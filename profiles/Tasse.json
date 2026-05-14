@@ -1,0 +1,31 @@
+{
+    "profile_name": "Tasse",
+    "theme": "frostbite",
+    "language": "de",
+    "settings": {
+        "daily_reset_time": "09:00",
+        "weekly_reset_day": "Di",
+        "weekly_reset_time": "09:00",
+        "show_events": true,
+        "shugo_enabled": true,
+        "shugo_start_minute": 15,
+        "shugo_interval_text": "2 Stunden",
+        "riss_enabled": true,
+        "riss_anchor_hour": 0,
+        "riss_interval_text": "3 Stunden"
+    },
+    "tasks": {
+        "dailyTasks": [
+            {
+                "title": "Task1",
+                "description": "",
+                "completed": false
+            }
+        ],
+        "weeklyTasks": [],
+        "eventTasks": [],
+        "dailyShopping": [],
+        "weeklyShopping": [],
+        "eventShopping": []
+    }
+}

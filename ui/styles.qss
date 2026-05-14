@@ -1,0 +1,564 @@
+QMenuBar {
+    background-color: #1f2937;
+    color: #e5e7eb;
+    padding: 6px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+QMenuBar::item {
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+QMenuBar::item:selected {
+    background-color: #374151;
+}
+
+QMenu {
+    background-color: #1f2937;
+    color: #e5e7eb;
+    border: 1px solid #374151;
+}
+
+QMenu::item {
+    padding: 8px 24px;
+}
+
+QMenu::item:selected {
+    background-color: #374151;
+}
+
+#appIcon {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #06b6d4, stop:1 #a855f7);
+    color: white;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+#mainTitle {
+    color: white;
+    font-size: 34px;
+    font-weight: bold;
+}
+
+#subtitle {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+#tabButton {
+    background-color: rgba(30, 41, 59, 0.55);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    border-radius: 9px;
+    padding: 9px 14px;
+    font-weight: 600;
+}
+
+#tabButton:hover {
+    border-color: rgba(148, 163, 184, 0.75);
+}
+
+#tabButton[active="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06b6d4, stop:1 #a855f7);
+    color: white;
+    border: none;
+}
+
+#statCard,
+#addPanel,
+#taskCard {
+    background-color: rgba(30, 41, 59, 0.65);
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+}
+
+#statTitle {
+    color: #94a3b8;
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+QLineEdit {
+    background-color: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(100, 116, 139, 0.6);
+    border-radius: 9px;
+    padding: 10px 14px;
+    color: white;
+    font-size: 14px;
+}
+
+QLineEdit:focus {
+    border: 1px solid rgba(34, 211, 238, 0.8);
+}
+
+#primaryButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06b6d4, stop:1 #a855f7);
+    color: white;
+    border: none;
+    border-radius: 9px;
+    padding: 10px 16px;
+    font-weight: bold;
+}
+
+#primaryButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0891b2, stop:1 #9333ea);
+}
+
+#taskTitle {
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#taskDescription {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+#checkButton {
+    color: #64748b;
+    background: transparent;
+    border: none;
+    font-size: 24px;
+}
+
+#checkButton:hover {
+    color: #22d3ee;
+}
+
+#deleteButton {
+    background: transparent;
+    color: #64748b;
+    border: none;
+    font-size: 16px;
+}
+
+#deleteButton:hover {
+    color: #f87171;
+    background-color: rgba(239, 68, 68, 0.12);
+    border-radius: 8px;
+}
+
+#priorityMedium {
+    color: #fbbf24;
+    background-color: rgba(245, 158, 11, 0.12);
+    border-radius: 10px;
+    padding: 4px 9px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+#taskCard[completed="true"] {
+    opacity: 0.6;
+}
+
+#scrollArea {
+    background: transparent;
+    border: none;
+}
+
+#footer {
+    color: #64748b;
+    border-top: 1px solid rgba(100, 116, 139, 0.35);
+    padding-top: 12px;
+}
+
+#iconButton {
+    background-color: rgba(30, 41, 59, 0.75);
+    color: #e5e7eb;
+    border: 1px solid rgba(100, 116, 139, 0.55);
+    border-radius: 10px;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+#iconButton:hover {
+    background-color: rgba(51, 65, 85, 0.95);
+    border: 1px solid rgba(34, 211, 238, 0.8);
+    color: white;
+}
+
+QDialog {
+    background-color: #111827;
+}
+
+#settingsTitle {
+    color: white;
+    font-size: 26px;
+    font-weight: bold;
+}
+
+#settingsSectionTitle {
+    color: #22d3ee;
+    font-size: 15px;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+#settingsRow {
+    background-color: rgba(30, 41, 59, 0.75);
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+}
+
+#settingsLabel {
+    color: #e5e7eb;
+    font-size: 14px;
+}
+
+#settingsCheckbox {
+    color: #e5e7eb;
+    font-size: 14px;
+    padding: 8px;
+}
+
+#settingsTimeEdit {
+    background-color: rgba(15, 23, 42, 0.85);
+    color: white;
+    border: 1px solid rgba(100, 116, 139, 0.6);
+    border-radius: 8px;
+    padding: 6px;
+}
+
+#settingsRow {
+    background-color: rgba(30, 41, 59, 0.75);
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+    min-height: 52px;
+}
+
+#settingsLabel {
+    color: #e5e7eb;
+    font-size: 15px;
+    min-height: 28px;
+}
+
+#settingsCheckbox {
+    color: #e5e7eb;
+    font-size: 15px;
+    padding: 10px;
+    min-height: 34px;
+}
+
+#settingsTimeEdit {
+    background-color: rgba(15, 23, 42, 0.85);
+    color: white;
+    border: 1px solid rgba(100, 116, 139, 0.6);
+    border-radius: 8px;
+    padding: 8px 12px;
+    min-width: 90px;
+    min-height: 34px;
+    font-size: 15px;
+}
+
+#settingsComboBox {
+    background-color: rgba(15, 23, 42, 0.85);
+    color: white;
+    border: 1px solid rgba(100, 116, 139, 0.6);
+    border-radius: 8px;
+    padding: 8px 12px;
+    min-width: 140px;
+    min-height: 34px;
+    font-size: 15px;
+}
+
+#settingsComboBox QAbstractItemView {
+    background-color: #1f2937;
+    color: white;
+    selection-background-color: #374151;
+}
+
+#minuteToggleButton {
+    background-color: rgba(15, 23, 42, 0.85);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.6);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#minuteToggleButton:hover {
+    border: 1px solid rgba(34, 211, 238, 0.8);
+    color: white;
+}
+
+#minuteToggleButton:checked {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #06b6d4,
+        stop:1 #a855f7
+    );
+    color: white;
+    border: none;
+}
+
+#timerCard {
+    background-color: rgba(30, 41, 59, 0.65);
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+    max-width: 190px;
+    min-height: 72px;
+}
+
+#smallTimerLabel {
+    color: #fbbf24;
+    font-size: 12px;
+    font-weight: bold;
+    padding-left: 4px;
+}
+
+#systemTimeLabel {
+    color: #fbbf24;
+    font-size: 14px;
+    font-weight: bold;
+    padding-bottom: 6px;
+}
+
+#profileInput {
+    background-color: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(34, 211, 238, 0.75);
+    border-radius: 8px;
+    padding: 7px 10px;
+    color: white;
+    font-size: 13px;
+    min-width: 220px;
+    max-width: 320px;
+}
+
+#smallIconButton {
+    background-color: rgba(30, 41, 59, 0.75);
+    color: #e5e7eb;
+    border: 1px solid rgba(100, 116, 139, 0.55);
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+#smallIconButton:hover {
+    background-color: rgba(51, 65, 85, 0.95);
+    border: 1px solid rgba(34, 211, 238, 0.8);
+    color: white;
+}
+
+#settingsSidebar {
+    background-color: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+    min-width: 160px;
+    max-width: 180px;
+    padding: 8px;
+}
+
+#settingsSidebarButton {
+    background-color: transparent;
+    color: #cbd5e1;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#settingsSidebarButton:hover {
+    background-color: rgba(51, 65, 85, 0.8);
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    color: white;
+}
+
+#settingsSidebarButton:checked {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #06b6d4,
+        stop:1 #a855f7
+    );
+    color: white;
+    border: none;
+}
+
+#statCard,
+#timerCard,
+#addPanel,
+#taskCard {
+    background-color: rgba(30, 41, 59, 0.65);
+}
+
+QWidget[theme="inferno"] #statCard,
+QWidget[theme="inferno"] #timerCard,
+QWidget[theme="inferno"] #addPanel,
+QWidget[theme="inferno"] #taskCard {
+    background-color: rgba(59, 15, 15, 0.72);
+    border: 1px solid rgba(249, 115, 22, 0.45);
+}
+
+QWidget[theme="emerald"] #statCard,
+QWidget[theme="emerald"] #timerCard,
+QWidget[theme="emerald"] #addPanel,
+QWidget[theme="emerald"] #taskCard {
+    background-color: rgba(11, 31, 23, 0.72);
+    border: 1px solid rgba(16, 185, 129, 0.45);
+}
+
+QWidget[theme="frostbite"] #statCard,
+QWidget[theme="frostbite"] #timerCard,
+QWidget[theme="frostbite"] #addPanel,
+QWidget[theme="frostbite"] #taskCard {
+    background-color: rgba(23, 37, 84, 0.72);
+    border: 1px solid rgba(96, 165, 250, 0.45);
+}
+
+QWidget[theme="obsidian"] #statCard,
+QWidget[theme="obsidian"] #timerCard,
+QWidget[theme="obsidian"] #addPanel,
+QWidget[theme="obsidian"] #taskCard {
+    background-color: rgba(31, 31, 31, 0.78);
+    border: 1px solid rgba(251, 191, 36, 0.45);
+}
+
+QWidget[theme="void"] #statCard,
+QWidget[theme="void"] #timerCard,
+QWidget[theme="void"] #addPanel,
+QWidget[theme="void"] #taskCard {
+    background-color: rgba(35, 18, 54, 0.74);
+    border: 1px solid rgba(192, 132, 252, 0.45);
+}
+
+#themeToggleButton {
+    background-color: rgba(15, 23, 42, 0.85);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.6);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#themeToggleButton:hover {
+    border: 1px solid rgba(34, 211, 238, 0.8);
+    color: white;
+}
+
+#themeToggleButton:checked {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #06b6d4,
+        stop:1 #a855f7
+    );
+    color: white;
+    border: none;
+}
+
+#settingsThemeContainer {
+    background-color: rgba(30, 41, 59, 0.75);
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+    padding: 8px;
+}
+
+#themeToggleButton {
+    background-color: rgba(15, 23, 42, 0.85);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.6);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+}
+
+#themeToggleButton:hover {
+    border: 1px solid rgba(34, 211, 238, 0.8);
+    color: white;
+}
+
+#themeToggleButton:checked {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #06b6d4,
+        stop:1 #a855f7
+    );
+    color: white;
+    border: none;
+}
+
+QDialog[theme="inferno"] {
+    background-color: #140f0f;
+}
+
+QDialog[theme="emerald"] {
+    background-color: #07130f;
+}
+
+QDialog[theme="frostbite"] {
+    background-color: #0b1120;
+}
+
+QDialog[theme="obsidian"] {
+    background-color: #111111;
+}
+
+QDialog[theme="void"] {
+    background-color: #120c1c;
+}
+
+#userLabel {
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 600;
+    padding-right: 8px;
+}
+
+#loginTitle {
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+#loginInfo {
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+/* ================= SIDEBAR ================= */
+
+#SidebarWidget {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 18px;
+    padding: 12px;
+}
+
+#sidebarButton {
+    text-align: left;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #cbd5e1;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#sidebarButton:hover {
+    background: rgba(88, 101, 242, 0.18);
+    color: white;
+}
+
+#sidebarButton:checked {
+    background: rgba(88, 101, 242, 0.95);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* ================= CONTENT AREA ================= */
+
+#ContentArea {
+    background: rgba(15, 23, 42, 0.22);
+    border: 1px solid rgba(148, 163, 184, 0.10);
+    border-radius: 18px;
+    padding: 18px;
+}
