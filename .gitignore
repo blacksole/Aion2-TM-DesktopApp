@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+dist/
+build/
+release/
+*.spec
+profiles/last_profile.txt
+*.db
+*.sqlite
+*.sqlite3
+.vscode/
+test_*.py
