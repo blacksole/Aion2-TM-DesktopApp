@@ -86,6 +86,9 @@ class ProfilePage(QWidget):
 
         self.profile_input.setText(profile_name)
 
+    def get_profile_name(self):
+        return self.profile_input.text().strip()
+
     def toggle_profile_edit(self):
         if not self.edit_mode:
             self.edit_mode = True

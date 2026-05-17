@@ -48,11 +48,11 @@ class SettingsPage(QWidget):
         sidebar_layout.setContentsMargins(12, 12, 12, 12)
         sidebar_layout.setSpacing(8)
 
-        self.btn_general = QPushButton("Allgemein")
-        self.btn_reset_timer = QPushButton("Reset Timer")
-        self.btn_advanced_timer = QPushButton("Advanced Timer")
-        self.btn_layout = QPushButton("Layout")
-        self.btn_language = QPushButton("Language")
+        self.btn_general = QPushButton()
+        self.btn_reset_timer = QPushButton()
+        self.btn_advanced_timer = QPushButton()
+        self.btn_layout = QPushButton()
+        self.btn_language = QPushButton()
 
         self.setting_buttons = [
             self.btn_general,
@@ -148,6 +148,13 @@ class SettingsPage(QWidget):
             button.style().unpolish(button)
             button.style().polish(button)
 
+    def _update_toggle_text(self, button, checked, language, tr_func):
+        button.setText(
+            tr_func(language, "on")
+            if checked else
+            tr_func(language, "off")
+        )
+
     def update_language(self, language: str, tr_func):
         self.title_label.setText(
             tr_func(language, "settings_title")
@@ -161,6 +168,137 @@ class SettingsPage(QWidget):
             tr_func(language, "save")
         )
 
+        self.btn_general.setText(tr_func(language, "general"))
+        self.btn_reset_timer.setText(tr_func(language, "reset_timer"))
+        self.btn_advanced_timer.setText(tr_func(language, "advanced_timer"))
+        self.btn_layout.setText(tr_func(language, "layout"))
+        self.btn_language.setText(tr_func(language, "language"))
+
+        # ===== GENERAL =====
+
+        self.general_title.setText(
+            tr_func(language, "general")
+        )
+
+        self.event_title.setText(
+            tr_func(language, "event_tasks")
+        )
+
+        self.event_desc.setText(
+            tr_func(language, "show_events_desc")
+        )
+
+        self.auto_save_title.setText(
+            tr_func(language, "auto_save")
+        )
+
+        self.auto_save_desc.setText(
+            tr_func(language, "auto_save_desc")
+        )
+
+        # ===== RESET TIMER =====
+
+        self.reset_timer_title.setText(
+            tr_func(language, "reset_timer")
+        )
+
+        self.daily_reset_label.setText(
+            tr_func(language, "daily_reset")
+        )
+
+        self.weekly_reset_label.setText(
+            tr_func(language, "weekly_reset")
+        )
+
+        # ===== ADVANCED TIMER =====
+
+        self._update_toggle_text(
+            self.shugo_enabled_btn,
+            self.shugo_enabled_btn.isChecked(),
+            language,
+            tr_func
+        )
+
+        self._update_toggle_text(
+            self.riss_enabled_btn,
+            self.riss_enabled_btn.isChecked(),
+            language,
+            tr_func
+        )
+
+        self.advanced_timer_title.setText(
+            tr_func(language, "advanced_timer")
+        )
+
+        self.shugo_title.setText(
+            tr_func(language, "shugo_timer")
+        )
+
+        self.shugo_desc.setText(
+            tr_func(language, "shugo_timer_desc")
+        )
+
+        self.shugo_start_label.setText(
+            tr_func(language, "start")
+        )
+
+        self.shugo_interval_label.setText(
+            tr_func(language, "interval")
+        )
+
+        self.riss_title.setText(
+            tr_func(language, "riss_timer")
+        )
+
+        self.riss_desc.setText(
+            tr_func(language, "riss_timer_desc")
+        )
+
+        self.riss_anchor_label.setText(
+            tr_func(language, "anchor")
+        )
+
+        self.riss_interval_label.setText(
+            tr_func(language, "interval")
+        )
+
+        # ===== LANGUAGE =====
+
+        self.language_title.setText(
+            tr_func(language, "language")
+        )
+
+        self.language_desc.setText(
+            tr_func(language, "language_desc")
+        )
+
+        self.language_label.setText(
+            tr_func(language, "application_language")
+        )
+
+        # ==== LAYOUT =====
+
+        self.layout_title.setText(
+            tr_func(language, "layout")
+        )
+
+
+
+
+        self._update_toggle_text(
+            self.show_events_btn,
+            self.show_events_btn.isChecked(),
+            language,
+            tr_func
+        )
+
+        self._update_toggle_text(
+            self.auto_save_btn,
+            self.auto_save_btn.isChecked(),
+            language,
+            tr_func
+        )
+
     def _create_language_page(self):
         page = QWidget()
 
@@ -168,33 +306,32 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
 
-        title_label = QLabel("Language")
-        title_label.setObjectName("settingsSectionTitle")
+        self.language_title = QLabel()
+        self.language_title.setObjectName("settingsSectionTitle")
 
-        description_label = QLabel(
-            "Choose the language used by the application."
-        )
-        description_label.setObjectName("settingsSectionDescription")
-        description_label.setWordWrap(True)
+        self.language_desc = QLabel()
+        self.language_desc.setObjectName("settingsSectionDescription")
+        self.language_desc.setWordWrap(True)
 
         self.language_combo = QComboBox()
+        self.language_combo.setObjectName("settingsCombo")
         self.language_combo.addItem("English", "en")
         self.language_combo.addItem("Deutsch", "de")
 
-        layout.addWidget(title_label)
-        layout.addWidget(description_label)
+        layout.addWidget(self.language_title)
+        layout.addWidget(self.language_desc)
         language_row = QFrame()
         language_row.setObjectName("settingsRow")
 
         row_layout = QHBoxLayout(language_row)
         row_layout.setContentsMargins(14, 12, 14, 12)
 
-        language_label = QLabel("Application Language")
-        language_label.setObjectName("settingsLabel")
+        self.language_label = QLabel()
+        self.language_label.setObjectName("settingsLabel")
 
         self.language_combo.setFixedWidth(180)
 
-        row_layout.addWidget(language_label)
+        row_layout.addWidget(self.language_label)
         row_layout.addStretch()
         row_layout.addWidget(self.language_combo)
 
@@ -220,10 +357,10 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(18)
 
-        title_label = QLabel("Layout")
-        title_label.setObjectName("settingsSectionTitle")
+        self.layout_title = QLabel()
+        self.layout_title.setObjectName("settingsSectionTitle")
 
-        layout.addWidget(title_label)
+        layout.addWidget(self.layout_title)
 
         self.theme_button_group = QButtonGroup(self)
         self.theme_button_group.setExclusive(True)
@@ -292,10 +429,10 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(18)
 
-        title_label = QLabel("Reset Timer")
-        title_label.setObjectName("settingsSectionTitle")
+        self.reset_timer_title = QLabel()
+        self.reset_timer_title.setObjectName("settingsSectionTitle")
 
-        layout.addWidget(title_label)
+        layout.addWidget(self.reset_timer_title)
 
         # ===== DAILY RESET ROW =====
         daily_row = QFrame()
@@ -305,16 +442,16 @@ class SettingsPage(QWidget):
         daily_layout.setContentsMargins(14, 12, 14, 12)
         daily_layout.setSpacing(12)
 
-        daily_label = QLabel("Daily Reset")
-        daily_label.setObjectName("settingsLabel")
+        self.daily_reset_label = QLabel()
+        self.daily_reset_label.setObjectName("settingsLabel")
 
         self.daily_reset_time = QTimeEdit()
-        self.daily_reset_time.setObjectName("smallTimeEdit")
+        self.daily_reset_time.setObjectName("settingsTimeInput")
         self.daily_reset_time.setDisplayFormat("HH:mm")
         self.daily_reset_time.setTime(QTime(9, 0))
-        self.daily_reset_time.setFixedWidth(90)
+        self.daily_reset_time.setFixedWidth(130)
 
-        daily_layout.addWidget(daily_label)
+        daily_layout.addWidget(self.daily_reset_label)
         daily_layout.addStretch()
         daily_layout.addWidget(self.daily_reset_time)
 
@@ -326,8 +463,8 @@ class SettingsPage(QWidget):
         weekly_layout.setContentsMargins(14, 12, 14, 12)
         weekly_layout.setSpacing(12)
 
-        weekly_label = QLabel("Weekly Reset")
-        weekly_label.setObjectName("settingsLabel")
+        self.weekly_reset_label = QLabel()
+        self.weekly_reset_label.setObjectName("settingsLabel")
 
         self.weekly_day_group = QButtonGroup(self)
 
@@ -353,12 +490,12 @@ class SettingsPage(QWidget):
             day_layout.addWidget(btn)
 
         self.weekly_reset_time = QTimeEdit()
-        self.weekly_reset_time.setObjectName("smallTimeEdit")
+        self.weekly_reset_time.setObjectName("settingsTimeInput")
         self.weekly_reset_time.setDisplayFormat("HH:mm")
         self.weekly_reset_time.setTime(QTime(9, 0))
-        self.weekly_reset_time.setFixedWidth(90)
+        self.weekly_reset_time.setFixedWidth(130)
 
-        weekly_layout.addWidget(weekly_label)
+        weekly_layout.addWidget(self.weekly_reset_label)
         weekly_layout.addStretch()
         weekly_layout.addWidget(day_widget)
         weekly_layout.addWidget(self.weekly_reset_time)
@@ -423,9 +560,9 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(18)
 
-        title_label = QLabel("Advanced Timer")
-        title_label.setObjectName("settingsSectionTitle")
-        layout.addWidget(title_label)
+        self.advanced_timer_title = QLabel()
+        self.advanced_timer_title.setObjectName("settingsSectionTitle")
+        layout.addWidget(self.advanced_timer_title)
 
         # ===== SHUGO ROW =====
         shugo_row = QFrame()
@@ -438,14 +575,14 @@ class SettingsPage(QWidget):
         shugo_text = QVBoxLayout()
         shugo_text.setSpacing(2)
 
-        shugo_title = QLabel("Shugo Timer")
-        shugo_title.setObjectName("settingsLabel")
+        self.shugo_title = QLabel()
+        self.shugo_title.setObjectName("settingsLabel")
 
-        shugo_desc = QLabel("Enable spawn countdown for Shugo events.")
-        shugo_desc.setObjectName("settingsDescription")
+        self.shugo_desc = QLabel()
+        self.shugo_desc.setObjectName("settingsDescription")
 
-        shugo_text.addWidget(shugo_title)
-        shugo_text.addWidget(shugo_desc)
+        shugo_text.addWidget(self.shugo_title)
+        shugo_text.addWidget(self.shugo_desc)
 
         self.shugo_enabled_btn = QPushButton("Off")
         self.shugo_enabled_btn.setCheckable(True)
@@ -453,19 +590,25 @@ class SettingsPage(QWidget):
         self.shugo_enabled_btn.setFixedWidth(70)
 
         self.shugo_minute_combo = QComboBox()
+        self.shugo_minute_combo.setObjectName("settingsCombo")
         self.shugo_minute_combo.addItems(["00", "15", "30", "45"])
         self.shugo_minute_combo.setFixedWidth(80)
 
         self.shugo_interval_combo = QComboBox()
+        self.shugo_interval_combo.setObjectName("settingsCombo")
         self.shugo_interval_combo.addItems([
             "30 min", "1 Stunde", "2 Stunden", "3 Stunden"
         ])
         self.shugo_interval_combo.setFixedWidth(120)
 
         shugo_layout.addLayout(shugo_text, 1)
-        shugo_layout.addWidget(QLabel("Start"))
+        self.shugo_start_label = QLabel()
+        self.shugo_start_label.setObjectName("settingsInlineLabel")
+        shugo_layout.addWidget(self.shugo_start_label)
         shugo_layout.addWidget(self.shugo_minute_combo)
-        shugo_layout.addWidget(QLabel("Interval"))
+        self.shugo_interval_label = QLabel()
+        self.shugo_interval_label.setObjectName("settingsInlineLabel")
+        shugo_layout.addWidget(self.shugo_interval_label)
         shugo_layout.addWidget(self.shugo_interval_combo)
         shugo_layout.addWidget(self.shugo_enabled_btn)
 
@@ -480,14 +623,14 @@ class SettingsPage(QWidget):
         riss_text = QVBoxLayout()
         riss_text.setSpacing(2)
 
-        riss_title = QLabel("Riss Timer")
-        riss_title.setObjectName("settingsLabel")
+        self.riss_title = QLabel()
+        self.riss_title.setObjectName("settingsLabel")
 
-        riss_desc = QLabel("Enable countdown for recurring Riss events.")
-        riss_desc.setObjectName("settingsDescription")
+        self.riss_desc = QLabel()
+        self.riss_desc.setObjectName("settingsDescription")
 
-        riss_text.addWidget(riss_title)
-        riss_text.addWidget(riss_desc)
+        riss_text.addWidget(self.riss_title)
+        riss_text.addWidget(self.riss_desc)
 
         self.riss_enabled_btn = QPushButton("Off")
         self.riss_enabled_btn.setCheckable(True)
@@ -495,21 +638,27 @@ class SettingsPage(QWidget):
         self.riss_enabled_btn.setFixedWidth(70)
 
         self.riss_anchor_combo = QComboBox()
+        self.riss_anchor_combo.setObjectName("settingsCombo")
         self.riss_anchor_combo.addItems([
             "00", "01", "02"
         ])
         self.riss_anchor_combo.setFixedWidth(80)
 
         self.riss_interval_combo = QComboBox()
+        self.riss_interval_combo.setObjectName("settingsCombo")
         self.riss_interval_combo.addItems([
             "1 Stunde", "2 Stunden", "3 Stunden"
         ])
         self.riss_interval_combo.setFixedWidth(120)
 
         riss_layout.addLayout(riss_text, 1)
-        riss_layout.addWidget(QLabel("Anchor"))
+        self.riss_anchor_label = QLabel()
+        self.riss_anchor_label.setObjectName("settingsInlineLabel")
+        riss_layout.addWidget(self.riss_anchor_label)
         riss_layout.addWidget(self.riss_anchor_combo)
-        riss_layout.addWidget(QLabel("Interval"))
+        self.riss_interval_label = QLabel()
+        self.riss_interval_label.setObjectName("settingsInlineLabel")
+        riss_layout.addWidget(self.riss_interval_label)
         riss_layout.addWidget(self.riss_interval_combo)
         riss_layout.addWidget(self.riss_enabled_btn)
 
@@ -534,10 +683,10 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(18)
 
-        title_label = QLabel("Allgemein")
-        title_label.setObjectName("settingsSectionTitle")
+        self.general_title = QLabel()
+        self.general_title.setObjectName("settingsSectionTitle")
 
-        layout.addWidget(title_label)
+        layout.addWidget(self.general_title)
 
         event_row = QFrame()
         event_row.setObjectName("settingsRow")
@@ -552,14 +701,14 @@ class SettingsPage(QWidget):
         auto_save_text = QVBoxLayout()
         auto_save_text.setSpacing(2)
 
-        auto_save_title = QLabel("Auto Save")
-        auto_save_title.setObjectName("settingsLabel")
+        self.auto_save_title = QLabel()
+        self.auto_save_title.setObjectName("settingsLabel")
 
-        auto_save_desc = QLabel("Profile automatisch speichern, wenn Aufgaben geändert werden.")
-        auto_save_desc.setObjectName("settingsDescription")
+        self.auto_save_desc = QLabel()
+        self.auto_save_desc.setObjectName("settingsDescription")
 
-        auto_save_text.addWidget(auto_save_title)
-        auto_save_text.addWidget(auto_save_desc)
+        auto_save_text.addWidget(self.auto_save_title)
+        auto_save_text.addWidget(self.auto_save_desc)
 
         self.auto_save_btn = QPushButton("On")
         self.auto_save_btn.setCheckable(True)
@@ -581,14 +730,15 @@ class SettingsPage(QWidget):
         text_layout = QVBoxLayout()
         text_layout.setSpacing(2)
 
-        event_title = QLabel("Event Tasks")
-        event_title.setObjectName("settingsLabel")
+        self.event_title = QLabel()
+        self.event_title.setObjectName("settingsLabel")
 
-        event_desc = QLabel("Event Aufgaben und Event Shopping anzeigen.")
-        event_desc.setObjectName("settingsDescription")
+        self.event_desc = QLabel()
+        self.event_desc.setObjectName("settingsDescription")
 
-        text_layout.addWidget(event_title)
-        text_layout.addWidget(event_desc)
+
+        text_layout.addWidget(self.event_title)
+        text_layout.addWidget(self.event_desc)
 
         self.show_events_btn = QPushButton("On")
         self.show_events_btn.setCheckable(True)

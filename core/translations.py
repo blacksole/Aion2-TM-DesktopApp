@@ -23,7 +23,7 @@ TRANSLATIONS = {
         "description": "Beschreibung oder Ort",
         "progress": "Fortschritt",
 
-        # ================ DISCORD ================
+        # ================= DISCORD =================
         "discord_connected": "Discord verbunden",
         "discord_not_connected": "Discord nicht verbunden",
         "online": "Online",
@@ -33,7 +33,6 @@ TRANSLATIONS = {
         "daily_tasks": "📋 Tägl. Aufgaben",
         "weekly_tasks": "📅 Wöch. Aufgaben",
         "event_tasks": "🎉 Event Aufgaben",
-
         "tasks": "Aufgaben",
         "tasks_subtitle": "Daily, Weekly und Event Aufgaben",
 
@@ -41,6 +40,20 @@ TRANSLATIONS = {
         "daily_shopping": "🛒 Tägl. Einkauf",
         "weekly_shopping": "🛍️ Wöch. Einkauf",
         "event_shopping": "🎁 Event Einkauf",
+        "priority": "Priorität",
+        "priority_low": "Niedrig",
+        "priority_middle": "Mittel",
+        "priority_high": "Hoch",
+        "location": "Ort",
+        "amount": "Anzahl",
+        "price": "Preis",
+
+        # ================= SORTING =================
+        "sort_by": "Sortieren nach ▾",
+        "sort_by_title": "Titel",
+        "sort_by_location": "Ort",
+        "sort_by_price": "Preis",
+        "sort_by_priority": "Priorität",
 
         # ================= STATS =================
         "total": "Gesamt",
@@ -69,16 +82,31 @@ TRANSLATIONS = {
         "settings_title": "Einstellungen",
         "settings_subtitle": "App-, Layout- und Timer-Einstellungen",
 
+        # ================= SETTINGS GENERAL =================
+        "auto_save": "Automatisch speichern",
+        "auto_save_desc": "Profiländerungen automatisch speichern.",
+        "show_events_desc": "Event Aufgaben und Event Einkauf anzeigen.",
+
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",
         "weekly_reset_day": "Wöch. Reset Wochentag",
         "weekly_reset_time": "Wöch. Reset Uhrzeit",
 
         # ================= ADVANCED TIMER =================
+        "advanced_timer": "Erweiterte Timer",
+        "shugo_timer": "Shugo Timer",
+        "shugo_timer_desc": "Countdown für Shugo Events aktivieren.",
         "shugo_start": "Shugo Event Start (Min)",
         "shugo_interval": "Shugo Event Takt",
+        "riss_timer": "Riss Timer",
+        "riss_timer_desc": "Countdown für wiederkehrende Riss Events aktivieren.",
         "riss_anchor": "Riss Orientierungsstart (Uhrzeit)",
         "riss_interval": "Riss Takt",
+        "start": "Start",
+        "interval": "Intervall",
+        "anchor": "Anker",
+        "on": "Ein",
+        "off": "Aus",
 
         # ================= TIME VALUES =================
         "30_min": "30 Min",
@@ -88,12 +116,13 @@ TRANSLATIONS = {
 
         # ================= LANGUAGE =================
         "select_language": "Sprache auswählen",
+        "application_language": "App-Sprache",
+        "language_desc": "Wähle die Sprache der Anwendung.",
 
         # ================= PLACEHOLDERS =================
         "placeholder_daily_tasks": "Titel der täglichen Aufgabe",
         "placeholder_weekly_tasks": "Titel der wöchentlichen Aufgabe",
         "placeholder_event_tasks": "Titel der Event-Aufgabe",
-
         "placeholder_daily_shopping": "Titel des täglichen Einkaufs",
         "placeholder_weekly_shopping": "Titel des wöchentlichen Einkaufs",
         "placeholder_event_shopping": "Titel des Event-Einkaufs",
@@ -103,7 +132,6 @@ TRANSLATIONS = {
         "toast_timers_opened": "Timer geöffnet",
         "toast_settings_opened": "Einstellungen geöffnet",
         "toast_profile_opened": 'Profil: "{name}"',
-
     },
 
     "en": {
@@ -119,6 +147,7 @@ TRANSLATIONS = {
         "profile_saved": "Profile saved",
         "profile": "Profile",
         "profile_subtitle": "Manage and save profiles",
+
         # ================= GENERAL =================
         "add": "+ Add",
         "save": "Save",
@@ -127,24 +156,37 @@ TRANSLATIONS = {
         "description": "Description or location",
         "progress": "Progress",
 
-        # ================= TASKS =================
-        "daily_tasks": "📋 Daily Tasks",
-        "weekly_tasks": "📅 Weekly Tasks",
-        "event_tasks": "🎉 Event Tasks",
-
-        "tasks": "Tasks",
-        "tasks_subtitle": "Daily, weekly and event tasks",
-
-        # ================= DISCORD ================
+        # ================= DISCORD =================
         "discord_connected": "Discord connected",
         "discord_not_connected": "Discord not connected",
         "online": "Online",
         "offline": "Offline",
 
+        # ================= TASKS =================
+        "daily_tasks": "📋 Daily Tasks",
+        "weekly_tasks": "📅 Weekly Tasks",
+        "event_tasks": "🎉 Event Tasks",
+        "tasks": "Tasks",
+        "tasks_subtitle": "Daily, weekly and event tasks",
+
         # ================= SHOPPING =================
         "daily_shopping": "🛒 Daily Shopping",
         "weekly_shopping": "🛍️ Weekly Shopping",
         "event_shopping": "🎁 Event Shopping",
+        "priority": "Priority",
+        "priority_low": "Low",
+        "priority_middle": "Medium",
+        "priority_high": "High",
+        "location": "Location",
+        "amount": "Amount",
+        "price": "Price",
+
+        # ================= SORTING =================
+        "sort_by": "Sort by ▾",
+        "sort_by_title": "Title",
+        "sort_by_location": "Location",
+        "sort_by_price": "Price",
+        "sort_by_priority": "Priority",
 
         # ================= STATS =================
         "total": "Total",
@@ -173,16 +215,31 @@ TRANSLATIONS = {
         "settings_title": "Settings",
         "settings_subtitle": "App, layout and timer settings",
 
+        # ================= SETTINGS GENERAL =================
+        "auto_save": "Auto Save",
+        "auto_save_desc": "Automatically save profile changes.",
+        "show_events_desc": "Show event tasks and event shopping.",
+
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",
         "weekly_reset_day": "Weekly Reset Day",
         "weekly_reset_time": "Weekly Reset Time",
 
         # ================= ADVANCED TIMER =================
+        "advanced_timer": "Advanced Timer",
+        "shugo_timer": "Shugo Timer",
+        "shugo_timer_desc": "Enable spawn countdown for Shugo events.",
         "shugo_start": "Shugo Event Start (Min)",
         "shugo_interval": "Shugo Event Interval",
+        "riss_timer": "Rift Timer",
+        "riss_timer_desc": "Enable countdown for recurring Rift events.",
         "riss_anchor": "Rift Orientation Start (Daytime)",
         "riss_interval": "Rift Interval",
+        "start": "Start",
+        "interval": "Interval",
+        "anchor": "Anchor",
+        "on": "On",
+        "off": "Off",
 
         # ================= TIME VALUES =================
         "30_min": "30 Min",
@@ -192,12 +249,13 @@ TRANSLATIONS = {
 
         # ================= LANGUAGE =================
         "select_language": "Select language",
+        "application_language": "Application Language",
+        "language_desc": "Choose the language used by the application.",
 
         # ================= PLACEHOLDERS =================
         "placeholder_daily_tasks": "Title daily task",
         "placeholder_weekly_tasks": "Title weekly task",
         "placeholder_event_tasks": "Title event task",
-
         "placeholder_daily_shopping": "Title daily shopping",
         "placeholder_weekly_shopping": "Title weekly shopping",
         "placeholder_event_shopping": "Title event shopping",
@@ -216,4 +274,5 @@ def tr(language, key, **kwargs):
         language,
         TRANSLATIONS[DEFAULT_LANGUAGE]
     ).get(key, key)
+
     return text.format(**kwargs)

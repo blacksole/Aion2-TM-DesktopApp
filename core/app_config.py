@@ -1,5 +1,5 @@
-APP_NAME = "Aion2 Task Manager"
-APP_VERSION = "0.1.0"
+APP_NAME = "Aion2 Task Manager version 0.2.0"
+APP_VERSION = "0.4.0"
 
 API_URL = "https://aion2-task-manager.onrender.com"
 

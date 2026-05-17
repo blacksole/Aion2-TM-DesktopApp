@@ -562,3 +562,165 @@ QDialog[theme="void"] {
     border-radius: 18px;
     padding: 18px;
 }
+
+QComboBox {
+    padding: 8px 10px;
+    border-radius: 8px;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 8px;
+}
+
+QComboBox#priorityInput {
+    font-weight: 700;
+}
+
+#priorityInput {
+    background-color: rgba(15, 23, 42, 0.92);
+    color: #e2e8f0;
+
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+
+    padding: 8px 34px 8px 12px;
+
+    font-size: 13px;
+    font-weight: 700;
+
+    min-height: 20px;
+}
+
+#priorityInput:hover {
+    border: 1px solid rgba(34, 211, 238, 0.7);
+}
+
+#priorityInput::drop-down {
+    border: none;
+    width: 24px;
+    background: transparent;
+}
+
+#priorityInput::down-arrow {
+    image: url(./assets/icons/arrow_down_orange.png);
+    width: 12px;
+    height: 12px;
+}
+
+#priorityInput QAbstractItemView {
+    background-color: #0f172a;
+    border: 1px solid rgba(100, 116, 139, 0.45);
+
+    selection-background-color: rgba(34, 211, 238, 0.25);
+    selection-color: white;
+
+    color: #e2e8f0;
+
+    padding: 4px;
+}
+
+#sortLabel {
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#sortButton {
+    background-color: rgba(15, 23, 42, 0.85);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 9px;
+    padding: 7px 12px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#sortButton:hover {
+    background-color: rgba(51, 65, 85, 0.9);
+    border: 1px solid rgba(34, 211, 238, 0.7);
+    color: white;
+}
+
+#priorityInput,
+#settingsCombo {
+    background-color: rgba(15, 23, 42, 0.92);
+    color: #e2e8f0;
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+    padding: 8px 34px 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    min-height: 20px;
+}
+
+#priorityInput::drop-down,
+#settingsCombo::drop-down {
+    border: none;
+    width: 24px;
+    background: transparent;
+}
+
+#priorityInput::down-arrow,
+#settingsCombo::down-arrow {
+    image: url(ASSET_PATH/assets/icons/arrow_down_orange.png);
+    width: 14px;
+    height: 14px;
+}
+
+#settingsTimeInput {
+    background-color: rgba(15, 23, 42, 0.92);
+    color: #e2e8f0;
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#settingsTimeInput {
+    background-color: rgba(15, 23, 42, 0.92);
+    color: #e2e8f0;
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    min-height: 20px;
+}
+
+#settingsTimeInput::up-button,
+#settingsTimeInput::down-button {
+    width: 22px;
+    border: none;
+    background: transparent;
+}
+
+#settingsTimeInput::up-arrow {
+    image: url(ASSET_PATH/assets/icons/arrow_up_orange.png);
+    width: 10px;
+    height: 10px;
+}
+
+#settingsTimeInput::down-arrow {
+    image: url(ASSET_PATH/assets/icons/arrow_down_orange.png);
+    width: 10px;
+    height: 10px;
+}
+
+#settingsTimeInput::up-button:hover,
+#settingsTimeInput::down-button:hover {
+    background-color: rgba(34, 211, 238, 0.08);
+    border-radius: 6px;
+}
+
+#settingsTimeInput::up-arrow {
+    image: url(ASSET_PATH/assets/icons/arrow_up_orange.png);
+    width: 10px;
+    height: 10px;
+}
+
+#settingsTimeInput::down-arrow {
+    image: url(ASSET_PATH/assets/icons/arrow_down_orange.png);
+    width: 10px;
+    height: 10px;
+}

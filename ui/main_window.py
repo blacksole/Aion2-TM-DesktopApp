@@ -1,9 +1,9 @@
-from asyncio import tasks
 import json
 from pathlib import Path
 from .settings_dialog import SettingsDialog
 from .widgets.header_widget import HeaderWidget
 from .widgets.sidebar_widget import SidebarWidget
+from .widgets.shopping_card import ShoppingCard
 from .pages.tasks_page import TasksPage
 from .pages.timers_page import TimersPage
 from .pages.profile_page import ProfilePage
@@ -14,8 +14,7 @@ from PySide6.QtWidgets import QTimeEdit
 from PySide6.QtGui import QPainter, QLinearGradient, QColor, Qt, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QMenu, QComboBox, 
-    QStackedWidget
+    QPushButton, QFrame, QMenu, QComboBox, QStackedWidget,
 )
 from datetime import datetime, timedelta
 from PySide6.QtCore import QTimer
@@ -62,7 +61,7 @@ class GradientBackground(QWidget):
         painter.fillRect(self.rect(), gradient)
 
 class TaskCard(QFrame):
-    def __init__(self, title, description=""):
+    def __init__(self, title, description="", priority="low"):
         super().__init__()
 
         self.completed = False
@@ -91,7 +90,8 @@ class TaskCard(QFrame):
         if description:
             text_box.addWidget(self.desc_label)
 
-        self.priority = QLabel("Mittel")
+        self.priority_value = priority
+        self.priority = QLabel(priority.upper())
         self.priority.setObjectName("priorityMedium")
 
         self.delete_btn = QPushButton("🗑")
@@ -314,6 +314,11 @@ class MainWindow(QMainWindow):
                 self.change_theme_from_page
             )
 
+        if hasattr(self.profile_page, "profile_name_changed"):
+            self.profile_page.profile_name_changed.connect(
+                self.set_profile_name
+            )
+
         if hasattr(self.header, "settings_requested"):
             self.header.settings_requested.connect(self.open_settings)
 
@@ -324,6 +329,24 @@ class MainWindow(QMainWindow):
             self.settings_page.settings_save_requested.connect(
                 self.apply_settings_from_page
             )
+
+        if hasattr(self.profile_page, "save_profile_btn"):
+            self.profile_page.save_profile_btn.clicked.connect(
+                self.save_profile_from_profile_page
+            )
+
+        if hasattr(self.profile_page, "reset_profile_btn"):
+            self.profile_page.reset_profile_btn.clicked.connect(
+                self.reset_profile
+            )
+
+        if hasattr(self.profile_page, "load_profile_btn"):
+            self.profile_page.load_profile_btn.clicked.connect(
+                self.open_profile_menu
+            )
+            
+        
+        self.tasks_page.sort_requested.connect(self.sort_current_list)
 
     def open_main_menu(self):
         menu = QMenu(self)
@@ -556,22 +579,6 @@ class MainWindow(QMainWindow):
 
         self.refresh()
 
-    def add_task(self):
-        title = self.title_input.text().strip()
-        description = self.desc_input.text().strip()
-
-        if not title:
-            return
-
-        card = TaskCard(title, description)
-
-        self.task_lists[self.active_tab].insert(0, card)
-
-        self.title_input.clear()
-        self.desc_input.clear()
-
-        self.refresh()
-
     def refresh(self):
 
         tasks = self.task_lists[self.active_tab]
@@ -610,7 +617,16 @@ class MainWindow(QMainWindow):
         )
 
         with open(style_path, "r", encoding="utf-8") as f:
-            self.setStyleSheet(f.read())
+            styles = f.read()
+
+        base_path = Path(__file__).resolve().parent.parent
+
+        styles = styles.replace(
+            "ASSET_PATH",
+            base_path.as_posix()
+        )
+
+        self.setStyleSheet(styles)
 
     def toggle_events(self):
         self.tasks_page.set_events_visible(self.show_events)
@@ -769,13 +785,6 @@ class MainWindow(QMainWindow):
         # Aktuelle Listen immer leeren
         self.task_lists = {key: [] for key in self.tabs}
 
-        # Neues Format:
-        # {
-        #   "profile_name": "...",
-        #   "tasks": {
-        #       "dailyTasks": [...]
-        #   }
-        # }
         if isinstance(data, dict):
             saved_tasks = data.get("tasks", {})
 
@@ -795,17 +804,49 @@ class MainWindow(QMainWindow):
                     if not isinstance(item, dict):
                         continue
 
-                    card = TaskCard(
-                        item.get("title", ""),
-                        item.get("description", "")
-                    )
+                    if item.get("type") == "shopping":
+                        card = ShoppingCard(
+                            priority=item.get("priority", "middle"),
+                            amount=str(item.get("amount", "1")),
+                            title=item.get("title", ""),
+                            location=item.get("location", ""),
+                            price=item.get("price", "0")
+                        )
+                    else:
+                        card = TaskCard(
+                            item.get("title", ""),
+                            item.get("description", ""),
+                            item.get("priority", "low")
+                        )
+
                     if item.get("completed", False):
                         card.toggle()
+
                     self.task_lists[tab].append(card)
 
         self.refresh()
         self.save_last_profile(profile_path)
         print("Profil geladen:", self.profile_name)
+
+    def serialize_card(self, card):
+        if isinstance(card, ShoppingCard):
+            return {
+                "type": "shopping",
+                "priority": card.priority,
+                "amount": card.amount,
+                "title": card.title,
+                "location": card.location,
+                "price": card.price,
+                "completed": card.completed,
+            }
+
+        return {
+            "type": "task",
+            "priority": getattr(card, "priority_value", "low"),
+            "title": card.title_label.text(),
+            "description": card.desc_label.text(),
+            "completed": card.completed,
+        }
     
     def save_profile(self):
         data = {
@@ -833,11 +874,7 @@ class MainWindow(QMainWindow):
 
             "tasks": {
                 tab: [
-                    {
-                        "title": card.title_label.text(),
-                        "description": card.desc_label.text(),
-                        "completed": card.completed,
-                    }
+                    self.serialize_card(card)
                     for card in cards
                 ]
                 for tab, cards in self.task_lists.items()
@@ -1008,8 +1045,28 @@ class MainWindow(QMainWindow):
                 tr(self.language, "toast_profile_opened", name=self.profile_name)
             )
 
-    def add_task_from_page(self, title: str, description: str):
-        card = TaskCard(title, description)
+    def add_task_from_page(self, data):
+        shopping_tabs = [
+            "dailyShopping",
+            "weeklyShopping",
+            "eventShopping",
+        ]
+
+        if self.active_tab in shopping_tabs:
+            card = ShoppingCard(
+                priority=data.get("priority", "middle"),
+                amount=str(data.get("amount", "1")),
+                title=data.get("title", ""),
+                location=data.get("location", ""),
+                price=data.get("price", "0")
+            )
+        else:
+            card = TaskCard(
+                data.get("title", ""),
+                data.get("description", ""),
+                data.get("priority", "middle")
+            )
+
         self.task_lists[self.active_tab].insert(0, card)
         self.refresh()
 
@@ -1176,3 +1233,64 @@ class MainWindow(QMainWindow):
 
             "auto_save": self.auto_save,
         })
+
+
+    def sort_current_list(self, sort_key):
+        priority_order = {
+            "high": 0,
+            "middle": 1,
+            "low": 2,
+        }
+
+        def get_card_value(card):
+            if sort_key == "priority":
+                if isinstance(card, ShoppingCard):
+                    return priority_order.get(card.priority, 99)
+
+                return priority_order.get(
+                    getattr(card, "priority_value", "middle"),
+                    99
+                )
+
+            if sort_key == "title":
+                if isinstance(card, ShoppingCard):
+                    return card.title.lower()
+
+                return card.title_label.text().lower()
+
+            if sort_key == "location":
+                if isinstance(card, ShoppingCard):
+                    return card.location.lower()
+
+                return card.desc_label.text().lower()
+
+            if sort_key == "price":
+                if isinstance(card, ShoppingCard):
+                    try:
+                        return float(
+                            str(card.price)
+                            .replace("€", "")
+                            .replace(",", ".")
+                            .strip()
+                        )
+                    except ValueError:
+                        return 0
+
+                return 0
+
+            return ""
+
+        self.task_lists[self.active_tab].sort(
+            key=get_card_value
+        )
+
+        self.refresh()
+
+    def save_profile_from_profile_page(self):
+        if hasattr(self.profile_page, "get_profile_name"):
+            profile_name = self.profile_page.get_profile_name()
+
+            if profile_name:
+                self.set_profile_name(profile_name)
+
+        self.save_profile()
