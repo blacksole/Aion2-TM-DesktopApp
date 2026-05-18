@@ -48,12 +48,21 @@ TRANSLATIONS = {
         "amount": "Anzahl",
         "price": "Preis",
 
+        "daily_total_price": "Täglicher Gesamtpreis",
+        "weekly_total_price": "Wöchentlicher Gesamtpreis",
+        "event_total_price": "Event Gesamtpreis",
+
         # ================= SORTING =================
         "sort_by": "Sortieren nach ▾",
         "sort_by_title": "Titel",
         "sort_by_location": "Ort",
         "sort_by_price": "Preis",
         "sort_by_priority": "Priorität",
+
+        # ================= FILTERING =================
+        "filter_by": "Filtern nach ▾",
+        "filter_by_all": "Alle",
+        "filter_by_events": "Event",
 
         # ================= STATS =================
         "total": "Gesamt",
@@ -181,12 +190,21 @@ TRANSLATIONS = {
         "amount": "Amount",
         "price": "Price",
 
+        "daily_total_price": "Daily Total Price",
+        "weekly_total_price": "Weekly Total Price",
+        "event_total_price": "Event Total Price",
+
         # ================= SORTING =================
         "sort_by": "Sort by ▾",
         "sort_by_title": "Title",
         "sort_by_location": "Location",
         "sort_by_price": "Price",
         "sort_by_priority": "Priority",
+
+        # ================= FILTERING =================
+        "filter_by": "Filter by ▾",
+        "filter_by_all": "All",
+        "filter_by_events": "Event",
 
         # ================= STATS =================
         "total": "Total",

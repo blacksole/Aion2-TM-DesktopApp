@@ -1,9 +1,10 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QLineEdit, QScrollArea, 
-    QComboBox
+    QComboBox, QCheckBox, QButtonGroup
 )
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QIntValidator
 
 class TaskStatCard(QFrame):
     def __init__(self, title, value, color):
@@ -29,6 +30,7 @@ class TasksPage(QWidget):
     tab_changed = Signal(str)
     task_add_requested = Signal(dict)
     sort_requested = Signal(str)  # tab_key, sort_key
+    filter_changed = Signal(str)
 
     def __init__(self, tabs: dict, language: str, tr_func):
         super().__init__()
@@ -37,6 +39,7 @@ class TasksPage(QWidget):
         self.language = language
         self.tr = tr_func
         self.active_tab = "dailyTasks"
+        self.active_filter = "all"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -122,19 +125,29 @@ class TasksPage(QWidget):
             "high"
         )
 
+        self.event_input = QCheckBox()
+        self.event_input.setObjectName("eventCheckBox")
+        self.event_input.setText("Event")
+
         self.location_input = QLineEdit()
         self.location_input.setPlaceholderText(
             self.tr(self.language, "location")
         )
 
         self.amount_input = QLineEdit()
+        self.amount_input.setValidator(
+            QIntValidator(0, 999999)
+        )
         self.amount_input.setPlaceholderText(
             self.tr(self.language, "amount")
         )
 
         self.price_input = QLineEdit()
+        self.price_input.setValidator(
+            QIntValidator(0, 999999999)
+        )
         self.price_input.setPlaceholderText(
-            self.tr(self.language, "price")
+            f"{self.tr(self.language, 'price')} (K)"
         )
 
         self.add_btn = QPushButton(self.tr(self.language, "add"))
@@ -144,6 +157,7 @@ class TasksPage(QWidget):
         self.add_btn.clicked.connect(self.emit_add_task)
 
         # Standardmäßig nur die für Aufgaben relevanten Inputs anzeigen
+        add_layout.addWidget(self.event_input)
         add_layout.addWidget(self.priority_input, 2)
         add_layout.addWidget(self.title_input, 3)
 
@@ -175,31 +189,81 @@ class TasksPage(QWidget):
             self.tr(self.language, "sort_by_priority")
         )
         self.sort_prio_btn.setObjectName("sortButton")
-        self.sort_prio_btn.clicked.connect(lambda: self.sort_requested.emit("priority"))
+        self.sort_prio_btn.setCheckable(True)
+        self.sort_prio_btn.clicked.connect(
+            lambda: self.set_sort("priority")
+        )
 
         self.sort_title_btn = QPushButton(
             self.tr(self.language, "sort_by_title")
         )
         self.sort_title_btn.setObjectName("sortButton")
-        self.sort_title_btn.clicked.connect(lambda: self.sort_requested.emit("title"))
+        self.sort_title_btn.setCheckable(True)
+        self.sort_title_btn.clicked.connect(lambda: self.set_sort("title"))
 
         self.sort_location_btn = QPushButton(
             self.tr(self.language, "sort_by_location")
         )
         self.sort_location_btn.setObjectName("sortButton")
-        self.sort_location_btn.clicked.connect(lambda: self.sort_requested.emit("location"))
+        self.sort_location_btn.setCheckable(True)
+        self.sort_location_btn.clicked.connect(lambda: self.set_sort("location"))
 
         self.sort_price_btn = QPushButton(
             self.tr(self.language, "sort_by_price")
         )
         self.sort_price_btn.setObjectName("sortButton")
-        self.sort_price_btn.clicked.connect(lambda: self.sort_requested.emit("price"))
+        self.sort_price_btn.setCheckable(True)
+        self.sort_price_btn.clicked.connect(lambda: self.set_sort("price"))
+
+        self.sort_button_group = QButtonGroup(self)
+        self.sort_button_group.setExclusive(True)
+
+        for btn in [
+            self.sort_prio_btn,
+            self.sort_title_btn,
+            self.sort_location_btn,
+            self.sort_price_btn,
+        ]:
+            btn.setCheckable(True)
+            self.sort_button_group.addButton(btn)
+
+        self.filter_label = QLabel(
+            self.tr(self.language, "filter_by")
+        )
+        self.filter_label.setObjectName("sortLabel")
+
+        self.filter_all_btn = QPushButton("Alle")
+        self.filter_all_btn.setObjectName("filterButton")
+        self.filter_all_btn.clicked.connect(lambda: self.set_filter("all"))
+        self.filter_all_btn.setProperty("active", True)
+
+        self.filter_event_btn = QPushButton("Events")
+        self.filter_event_btn.setObjectName("filterButton")
+        self.filter_event_btn.clicked.connect(lambda: self.set_filter("event"))
+
+        self.active_sort = "priority"
+        self.update_sort_buttons()
+
+        self.active_filter = "all"
+        self.update_filter_buttons()
+
+        separator = QLabel("|")
+        separator.setObjectName("sortSeparator")
 
         self.sort_row.addWidget(self.sort_label)
         self.sort_row.addWidget(self.sort_prio_btn)
         self.sort_row.addWidget(self.sort_title_btn)
         self.sort_row.addWidget(self.sort_location_btn)
         self.sort_row.addWidget(self.sort_price_btn)
+
+        self.sort_row.addSpacing(8)
+        self.sort_row.addWidget(separator)
+        self.sort_row.addSpacing(8)
+
+        self.sort_row.addWidget(self.filter_label)
+        self.sort_row.addWidget(self.filter_all_btn)
+        self.sort_row.addWidget(self.filter_event_btn)
+
         self.sort_row.addStretch()
 
         layout.addLayout(self.sort_row)
@@ -333,7 +397,7 @@ class TasksPage(QWidget):
         )
 
         self.price_input.setPlaceholderText(
-            self.tr(self.language, "price")
+            f"{self.tr(self.language, 'price')} (K)"
         )
 
         self.sort_label.setText(
@@ -356,6 +420,18 @@ class TasksPage(QWidget):
             self.tr(self.language, "sort_by_price")
         )
 
+        self.filter_label.setText(
+            self.tr(self.language, "filter_by")
+        )
+
+        self.filter_all_btn.setText(
+            self.tr(self.language, "filter_by_all")
+        )
+
+        self.filter_event_btn.setText(
+            self.tr(self.language, "filter_by_events")
+        )
+
     def update_stats(self, total: int, done: int, open_count: int):
         self.total_card.value_label.setText(str(total))
         self.done_card.value_label.setText(str(done))
@@ -375,14 +451,16 @@ class TasksPage(QWidget):
 
         if self.active_tab in shopping_tabs:
             data = {
+                "event": self.event_input.isChecked(),
                 "priority": self.priority_input.currentData(),
                 "amount": self.amount_input.text().strip() or "1",
                 "title": title,
                 "location": self.location_input.text().strip(),
-                "price": f"{float(self.price_input.text().strip() or 0):.2f} €",
+                "price": self.price_input.text().strip() or "0",
             }
         else:
             data = {
+                "event": self.event_input.isChecked(),
                 "priority": self.priority_input.currentData(),
                 "title": title,
                 "description": self.desc_input.text().strip(),
@@ -396,6 +474,7 @@ class TasksPage(QWidget):
         self.amount_input.clear()
         self.price_input.clear()
         self.priority_input.setCurrentIndex(1)
+        self.event_input.setChecked(False)
 
 
     def set_title_placeholder(self, text: str):
@@ -415,7 +494,77 @@ class TasksPage(QWidget):
                 task
             )
 
+    def set_event_features_visible(self, visible: bool):
+        self.event_input.setVisible(visible)
+
+        self.filter_label.setVisible(visible)
+        self.filter_all_btn.setVisible(visible)
+        self.filter_event_btn.setVisible(visible)
+
+        if not visible:
+            self.set_filter("all")
+
     def set_footer_text(self, text: str):
         self.footer.setText(text)
 
-    
+    def set_filter(self, filter_key: str):
+        self.active_filter = filter_key
+        self.filter_changed.emit(filter_key)
+        self.update_filter_buttons()
+
+    def update_filter_buttons(self):
+        self.filter_all_btn.setProperty(
+            "active",
+            self.active_filter == "all"
+        )
+
+        self.filter_event_btn.setProperty(
+            "active",
+            self.active_filter == "event"
+        )
+
+        for btn in [
+            self.filter_all_btn,
+            self.filter_event_btn,
+        ]:
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+    def set_sort(self, sort_key: str):
+        self.active_sort = sort_key
+
+        self.update_sort_buttons()
+
+        self.sort_requested.emit(sort_key)
+
+
+    def update_sort_buttons(self):
+        sort_buttons = {
+            "priority": self.sort_prio_btn,
+            "title": self.sort_title_btn,
+            "location": self.sort_location_btn,
+        }
+
+        if self.sort_price_btn.isVisible():
+            sort_buttons["price"] = self.sort_price_btn
+
+        for key, btn in sort_buttons.items():
+            is_active = self.active_sort == key
+
+            btn.setProperty("active", is_active)
+
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            btn.update()
+
+        # Reset hidden price button
+        if not self.sort_price_btn.isVisible():
+            self.sort_price_btn.setProperty("active", False)
+
+            self.sort_price_btn.style().unpolish(
+                self.sort_price_btn
+            )
+
+            self.sort_price_btn.style().polish(
+                self.sort_price_btn
+            )

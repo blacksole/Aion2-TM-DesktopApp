@@ -1,5 +1,6 @@
 import sys
-
+from pathlib import Path
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from services.auth_service import AuthManager
@@ -9,6 +10,8 @@ from ui.main_window import MainWindow
 
 
 app = QApplication(sys.argv)
+app_icon = Path(__file__).resolve().parent / "assets" / "icons" / "aion2_tm_icon.ico"
+app.setWindowIcon(QIcon(str(app_icon)))
 
 auth = AuthManager()
 

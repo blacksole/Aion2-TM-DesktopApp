@@ -1,7 +1,7 @@
 {
     "profile_name": "TasseTW",
     "theme": "abyss",
-    "language": "de",
+    "language": "en",
     "settings": {
         "daily_reset_time": "09:00",
         "weekly_reset_day": "Mo",
@@ -18,9 +18,7 @@
     "tasks": {
         "dailyTasks": [],
         "weeklyTasks": [],
-        "eventTasks": [],
         "dailyShopping": [],
-        "weeklyShopping": [],
-        "eventShopping": []
+        "weeklyShopping": []
     }
 }

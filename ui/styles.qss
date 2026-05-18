@@ -724,3 +724,58 @@ QComboBox#priorityInput {
     width: 10px;
     height: 10px;
 }
+
+#eventBadge {
+    background-color: rgba(249, 115, 22, 0.18);
+    color: #fb923c;
+    border: 1px solid rgba(249, 115, 22, 0.45);
+    border-radius: 8px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+#sortSeparator {
+    color: rgba(148, 163, 184, 0.45);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#sortButton,
+#filterButton {
+    background-color: rgba(15, 23, 42, 0.85);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    border-radius: 9px;
+    padding: 7px 12px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#sortButton:hover,
+#filterButton:hover {
+    background-color: rgba(51, 65, 85, 0.9);
+    border: 1px solid rgba(34, 211, 238, 0.7);
+    color: white;
+}
+
+#sortButton:checked,
+#filterButton[active="true"] {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #06b6d4,
+        stop:1 #a855f7
+    );
+    color: white;
+    border: none;
+}
+
+#shoppingAmount {
+    color: #e2e8f0;
+    font-size: 14px;
+    font-weight: 800;
+    min-width: 34px;
+    max-width: 44px;
+    qproperty-alignment: AlignTop;
+    padding-top: 2px;
+}

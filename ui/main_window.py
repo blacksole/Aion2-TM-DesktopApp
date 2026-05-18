@@ -11,7 +11,7 @@ from .pages.settings_page import SettingsPage
 from .pages.dashboard_page import DashboardPage
 from core.translations import tr
 from PySide6.QtWidgets import QTimeEdit
-from PySide6.QtGui import QPainter, QLinearGradient, QColor, Qt, QPixmap
+from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QMenu, QComboBox, QStackedWidget,
@@ -61,11 +61,12 @@ class GradientBackground(QWidget):
         painter.fillRect(self.rect(), gradient)
 
 class TaskCard(QFrame):
-    def __init__(self, title, description="", priority="low"):
+    def __init__(self, title, description="", priority="low", is_event=False):
         super().__init__()
 
         self.completed = False
-
+        self.is_event = is_event
+        self.setProperty("event", self.is_event)
         self.setObjectName("taskCard")
 
         layout = QHBoxLayout(self)
@@ -85,7 +86,17 @@ class TaskCard(QFrame):
         self.desc_label = QLabel(description)
         self.desc_label.setObjectName("taskDescription")
 
-        text_box.addWidget(self.title_label)
+        title_row = QHBoxLayout()
+
+        if self.is_event:
+            self.event_badge = QLabel("EVENT")
+            self.event_badge.setObjectName("eventBadge")
+            title_row.addWidget(self.event_badge)
+
+        title_row.addWidget(self.title_label)
+        title_row.addStretch()
+
+        text_box.addLayout(title_row)
 
         if description:
             text_box.addWidget(self.desc_label)
@@ -151,16 +162,15 @@ class MainWindow(QMainWindow):
         self.tabs = {
             "dailyTasks": "daily_tasks",
             "weeklyTasks": "weekly_tasks",
-            "eventTasks": "event_tasks",
             "dailyShopping": "daily_shopping",
             "weeklyShopping": "weekly_shopping",
-            "eventShopping": "event_shopping",
         }
 
         self.language = "en"
         self.current_theme = "abyss"
 
         self.active_tab = "dailyTasks"
+        self.active_filter = "all"
         self.show_events = True
         self.daily_reset_time = "09:00"
         self.weekly_reset_day = "Mo"
@@ -196,6 +206,7 @@ class MainWindow(QMainWindow):
         self.apply_language()
         self.sync_settings_page()
         self.refresh()
+        self.sort_current_list("priority")
 
         self.load_last_profile()
 
@@ -222,6 +233,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self.tr("app.title"))
         self.resize(1200, 800)
         self.setMinimumSize(1000, 700)
+        icon_path = self.project_root / "assets" / "icons" / "aion2_tm_icon.ico"
+        self.setWindowIcon(QIcon(str(icon_path)))
 
     def _setup_header(self):
         self.header = HeaderWidget()
@@ -347,6 +360,7 @@ class MainWindow(QMainWindow):
             
         
         self.tasks_page.sort_requested.connect(self.sort_current_list)
+        self.tasks_page.filter_changed.connect(self.set_task_filter)
 
     def open_main_menu(self):
         menu = QMenu(self)
@@ -582,13 +596,22 @@ class MainWindow(QMainWindow):
     def refresh(self):
 
         tasks = self.task_lists[self.active_tab]
+
+        if self.active_filter == "event":
+            tasks = [
+                task for task in tasks
+                if getattr(task, "is_event", False)
+            ]
+
+        if not self.show_events:
+            tasks = [
+                task for task in tasks
+                if not getattr(task, "is_event", False)
+            ]
+
         self.tasks_page.render_tasks(tasks)
-
         total = len(tasks)
-
-        done = len([
-            t for t in tasks if t.completed
-        ])
+        done = len([t for t in tasks if t.completed])
 
         open_count = total - done
 
@@ -596,11 +619,52 @@ class MainWindow(QMainWindow):
             (done / total) * 100
         ) if total else 0
 
+        shopping_tabs = [
+            "dailyShopping",
+            "weeklyShopping",
+        ]
+
+        total_kinah_k = 0
+
+        if self.active_tab in shopping_tabs:
+            for card in tasks:
+                if isinstance(card, ShoppingCard):
+                    try:
+                        amount = int(
+                            str(card.amount).strip() or 1
+                        )
+
+                        price_k = float(
+                            str(card.price).replace(",", ".").strip() or 0
+                        )
+
+                        total_kinah_k += amount * price_k
+
+                    except ValueError:
+                        pass
+
         self.tasks_page.update_stats(total, done, open_count)
 
         self.tasks_page.set_footer_text(
             f"● {tr(self.language, 'progress')}: {progress}%"
         )
+
+        shopping_total_labels = {
+            "dailyShopping": "daily_total_price",
+            "weeklyShopping": "weekly_total_price",
+            "eventShopping": "event_total_price",
+        }
+
+        if self.active_tab in shopping_total_labels:
+            self.tasks_page.set_footer_text(
+                f"● {tr(self.language, 'progress')}: {progress}%   |   "
+                f"{tr(self.language, shopping_total_labels[self.active_tab])}: "
+                f"{self.format_kinah_price(total_kinah_k)}"
+            )
+        else:
+            self.tasks_page.set_footer_text(
+                f"● {tr(self.language, 'progress')}: {progress}%"
+            )
 
         tab_key = self.tabs[self.active_tab]
 
@@ -629,17 +693,9 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(styles)
 
     def toggle_events(self):
-        self.tasks_page.set_events_visible(self.show_events)
-
-        if (
-            not self.show_events and
-            self.active_tab in [
-                "eventTasks",
-                "eventShopping"
-            ]
-        ):
-            self.active_tab = "dailyTasks"
-            self.tasks_page.set_active_tab("dailyTasks")
+        self.tasks_page.set_event_features_visible(
+            self.show_events
+        )
 
         self.refresh()
 
@@ -788,6 +844,31 @@ class MainWindow(QMainWindow):
         if isinstance(data, dict):
             saved_tasks = data.get("tasks", {})
 
+        # ===== MIGRATION OLD EVENT TABS =====
+
+        old_event_tasks = saved_tasks.get("eventTasks", [])
+        old_event_shopping = saved_tasks.get("eventShopping", [])
+
+        if old_event_tasks:
+            saved_tasks.setdefault("dailyTasks", [])
+
+            for item in old_event_tasks:
+                item["event"] = True
+
+            saved_tasks["dailyTasks"].extend(
+                old_event_tasks
+            )
+
+        if old_event_shopping:
+            saved_tasks.setdefault("dailyShopping", [])
+
+            for item in old_event_shopping:
+                item["event"] = True
+
+            saved_tasks["dailyShopping"].extend(
+                old_event_shopping
+            )
+
         # Altes Format oder leeres Profil
         else:
             saved_tasks = {}
@@ -810,13 +891,15 @@ class MainWindow(QMainWindow):
                             amount=str(item.get("amount", "1")),
                             title=item.get("title", ""),
                             location=item.get("location", ""),
-                            price=item.get("price", "0")
+                            price=item.get("price", "0"),
+                            is_event=item.get("event", False)
                         )
                     else:
                         card = TaskCard(
                             item.get("title", ""),
                             item.get("description", ""),
-                            item.get("priority", "low")
+                            item.get("priority", "low"),
+                            item.get("event", False)
                         )
 
                     if item.get("completed", False):
@@ -837,6 +920,7 @@ class MainWindow(QMainWindow):
                 "title": card.title,
                 "location": card.location,
                 "price": card.price,
+                "event": getattr(card, "is_event", False),
                 "completed": card.completed,
             }
 
@@ -845,6 +929,7 @@ class MainWindow(QMainWindow):
             "priority": getattr(card, "priority_value", "low"),
             "title": card.title_label.text(),
             "description": card.desc_label.text(),
+            "event": getattr(card, "is_event", False),
             "completed": card.completed,
         }
     
@@ -1049,7 +1134,6 @@ class MainWindow(QMainWindow):
         shopping_tabs = [
             "dailyShopping",
             "weeklyShopping",
-            "eventShopping",
         ]
 
         if self.active_tab in shopping_tabs:
@@ -1058,13 +1142,15 @@ class MainWindow(QMainWindow):
                 amount=str(data.get("amount", "1")),
                 title=data.get("title", ""),
                 location=data.get("location", ""),
-                price=data.get("price", "0")
+                price=data.get("price", "0"),
+                is_event=data.get("event", False),
             )
         else:
             card = TaskCard(
                 data.get("title", ""),
                 data.get("description", ""),
-                data.get("priority", "middle")
+                data.get("priority", "middle"),
+                data.get("event", False),
             )
 
         self.task_lists[self.active_tab].insert(0, card)
@@ -1294,3 +1380,23 @@ class MainWindow(QMainWindow):
                 self.set_profile_name(profile_name)
 
         self.save_profile()
+
+    def format_kinah_price(self, value):
+        try:
+            kinah = float(str(value).replace(",", ".").strip()) * 1000
+        except ValueError:
+            kinah = 0
+
+        if kinah >= 1_000_000:
+            millions = kinah / 1_000_000
+            return f"{millions:g}m Kinah"
+
+        if kinah >= 1_000:
+            thousands = kinah / 1_000
+            return f"{thousands:g}k Kinah"
+
+        return f"{int(kinah)} Kinah"
+    
+    def set_task_filter(self, filter_key):
+        self.active_filter = filter_key
+        self.refresh()
