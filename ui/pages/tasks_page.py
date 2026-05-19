@@ -29,7 +29,7 @@ class TaskStatCard(QFrame):
 class TasksPage(QWidget):
     tab_changed = Signal(str)
     task_add_requested = Signal(dict)
-    sort_requested = Signal(str)  # tab_key, sort_key
+    sort_requested = Signal(object)  # tab_key, sort_key
     filter_changed = Signal(str)
 
     def __init__(self, tabs: dict, language: str, tr_func):
@@ -40,6 +40,8 @@ class TasksPage(QWidget):
         self.tr = tr_func
         self.active_tab = "dailyTasks"
         self.active_filter = "all"
+        self.active_sort = "priority"
+        self.sort_direction = "desc"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -531,40 +533,55 @@ class TasksPage(QWidget):
             btn.style().polish(btn)
 
     def set_sort(self, sort_key: str):
-        self.active_sort = sort_key
+        if self.active_sort == sort_key:
+            self.sort_direction = (
+                "asc" if self.sort_direction == "desc" else "desc"
+            )
+        else:
+            self.active_sort = sort_key
+            self.sort_direction = "desc"
 
         self.update_sort_buttons()
-
-        self.sort_requested.emit(sort_key)
+        self.sort_requested.emit(
+            {
+                "key": self.active_sort,
+                "direction": self.sort_direction,
+            }
+        )
 
 
     def update_sort_buttons(self):
         sort_buttons = {
-            "priority": self.sort_prio_btn,
-            "title": self.sort_title_btn,
-            "location": self.sort_location_btn,
+            "priority": (
+                self.sort_prio_btn,
+                self.tr(self.language, "sort_by_priority")
+            ),
+            "title": (
+                self.sort_title_btn,
+                self.tr(self.language, "sort_by_title")
+            ),
+            "location": (
+                self.sort_location_btn,
+                self.tr(self.language, "sort_by_location")
+            ),
+            "price": (
+                self.sort_price_btn,
+                self.tr(self.language, "sort_by_price")
+            ),
         }
 
-        if self.sort_price_btn.isVisible():
-            sort_buttons["price"] = self.sort_price_btn
+        arrow = "↓" if self.sort_direction == "desc" else "↑"
 
-        for key, btn in sort_buttons.items():
+        for key, (btn, label) in sort_buttons.items():
             is_active = self.active_sort == key
 
-            btn.setProperty("active", is_active)
+            btn.setChecked(is_active)
+
+            if is_active:
+                btn.setText(f"{label} {arrow}")
+            else:
+                btn.setText(label)
 
             btn.style().unpolish(btn)
             btn.style().polish(btn)
             btn.update()
-
-        # Reset hidden price button
-        if not self.sort_price_btn.isVisible():
-            self.sort_price_btn.setProperty("active", False)
-
-            self.sort_price_btn.style().unpolish(
-                self.sort_price_btn
-            )
-
-            self.sort_price_btn.style().polish(
-                self.sort_price_btn
-            )

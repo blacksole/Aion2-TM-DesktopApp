@@ -357,6 +357,16 @@ class MainWindow(QMainWindow):
             self.profile_page.load_profile_btn.clicked.connect(
                 self.open_profile_menu
             )
+
+        if hasattr(self.profile_page, "clear_events_btn"):
+            self.profile_page.clear_events_btn.clicked.connect(
+                self.clear_event_entries
+            )
+
+        if hasattr(self.profile_page, "clear_events_btn"):
+            self.profile_page.clear_events_btn.clicked.connect(
+                self.clear_event_entries
+            )
             
         
         self.tasks_page.sort_requested.connect(self.sort_current_list)
@@ -991,6 +1001,22 @@ class MainWindow(QMainWindow):
         self.refresh()
 
         print("Profil zurückgesetzt:", self.profile_name)
+        
+    def clear_event_entries(self):
+        for tab in self.task_lists:
+            self.task_lists[tab] = [
+                card for card in self.task_lists[tab]
+                if not getattr(card, "is_event", False)
+            ]
+
+        self.refresh()
+
+        if self.auto_save:
+            self.save_profile()
+
+        self.show_toast(
+            tr(self.language, "event_entries_removed")
+        )
 
     def apply_language(self):
         self.setWindowTitle("Aion Companion")
@@ -1317,7 +1343,15 @@ class MainWindow(QMainWindow):
         })
 
 
-    def sort_current_list(self, sort_key):
+    def sort_current_list(self, sort_data):
+        if isinstance(sort_data, dict):
+            sort_key = sort_data.get("key", "priority")
+            direction = sort_data.get("direction", "desc")
+        else:
+            sort_key = sort_data
+            direction = "desc"
+
+        reverse = direction == "desc"
         priority_order = {
             "high": 0,
             "middle": 1,
@@ -1363,7 +1397,8 @@ class MainWindow(QMainWindow):
             return ""
 
         self.task_lists[self.active_tab].sort(
-            key=get_card_value
+            key=get_card_value,
+            reverse=reverse
         )
 
         self.refresh()
@@ -1396,3 +1431,20 @@ class MainWindow(QMainWindow):
     def set_task_filter(self, filter_key):
         self.active_filter = filter_key
         self.refresh()
+
+    def clear_event_entries(self):
+        for tab in self.task_lists:
+
+            self.task_lists[tab] = [
+                card for card in self.task_lists[tab]
+                if not getattr(card, "is_event", False)
+            ]
+
+        self.refresh()
+
+        if self.auto_save:
+            self.save_profile()
+
+        self.show_toast(
+            tr(self.language, "event_entries_removed")
+        )

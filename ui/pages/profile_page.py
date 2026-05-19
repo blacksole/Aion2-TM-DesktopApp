@@ -9,6 +9,7 @@ class ProfilePage(QWidget):
     save_requested = Signal()
     load_requested = Signal()
     reset_requested = Signal()
+    clear_events_requested = Signal()
     profile_name_changed = Signal(str)
 
     def __init__(self):
@@ -68,13 +69,22 @@ class ProfilePage(QWidget):
         )
         self.reset_profile_btn.setObjectName("tabButton")
 
+        self.clear_events_btn = QPushButton("Clear Events")
+        self.clear_events_btn.setObjectName("tabButton")
+        self.clear_events_btn.setToolTip(
+            "Removes all Event entries from Tasks "
+            "and Shopping lists."
+        )
+
         self.save_profile_btn.clicked.connect(self.save_requested.emit)
         self.load_profile_btn.clicked.connect(self.load_requested.emit)
         self.reset_profile_btn.clicked.connect(self.reset_requested.emit)
+        self.clear_events_btn.clicked.connect(self.clear_events_requested.emit)
 
         button_row.addWidget(self.save_profile_btn)
         button_row.addWidget(self.load_profile_btn)
         button_row.addWidget(self.reset_profile_btn)
+        button_row.addWidget(self.clear_events_btn)
         button_row.addStretch()
 
         layout.addWidget(self.title_label)
@@ -150,4 +160,12 @@ class ProfilePage(QWidget):
 
         self.reset_profile_btn.setToolTip(
             tr_func(language, "reset_profile_tooltip")
+        )
+
+        self.clear_events_btn.setText(
+            tr_func(language, "clear_events")
+        )
+
+        self.clear_events_btn.setToolTip(
+            tr_func(language, "clear_events_tooltip")
         )

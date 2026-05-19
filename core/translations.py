@@ -57,6 +57,15 @@ TRANSLATIONS = {
         "weekly_total_price": "Wöchentlicher Gesamtpreis",
         "event_total_price": "Event Gesamtpreis",
 
+        # ================= CLEAR EVENTS =================
+
+        "clear_events": "Event-Einträge löschen",
+        "clear_events_tooltip":
+            "Entfernt alle Event-Einträge aus Aufgaben "
+            "und Shopping-Listen.\n\n"
+            "Normale Daily- und Weekly-Einträge bleiben erhalten.",
+        "event_entries_removed": "✓ Event-Einträge gelöscht",
+
         # ================= SORTING =================
         "sort_by": "Sortieren nach ▾",
         "sort_by_title": "Titel",
@@ -203,6 +212,14 @@ TRANSLATIONS = {
         "daily_total_price": "Daily Total Price",
         "weekly_total_price": "Weekly Total Price",
         "event_total_price": "Event Total Price",
+
+        # ================= CLEAR EVENTS =================
+        "clear_events": "Clear Event Entries",
+        "clear_events_tooltip":
+            "Removes all Event entries from Tasks "
+            "and Shopping lists.\n\n"
+            "Normal Daily and Weekly entries remain unchanged.",
+        "event_entries_removed": "✓ Event entries removed",
 
         # ================= SORTING =================
         "sort_by": "Sort by ▾",

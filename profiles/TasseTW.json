@@ -1,7 +1,7 @@
 {
     "profile_name": "TasseTW",
     "theme": "emerald",
-    "language": "en",
+    "language": "de",
     "settings": {
         "daily_reset_time": "09:00",
         "weekly_reset_day": "Mo",
@@ -19,10 +19,18 @@
         "dailyTasks": [
             {
                 "type": "task",
-                "priority": "low",
-                "title": "asdas",
-                "description": "asdasd",
+                "priority": "high",
+                "title": "asd",
+                "description": "asd",
                 "event": true,
+                "completed": false
+            },
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "asdasd",
+                "description": "asdasd",
+                "event": false,
                 "completed": false
             }
         ],
