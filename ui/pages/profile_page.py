@@ -58,6 +58,14 @@ class ProfilePage(QWidget):
         self.load_profile_btn.setObjectName("tabButton")
 
         self.reset_profile_btn = QPushButton("Reset Profile")
+        self.reset_profile_btn.setToolTip(
+            self.tr_func(
+                self.language,
+                "reset_profile_tooltip"
+            ) if self.tr_func else
+            "Removes all current Tasks and Shopping entries "
+            "from this profile."
+        )
         self.reset_profile_btn.setObjectName("tabButton")
 
         self.save_profile_btn.clicked.connect(self.save_requested.emit)
@@ -138,4 +146,8 @@ class ProfilePage(QWidget):
 
         self.subtitle_label.setText(
             tr_func(language, "profile_subtitle")
+        )
+
+        self.reset_profile_btn.setToolTip(
+            tr_func(language, "reset_profile_tooltip")
         )

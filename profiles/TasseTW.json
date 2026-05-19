@@ -1,6 +1,6 @@
 {
     "profile_name": "TasseTW",
-    "theme": "abyss",
+    "theme": "emerald",
     "language": "en",
     "settings": {
         "daily_reset_time": "09:00",
@@ -16,9 +16,29 @@
         "auto_save": true
     },
     "tasks": {
-        "dailyTasks": [],
+        "dailyTasks": [
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "asdas",
+                "description": "asdasd",
+                "event": true,
+                "completed": false
+            }
+        ],
         "weeklyTasks": [],
-        "dailyShopping": [],
+        "dailyShopping": [
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "123",
+                "title": "asdasd",
+                "location": "asdasd",
+                "price": "12",
+                "event": false,
+                "completed": false
+            }
+        ],
         "weeklyShopping": []
     }
 }

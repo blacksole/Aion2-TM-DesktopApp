@@ -15,6 +15,11 @@ TRANSLATIONS = {
         "profile": "Profil",
         "profile_subtitle": "Profile verwalten und speichern",
 
+        "reset_profile_tooltip":
+        "Entfernt alle aktuellen Tasks- und Shopping-Einträge "
+        "aus diesem Profil.\n\n"
+        "Profileinstellungen und Layout bleiben erhalten.",
+
         # ================= GENERAL =================
         "add": "+ Hinzufügen",
         "save": "Speichern",
@@ -156,6 +161,11 @@ TRANSLATIONS = {
         "profile_saved": "Profile saved",
         "profile": "Profile",
         "profile_subtitle": "Manage and save profiles",
+
+        "reset_profile_tooltip":
+        "Removes all current Tasks and Shopping entries "
+        "from this profile.\n\n"
+        "Profile settings and layout will remain unchanged.",
 
         # ================= GENERAL =================
         "add": "+ Add",

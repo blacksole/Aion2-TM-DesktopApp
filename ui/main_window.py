@@ -869,43 +869,36 @@ class MainWindow(QMainWindow):
                 old_event_shopping
             )
 
-        # Altes Format oder leeres Profil
-        else:
-            saved_tasks = {}
+        for tab, items in saved_tasks.items():
 
-        if isinstance(saved_tasks, dict):
-            for tab, cards in saved_tasks.items():
-                if tab not in self.task_lists:
-                    continue
+            if tab not in self.task_lists:
+                continue
 
-                if not isinstance(cards, list):
-                    continue
+            for item in items:
 
-                for item in cards:
-                    if not isinstance(item, dict):
-                        continue
+                if item.get("type") == "shopping":
 
-                    if item.get("type") == "shopping":
-                        card = ShoppingCard(
-                            priority=item.get("priority", "middle"),
-                            amount=str(item.get("amount", "1")),
-                            title=item.get("title", ""),
-                            location=item.get("location", ""),
-                            price=item.get("price", "0"),
-                            is_event=item.get("event", False)
-                        )
-                    else:
-                        card = TaskCard(
-                            item.get("title", ""),
-                            item.get("description", ""),
-                            item.get("priority", "low"),
-                            item.get("event", False)
-                        )
+                    card = ShoppingCard(
+                        priority=item.get("priority", "middle"),
+                        amount=str(item.get("amount", "1")),
+                        title=item.get("title", ""),
+                        location=item.get("location", ""),
+                        price=item.get("price", "0"),
+                        is_event=item.get("event", False),
+                    )
 
-                    if item.get("completed", False):
-                        card.toggle()
+                else:
+                    card = TaskCard(
+                        item.get("title", ""),
+                        item.get("description", ""),
+                        item.get("priority", "middle"),
+                        item.get("event", False),
+                    )
 
-                    self.task_lists[tab].append(card)
+                if item.get("completed", False):
+                    card.set_completed(True)
+
+                self.task_lists[tab].append(card)
 
         self.refresh()
         self.save_last_profile(profile_path)
@@ -1155,6 +1148,9 @@ class MainWindow(QMainWindow):
 
         self.task_lists[self.active_tab].insert(0, card)
         self.refresh()
+
+        if self.auto_save:
+            self.save_profile()
 
     def set_profile_name(self, profile_name: str):
         if profile_name:
