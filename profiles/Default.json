@@ -16,32 +16,7 @@
         "auto_save": true
     },
     "tasks": {
-        "dailyTasks": [
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "asdas",
-                "description": "asdasd",
-                "event": false,
-                "completed": false
-            },
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "asdasd",
-                "description": "asdasd",
-                "event": true,
-                "completed": false
-            },
-            {
-                "type": "task",
-                "priority": "low",
-                "title": "asdas",
-                "description": "asdasd",
-                "event": false,
-                "completed": false
-            }
-        ],
+        "dailyTasks": [],
         "weeklyTasks": [],
         "dailyShopping": [],
         "weeklyShopping": []

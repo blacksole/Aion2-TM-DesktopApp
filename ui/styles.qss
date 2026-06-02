@@ -789,3 +789,293 @@ QToolTip {
     font-size: 12px;
     font-weight: 600;
 }
+
+#FlowNodeCard {
+    background-color: rgba(15, 23, 42, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 18px;
+}
+
+#FlowNodeTitle {
+    color: #f8fafc;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+#FlowNodeDescription {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+#FlowNodeAddButton {
+    background-color: transparent;
+    color: #d1d5db;
+    border: none;
+    font-size: 30px;
+    font-weight: 900;
+    padding: 0px;
+    margin: 0px;
+}
+
+#FlowNodeAddButton:hover {
+    color: #ffffff;
+}
+
+#FlowNodeAddButton:pressed {
+    background-color: rgba(45, 45, 45, 1);
+}
+
+#FlowCanvas {
+    background-color: rgba(5, 10, 18, 0.98);
+}
+
+#FlowTopbar {
+    background-color: rgba(7, 12, 22, 0.92);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+#FlowBackButton {
+    background-color: transparent;
+    color: #e5e7eb;
+    border: none;
+    font-size: 34px;
+}
+
+#FlowPlanTitle {
+    color: #f8fafc;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+#FlowModeButton {
+    background-color: rgba(15, 23, 42, 0.72);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    padding: 10px 34px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+#FlowModeButton:checked {
+    background-color: rgba(37, 99, 235, 0.25);
+    color: #dbeafe;
+    border: 1px solid rgba(59, 130, 246, 0.85);
+}
+
+#FlowTopSaveButton {
+    background-color: rgba(37, 99, 235, 0.8);
+    color: white;
+    border: 1px solid rgba(96, 165, 250, 0.9);
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+#FlowNodeCard {
+    background-color: rgba(15, 23, 42, 0.74);
+    border: 1px solid rgba(59, 130, 246, 0.85);
+    border-radius: 14px;
+}
+
+#FlowNodeCard[status="completed"] {
+    border: 1px solid rgba(74, 222, 128, 0.9);
+}
+
+#FlowNodeCard[status="active"] {
+    border: 1px solid rgba(59, 130, 246, 0.95);
+}
+
+#FlowNodeCard[status="optional"] {
+    border: 1px solid rgba(245, 158, 11, 0.95);
+}
+
+#FlowNodeCard[status="locked"] {
+    border: 1px solid rgba(107, 114, 128, 0.8);
+}
+
+#FlowNodeIcon {
+    background-color: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    border-radius: 12px;
+}
+
+#FlowNodeTitle {
+    color: #f8fafc;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+#FlowNodeDescription {
+    color: #cbd5e1;
+    font-size: 14px;
+}
+
+#FlowDoneButton {
+    background-color: transparent;
+    color: rgba(203, 213, 225, 0.6);
+    border: 2px solid rgba(148, 163, 184, 0.45);
+    border-radius: 17px;
+    font-size: 20px;
+    font-weight: 900;
+}
+
+#FlowDoneButton:hover {
+    color: #86efac;
+    border-color: #22c55e;
+}
+
+#FlowConnectorLine {
+    color: rgba(226, 232, 240, 0.65);
+    font-size: 22px;
+    padding: 0px;
+    margin: 0px;
+}
+
+#FlowConnectorArrow {
+    color: rgba(226, 232, 240, 0.9);
+    font-size: 17px;
+    padding: 0px;
+    margin: 0px;
+}
+
+#FlowConnectorPlus {
+    background-color: rgba(31, 41, 55, 0.95);
+    color: #ffffff;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 21px;
+    font-size: 32px;
+    font-weight: 900;
+    padding: 0px;
+}
+
+#NodeEditorPanel,
+#StatusPanel,
+#FlowInfoBar {
+    background-color: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 14px;
+}
+
+#PanelTitle {
+    color: #cbd5e1;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+#PanelCloseButton {
+    background: transparent;
+    color: #cbd5e1;
+    border: none;
+    font-size: 28px;
+}
+
+#FieldLabel {
+    color: #cbd5e1;
+    font-size: 14px;
+}
+
+#FlowInput,
+#FlowTextEdit {
+    background-color: rgba(2, 6, 23, 0.42);
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+#FlowIconButton {
+    background-color: rgba(15, 23, 42, 0.72);
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 9px;
+    font-size: 38px;
+}
+
+#FlowIconButton:checked {
+    border: 1px solid rgba(59, 130, 246, 0.95);
+    background-color: rgba(37, 99, 235, 0.18);
+}
+
+#FlowCancelButton {
+    background-color: rgba(31, 41, 55, 0.7);
+    color: #e5e7eb;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+}
+
+#FlowSaveButton {
+    background-color: rgba(37, 99, 235, 0.82);
+    color: #ffffff;
+    border: 1px solid rgba(96, 165, 250, 0.85);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+}
+
+#StatusText {
+    color: #d1d5db;
+    font-size: 14px;
+}
+
+#StatusDot_green {
+    color: #22c55e;
+    font-size: 20px;
+}
+
+#StatusDot_blue {
+    color: #2563eb;
+    font-size: 20px;
+}
+
+#StatusDot_yellow {
+    color: #f59e0b;
+    font-size: 20px;
+}
+
+#StatusDot_gray {
+    color: #64748b;
+    font-size: 20px;
+}
+
+#FlowInfoIcon {
+    color: #60a5fa;
+    border: 2px solid #2563eb;
+    border-radius: 19px;
+    font-size: 20px;
+    font-weight: 800;
+}
+
+#FlowInfoText {
+    color: #cbd5e1;
+    font-size: 14px;
+}
+
+#FlowProgressHint {
+    color: #cbd5e1;
+    font-size: 22px;
+}
+
+#FlowSymbolCombo {
+    background-color: rgba(2, 6, 23, 0.42);
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+#FlowSymbolCombo {
+    background-color: rgba(2, 6, 23, 0.42);
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 15px;
+    min-height: 58px;
+}

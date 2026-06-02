@@ -9,6 +9,7 @@ from .pages.timers_page import TimersPage
 from .pages.profile_page import ProfilePage
 from .pages.settings_page import SettingsPage
 from .pages.dashboard_page import DashboardPage
+from .windows.flow_app_window import FlowMapWindow
 from core.translations import tr
 from PySide6.QtWidgets import QTimeEdit
 from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
@@ -158,6 +159,7 @@ class MainWindow(QMainWindow):
 
         self.auth_manager = auth_manager
         self.auto_save = True
+        
 
         self.tabs = {
             "dailyTasks": "daily_tasks",
@@ -201,6 +203,8 @@ class MainWindow(QMainWindow):
             key: [] for key in self.tabs
         }
 
+        self.flow_map_window = FlowMapWindow(self, language=self.language, tr_func=tr)
+
         self.setup_ui()
         self.load_styles()
         self.apply_language()
@@ -216,6 +220,13 @@ class MainWindow(QMainWindow):
 
         self.update_countdowns()
 
+    def open_flow_map_window(self):
+        if self.flow_map_window is None:
+            self.flow_map_window = FlowMapWindow(self)
+
+        self.flow_map_window.show()
+        self.flow_map_window.raise_()
+        self.flow_map_window.activateWindow()
 
 
     def setup_ui(self):
@@ -1139,6 +1150,10 @@ class MainWindow(QMainWindow):
 
         elif page_key == "timers":
             self.show_toast(tr(self.language, "toast_timers_opened"))
+
+        elif page_key == "plan":
+            self.open_flow_map_window()
+            self.show_toast(tr(self.language, "toast_plan_opened"))
 
         elif page_key == "settings":
             self.show_toast(tr(self.language, "toast_settings_opened"))

@@ -14,6 +14,7 @@ class SidebarWidget(QWidget):
         self.pages = {
             "tasks": "tasks",
             "timers": "timers",
+            "plan": "plan",
             "profile": "profile",
             "settings": "settings",
         }

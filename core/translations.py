@@ -131,6 +131,47 @@ TRANSLATIONS = {
         "on": "Ein",
         "off": "Aus",
 
+        # ================= PLAN / FLOW MAP =================
+        "plan": "Plan",
+
+        "toast_plan_opened": "Ablaufplan geöffnet",
+
+        "flow_title": "Ablaufplan",
+        "flow_window_title": "Ablaufplan Map",
+
+        "flow_edit_mode": "Plan bearbeiten",
+        "flow_guide_mode": "Guide-Modus",
+
+        "flow_add_node": "Knoten hinzufügen",
+        "flow_edit_node": "Knoten bearbeiten",
+        "flow_delete_node": "Knoten löschen",
+        "flow_node_edit": "NODE BEARBEITEN",
+
+        "flow_edit_mode": "Plan bearbeiten",
+        "flow_guide_mode": "Guide-Modus",
+
+        "flow_title_placeholder": "Titel",
+        "flow_description_placeholder": "Beschreibung",
+        "flow_symbol": "Symbol",
+
+        "flow_save": "Speichern",
+        "flow_load": "Laden",
+
+        "cancel": "Abbrechen",
+
+        "flow_status_colors": "STATUS & FARBEN",
+        "status_completed": "Grün  =  Abgeschlossen",
+        "status_active": "Blau  =  Aktiv",
+        "status_optional": "Gelb  =  Optional / In Arbeit",
+        "status_locked": "Grau  =  Zukünftig / Gesperrt",
+
+        "flow_info_text": (
+            "Kacheln können durch Klicken auf den Haken als erledigt markiert werden.\n"
+            "Der nächste Schritt wird automatisch als aktiv markiert."
+        ),
+
+        "flow_start_hint": "Klicke auf (+), um die erste Kachel zu erstellen.",
+
         # ================= TIME VALUES =================
         "30_min": "30 Min",
         "1_hour": "1 Stunde",
@@ -285,6 +326,45 @@ TRANSLATIONS = {
         "anchor": "Anchor",
         "on": "On",
         "off": "Off",
+
+        # ================= TOAST PLANS =================
+        "toast_plan_opened": "Plan opened",
+        "plan": "Plan",
+
+        "flow_title": "Flow",
+        "flow_window_title": "Flow Map",
+
+        "flow_add_node": "Add Node",
+        "flow_edit_node": "Edit Node",
+        "flow_delete_node": "Delete Node",
+        "flow_node_edit": "EDIT NODE",
+
+        "flow_edit_mode": "Edit plan",
+        "flow_guide_mode": "Guide mode",
+
+        "flow_title_placeholder": "Title",
+        "flow_description_placeholder": "Description",
+        "flow_symbol": "Symbol",
+
+        "flow_save": "Save",
+        "flow_load": "Load",
+
+        "save": "Save",
+        "cancel": "Cancel",
+
+        "flow_status_colors": "STATUS & COLORS",
+        "status_completed": "Green  =  Completed",
+        "status_active": "Blue   =  Active",
+        "status_optional": "Yellow =  Optional / In Progress",
+        "status_locked": "Gray   =  Future / Locked",
+
+        "flow_info_text": (
+            "Tiles can be marked as completed by clicking the checkmark.\n"
+            "The next step will automatically be marked as active."
+        ),
+
+        "flow_start_hint": "Click (+) to create the first card.",
+
 
         # ================= TIME VALUES =================
         "30_min": "30 Min",
