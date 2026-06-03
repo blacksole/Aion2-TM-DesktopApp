@@ -202,31 +202,6 @@ QDialog {
     background-color: rgba(30, 41, 59, 0.75);
     border: 1px solid rgba(100, 116, 139, 0.45);
     border-radius: 10px;
-}
-
-#settingsLabel {
-    color: #e5e7eb;
-    font-size: 14px;
-}
-
-#settingsCheckbox {
-    color: #e5e7eb;
-    font-size: 14px;
-    padding: 8px;
-}
-
-#settingsTimeEdit {
-    background-color: rgba(15, 23, 42, 0.85);
-    color: white;
-    border: 1px solid rgba(100, 116, 139, 0.6);
-    border-radius: 8px;
-    padding: 6px;
-}
-
-#settingsRow {
-    background-color: rgba(30, 41, 59, 0.75);
-    border: 1px solid rgba(100, 116, 139, 0.45);
-    border-radius: 10px;
     min-height: 52px;
 }
 
@@ -427,31 +402,6 @@ QWidget[theme="void"] #taskCard {
     border: 1px solid rgba(192, 132, 252, 0.45);
 }
 
-#themeToggleButton {
-    background-color: rgba(15, 23, 42, 0.85);
-    color: #cbd5e1;
-    border: 1px solid rgba(100, 116, 139, 0.6);
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: 600;
-}
-
-#themeToggleButton:hover {
-    border: 1px solid rgba(34, 211, 238, 0.8);
-    color: white;
-}
-
-#themeToggleButton:checked {
-    background: qlineargradient(
-        x1:0, y1:0, x2:1, y2:0,
-        stop:0 #06b6d4,
-        stop:1 #a855f7
-    );
-    color: white;
-    border: none;
-}
-
 #settingsThemeContainer {
     background-color: rgba(30, 41, 59, 0.75);
     border: 1px solid rgba(100, 116, 139, 0.45);
@@ -601,12 +551,6 @@ QComboBox#priorityInput {
     background: transparent;
 }
 
-#priorityInput::down-arrow {
-    image: url(./assets/icons/arrow_down_orange.png);
-    width: 12px;
-    height: 12px;
-}
-
 #priorityInput QAbstractItemView {
     background-color: #0f172a;
     border: 1px solid rgba(100, 116, 139, 0.45);
@@ -653,28 +597,22 @@ QComboBox#priorityInput {
     min-height: 20px;
 }
 
-#priorityInput::drop-down,
-#settingsCombo::drop-down {
+#priorityInput::down-arrow,
+#settingsCombo::down-arrow,
+#FlowZoomCombo::down-arrow,
+#FlowSymbolCombo::down-arrow {
     border: none;
     width: 24px;
     background: transparent;
 }
 
 #priorityInput::down-arrow,
-#settingsCombo::down-arrow {
+#settingsCombo::down-arrow,
+#FlowZoomCombo::down-arrow,
+#FlowSymbolCombo::down-arrow {
     image: url(ASSET_PATH/assets/icons/arrow_down_orange.png);
     width: 14px;
     height: 14px;
-}
-
-#settingsTimeInput {
-    background-color: rgba(15, 23, 42, 0.92);
-    color: #e2e8f0;
-    border: 1px solid rgba(100, 116, 139, 0.45);
-    border-radius: 10px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: 700;
 }
 
 #settingsTimeInput {
@@ -693,12 +631,6 @@ QComboBox#priorityInput {
     width: 22px;
     border: none;
     background: transparent;
-}
-
-#settingsTimeInput::up-arrow {
-    image: url(ASSET_PATH/assets/icons/arrow_up_orange.png);
-    width: 10px;
-    height: 10px;
 }
 
 #settingsTimeInput::down-arrow {
@@ -790,23 +722,6 @@ QToolTip {
     font-weight: 600;
 }
 
-#FlowNodeCard {
-    background-color: rgba(15, 23, 42, 0.92);
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 18px;
-}
-
-#FlowNodeTitle {
-    color: #f8fafc;
-    font-size: 15px;
-    font-weight: 700;
-}
-
-#FlowNodeDescription {
-    color: #94a3b8;
-    font-size: 12px;
-}
-
 #FlowNodeAddButton {
     background-color: transparent;
     color: #d1d5db;
@@ -863,15 +778,6 @@ QToolTip {
     border: 1px solid rgba(59, 130, 246, 0.85);
 }
 
-#FlowTopSaveButton {
-    background-color: rgba(37, 99, 235, 0.8);
-    color: white;
-    border: 1px solid rgba(96, 165, 250, 0.9);
-    border-radius: 8px;
-    padding: 10px 24px;
-    font-size: 15px;
-    font-weight: 700;
-}
 
 #FlowNodeCard {
     background-color: rgba(15, 23, 42, 0.74);
@@ -879,8 +785,9 @@ QToolTip {
     border-radius: 14px;
 }
 
-#FlowNodeCard[status="completed"] {
-    border: 1px solid rgba(74, 222, 128, 0.9);
+#FlowNodeCard[status="completed"] #FlowDoneButton {
+    color: #22c55e;
+    border-color: #22c55e;
 }
 
 #FlowNodeCard[status="active"] {
@@ -914,10 +821,10 @@ QToolTip {
 
 #FlowDoneButton {
     background-color: transparent;
-    color: rgba(203, 213, 225, 0.6);
-    border: 2px solid rgba(148, 163, 184, 0.45);
+    color: rgba(203, 213, 225, 0.45);
+    border: 2px solid rgba(148, 163, 184, 0.35);
     border-radius: 17px;
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 900;
 }
 
@@ -1066,16 +973,131 @@ QToolTip {
     color: #f8fafc;
     border: 1px solid rgba(148, 163, 184, 0.25);
     border-radius: 8px;
-    padding: 10px;
-    font-size: 14px;
-}
-
-#FlowSymbolCombo {
-    background-color: rgba(2, 6, 23, 0.42);
-    color: #f8fafc;
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    border-radius: 8px;
     padding: 8px;
     font-size: 15px;
     min-height: 58px;
+}
+
+#FlowZoomCombo {
+    background-color: rgba(15, 23, 42, 0.72);
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 14px;
+    font-weight: 700;
+    min-height: 38px;
+}
+
+#FooterStatusTitle {
+    color: #cbd5e1;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+#FooterStatusCompleted {
+    color: #22c55e;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#FooterStatusActive {
+    color: #3b82f6;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#FooterStatusOptional {
+    color: #f59e0b;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#FooterStatusLocked {
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#FlowModeTabs {
+    background-color: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 10px;
+}
+
+#FlowModeTabs #FlowModeButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 9px;
+    padding: 10px 36px;
+    color: #cbd5e1;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#FlowModeTabs #FlowModeButton:checked {
+    background-color: rgba(37, 99, 235, 0.35);
+    color: #ffffff;
+    border: 1px solid rgba(59, 130, 246, 0.95);
+}
+
+#FlowEditorBottomToggle {
+    background-color: rgba(15, 23, 42, 0.92);
+    color: #dbeafe;
+
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    border-radius: 10px;
+
+    font-size: 15px;
+    font-weight: 900;
+}
+
+#FlowEditorBottomToggle:hover {
+    background-color: rgba(37, 99, 235, 0.28);
+    border: 1px solid rgba(96, 165, 250, 0.75);
+}
+
+#FlowSaveStatusLabel {
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0px 8px;
+}
+
+#FlowSaveStatusLabel[state="saving"] {
+    color: #f59e0b;
+}
+
+#FlowSaveStatusLabel[state="saved"] {
+    color: #22c55e;
+}
+
+#FlowToolBar {
+    background-color: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 14px;
+}
+
+#FlowToolButton {
+    background-color: rgba(2, 6, 23, 0.42);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 10px;
+    font-size: 20px;
+    font-weight: 800;
+    min-width: 44px;
+    max-width: 44px;
+    min-height: 44px;
+    max-height: 44px;
+}
+
+#FlowToolButton:hover {
+    background-color: rgba(37, 99, 235, 0.18);
+    border: 1px solid rgba(96, 165, 250, 0.6);
+}
+
+#FlowToolButton:checked {
+    background-color: rgba(37, 99, 235, 0.35);
+    color: #ffffff;
+    border: 1px solid rgba(96, 165, 250, 0.9);
 }

@@ -1,11 +1,11 @@
 import requests
 from pathlib import Path
+from core.version import APP_VERSION
 
 from core.app_config import (
     AUTH_REQUIRED,
     API_URL,
     SERVER_API_KEY,
-    APP_VERSION,
 )
 
 

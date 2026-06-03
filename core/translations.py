@@ -172,6 +172,11 @@ TRANSLATIONS = {
 
         "flow_start_hint": "Klicke auf (+), um die erste Kachel zu erstellen.",
 
+        "status_completed_short": "Abgeschlossen",
+        "status_active_short": "Aktiv",
+        "status_optional_short": "Optional",
+        "status_locked_short": "Gesperrt",
+
         # ================= TIME VALUES =================
         "30_min": "30 Min",
         "1_hour": "1 Stunde",
@@ -364,6 +369,11 @@ TRANSLATIONS = {
         ),
 
         "flow_start_hint": "Click (+) to create the first card.",
+
+        "status_completed_short": "Completed",
+        "status_active_short": "Active",
+        "status_optional_short": "Optional",
+        "status_locked_short": "Locked",
 
 
         # ================= TIME VALUES =================
