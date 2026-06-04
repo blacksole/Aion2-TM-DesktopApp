@@ -10,8 +10,10 @@ from PySide6.QtWidgets import (
     QFrame,
     QComboBox,
     QButtonGroup,
+    QToolTip,
+    QGridLayout,
 )
-from PySide6.QtCore import  Qt, QSize, QTimer
+from PySide6.QtCore import  Qt, QSize, QTimer,QPoint
 from PySide6.QtGui import (
     QPainter, 
     QColor, 
@@ -22,6 +24,7 @@ from PySide6.QtGui import (
 )
 from pathlib import Path
 from core.flow_model import FlowNode
+import time
 
 
 class FlowCanvas(QWidget):
@@ -97,18 +100,25 @@ class FlowMapViewport(QWidget):
 
 
 class FlowNodeCard(QFrame):
-    def __init__(self, node_id, title, description, icon="☆", status="active",  zoom=1.0):
+    def __init__(
+        self,
+        node_id,
+        title,
+        description,
+        icon="☆",
+        status="active",
+        zoom=1.0,
+        parent_window=None,
+    ):
         super().__init__()
 
         self.setObjectName("FlowNodeCard")
         self.setProperty("status", status)
         self.setFixedSize(int(440 * zoom), int(136 * zoom))
         self.node_id = node_id
+        self.parent_window = parent_window
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(22, 18, 18, 18)
-        layout.setSpacing(18)
-
+        # LEFT ICON
         self.icon_box = QLabel()
         self.icon_box.setObjectName("FlowNodeIcon")
         self.icon_box.setAlignment(Qt.AlignCenter)
@@ -119,17 +129,16 @@ class FlowNodeCard(QFrame):
         if not pixmap.isNull():
             self.icon_box.setPixmap(
                 pixmap.scaled(
-                    int(54 * zoom), int(54 * zoom),
+                    int(54 * zoom),
+                    int(54 * zoom),
                     Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation
+                    Qt.SmoothTransformation,
                 )
             )
         else:
             self.icon_box.setText("☆")
 
-        text_layout = QVBoxLayout()
-        text_layout.setSpacing(6)
-
+        # TITLE
         self.title_label = QLabel(title)
         self.title_label.setObjectName("FlowNodeTitle")
 
@@ -147,16 +156,17 @@ class FlowNodeCard(QFrame):
             """
         )
 
-        # ======= DESC EDITOR PANEL ZOOM LOGIC ======= #
-
-
+        # DESCRIPTION
         if zoom >= 1.0:
             visible_description = description
         elif zoom >= 0.8:
-            visible_description = description[:45] + "..." if len(description) > 45 else description
+            visible_description = (
+                description[:45] + "..."
+                if len(description) > 45
+                else description
+            )
         else:
             visible_description = ""
-
 
         self.desc_label = QLabel(visible_description)
         self.desc_label.setObjectName("FlowNodeDescription")
@@ -174,27 +184,133 @@ class FlowNodeCard(QFrame):
             font-size: {desc_size}px;
             """
         )
-
         self.desc_label.setVisible(zoom >= 0.8)
 
-        text_layout.addWidget(self.title_label)
-        text_layout.addWidget(self.desc_label)
-        text_layout.addStretch()
+        # ADD NODE ICON BUTTON
+        self.add_node_hint_btn = QPushButton()
+        self.add_node_hint_btn.setObjectName("FlowNodeAddHintButton")
+        self.add_node_hint_btn.setFixedSize(72, 64)
+        self.add_node_hint_btn.setCursor(Qt.PointingHandCursor)
+        self.add_node_hint_btn.setEnabled(False)
+        self.add_node_hint_btn.setProperty("visibleState", "false")
 
+        if self.parent_window:
+            plus_icon = self.parent_window.flow_tool_icon_dir / "cursor_addNode.png"
+
+            self.add_node_hint_btn.setIcon(
+                QIcon(str(plus_icon))
+            )
+            self.add_node_hint_btn.setIconSize(
+                QSize(50, 50)
+            )
+        else:
+            self.add_node_hint_btn.setText("+")
+
+        # DONE BUTTON
         self.done_btn = QPushButton("✓")
         self.done_btn.setObjectName("FlowDoneButton")
         self.done_btn.setFixedSize(34, 34)
         self.done_btn.setCursor(Qt.PointingHandCursor)
 
-        layout.addWidget(self.icon_box)
-        layout.addLayout(text_layout, 1)
-        layout.addWidget(self.done_btn, alignment=Qt.AlignTop)
+        grid = QGridLayout(self)
+        grid.setContentsMargins(22, 18, 18, 14)
+
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(2)
+
+        # LEFT
+        grid.addWidget(
+            self.icon_box,
+            0,
+            0,
+            3,
+            1,
+            Qt.AlignTop
+        )
+
+        # TOP
+        grid.addWidget(
+            self.title_label,
+            0,
+            1,
+            Qt.AlignLeft | Qt.AlignTop
+        )
+
+        # CENTER
+        grid.addWidget(
+            self.desc_label,
+            1,
+            1,
+            Qt.AlignLeft | Qt.AlignTop
+        )
+
+        # BOTTOM
+        grid.addWidget(
+            self.add_node_hint_btn,
+            2,
+            0,
+            1,
+            3,
+            Qt.AlignHCenter | Qt.AlignTop
+        )
+
+        # RIGHT
+        grid.addWidget(
+            self.done_btn,
+            0,
+            2,
+            Qt.AlignRight | Qt.AlignTop
+        )
+
+        grid.setColumnStretch(1, 1)
+
+    def enterEvent(self, event):
+        print("Node hover detected")
+
+        if self.parent_window:
+            if self.parent_window.current_tool == "add_node":
+                self.add_node_hint_btn.setEnabled(True)
+                self.add_node_hint_btn.setProperty(
+                    "visibleState",
+                    "true"
+                )
+
+                self.add_node_hint_btn.style().unpolish(
+                    self.add_node_hint_btn
+                )
+                self.add_node_hint_btn.style().polish(
+                    self.add_node_hint_btn
+                )
+
+        super().enterEvent(event)
+
+
+    def leaveEvent(self, event):
+        self.add_node_hint_btn.setEnabled(False)
+
+        self.add_node_hint_btn.setProperty(
+            "visibleState",
+            "false"
+        )
+
+        self.add_node_hint_btn.style().unpolish(
+            self.add_node_hint_btn
+        )
+        self.add_node_hint_btn.style().polish(
+            self.add_node_hint_btn
+        )
+
+        super().leaveEvent(event)
 
 
 class FlowConnector(QWidget):
-    def __init__(self, zoom=1.0):
+    def __init__(self, parent_id=None, zoom=1.0, parent_window=None):
         super().__init__()
+
+        self.parent_id = parent_id
+        self.parent_window = parent_window
         self.setFixedHeight(int(82 * zoom))
+        
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -216,6 +332,19 @@ class FlowConnector(QWidget):
         layout.addWidget(arrow)
 
         self.setToolTip("")
+
+    def enterEvent(self, event):
+        print("Arrow Hover detected")
+        start_time = time.perf_counter()
+
+        elapsed = (time.perf_counter() - start_time) * 1000
+        print(f"Arrow tooltip shown after {elapsed:.2f} ms")
+
+        super().enterEvent(event)
+
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
 
 
 class NodeEditorPanel(QFrame):
@@ -407,7 +536,6 @@ class FlowMapWindow(QMainWindow):
         self.language = language
         self.tr_func = tr_func
         
-
         self.project_root = Path(__file__).resolve().parent.parent.parent
         self.flow_icon_dir = (
             self.project_root / "assets" / "icons" / "flow"
@@ -799,6 +927,7 @@ class FlowMapWindow(QMainWindow):
 
     def render_flow(self):
         self.clear_map_layout()
+        self.connectors = []
 
         if not self.root_node_id:
             return
@@ -818,6 +947,11 @@ class FlowMapWindow(QMainWindow):
                 icon=self.get_icon_symbol(node.icon),
                 status=node.status,
                 zoom=self.zoom_factor,
+                parent_window=self,
+            )
+
+            card.add_node_hint_btn.clicked.connect(
+                lambda checked=False, parent_id=node.id: self.add_child_node(parent_id)
             )
 
             card.done_btn.clicked.connect(
@@ -828,16 +962,17 @@ class FlowMapWindow(QMainWindow):
                 lambda event, node_id=node.id: self.handle_node_click(node_id)
             )
 
-            connector = FlowConnector(self.zoom_factor)
+            connector = FlowConnector(
+                parent_id=node.id,
+                zoom=self.zoom_factor,
+                parent_window=self
+            )
 
-            if self.current_tool == "add_node":
-                connector.setToolTip("Neue Node hinzufügen")
+            self.connectors.append(connector)
 
-            elif self.current_tool == "branch":
-                connector.setToolTip("Beschreibung hinzufügen")
-
-            elif self.current_tool == "delete":
-                connector.setToolTip("Branches können nicht gelöscht werden")
+            connector.mousePressEvent = (
+                lambda event, parent_id=node.id: self.handle_connector_click(parent_id)
+            )
 
             self.map_layout.addWidget(card, alignment=Qt.AlignCenter)
 
@@ -850,6 +985,10 @@ class FlowMapWindow(QMainWindow):
     def handle_node_click(self, node_id: str):
         if self.current_tool == "select":
             self.select_node(node_id)
+            return
+
+        if self.current_tool == "add_node":
+            self.add_child_node(node_id)
             return
 
         if self.current_tool == "branch":
@@ -886,6 +1025,8 @@ class FlowMapWindow(QMainWindow):
         if not parent_node:
             return
 
+        old_children = parent_node.children.copy()
+
         new_node = FlowNode(
             title="Neue Kachel",
             description="Beschreibung hinzufügen.",
@@ -893,14 +1034,19 @@ class FlowMapWindow(QMainWindow):
             status="locked",
         )
 
-        if not parent_node.children:
-            parent_node.children.append(new_node.id)
+        # Neue Node wird direkt nach Parent eingefügt
+        parent_node.children = [new_node.id]
+
+        # Alte Nachfolger hängen nun an der neuen Node
+        new_node.children = old_children
 
         self.nodes[new_node.id] = new_node
         self.selected_node_id = new_node.id
 
         self.render_flow()
+        self.expand_editor_panel()
         self.load_node_into_editor(new_node.id)
+        self.mark_unsaved()
 
     def select_node(self, node_id: str):
         self.selected_node_id = node_id
@@ -985,7 +1131,6 @@ class FlowMapWindow(QMainWindow):
         self.current_tool = tool_name
 
         self.apply_current_tool_cursor()
-
         self.update_active_tool_label()
 
         self.render_flow()
@@ -1036,3 +1181,17 @@ class FlowMapWindow(QMainWindow):
 
         elif self.current_tool == "delete":
             self.set_tool_cursor("cursor_delete.png")
+
+
+    def handle_connector_click(self, parent_id: str):
+        if self.current_tool == "add_node":
+            self.add_child_node(parent_id)
+            return
+
+        if self.current_tool == "branch":
+            # später: Beschreibung am Connector bearbeiten
+            return
+
+        if self.current_tool == "delete":
+            # Branches / Connectoren werden nicht gelöscht
+            return
