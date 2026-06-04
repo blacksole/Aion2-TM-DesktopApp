@@ -79,6 +79,13 @@ class FlowMapViewport(QWidget):
                 )
 
     def mouseMoveEvent(self, event):
+        print("Viewport Mouse Move")
+        if self.parent_window:
+            self.parent_window.update_mouse_position_debug(
+                event.position().toPoint(),
+                self
+            )
+
         if not self.is_panning or not self.pan_target:
             return
 
@@ -97,6 +104,21 @@ class FlowMapViewport(QWidget):
 
             if self.parent_window:
                 self.parent_window.apply_current_tool_cursor()
+
+    def wheelEvent(self, event):
+        if event.modifiers() == Qt.ControlModifier:
+            if self.parent_window:
+                delta = event.angleDelta().y()
+
+                if delta > 0:
+                    self.parent_window.adjust_zoom(0.1)
+                else:
+                    self.parent_window.adjust_zoom(-0.1)
+
+            event.accept()
+            return
+
+        super().wheelEvent(event)
 
 
 class FlowNodeCard(QFrame):
@@ -177,7 +199,7 @@ class FlowNodeCard(QFrame):
         elif zoom >= 0.8:
             desc_size = 12
         else:
-            desc_size = 0
+            desc_size = 1
 
         self.desc_label.setStyleSheet(
             f"""
@@ -265,7 +287,7 @@ class FlowNodeCard(QFrame):
         grid.setColumnStretch(1, 1)
 
     def enterEvent(self, event):
-        print("Node hover detected")
+        #print("Node hover detected")
 
         if self.parent_window:
             if self.parent_window.current_tool == "add_node":
@@ -334,11 +356,11 @@ class FlowConnector(QWidget):
         self.setToolTip("")
 
     def enterEvent(self, event):
-        print("Arrow Hover detected")
-        start_time = time.perf_counter()
+        #print("Arrow Hover detected")
+        #start_time = time.perf_counter()
 
-        elapsed = (time.perf_counter() - start_time) * 1000
-        print(f"Arrow tooltip shown after {elapsed:.2f} ms")
+        #elapsed = (time.perf_counter() - start_time) * 1000
+        #print(f"Arrow tooltip shown after {elapsed:.2f} ms")
 
         super().enterEvent(event)
 
@@ -595,6 +617,11 @@ class FlowMapWindow(QMainWindow):
         self.zoom_combo.setMaximumHeight(42)
         self.zoom_combo.currentIndexChanged.connect(self.change_zoom)
 
+        self.zoom_hint_label = QLabel("Ctrl + Wheel | Zoom 100%")
+        self.zoom_hint_label.setObjectName("FlowZoomHintLabel")
+
+        
+
         self.save_status_label = QLabel("✓ Saved")
         self.save_status_label.setObjectName("FlowSaveStatusLabel")
 
@@ -616,19 +643,22 @@ class FlowMapWindow(QMainWindow):
         top_layout.addStretch()
 
         top_layout.addWidget(self.zoom_combo)
+        top_layout.addWidget(self.zoom_hint_label)
         top_layout.setSpacing(10)
         top_layout.addWidget(self.save_status_label)
 
         self.content = QWidget()
-        content_layout = QHBoxLayout(self.content)
-        content_layout.setContentsMargins(28, 24, 28, 18)
-        content_layout.setSpacing(34)
+        self.content.setObjectName("FlowContentOverlay")
+        content_overlay_layout = QVBoxLayout(self.content)
+        content_overlay_layout.setContentsMargins(0, 0, 0, 0)
+        content_overlay_layout.setSpacing(0)
 
         # ====== TOOLBAR & MAP AREA ======= #
 
         self.tool_bar = QFrame()
         self.tool_bar.setObjectName("FlowToolBar")
         self.tool_bar.setFixedWidth(64)
+        self.tool_bar.setParent(self.content)
 
         tool_layout = QVBoxLayout(self.tool_bar)
         tool_layout.setContentsMargins(8, 8, 8, 8)
@@ -696,10 +726,15 @@ class FlowMapWindow(QMainWindow):
         tool_layout.addStretch()
 
         self.map_viewport = FlowMapViewport(self)
+        self.map_viewport.setMouseTracking(True)
+        
+        self.map_viewport.setParent(self.content)
 
         self.map_area = QWidget(self.map_viewport)
-        self.map_area.resize(900, 2000)
-        self.map_area.move(0, 0)
+        self.map_area.resize(3000, 3000)
+        self.map_area.move(20, 0)
+
+        self.map_area.setMouseTracking(True)
 
         self.map_viewport.set_pan_target(self.map_area)
 
@@ -712,6 +747,7 @@ class FlowMapWindow(QMainWindow):
         self.add_demo_flow()
 
         self.side_panel_wrapper = QWidget()
+        self.side_panel_wrapper.setParent(self.content)
         side_wrapper_layout = QVBoxLayout(self.side_panel_wrapper)
         side_wrapper_layout.setContentsMargins(0, 0, 0, 0)
         side_wrapper_layout.setSpacing(8)
@@ -752,10 +788,6 @@ class FlowMapWindow(QMainWindow):
         )
         side_wrapper_layout.addStretch()
 
-        content_layout.addWidget(self.tool_bar)
-        content_layout.addWidget(self.map_viewport, 1)
-        content_layout.addWidget(self.side_panel_wrapper)
-
         self.map_viewport.setMinimumWidth(800)
 
         # ======= INFO BAR FOOTER ======= #
@@ -770,6 +802,9 @@ class FlowMapWindow(QMainWindow):
 
         self.active_tool_label = QLabel()
         self.active_tool_label.setObjectName("FlowActiveToolLabel")
+
+        self.mouse_debug_label = QLabel("Mouse: -")
+        self.mouse_debug_label.setObjectName("FlowMouseDebugLabel")
 
         self.info_icon = QLabel("i")
         self.info_icon.setObjectName("FlowInfoIcon")
@@ -795,6 +830,7 @@ class FlowMapWindow(QMainWindow):
         self.footer_locked.setObjectName("FooterStatusLocked")
 
         info_layout.addWidget(self.active_tool_label)
+        info_layout.addWidget(self.mouse_debug_label)
         info_layout.addSpacing(18)
 
         info_layout.addWidget(self.info_icon)
@@ -810,10 +846,15 @@ class FlowMapWindow(QMainWindow):
         root.addWidget(self.content, 1)
         root.addWidget(self.info_bar)
 
+        self.content.installEventFilter(self)
+        QTimer.singleShot(0, self.position_flow_overlays)
+
         self.update_active_tool_label()
 
         self.update_language(language, tr_func)
         self.set_current_tool("select")
+
+        self.position_flow_overlays()
 
     def update_language(self, language, tr_func):
         self.language = language
@@ -848,6 +889,21 @@ class FlowMapWindow(QMainWindow):
 
     def change_zoom(self):
         self.zoom_factor = self.zoom_combo.currentData()
+        self.zoom_hint_label.setText(
+            f"Ctrl + Wheel | Zoom {int(self.zoom_factor * 100)}%"
+        )
+        self.render_flow()
+
+    def adjust_zoom(self, delta: float):
+        new_zoom = self.zoom_factor + delta
+        new_zoom = max(0.4, min(1.4, new_zoom))
+
+        self.zoom_factor = new_zoom
+
+        self.zoom_hint_label.setText(
+            f"Ctrl + Wheel | Zoom {int(self.zoom_factor * 100)}%"
+        )
+
         self.render_flow()
 
 
@@ -932,35 +988,79 @@ class FlowMapWindow(QMainWindow):
         if not self.root_node_id:
             return
 
-        current_id = self.root_node_id
+        branch_widget = self.render_node_branch(self.root_node_id)
 
-        while current_id:
-            node = self.nodes.get(current_id)
+        self.map_layout.addWidget(
+            branch_widget,
+            alignment=Qt.AlignTop | Qt.AlignHCenter
+        )
 
-            if not node:
-                break
+        self.map_area.adjustSize()
+        QTimer.singleShot(0, self.center_flow_in_viewport)
 
-            card = FlowNodeCard(
-                node.id,
-                node.title,
-                node.description,
-                icon=self.get_icon_symbol(node.icon),
-                status=node.status,
-                zoom=self.zoom_factor,
-                parent_window=self,
-            )
+    def center_flow_in_viewport(self):
+        if self.map_layout.count() == 0:
+            return
 
-            card.add_node_hint_btn.clicked.connect(
-                lambda checked=False, parent_id=node.id: self.add_child_node(parent_id)
-            )
+        flow_widget = self.map_layout.itemAt(0).widget()
 
-            card.done_btn.clicked.connect(
-                lambda checked=False, node_id=node.id: self.toggle_node_completed(node_id)
-            )
+        if not flow_widget:
+            return
 
-            card.mousePressEvent = (
-                lambda event, node_id=node.id: self.handle_node_click(node_id)
-            )
+        self.map_area.adjustSize()
+        flow_widget.adjustSize()
+
+        flow_center = flow_widget.geometry().center()
+        viewport_center = self.map_viewport.rect().center()
+
+        new_x = viewport_center.x() - flow_center.x()
+        new_y = viewport_center.y() - flow_center.y()
+
+        self.map_area.move(new_x, new_y)
+
+    def render_node_branch(self, node_id: str):
+        node = self.nodes.get(node_id)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        if not node:
+            return container
+
+        card = FlowNodeCard(
+            node.id,
+            node.title,
+            node.description,
+            icon=self.get_icon_symbol(node.icon),
+            status=node.status,
+            zoom=self.zoom_factor,
+            parent_window=self,
+        )
+
+        card.add_node_hint_btn.clicked.connect(
+            lambda checked=False, parent_id=node.id: self.add_child_node(parent_id)
+        )
+
+        card.done_btn.clicked.connect(
+            lambda checked=False, node_id=node.id: self.toggle_node_completed(node_id)
+        )
+
+        card.mousePressEvent = (
+            lambda event, node_id=node.id: self.handle_node_click(node_id)
+        )
+
+        layout.addWidget(card, alignment=Qt.AlignCenter)
+
+        if not node.children:
+            return container
+        
+        layout.addSpacing(16)
+
+        if len(node.children) == 1:
+            child_id = node.children[0]
 
             connector = FlowConnector(
                 parent_id=node.id,
@@ -968,19 +1068,58 @@ class FlowMapWindow(QMainWindow):
                 parent_window=self
             )
 
+            connector.mousePressEvent = (
+                lambda event, parent_id=node.id: self.handle_connector_click(parent_id)
+            )
+
             self.connectors.append(connector)
+
+            layout.addWidget(connector, alignment=Qt.AlignCenter)
+
+            child_widget = self.render_node_branch(child_id)
+            layout.addWidget(child_widget, alignment=Qt.AlignCenter)
+
+            return container
+
+        branch_row = QHBoxLayout()
+        branch_row.setContentsMargins(0, 0, 0, 0)
+        branch_row.setSpacing(90)
+        branch_row.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        for child_id in node.children:
+            branch_container = QWidget()
+            branch_layout = QVBoxLayout(branch_container)
+            branch_layout.setContentsMargins(0, 0, 0, 0)
+            branch_layout.setSpacing(0)
+            branch_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+            connector = FlowConnector(
+                parent_id=node.id,
+                zoom=self.zoom_factor,
+                parent_window=self
+            )
 
             connector.mousePressEvent = (
                 lambda event, parent_id=node.id: self.handle_connector_click(parent_id)
             )
 
-            self.map_layout.addWidget(card, alignment=Qt.AlignCenter)
+            self.connectors.append(connector)
 
+            branch_layout.addWidget(connector, alignment=Qt.AlignCenter)
 
+            child_widget = self.render_node_branch(child_id)
+            branch_layout.addWidget(child_widget, alignment=Qt.AlignCenter)
 
-            self.map_layout.addWidget(connector, alignment=Qt.AlignCenter)
+            branch_row.addWidget(branch_container)
 
-            current_id = node.children[0] if node.children else None
+        branch_width = len(node.children) * int(440 * self.zoom_factor)
+        branch_spacing = (len(node.children) - 1) * 90
+        required_width = branch_width + branch_spacing
+
+        container.setMinimumWidth(required_width)
+        layout.addLayout(branch_row)
+
+        return container
 
     def handle_node_click(self, node_id: str):
         if self.current_tool == "select":
@@ -992,8 +1131,7 @@ class FlowMapWindow(QMainWindow):
             return
 
         if self.current_tool == "branch":
-            # später: Branch hinzufügen
-            self.select_node(node_id)
+            self.add_branch_node(node_id)
             return
 
         if self.current_tool == "delete":
@@ -1048,6 +1186,33 @@ class FlowMapWindow(QMainWindow):
         self.load_node_into_editor(new_node.id)
         self.mark_unsaved()
 
+    def add_branch_node(self, parent_id: str):
+        parent_node = self.nodes.get(parent_id)
+
+        if not parent_node:
+            return
+
+        new_node = FlowNode(
+            title="Neuer Branch",
+            description="Beschreibung hinzufügen.",
+            icon="level",
+            status="locked",
+        )
+
+        parent_node.children.append(new_node.id)
+        print(f"Branch added to {parent_node.title}")
+        print(f"Children now: {parent_node.children}")
+
+        self.nodes[new_node.id] = new_node
+        self.selected_node_id = new_node.id
+
+        self.render_flow()
+        self.expand_editor_panel()
+        self.load_node_into_editor(new_node.id)
+        self.mark_unsaved()
+
+
+
     def select_node(self, node_id: str):
         self.selected_node_id = node_id
 
@@ -1098,6 +1263,16 @@ class FlowMapWindow(QMainWindow):
     def closeEvent(self, event):
         self.mark_saved()
         super().closeEvent(event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.position_flow_overlays()
+
+    def eventFilter(self, obj, event):
+        if obj == self.content and event.type() == event.Type.Resize:
+            QTimer.singleShot(0, self.position_flow_overlays)
+
+        return super().eventFilter(obj, event)
 
     def toggle_node_completed(self, node_id: str):
         node = self.nodes.get(node_id)
@@ -1195,3 +1370,81 @@ class FlowMapWindow(QMainWindow):
         if self.current_tool == "delete":
             # Branches / Connectoren werden nicht gelöscht
             return
+        
+    def position_flow_overlays(self):
+        if not hasattr(self, "content"):
+            return
+
+        content_size = self.content.size()
+
+        if content_size.width() <= 0 or content_size.height() <= 0:
+            return
+
+        self.map_viewport.setGeometry(
+            0,
+            0,
+            content_size.width(),
+            content_size.height()
+        )
+
+        self.map_viewport.lower()
+
+        self.map_area.resize(
+            max(5000, content_size.width() * 3),
+            max(5000, content_size.height() * 3)
+        )
+
+        margin = 18
+
+        self.tool_bar.move(margin, margin)
+        self.tool_bar.setFixedHeight(content_size.height() - margin * 2)
+
+        panel_width = 390 if self.toggle_editor_btn.isChecked() else 82
+        self.side_panel_wrapper.setFixedWidth(panel_width)
+
+        self.side_panel_wrapper.move(
+            content_size.width() - panel_width - margin,
+            margin
+        )
+
+        self.side_panel_wrapper.setFixedHeight(
+            content_size.height() - margin * 2
+        )
+
+        self.tool_bar.raise_()
+        self.side_panel_wrapper.raise_()
+
+
+
+    # ========== DEBUG Funktionen ========== #
+    def update_mouse_position_debug(self, pos, source_widget):
+        global_pos = source_widget.mapToGlobal(pos)
+        content_pos = self.content.mapFromGlobal(global_pos)
+        map_pos = self.map_area.mapFromGlobal(global_pos)
+
+        viewport_center = self.map_viewport.rect().center()
+        map_area_pos = self.map_area.pos()
+
+        node_center_text = "Nodes Center: -"
+
+        if self.map_layout.count() > 0:
+            flow_widget = self.map_layout.itemAt(0).widget()
+
+            if flow_widget:
+                flow_center = flow_widget.geometry().center()
+
+                node_center_global = self.map_area.mapToGlobal(flow_center)
+                node_center_viewport = self.map_viewport.mapFromGlobal(node_center_global)
+
+                node_center_text = (
+                    f"Nodes Center Map: {flow_center.x()}, {flow_center.y()} "
+                    f"| Nodes Center Viewport: {node_center_viewport.x()}, {node_center_viewport.y()}"
+                )
+
+        self.mouse_debug_label.setText(
+            f"Mouse | Content: {content_pos.x()}, {content_pos.y()} "
+            f"| Map: {map_pos.x()}, {map_pos.y()} "
+            f"| Viewport Center: {viewport_center.x()}, {viewport_center.y()} "
+            f"| MapArea Pos: {map_area_pos.x()}, {map_area_pos.y()} "
+            f"| {node_center_text}"
+        )

@@ -16,29 +16,9 @@
         "auto_save": true
     },
     "tasks": {
-        "dailyTasks": [
-            {
-                "type": "task",
-                "priority": "low",
-                "title": "Task 1",
-                "description": "Desc1",
-                "event": false,
-                "completed": false
-            }
-        ],
+        "dailyTasks": [],
         "weeklyTasks": [],
-        "dailyShopping": [
-            {
-                "type": "shopping",
-                "priority": "middle",
-                "amount": "16",
-                "title": "Shop1",
-                "location": "Windbreeze Shop",
-                "price": "100",
-                "event": false,
-                "completed": false
-            }
-        ],
+        "dailyShopping": [],
         "weeklyShopping": []
     }
 }
