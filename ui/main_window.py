@@ -9,7 +9,7 @@ from .pages.timers_page import TimersPage
 from .pages.profile_page import ProfilePage
 from .pages.settings_page import SettingsPage
 from .pages.dashboard_page import DashboardPage
-from .windows.flow_app_window import FlowMapWindow
+from .flow.flow_app_window import FlowMapWindow
 from core.translations import tr
 from PySide6.QtWidgets import QTimeEdit
 from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap

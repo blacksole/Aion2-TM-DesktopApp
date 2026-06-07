@@ -26,6 +26,8 @@ from PySide6.QtGui import (
 from pathlib import Path
 from core.flow_model import FlowNode
 
+from ui.flow.widgets.flow_canvas import FlowCanvas
+
 NODE_WIDTH = 440
 NODE_HEIGHT = 136
 
@@ -35,32 +37,6 @@ ICON_SIZE = int(ICON_ASSET_SCALE * ICON_BOX_SIZE)
 
 TITLE_SIZE = 18
 DESCRIPTION_SIZE = 13
-
-class FlowCanvas(QWidget):
-    def __init__(self):
-        super().__init__()
-
-        self.setObjectName("FlowCanvas")
-
-    def set_pan_target(self, widget):
-        self.pan_target = widget
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        spacing = 72
-        color = QColor(255, 255, 255, 12)
-        pen = QPen(color)
-        pen.setWidth(1)
-        painter.setPen(pen)
-
-        for x in range(0, self.width(), spacing):
-            for y in range(0, self.height(), spacing):
-                painter.drawLine(x - 4, y, x + 4, y)
-                painter.drawLine(x, y - 4, x, y + 4)
 
 class FlowMapViewport(QWidget):
     def __init__(self, parent_window=None):
@@ -1054,118 +1030,46 @@ class FlowMapWindow(QMainWindow):
         if not node:
             return container
 
-        card = FlowNodeCard(
-            node.id,
-            node.title,
-            node.description,
-            icon=self.get_icon_symbol(node.icon),
-            status=node.status,
-            zoom=self.zoom_factor,
-            parent_window=self,
-        )
-
-        card.add_node_hint_btn.clicked.connect(
-            lambda checked=False, parent_id=node.id: self.add_child_node(parent_id)
-        )
-
-        card.done_btn.clicked.connect(
-            lambda checked=False, node_id=node.id: self.toggle_node_completed(node_id)
-        )
-
-        card.mousePressEvent = (
-            lambda event, node_id=node.id: self.handle_node_click(node_id)
-        )
         
-        branch_spacing = 90
-        node_width = int(NODE_WIDTH * self.zoom_factor)
+        
+        layout_data = self.calculate_branch_layout(node)
 
-        child_count = len(node.children)
-
-        if child_count > 0:
-
-            child_widths = [
-                self.calculate_subtree_width(child_id)
-                for child_id in node.children
-            ]
-
-            required_width = (
-                sum(child_widths)
-                + (child_count - 1) * branch_spacing
-            )
-
-            required_width = max(
-                required_width,
-                node_width
-            )
-
-        else:
-            child_widths = []
-            required_width = node_width
+        branch_spacing = layout_data["branch_spacing"]
+        node_width = layout_data["node_width"]
+        child_count = layout_data["child_count"]
+        child_widths = layout_data["child_widths"]
+        required_width = layout_data["required_width"]
 
         container.setMinimumWidth(required_width)
 
-        card_wrapper = QWidget()
-        card_wrapper.setFixedWidth(required_width)
-
-        card_layout = QHBoxLayout(card_wrapper)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
-        card_layout.addWidget(card, alignment=Qt.AlignHCenter)
-
+        card = self.create_node_card(node)
+        card_wrapper = self.create_card_wrapper(card, required_width)
         layout.addWidget(card_wrapper, alignment=Qt.AlignCenter)
 
         if child_count == 0:
             return container
 
-        connections = []
-
-        for index in range(child_count):
-            parent_anchor_x = self.calculate_parent_anchor_x(
-                index=index,
-                count=child_count,
-                width=node_width,
-            )
-
-            parent_offset_x = (required_width - node_width) / 2
-            start_x = parent_offset_x + parent_anchor_x
-
-            child_x = sum(child_widths[:index]) + index * branch_spacing
-            child_top_center_x = child_x + child_widths[index] / 2
-
-            connections.append((start_x, child_top_center_x))
-
-        base_connector_height = 70
-        extra_per_child = 14
-
-        connector_height = (
-            base_connector_height
-            + int(self.zoom_factor * child_count * extra_per_child)
+        connections = self.build_connections(
+            child_count=child_count,
+            child_widths=child_widths,
+            branch_spacing=branch_spacing,
+            node_width=node_width,
+            required_width=required_width,
         )
 
-        connector = FlowPointConnector(
+        connector = self.create_connector(
             connections=connections,
-            zoom=self.zoom_factor,
-            height=connector_height,
-            parent_window=self,
+            child_count=child_count,
+            required_width=required_width,
         )
-
-        connector.setFixedWidth(required_width)
 
         layout.addWidget(connector, alignment=Qt.AlignCenter)
 
-        branch_row = QHBoxLayout()
-        branch_row.setContentsMargins(0, 0, 0, 0)
-        branch_row.setSpacing(branch_spacing)
-        branch_row.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-
-        for index, child_id in enumerate(node.children):
-            child_widget = self.render_node_branch(child_id)
-            child_widget.setFixedWidth(child_widths[index])
-
-            branch_row.addWidget(
-                child_widget,
-                alignment=Qt.AlignTop | Qt.AlignHCenter
-            )
+        branch_row = self.create_children_row(
+            node=node,
+            child_widths=child_widths,
+            branch_spacing=branch_spacing,
+        )
 
         layout.addLayout(branch_row)
 
@@ -1541,3 +1445,132 @@ class FlowMapWindow(QMainWindow):
             int(NODE_WIDTH * self.zoom_factor),
             children_total_width
         )
+    
+    def calculate_branch_layout(self, node):
+        branch_spacing = 90
+        node_width = int(NODE_WIDTH * self.zoom_factor)
+        child_count = len(node.children)
+
+        if child_count > 0:
+            child_widths = [
+                self.calculate_subtree_width(child_id)
+                for child_id in node.children
+            ]
+
+            required_width = (
+                sum(child_widths)
+                + (child_count - 1) * branch_spacing
+            )
+
+            required_width = max(required_width, node_width)
+        else:
+            child_widths = []
+            required_width = node_width
+
+        return {
+            "branch_spacing": branch_spacing,
+            "node_width": node_width,
+            "child_count": child_count,
+            "child_widths": child_widths,
+            "required_width": required_width,
+        }
+    
+    def create_node_card(self, node):
+        card = FlowNodeCard(
+            node.id,
+            node.title,
+            node.description,
+            icon=self.get_icon_symbol(node.icon),
+            status=node.status,
+            zoom=self.zoom_factor,
+            parent_window=self,
+        )
+
+        card.add_node_hint_btn.clicked.connect(
+            lambda checked=False, parent_id=node.id: self.add_child_node(parent_id)
+        )
+
+        card.done_btn.clicked.connect(
+            lambda checked=False, node_id=node.id: self.toggle_node_completed(node_id)
+        )
+
+        card.mousePressEvent = (
+            lambda event, node_id=node.id: self.handle_node_click(node_id)
+        )
+
+        return card
+    
+    def create_card_wrapper(self, card, required_width):
+        card_wrapper = QWidget()
+        card_wrapper.setFixedWidth(required_width)
+
+        card_layout = QHBoxLayout(card_wrapper)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+        card_layout.addWidget(card, alignment=Qt.AlignHCenter)
+
+        return card_wrapper
+    
+    def build_connections(
+        self,
+        child_count,
+        child_widths,
+        branch_spacing,
+        node_width,
+        required_width,
+    ):
+        connections = []
+
+        for index in range(child_count):
+            parent_anchor_x = self.calculate_parent_anchor_x(
+                index=index,
+                count=child_count,
+                width=node_width,
+            )
+
+            parent_offset_x = (required_width - node_width) / 2
+            start_x = parent_offset_x + parent_anchor_x
+
+            child_x = sum(child_widths[:index]) + index * branch_spacing
+            child_top_center_x = child_x + child_widths[index] / 2
+
+            connections.append((start_x, child_top_center_x))
+
+        return connections
+    
+    def create_connector(self, connections, child_count, required_width):
+        base_connector_height = 70
+        extra_per_child = 14
+
+        connector_height = (
+            base_connector_height
+            + int(self.zoom_factor * child_count * extra_per_child)
+        )
+
+        connector = FlowPointConnector(
+            connections=connections,
+            zoom=self.zoom_factor,
+            height=connector_height,
+            parent_window=self,
+        )
+
+        connector.setFixedWidth(required_width)
+
+        return connector
+    
+    def create_children_row(self, node, child_widths, branch_spacing):
+        branch_row = QHBoxLayout()
+        branch_row.setContentsMargins(0, 0, 0, 0)
+        branch_row.setSpacing(branch_spacing)
+        branch_row.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        for index, child_id in enumerate(node.children):
+            child_widget = self.render_node_branch(child_id)
+            child_widget.setFixedWidth(child_widths[index])
+
+            branch_row.addWidget(
+                child_widget,
+                alignment=Qt.AlignTop | Qt.AlignHCenter
+            )
+
+        return branch_row
