@@ -35,6 +35,7 @@ from ui.flow.widgets.flow_viewport import FlowMapViewport
 from ui.flow.widgets.flow_node_card import FlowNodeCard
 from ui.flow.widgets.flow_point_connector import FlowPointConnector
 from ui.flow.widgets.node_editor_panel import NodeEditorPanel
+from ui.flow.flow_debug import DEBUG_MODE, format_mouse_debug_text
 
 class StatusPanel(QFrame):
     def __init__(self, language="en", tr_func=None):
@@ -916,6 +917,10 @@ class FlowMapWindow(QMainWindow):
 
     # ========== DEBUG Funktionen ========== #
     def update_mouse_position_debug(self, pos, source_widget):
+        if not DEBUG_MODE:
+            self.mouse_debug_label.setText("")
+            return
+
         global_pos = source_widget.mapToGlobal(pos)
         content_pos = self.content.mapFromGlobal(global_pos)
         map_pos = self.map_area.mapFromGlobal(global_pos)
@@ -940,12 +945,15 @@ class FlowMapWindow(QMainWindow):
                 )
 
         self.mouse_debug_label.setText(
-            f"Mouse | Content: {content_pos.x()}, {content_pos.y()} "
-            f"| Map: {map_pos.x()}, {map_pos.y()} "
-            f"| Viewport Center: {viewport_center.x()}, {viewport_center.y()} "
-            f"| MapArea Pos: {map_area_pos.x()}, {map_area_pos.y()} "
-            f"| {node_center_text}"
+            format_mouse_debug_text(
+                content_pos,
+                map_pos,
+                viewport_center,
+                map_area_pos,
+                node_center_text
+            )
         )
+        
 
     def calculate_parent_anchor_x(self, index: int, count: int, width: int) -> float:
         center = width / 2
