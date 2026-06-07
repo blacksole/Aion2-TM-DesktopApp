@@ -35,6 +35,7 @@ from ui.flow.widgets.flow_node_card import FlowNodeCard
 from ui.flow.widgets.flow_point_connector import FlowPointConnector
 from ui.flow.widgets.node_editor_panel import NodeEditorPanel
 from ui.flow.flow_renderer import FlowRenderer
+from ui.flow.flow_controller import FlowController
 
 class FlowMapWindow(QMainWindow):
     def __init__(self, parent=None, language="en", tr_func=None):
@@ -80,7 +81,7 @@ class FlowMapWindow(QMainWindow):
         self.current_tool = "select"
 
         self.renderer = FlowRenderer(self)
-
+        self.controller = FlowController(self)
         self.plan_title = QLabel("Aion Classic Progress")
         self.plan_title.setObjectName("FlowPlanTitle")
 
