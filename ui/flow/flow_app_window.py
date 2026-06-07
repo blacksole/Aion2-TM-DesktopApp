@@ -15,18 +15,10 @@ from PySide6.QtCore import  Qt, QSize, QTimer
 from PySide6.QtGui import QPixmap, QIcon, QCursor
 
 from core.flow_model import FlowNode
-from ui.flow.flow_layout import (
-    NODE_WIDTH,
-    calculate_branch_layout,
-    build_connections,
-    calculate_connector_height,
-)
+
 
 from ui.flow.flow_debug import (
-    DEBUG_MODE,
-    SHOW_STATUS_PANEL,
-    StatusPanel,
-    update_mouse_position_debug_label,
+    update_mouse_position_debug_label
 )
 
 from ui.flow.widgets.flow_canvas import FlowCanvas
@@ -644,19 +636,7 @@ class FlowMapWindow(QMainWindow):
         update_mouse_position_debug_label(self, pos, source_widget)
         
 
-    def calculate_parent_anchor_x(self, index: int, count: int, width: int) -> float:
-        center = width / 2
 
-        if count <= 1:
-            return center
-
-        # kleiner Wert = Punkte enger zusammen
-        anchor_spread = width * 0.18
-
-        start_x = center - anchor_spread / 2
-        step = anchor_spread / (count - 1)
-
-        return start_x + step * index
     
     def create_node_card(self, node):
         card = FlowNodeCard(
