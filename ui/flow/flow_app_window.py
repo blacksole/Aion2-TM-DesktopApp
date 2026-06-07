@@ -838,16 +838,9 @@ class FlowMapWindow(QMainWindow):
         return card
     
     def create_card_wrapper(self, card, required_width):
-        card_wrapper = QWidget()
-        card_wrapper.setFixedWidth(required_width)
-
-        card_layout = QHBoxLayout(card_wrapper)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
-        card_layout.addWidget(card, alignment=Qt.AlignHCenter)
-
-        return card_wrapper
+        return self.renderer.create_card_wrapper(card, required_width)
     
+
     def create_connector(self, connections, child_count, required_width):
         return self.renderer.create_connector(
             connections,
@@ -856,21 +849,11 @@ class FlowMapWindow(QMainWindow):
         )
     
     def create_children_row(self, node, child_widths, branch_spacing):
-        branch_row = QHBoxLayout()
-        branch_row.setContentsMargins(0, 0, 0, 0)
-        branch_row.setSpacing(branch_spacing)
-        branch_row.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-
-        for index, child_id in enumerate(node.children):
-            child_widget = self.render_node_branch(child_id)
-            child_widget.setFixedWidth(child_widths[index])
-
-            branch_row.addWidget(
-                child_widget,
-                alignment=Qt.AlignTop | Qt.AlignHCenter
-            )
-
-        return branch_row
+        return self.renderer.create_children_row(
+            node,
+            child_widths,
+            branch_spacing,
+        )
     
     def qt_align_top_center(self):
         return Qt.AlignTop | Qt.AlignHCenter

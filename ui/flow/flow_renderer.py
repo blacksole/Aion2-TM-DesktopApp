@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PySide6.QtCore import Qt
 
 from ui.flow.widgets.flow_point_connector import FlowPointConnector
@@ -61,7 +61,7 @@ class FlowRenderer:
         container.setMinimumWidth(required_width)
 
         card = self.window.create_node_card(node)
-        card_wrapper = self.window.create_card_wrapper(card, required_width)
+        card_wrapper = self.create_card_wrapper(card, required_width)
 
         layout.addWidget(card_wrapper, alignment=Qt.AlignCenter)
 
@@ -84,7 +84,7 @@ class FlowRenderer:
 
         layout.addWidget(connector, alignment=Qt.AlignCenter)
 
-        branch_row = self.window.create_children_row(
+        branch_row = self.create_children_row(
             node=node,
             child_widths=child_widths,
             branch_spacing=branch_spacing,
@@ -110,3 +110,31 @@ class FlowRenderer:
         connector.setFixedWidth(required_width)
 
         return connector
+    
+    def create_card_wrapper(self, card, required_width):
+        card_wrapper = QWidget()
+        card_wrapper.setFixedWidth(required_width)
+
+        card_layout = QHBoxLayout(card_wrapper)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+        card_layout.addWidget(card, alignment=Qt.AlignHCenter)
+
+        return card_wrapper
+    
+    def create_children_row(self, node, child_widths, branch_spacing):
+        branch_row = QHBoxLayout()
+        branch_row.setContentsMargins(0, 0, 0, 0)
+        branch_row.setSpacing(branch_spacing)
+        branch_row.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        for index, child_id in enumerate(node.children):
+            child_widget = self.render_node_branch(child_id)
+            child_widget.setFixedWidth(child_widths[index])
+
+            branch_row.addWidget(
+                child_widget,
+                alignment=Qt.AlignTop | Qt.AlignHCenter
+            )
+
+        return branch_row
