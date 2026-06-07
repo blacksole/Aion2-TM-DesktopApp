@@ -26,6 +26,13 @@ from ui.flow.flow_layout import (
     calculate_parent_anchor_x,
 )
 
+from ui.flow.flow_layout import (
+    NODE_WIDTH,
+    BRANCH_SPACING,
+    calculate_parent_anchor_x,
+    calculate_subtree_width,
+)
+
 from ui.flow.flow_layout import NODE_WIDTH
 from ui.flow.widgets.flow_canvas import FlowCanvas
 from ui.flow.widgets.flow_viewport import FlowMapViewport
@@ -954,38 +961,18 @@ class FlowMapWindow(QMainWindow):
 
         return start_x + step * index
     
-    def calculate_subtree_width(self, node_id: str) -> int:
-        node = self.nodes.get(node_id)
-
-        if not node or not node.children:
-            return int(NODE_WIDTH * self.zoom_factor)
-
-        child_count = len(node.children)
-        branch_spacing = 90
-
-        child_widths = [
-            self.calculate_subtree_width(child_id)
-            for child_id in node.children
-        ]
-
-        children_total_width = (
-            sum(child_widths)
-            + (child_count - 1) * branch_spacing
-        )
-
-        return max(
-            int(NODE_WIDTH * self.zoom_factor),
-            children_total_width
-        )
-    
     def calculate_branch_layout(self, node):
-        branch_spacing = 90
+        branch_spacing = BRANCH_SPACING
         node_width = int(NODE_WIDTH * self.zoom_factor)
         child_count = len(node.children)
 
         if child_count > 0:
             child_widths = [
-                self.calculate_subtree_width(child_id)
+                calculate_subtree_width(
+                    child_id,
+                    self.nodes,
+                    self.zoom_factor
+                )
                 for child_id in node.children
             ]
 

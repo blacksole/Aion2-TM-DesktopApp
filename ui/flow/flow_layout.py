@@ -22,3 +22,26 @@ def calculate_parent_anchor_x(index: int, count: int, width: int) -> float:
     step = anchor_spread / (count - 1)
 
     return start_x + step * index
+
+def calculate_subtree_width(node_id: str, nodes: dict, zoom_factor: float) -> int:
+    node = nodes.get(node_id)
+
+    if not node or not node.children:
+        return int(NODE_WIDTH * zoom_factor)
+
+    child_count = len(node.children)
+
+    child_widths = [
+        calculate_subtree_width(child_id, nodes, zoom_factor)
+        for child_id in node.children
+    ]
+
+    children_total_width = (
+        sum(child_widths)
+        + (child_count - 1) * BRANCH_SPACING
+    )
+
+    return max(
+        int(NODE_WIDTH * zoom_factor),
+        children_total_width
+    )
