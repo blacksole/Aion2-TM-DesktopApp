@@ -5,13 +5,28 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
-SHOW_MOUSE_DEBUG = True
+# Panels
 SHOW_STATUS_PANEL = True
+
+# Text
+SHOW_MOUSE_DEBUG = True
 SHOW_NODE_CENTER = True
 SHOW_VIEWPORT_INFO = True
 SHOW_MAP_AREA_INFO = True
+
+# Visual Debug
+SHOW_PARENT_ANCHORS = False
+SHOW_CHILD_ANCHORS = False
+SHOW_CONNECTOR_PATHS = False
+SHOW_LAYOUT_BOXES = False
+SHOW_SUBTREE_WIDTH = False
+SHOW_CARD_BOUNDS = False
+
+def debug_enabled(flag):
+    return DEBUG_MODE and flag
+
 
 def format_mouse_debug_text(
     content_pos,
