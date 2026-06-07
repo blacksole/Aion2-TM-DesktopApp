@@ -3,7 +3,20 @@ class FlowRenderer:
         self.window = window
 
     def render_flow(self):
-        return self.window.render_flow()
+        self.window.clear_map_layout()
+        self.window.connectors = []
 
-    def render_node_branch(self, node_id: str):
-        return self.window.render_node_branch(node_id)
+        if not self.window.root_node_id:
+            return
+
+        branch_widget = self.window.render_node_branch(
+            self.window.root_node_id
+        )
+
+        self.window.map_layout.addWidget(
+            branch_widget,
+            alignment=self.window.qt_align_top_center()
+        )
+
+        self.window.map_area.adjustSize()
+        self.window.schedule_center_flow()

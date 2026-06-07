@@ -468,21 +468,7 @@ class FlowMapWindow(QMainWindow):
 
 
     def render_flow(self):
-        self.clear_map_layout()
-        self.connectors = []
-
-        if not self.root_node_id:
-            return
-
-        branch_widget = self.render_node_branch(self.root_node_id)
-
-        self.map_layout.addWidget(
-            branch_widget,
-            alignment=Qt.AlignTop | Qt.AlignHCenter
-        )
-
-        self.map_area.adjustSize()
-        QTimer.singleShot(0, self.center_flow_in_viewport)
+        self.renderer.render_flow()
 
     def center_flow_in_viewport(self):
         if self.map_layout.count() == 0:
@@ -953,3 +939,10 @@ class FlowMapWindow(QMainWindow):
             )
 
         return branch_row
+    
+    def qt_align_top_center(self):
+        return Qt.AlignTop | Qt.AlignHCenter
+
+
+    def schedule_center_flow(self):
+        QTimer.singleShot(0, self.center_flow_in_viewport)
