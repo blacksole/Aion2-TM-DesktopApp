@@ -20,6 +20,12 @@ from PySide6.QtGui import (
 from pathlib import Path
 from core.flow_model import FlowNode
 
+from ui.flow.flow_layout import (
+    NODE_WIDTH,
+    BRANCH_SPACING,
+    calculate_parent_anchor_x,
+)
+
 from ui.flow.flow_layout import NODE_WIDTH
 from ui.flow.widgets.flow_canvas import FlowCanvas
 from ui.flow.widgets.flow_viewport import FlowMapViewport
@@ -1048,7 +1054,7 @@ class FlowMapWindow(QMainWindow):
         connections = []
 
         for index in range(child_count):
-            parent_anchor_x = self.calculate_parent_anchor_x(
+            parent_anchor_x = calculate_parent_anchor_x(
                 index=index,
                 count=child_count,
                 width=node_width,
