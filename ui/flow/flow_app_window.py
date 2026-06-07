@@ -24,13 +24,8 @@ from ui.flow.flow_layout import (
     NODE_WIDTH,
     BRANCH_SPACING,
     calculate_parent_anchor_x,
-)
-
-from ui.flow.flow_layout import (
-    NODE_WIDTH,
-    BRANCH_SPACING,
-    calculate_parent_anchor_x,
     calculate_subtree_width,
+    calculate_branch_layout,
 )
 
 from ui.flow.flow_layout import NODE_WIDTH
@@ -571,7 +566,11 @@ class FlowMapWindow(QMainWindow):
 
         
         
-        layout_data = self.calculate_branch_layout(node)
+        layout_data = calculate_branch_layout(
+            node,
+            self.nodes,
+            self.zoom_factor
+        )
 
         branch_spacing = layout_data["branch_spacing"]
         node_width = layout_data["node_width"]
@@ -960,39 +959,6 @@ class FlowMapWindow(QMainWindow):
         step = anchor_spread / (count - 1)
 
         return start_x + step * index
-    
-    def calculate_branch_layout(self, node):
-        branch_spacing = BRANCH_SPACING
-        node_width = int(NODE_WIDTH * self.zoom_factor)
-        child_count = len(node.children)
-
-        if child_count > 0:
-            child_widths = [
-                calculate_subtree_width(
-                    child_id,
-                    self.nodes,
-                    self.zoom_factor
-                )
-                for child_id in node.children
-            ]
-
-            required_width = (
-                sum(child_widths)
-                + (child_count - 1) * branch_spacing
-            )
-
-            required_width = max(required_width, node_width)
-        else:
-            child_widths = []
-            required_width = node_width
-
-        return {
-            "branch_spacing": branch_spacing,
-            "node_width": node_width,
-            "child_count": child_count,
-            "child_widths": child_widths,
-            "required_width": required_width,
-        }
     
     def create_node_card(self, node):
         card = FlowNodeCard(
