@@ -35,7 +35,7 @@ from ui.flow.widgets.flow_viewport import FlowMapViewport
 from ui.flow.widgets.flow_node_card import FlowNodeCard
 from ui.flow.widgets.flow_point_connector import FlowPointConnector
 from ui.flow.widgets.node_editor_panel import NodeEditorPanel
-from ui.flow.flow_debug import DEBUG_MODE, format_mouse_debug_text
+from ui.flow.flow_debug import DEBUG_MODE, update_mouse_position_debug_label
 
 class StatusPanel(QFrame):
     def __init__(self, language="en", tr_func=None):
@@ -917,42 +917,7 @@ class FlowMapWindow(QMainWindow):
 
     # ========== DEBUG Funktionen ========== #
     def update_mouse_position_debug(self, pos, source_widget):
-        if not DEBUG_MODE:
-            self.mouse_debug_label.setText("")
-            return
-
-        global_pos = source_widget.mapToGlobal(pos)
-        content_pos = self.content.mapFromGlobal(global_pos)
-        map_pos = self.map_area.mapFromGlobal(global_pos)
-
-        viewport_center = self.map_viewport.rect().center()
-        map_area_pos = self.map_area.pos()
-
-        node_center_text = "Nodes Center: -"
-
-        if self.map_layout.count() > 0:
-            flow_widget = self.map_layout.itemAt(0).widget()
-
-            if flow_widget:
-                flow_center = flow_widget.geometry().center()
-
-                node_center_global = self.map_area.mapToGlobal(flow_center)
-                node_center_viewport = self.map_viewport.mapFromGlobal(node_center_global)
-
-                node_center_text = (
-                    f"Nodes Center Map: {flow_center.x()}, {flow_center.y()} "
-                    f"| Nodes Center Viewport: {node_center_viewport.x()}, {node_center_viewport.y()}"
-                )
-
-        self.mouse_debug_label.setText(
-            format_mouse_debug_text(
-                content_pos,
-                map_pos,
-                viewport_center,
-                map_area_pos,
-                node_center_text
-            )
-        )
+        update_mouse_position_debug_label(self, pos, source_widget)
         
 
     def calculate_parent_anchor_x(self, index: int, count: int, width: int) -> float:
