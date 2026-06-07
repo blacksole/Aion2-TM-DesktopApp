@@ -46,3 +46,26 @@ class FlowController:
         self.window.expand_editor_panel()
         self.window.load_node_into_editor(new_node.id)
         self.window.mark_unsaved()
+
+    def add_branch_node(self, parent_id: str):
+        parent_node = self.window.nodes.get(parent_id)
+
+        if not parent_node:
+            return
+
+        new_node = FlowNode(
+            title="Neuer Branch",
+            description="Beschreibung hinzufügen.",
+            icon="level",
+            status="locked",
+        )
+
+        parent_node.children.append(new_node.id)
+
+        self.window.nodes[new_node.id] = new_node
+        self.window.selected_node_id = new_node.id
+
+        self.window.render_flow()
+        self.window.expand_editor_panel()
+        self.window.load_node_into_editor(new_node.id)
+        self.window.mark_unsaved()
