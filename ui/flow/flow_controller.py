@@ -69,3 +69,9 @@ class FlowController:
         self.window.expand_editor_panel()
         self.window.load_node_into_editor(new_node.id)
         self.window.mark_unsaved()
+
+    def select_node(self, node_id: str):
+        self.window.selected_node_id = node_id
+
+        self.window.expand_editor_panel()
+        self.window.load_node_into_editor(node_id)

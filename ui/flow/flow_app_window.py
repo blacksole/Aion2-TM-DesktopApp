@@ -520,12 +520,9 @@ class FlowMapWindow(QMainWindow):
 
     def add_branch_node(self, parent_id: str):
         self.controller.add_branch_node(parent_id)
-
+        
     def select_node(self, node_id: str):
-        self.selected_node_id = node_id
-
-        self.expand_editor_panel()
-        self.load_node_into_editor(node_id)
+        self.controller.select_node(node_id)
 
 
     def load_node_into_editor(self, node_id: str):
