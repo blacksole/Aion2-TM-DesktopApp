@@ -1,3 +1,6 @@
+from operator import index
+from platform import node
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -13,7 +16,7 @@ from PySide6.QtWidgets import (
     QToolTip,
     QGridLayout,
 )
-from PySide6.QtCore import  Qt, QSize, QTimer,QPoint
+from PySide6.QtCore import  Qt, QSize, QTimer,QPointF, QPoint
 from PySide6.QtGui import (
     QPainter, 
     QColor, 
@@ -21,11 +24,22 @@ from PySide6.QtGui import (
     QPixmap, 
     QIcon,
     QCursor,
+    QPainterPath,
+    QPolygonF,
 )
 from pathlib import Path
 from core.flow_model import FlowNode
 import time
 
+NODE_WIDTH = 440
+NODE_HEIGHT = 136
+
+ICON_BOX_SIZE = 72
+ICON_ASSET_SCALE = 1.2
+ICON_SIZE = int(ICON_ASSET_SCALE * ICON_BOX_SIZE)
+
+TITLE_SIZE = 18
+DESCRIPTION_SIZE = 13
 
 class FlowCanvas(QWidget):
     def __init__(self):
@@ -79,7 +93,7 @@ class FlowMapViewport(QWidget):
                 )
 
     def mouseMoveEvent(self, event):
-        print("Viewport Mouse Move")
+        #print("Viewport Mouse Move")
         if self.parent_window:
             self.parent_window.update_mouse_position_debug(
                 event.position().toPoint(),
@@ -136,7 +150,7 @@ class FlowNodeCard(QFrame):
 
         self.setObjectName("FlowNodeCard")
         self.setProperty("status", status)
-        self.setFixedSize(int(440 * zoom), int(136 * zoom))
+        self.setFixedSize(int(NODE_WIDTH * zoom), int(NODE_HEIGHT * zoom))
         self.node_id = node_id
         self.parent_window = parent_window
 
@@ -144,15 +158,15 @@ class FlowNodeCard(QFrame):
         self.icon_box = QLabel()
         self.icon_box.setObjectName("FlowNodeIcon")
         self.icon_box.setAlignment(Qt.AlignCenter)
-        self.icon_box.setFixedSize(int(72 * zoom), int(72 * zoom))
+        self.icon_box.setFixedSize(int(ICON_BOX_SIZE * zoom), int(ICON_BOX_SIZE * zoom))
 
         pixmap = QPixmap(icon)
 
         if not pixmap.isNull():
             self.icon_box.setPixmap(
                 pixmap.scaled(
-                    int(54 * zoom),
-                    int(54 * zoom),
+                    int(ICON_SIZE * zoom),
+                    int(ICON_SIZE * zoom),
                     Qt.KeepAspectRatio,
                     Qt.SmoothTransformation,
                 )
@@ -165,7 +179,7 @@ class FlowNodeCard(QFrame):
         self.title_label.setObjectName("FlowNodeTitle")
 
         if zoom >= 1.0:
-            title_size = 18
+            title_size = TITLE_SIZE
         elif zoom >= 0.8:
             title_size = 16
         else:
@@ -195,7 +209,7 @@ class FlowNodeCard(QFrame):
         self.desc_label.setWordWrap(True)
 
         if zoom >= 1.0:
-            desc_size = 13
+            desc_size = DESCRIPTION_SIZE
         elif zoom >= 0.8:
             desc_size = 12
         else:
@@ -326,47 +340,144 @@ class FlowNodeCard(QFrame):
 
 
 class FlowConnector(QWidget):
-    def __init__(self, parent_id=None, zoom=1.0, parent_window=None):
+    def __init__(
+        self,
+        parent_id=None,
+        zoom=1.0,
+        parent_window=None,
+        start_x=None,
+        end_x=None,
+        height=90,
+    ):
         super().__init__()
 
         self.parent_id = parent_id
         self.parent_window = parent_window
-        self.setFixedHeight(int(82 * zoom))
-        
+        self.zoom = zoom
+        self.start_x = start_x
+        self.end_x = end_x
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.setAlignment(Qt.AlignCenter)
-
-        line_top = QLabel("│")
-        line_top.setObjectName("FlowConnectorLine")
-        line_top.setAlignment(Qt.AlignCenter)
-
-        arrow = QLabel("▼")
-        arrow.setObjectName("FlowConnectorArrow")
-        arrow.setAlignment(Qt.AlignCenter)
-
-        line_top.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        arrow.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-
-        layout.addWidget(line_top)
-        layout.addWidget(arrow)
+        self.setFixedHeight(int(height * zoom))
+        self.setMinimumWidth(int(NODE_WIDTH * zoom))
 
         self.setToolTip("")
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
 
-    def enterEvent(self, event):
-        #print("Arrow Hover detected")
-        #start_time = time.perf_counter()
+    def paintEvent(self, event):
+        super().paintEvent(event)
 
-        #elapsed = (time.perf_counter() - start_time) * 1000
-        #print(f"Arrow tooltip shown after {elapsed:.2f} ms")
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
 
-        super().enterEvent(event)
+        color = QColor(95, 170, 255, 210)
 
+        pen = QPen(color)
+        pen.setWidth(max(2, int(3 * self.zoom)))
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
 
-    def leaveEvent(self, event):
-        super().leaveEvent(event)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+
+        start_x = self.start_x if self.start_x is not None else self.width() / 2
+        end_x = self.end_x if self.end_x is not None else self.width() / 2
+
+        start = QPointF(start_x, 0)
+        end = QPointF(end_x, self.height())
+
+        dx = end.x() - start.x()
+
+        if abs(dx) < 2:
+            painter.drawLine(start, end)
+        else:
+            cp1 = QPointF(start.x() + dx * 0.25, start.y())
+            cp2 = QPointF(start.x() + dx * 0.75, end.y())
+
+            path = QPainterPath()
+            path.moveTo(start)
+            path.cubicTo(cp1, cp2, end)
+
+            painter.drawPath(path)
+
+        self.paint_arrow(painter, color, end)
+
+    def paint_arrow(self, painter, color, end):
+        arrow_size = int(10 * self.zoom)
+
+        arrow = QPolygonF([
+            QPointF(end.x(), end.y() + arrow_size),
+            QPointF(end.x() - arrow_size, end.y() - arrow_size),
+            QPointF(end.x() + arrow_size, end.y() - arrow_size),
+        ])
+
+        painter.setBrush(color)
+        painter.drawPolygon(arrow)
+        painter.setBrush(Qt.NoBrush)
+
+class FlowPointConnector(QWidget):
+    def __init__(
+        self,
+        connections,
+        zoom=1.0,
+        height=110,
+        parent_window=None,
+    ):
+        super().__init__()
+
+        self.connections = connections
+        self.zoom = zoom
+        self.parent_window = parent_window
+
+        self.setFixedHeight(int(height * zoom))
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        parent_color = QColor(40, 100, 255, 255)
+        child_color = QColor(255, 160, 40, 255)
+
+        dot_size = int(8 * self.zoom)
+        arrow_size = int(12 * self.zoom)
+
+        for start_x, end_x in self.connections:
+            start = QPointF(start_x, 0)
+            end = QPointF(end_x, self.height() - int(16 * self.zoom))
+
+            # Parent Bottom Anchor = blauer Punkt
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(parent_color)
+            painter.drawEllipse(
+                start,
+                dot_size,
+                dot_size
+            )
+
+            # Child Top Anchor = schwarzer Pfeil
+            arrow = QPolygonF([
+                QPointF(end.x(), end.y() + arrow_size),
+                QPointF(end.x() - arrow_size, end.y() - arrow_size),
+                QPointF(end.x() + arrow_size, end.y() - arrow_size),
+            ])
+
+            painter.setBrush(child_color)
+            painter.drawPolygon(arrow)
+
+    def paint_arrow(self, painter, color, end):
+        arrow_size = int(10 * self.zoom)
+
+        arrow = QPolygonF([
+            QPointF(end.x(), end.y() + arrow_size),
+            QPointF(end.x() - arrow_size, end.y() - arrow_size),
+            QPointF(end.x() + arrow_size, end.y() - arrow_size),
+        ])
+
+        painter.setBrush(color)
+        painter.drawPolygon(arrow)
+        painter.setBrush(Qt.NoBrush)
 
 
 class NodeEditorPanel(QFrame):
@@ -1052,71 +1163,99 @@ class FlowMapWindow(QMainWindow):
             lambda event, node_id=node.id: self.handle_node_click(node_id)
         )
 
-        layout.addWidget(card, alignment=Qt.AlignCenter)
 
-        if not node.children:
+
+        if not node:
             return container
         
-        layout.addSpacing(16)
+        branch_spacing = 90
+        node_width = int(NODE_WIDTH * self.zoom_factor)
 
-        if len(node.children) == 1:
-            child_id = node.children[0]
+        child_count = len(node.children)
 
-            connector = FlowConnector(
-                parent_id=node.id,
-                zoom=self.zoom_factor,
-                parent_window=self
+        if child_count > 0:
+
+            child_widths = [
+                self.calculate_subtree_width(child_id)
+                for child_id in node.children
+            ]
+
+            required_width = (
+                sum(child_widths)
+                + (child_count - 1) * branch_spacing
             )
 
-            connector.mousePressEvent = (
-                lambda event, parent_id=node.id: self.handle_connector_click(parent_id)
+            required_width = max(
+                required_width,
+                node_width
             )
 
-            self.connectors.append(connector)
+        else:
+            child_widths = []
+            required_width = node_width
 
-            layout.addWidget(connector, alignment=Qt.AlignCenter)
+        container.setMinimumWidth(required_width)
 
-            child_widget = self.render_node_branch(child_id)
-            layout.addWidget(child_widget, alignment=Qt.AlignCenter)
+        card_wrapper = QWidget()
+        card_wrapper.setFixedWidth(required_width if node.children else int(NODE_WIDTH * self.zoom_factor))
 
-            return container
+        card_layout = QHBoxLayout(card_wrapper)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+        card_layout.addWidget(card, alignment=Qt.AlignHCenter)
+
+        layout.addWidget(card_wrapper, alignment=Qt.AlignCenter)
+
+        connections = []
+
+        for index in range(child_count):
+            parent_anchor_x = self.calculate_parent_anchor_x(
+                index=index,
+                count=child_count,
+                width=node_width,
+            )
+
+            parent_offset_x = (required_width - node_width) / 2
+            start_x = parent_offset_x + parent_anchor_x
+
+            child_x = sum(child_widths[:index]) + index * branch_spacing
+            child_top_center_x = child_x + child_widths[index] / 2
+
+            connections.append((start_x, child_top_center_x))
+
+        base_connector_height = 70
+        extra_per_child = 14
+
+        connector_height = (
+            base_connector_height
+            + int(self.zoom_factor * child_count * extra_per_child)
+        )
+
+        connector = FlowPointConnector(
+            connections=connections,
+            zoom=self.zoom_factor,
+            height=connector_height,
+            parent_window=self,
+        )
+
+        connector.setFixedWidth(required_width)
+
+        layout.addWidget(connector, alignment=Qt.AlignCenter)
 
         branch_row = QHBoxLayout()
         branch_row.setContentsMargins(0, 0, 0, 0)
-        branch_row.setSpacing(90)
+        branch_row.setSpacing(branch_spacing)
         branch_row.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
-        for child_id in node.children:
-            branch_container = QWidget()
-            branch_layout = QVBoxLayout(branch_container)
-            branch_layout.setContentsMargins(0, 0, 0, 0)
-            branch_layout.setSpacing(0)
-            branch_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-
-            connector = FlowConnector(
-                parent_id=node.id,
-                zoom=self.zoom_factor,
-                parent_window=self
-            )
-
-            connector.mousePressEvent = (
-                lambda event, parent_id=node.id: self.handle_connector_click(parent_id)
-            )
-
-            self.connectors.append(connector)
-
-            branch_layout.addWidget(connector, alignment=Qt.AlignCenter)
-
+        for index, child_id in enumerate(node.children):
             child_widget = self.render_node_branch(child_id)
-            branch_layout.addWidget(child_widget, alignment=Qt.AlignCenter)
+            child_widget.setFixedWidth(child_widths[index])
 
-            branch_row.addWidget(branch_container)
+            branch_row.addWidget(
+                child_widget,
+                alignment=Qt.AlignTop | Qt.AlignHCenter
+            )
 
-        branch_width = len(node.children) * int(440 * self.zoom_factor)
-        branch_spacing = (len(node.children) - 1) * 90
-        required_width = branch_width + branch_spacing
-
-        container.setMinimumWidth(required_width)
         layout.addLayout(branch_row)
 
         return container
@@ -1447,4 +1586,42 @@ class FlowMapWindow(QMainWindow):
             f"| Viewport Center: {viewport_center.x()}, {viewport_center.y()} "
             f"| MapArea Pos: {map_area_pos.x()}, {map_area_pos.y()} "
             f"| {node_center_text}"
+        )
+
+    def calculate_parent_anchor_x(self, index: int, count: int, width: int) -> float:
+        center = width / 2
+
+        if count <= 1:
+            return center
+
+        # kleiner Wert = Punkte enger zusammen
+        anchor_spread = width * 0.18
+
+        start_x = center - anchor_spread / 2
+        step = anchor_spread / (count - 1)
+
+        return start_x + step * index
+    
+    def calculate_subtree_width(self, node_id: str) -> int:
+        node = self.nodes.get(node_id)
+
+        if not node or not node.children:
+            return int(NODE_WIDTH * self.zoom_factor)
+
+        child_count = len(node.children)
+        branch_spacing = 90
+
+        child_widths = [
+            self.calculate_subtree_width(child_id)
+            for child_id in node.children
+        ]
+
+        children_total_width = (
+            sum(child_widths)
+            + (child_count - 1) * branch_spacing
+        )
+
+        return max(
+            int(NODE_WIDTH * self.zoom_factor),
+            children_total_width
         )
