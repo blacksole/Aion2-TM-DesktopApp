@@ -73,3 +73,29 @@ def calculate_branch_layout(node, nodes: dict, zoom_factor: float) -> dict:
         "child_widths": child_widths,
         "required_width": required_width,
     }
+
+def build_connections(
+    child_count: int,
+    child_widths: list[int],
+    branch_spacing: int,
+    node_width: int,
+    required_width: int,
+) -> list[tuple[float, float]]:
+    connections = []
+
+    for index in range(child_count):
+        parent_anchor_x = calculate_parent_anchor_x(
+            index=index,
+            count=child_count,
+            width=node_width,
+        )
+
+        parent_offset_x = (required_width - node_width) / 2
+        start_x = parent_offset_x + parent_anchor_x
+
+        child_x = sum(child_widths[:index]) + index * branch_spacing
+        child_top_center_x = child_x + child_widths[index] / 2
+
+        connections.append((start_x, child_top_center_x))
+
+    return connections

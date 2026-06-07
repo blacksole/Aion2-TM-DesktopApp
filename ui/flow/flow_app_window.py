@@ -24,8 +24,8 @@ from ui.flow.flow_layout import (
     NODE_WIDTH,
     BRANCH_SPACING,
     calculate_parent_anchor_x,
-    calculate_subtree_width,
     calculate_branch_layout,
+    build_connections,
 )
 
 from ui.flow.flow_layout import NODE_WIDTH
@@ -587,7 +587,7 @@ class FlowMapWindow(QMainWindow):
         if child_count == 0:
             return container
 
-        connections = self.build_connections(
+        connections = build_connections(
             child_count=child_count,
             child_widths=child_widths,
             branch_spacing=branch_spacing,
@@ -995,33 +995,6 @@ class FlowMapWindow(QMainWindow):
         card_layout.addWidget(card, alignment=Qt.AlignHCenter)
 
         return card_wrapper
-    
-    def build_connections(
-        self,
-        child_count,
-        child_widths,
-        branch_spacing,
-        node_width,
-        required_width,
-    ):
-        connections = []
-
-        for index in range(child_count):
-            parent_anchor_x = calculate_parent_anchor_x(
-                index=index,
-                count=child_count,
-                width=node_width,
-            )
-
-            parent_offset_x = (required_width - node_width) / 2
-            start_x = parent_offset_x + parent_anchor_x
-
-            child_x = sum(child_widths[:index]) + index * branch_spacing
-            child_top_center_x = child_x + child_widths[index] / 2
-
-            connections.append((start_x, child_top_center_x))
-
-        return connections
     
     def create_connector(self, connections, child_count, required_width):
         base_connector_height = 70
