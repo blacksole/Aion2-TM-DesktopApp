@@ -10,10 +10,9 @@ from PySide6.QtWidgets import (
     QFrame,
     QComboBox,
     QButtonGroup,
-    QToolTip,
     QGridLayout,
 )
-from PySide6.QtCore import  Qt, QSize, QTimer,QPointF, QPoint
+from PySide6.QtCore import  Qt, QSize, QTimer,QPointF
 from PySide6.QtGui import (
     QPainter, 
     QColor, 
@@ -26,7 +25,6 @@ from PySide6.QtGui import (
 )
 from pathlib import Path
 from core.flow_model import FlowNode
-import time
 
 NODE_WIDTH = 440
 NODE_HEIGHT = 136
@@ -335,82 +333,6 @@ class FlowNodeCard(QFrame):
 
         super().leaveEvent(event)
 
-
-class FlowConnector(QWidget):
-    def __init__(
-        self,
-        parent_id=None,
-        zoom=1.0,
-        parent_window=None,
-        start_x=None,
-        end_x=None,
-        height=90,
-    ):
-        super().__init__()
-
-        self.parent_id = parent_id
-        self.parent_window = parent_window
-        self.zoom = zoom
-        self.start_x = start_x
-        self.end_x = end_x
-
-        self.setFixedHeight(int(height * zoom))
-        self.setMinimumWidth(int(NODE_WIDTH * zoom))
-
-        self.setToolTip("")
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        color = QColor(95, 170, 255, 210)
-
-        pen = QPen(color)
-        pen.setWidth(max(2, int(3 * self.zoom)))
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
-
-        painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
-
-        start_x = self.start_x if self.start_x is not None else self.width() / 2
-        end_x = self.end_x if self.end_x is not None else self.width() / 2
-
-        start = QPointF(start_x, 0)
-        end = QPointF(end_x, self.height())
-
-        dx = end.x() - start.x()
-
-        if abs(dx) < 2:
-            painter.drawLine(start, end)
-        else:
-            cp1 = QPointF(start.x() + dx * 0.25, start.y())
-            cp2 = QPointF(start.x() + dx * 0.75, end.y())
-
-            path = QPainterPath()
-            path.moveTo(start)
-            path.cubicTo(cp1, cp2, end)
-
-            painter.drawPath(path)
-
-        self.paint_arrow(painter, color, end)
-
-    def paint_arrow(self, painter, color, end):
-        arrow_size = int(10 * self.zoom)
-
-        arrow = QPolygonF([
-            QPointF(end.x(), end.y() + arrow_size),
-            QPointF(end.x() - arrow_size, end.y() - arrow_size),
-            QPointF(end.x() + arrow_size, end.y() - arrow_size),
-        ])
-
-        painter.setBrush(color)
-        painter.drawPolygon(arrow)
-        painter.setBrush(Qt.NoBrush)
-
 class FlowPointConnector(QWidget):
     def __init__(
         self,
@@ -602,26 +524,6 @@ class NodeEditorPanel(QFrame):
         self.symbol_label.setText(tr_func(language, "flow_symbol"))
         self.node_cancel_btn.setText(tr_func(language, "cancel"))
         self.node_save_btn.setText(tr_func(language, "flow_save"))
-
-    def select_node(self, node_id: str):
-        self.selected_node_id = node_id
-        self.load_node_into_editor(node_id)
-
-
-    def load_node_into_editor(self, node_id: str):
-        node = self.nodes.get(node_id)
-
-        if not node:
-            return
-
-        self.editor_panel.title_input.setText(node.title)
-        self.editor_panel.desc_input.setPlainText(node.description)
-
-        index = self.editor_panel.symbol_combo.findData(node.icon)
-
-        if index >= 0:
-            self.editor_panel.symbol_combo.setCurrentIndex(index)
-
 
 class StatusPanel(QFrame):
     def __init__(self, language="en", tr_func=None):
@@ -1037,10 +939,9 @@ class FlowMapWindow(QMainWindow):
 
         if visible:
             self.toggle_editor_btn.setText(">>")
-            self.side_panel_wrapper.setFixedWidth(390)
         else:
             self.toggle_editor_btn.setText("<<")
-            self.side_panel_wrapper.setFixedWidth(82)
+        self.side_panel_wrapper.setFixedWidth(390)
 
     def collapse_editor_panel(self):
         self.toggle_editor_btn.setChecked(False)
@@ -1174,11 +1075,6 @@ class FlowMapWindow(QMainWindow):
         card.mousePressEvent = (
             lambda event, node_id=node.id: self.handle_node_click(node_id)
         )
-
-
-
-        if not node:
-            return container
         
         branch_spacing = 90
         node_width = int(NODE_WIDTH * self.zoom_factor)
@@ -1209,7 +1105,7 @@ class FlowMapWindow(QMainWindow):
         container.setMinimumWidth(required_width)
 
         card_wrapper = QWidget()
-        card_wrapper.setFixedWidth(required_width if node.children else int(NODE_WIDTH * self.zoom_factor))
+        card_wrapper.setFixedWidth(required_width)
 
         card_layout = QHBoxLayout(card_wrapper)
         card_layout.setContentsMargins(0, 0, 0, 0)
@@ -1217,6 +1113,9 @@ class FlowMapWindow(QMainWindow):
         card_layout.addWidget(card, alignment=Qt.AlignHCenter)
 
         layout.addWidget(card_wrapper, alignment=Qt.AlignCenter)
+
+        if child_count == 0:
+            return container
 
         connections = []
 
@@ -1379,6 +1278,11 @@ class FlowMapWindow(QMainWindow):
 
         self.editor_panel.title_input.setText(node.title)
         self.editor_panel.desc_input.setPlainText(node.description)
+
+        index = self.editor_panel.symbol_combo.findData(node.icon)
+
+        if index >= 0:
+            self.editor_panel.symbol_combo.setCurrentIndex(index)
 
     def save_selected_node(self):
         if not self.selected_node_id:
@@ -1550,7 +1454,7 @@ class FlowMapWindow(QMainWindow):
         self.tool_bar.move(margin, margin)
         self.tool_bar.setFixedHeight(content_size.height() - margin * 2)
 
-        panel_width = 390 if self.toggle_editor_btn.isChecked() else 82
+        panel_width = 390
         self.side_panel_wrapper.setFixedWidth(panel_width)
 
         self.side_panel_wrapper.move(
