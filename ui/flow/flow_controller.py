@@ -75,3 +75,32 @@ class FlowController:
 
         self.window.expand_editor_panel()
         self.window.load_node_into_editor(node_id)
+
+    def toggle_node_completed(self, node_id: str):
+        node = self.window.nodes.get(node_id)
+
+        if not node:
+            return
+
+        if node.status == "completed":
+            node.completed = False
+            node.status = "active"
+
+            for child_id in node.children:
+                child = self.window.nodes.get(child_id)
+
+                if child and child.status == "active":
+                    child.status = "locked"
+
+        else:
+            node.completed = True
+            node.status = "completed"
+
+            if node.children:
+                next_node = self.window.nodes.get(node.children[0])
+
+                if next_node and next_node.status != "completed":
+                    next_node.status = "active"
+
+        self.window.render_flow()
+        self.window.mark_unsaved()

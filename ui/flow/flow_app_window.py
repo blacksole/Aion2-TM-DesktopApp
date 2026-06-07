@@ -520,7 +520,7 @@ class FlowMapWindow(QMainWindow):
 
     def add_branch_node(self, parent_id: str):
         self.controller.add_branch_node(parent_id)
-        
+
     def select_node(self, node_id: str):
         self.controller.select_node(node_id)
 
@@ -585,32 +585,7 @@ class FlowMapWindow(QMainWindow):
         return super().eventFilter(obj, event)
 
     def toggle_node_completed(self, node_id: str):
-        node = self.nodes.get(node_id)
-
-        if not node:
-            return
-
-        if node.status == "completed":
-            node.completed = False
-            node.status = "active"
-
-            for child_id in node.children:
-                child = self.nodes.get(child_id)
-                if child and child.status == "active":
-                    child.status = "locked"
-
-        else:
-            node.completed = True
-            node.status = "completed"
-
-            if node.children:
-                next_node = self.nodes.get(node.children[0])
-
-                if next_node and next_node.status != "completed":
-                    next_node.status = "active"
-
-        self.render_flow()
-        self.mark_unsaved()
+        self.controller.toggle_node_completed(node_id)
 
     def set_current_tool(self, tool_name: str):
         self.current_tool = tool_name
