@@ -104,3 +104,19 @@ class FlowController:
 
         self.window.render_flow()
         self.window.mark_unsaved()
+
+    def save_selected_node(self):
+        if not self.window.selected_node_id:
+            return
+
+        node = self.window.nodes.get(self.window.selected_node_id)
+
+        if not node:
+            return
+
+        node.title = self.window.editor_panel.title_input.text().strip()
+        node.description = self.window.editor_panel.desc_input.toPlainText().strip()
+        node.icon = self.window.editor_panel.symbol_combo.currentData()
+
+        self.window.render_flow()
+        self.window.mark_unsaved()

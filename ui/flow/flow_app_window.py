@@ -540,20 +540,7 @@ class FlowMapWindow(QMainWindow):
             self.editor_panel.symbol_combo.setCurrentIndex(index)
 
     def save_selected_node(self):
-        if not self.selected_node_id:
-            return
-
-        node = self.nodes.get(self.selected_node_id)
-
-        if not node:
-            return
-
-        node.title = self.editor_panel.title_input.text().strip()
-        node.description = self.editor_panel.desc_input.toPlainText().strip()
-        node.icon = self.editor_panel.symbol_combo.currentData()
-
-        self.render_flow()
-        self.mark_unsaved()
+        self.controller.save_selected_node()
 
     def mark_unsaved(self):
         self.save_status_label.setText("Saving...")
