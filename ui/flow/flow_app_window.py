@@ -491,65 +491,7 @@ class FlowMapWindow(QMainWindow):
         self.map_area.move(new_x, new_y)
 
     def render_node_branch(self, node_id: str):
-        node = self.nodes.get(node_id)
-
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-
-        if not node:
-            return container
-
-        
-        
-        layout_data = calculate_branch_layout(
-            node,
-            self.nodes,
-            self.zoom_factor
-        )
-
-        branch_spacing = layout_data["branch_spacing"]
-        node_width = layout_data["node_width"]
-        child_count = layout_data["child_count"]
-        child_widths = layout_data["child_widths"]
-        required_width = layout_data["required_width"]
-
-        container.setMinimumWidth(required_width)
-
-        card = self.create_node_card(node)
-        card_wrapper = self.create_card_wrapper(card, required_width)
-        layout.addWidget(card_wrapper, alignment=Qt.AlignCenter)
-
-        if child_count == 0:
-            return container
-
-        connections = build_connections(
-            child_count=child_count,
-            child_widths=child_widths,
-            branch_spacing=branch_spacing,
-            node_width=node_width,
-            required_width=required_width,
-        )
-
-        connector = self.create_connector(
-            connections=connections,
-            child_count=child_count,
-            required_width=required_width,
-        )
-
-        layout.addWidget(connector, alignment=Qt.AlignCenter)
-
-        branch_row = self.create_children_row(
-            node=node,
-            child_widths=child_widths,
-            branch_spacing=branch_spacing,
-        )
-
-        layout.addLayout(branch_row)
-
-        return container
+        return self.renderer.render_node_branch(node_id)
 
     def handle_node_click(self, node_id: str):
         if self.current_tool == "select":

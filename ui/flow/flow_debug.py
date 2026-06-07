@@ -3,7 +3,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
+    QVBoxLayout,
 )
+
+
 
 DEBUG_MODE = False
 
