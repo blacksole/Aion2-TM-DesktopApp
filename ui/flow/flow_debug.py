@@ -20,16 +20,28 @@ def format_mouse_debug_text(
     map_area_pos,
     node_center_text,
 ):
-    if not DEBUG_MODE:
-        return ""
+    parts = []
 
-    return (
-        f"Mouse | Content: {content_pos.x()}, {content_pos.y()} "
-        f"| Map: {map_pos.x()}, {map_pos.y()} "
-        f"| Viewport Center: {viewport_center.x()}, {viewport_center.y()} "
-        f"| MapArea Pos: {map_area_pos.x()}, {map_area_pos.y()} "
-        f"| {node_center_text}"
-    )
+    if SHOW_MOUSE_DEBUG:
+        parts.append(
+            f"Mouse | Content: {content_pos.x()}, {content_pos.y()} "
+            f"| Map: {map_pos.x()}, {map_pos.y()}"
+        )
+
+    if SHOW_VIEWPORT_INFO:
+        parts.append(
+            f"Viewport Center: {viewport_center.x()}, {viewport_center.y()}"
+        )
+
+    if SHOW_MAP_AREA_INFO:
+        parts.append(
+            f"MapArea Pos: {map_area_pos.x()}, {map_area_pos.y()}"
+        )
+
+    if SHOW_NODE_CENTER:
+        parts.append(node_center_text)
+
+    return " | ".join(parts)
 
 def update_mouse_position_debug_label(window, pos, source_widget):
     if not DEBUG_MODE:
