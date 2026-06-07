@@ -1,8 +1,17 @@
+from PySide6.QtWidgets import (
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+)
+
 DEBUG_MODE = True
-SHOW_MOUSE_COORDS = True
+
+SHOW_MOUSE_DEBUG = True
+SHOW_STATUS_PANEL = True
 SHOW_NODE_CENTER = True
-SHOW_ANCHORS = False
-SHOW_LAYOUT_BOXES = False
+SHOW_VIEWPORT_INFO = True
+SHOW_MAP_AREA_INFO = True
 
 def format_mouse_debug_text(
     content_pos,
@@ -62,3 +71,53 @@ def update_mouse_position_debug_label(window, pos, source_widget):
             node_center_text,
         )
     )
+
+class StatusPanel(QFrame):
+    def __init__(self, language="en", tr_func=None):
+        super().__init__()
+
+        self.setObjectName("StatusPanel")
+        self.setFixedWidth(420)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 22, 28, 22)
+        layout.setSpacing(12)
+
+        self.title = QLabel()
+        self.title.setObjectName("PanelTitle")
+        self.setFixedWidth(390)
+
+        layout.addWidget(self.title)
+
+        items = [
+            ("green", "status_completed"),
+            ("blue", "status_active"),
+            ("yellow", "status_optional"),
+            ("gray", "status_locked"),
+        ]
+
+        self.rows = []
+
+        for color, key in items:
+            row = QHBoxLayout()
+
+            dot = QLabel("●")
+            dot.setObjectName(f"StatusDot_{color}")
+
+            text = QLabel()
+            text.setObjectName("StatusText")
+
+            row.addWidget(dot)
+            row.addWidget(text)
+            row.addStretch()
+
+            layout.addLayout(row)
+            self.rows.append((text, key))
+
+        self.update_language(language, tr_func)
+
+    def update_language(self, language, tr_func):
+        self.title.setText(tr_func(language, "flow_status_colors"))
+
+        for text, key in self.rows:
+            text.setText(tr_func(language, key))

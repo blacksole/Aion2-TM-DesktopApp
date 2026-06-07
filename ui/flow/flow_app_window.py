@@ -22,64 +22,18 @@ from ui.flow.flow_layout import (
     calculate_connector_height,
 )
 
-from ui.flow.flow_debug import update_mouse_position_debug_label
+from ui.flow.flow_debug import (
+    DEBUG_MODE,
+    SHOW_STATUS_PANEL,
+    StatusPanel,
+    update_mouse_position_debug_label,
+)
 
 from ui.flow.widgets.flow_canvas import FlowCanvas
 from ui.flow.widgets.flow_viewport import FlowMapViewport
 from ui.flow.widgets.flow_node_card import FlowNodeCard
 from ui.flow.widgets.flow_point_connector import FlowPointConnector
 from ui.flow.widgets.node_editor_panel import NodeEditorPanel
-
-class StatusPanel(QFrame):
-    def __init__(self, language="en", tr_func=None):
-        super().__init__()
-
-        self.setObjectName("StatusPanel")
-        self.setFixedWidth(420)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 22, 28, 22)
-        layout.setSpacing(12)
-
-        self.title = QLabel()
-        self.title.setObjectName("PanelTitle")
-        self.setFixedWidth(390)
-
-        layout.addWidget(self.title)
-
-        items = [
-            ("green", "status_completed"),
-            ("blue", "status_active"),
-            ("yellow", "status_optional"),
-            ("gray", "status_locked"),
-        ]
-
-        self.rows = []
-
-        for color, key in items:
-            row = QHBoxLayout()
-
-            dot = QLabel("●")
-            dot.setObjectName(f"StatusDot_{color}")
-
-            text = QLabel()
-            text.setObjectName("StatusText")
-
-            row.addWidget(dot)
-            row.addWidget(text)
-            row.addStretch()
-
-            layout.addLayout(row)
-            self.rows.append((text, key))
-
-        self.update_language(language, tr_func)
-
-    def update_language(self, language, tr_func):
-        self.title.setText(tr_func(language, "flow_status_colors"))
-
-        for text, key in self.rows:
-            text.setText(tr_func(language, key))
-
 
 class FlowMapWindow(QMainWindow):
     def __init__(self, parent=None, language="en", tr_func=None):
