@@ -516,33 +516,7 @@ class FlowMapWindow(QMainWindow):
 
 
     def add_child_node(self, parent_id: str):
-        parent_node = self.nodes.get(parent_id)
-
-        if not parent_node:
-            return
-
-        old_children = parent_node.children.copy()
-
-        new_node = FlowNode(
-            title="Neue Kachel",
-            description="Beschreibung hinzufügen.",
-            icon="level",
-            status="locked",
-        )
-
-        # Neue Node wird direkt nach Parent eingefügt
-        parent_node.children = [new_node.id]
-
-        # Alte Nachfolger hängen nun an der neuen Node
-        new_node.children = old_children
-
-        self.nodes[new_node.id] = new_node
-        self.selected_node_id = new_node.id
-
-        self.render_flow()
-        self.expand_editor_panel()
-        self.load_node_into_editor(new_node.id)
-        self.mark_unsaved()
+        self.controller.add_child_node(parent_id)
 
     def add_branch_node(self, parent_id: str):
         parent_node = self.nodes.get(parent_id)
