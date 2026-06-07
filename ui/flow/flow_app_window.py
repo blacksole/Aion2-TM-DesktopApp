@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -5,37 +7,28 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QLineEdit,
-    QTextEdit,
     QFrame,
     QComboBox,
     QButtonGroup,
 )
 from PySide6.QtCore import  Qt, QSize, QTimer
-from PySide6.QtGui import (
-    QPixmap, 
-    QIcon,
-    QCursor,
-)
-from pathlib import Path
-from core.flow_model import FlowNode
+from PySide6.QtGui import QPixmap, QIcon, QCursor
 
+from core.flow_model import FlowNode
 from ui.flow.flow_layout import (
     NODE_WIDTH,
-    BRANCH_SPACING,
-    calculate_parent_anchor_x,
     calculate_branch_layout,
     build_connections,
     calculate_connector_height,
 )
 
-from ui.flow.flow_layout import NODE_WIDTH
+from ui.flow.flow_debug import update_mouse_position_debug_label
+
 from ui.flow.widgets.flow_canvas import FlowCanvas
 from ui.flow.widgets.flow_viewport import FlowMapViewport
 from ui.flow.widgets.flow_node_card import FlowNodeCard
 from ui.flow.widgets.flow_point_connector import FlowPointConnector
 from ui.flow.widgets.node_editor_panel import NodeEditorPanel
-from ui.flow.flow_debug import DEBUG_MODE, update_mouse_position_debug_label
 
 class StatusPanel(QFrame):
     def __init__(self, language="en", tr_func=None):
