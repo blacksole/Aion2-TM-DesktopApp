@@ -423,36 +423,8 @@ class FlowMapWindow(QMainWindow):
             status="active",
         )
 
-        node2 = FlowNode(
-            title="Level 26 erreichen",
-            description="Erreiche mindestens\nLevel 26.",
-            icon="level",
-            status="locked",
-        )
-
-        node3 = FlowNode(
-            title="Dungeons erkunden",
-            description="Absolviere erste Dungeons\nfür bessere Ausrüstung.",
-            icon="daily_dungeon",
-            status="locked",
-        )
-
-        node4 = FlowNode(
-            title="Ausrüstung verbessern",
-            description="Verbessere deine Ausrüstung\ndurch Crafting.",
-            icon="crafting",
-            status="locked",
-        )
-
-        node1.children.append(node2.id)
-        node2.children.append(node3.id)
-        node3.children.append(node4.id)
-
         self.nodes = {
             node1.id: node1,
-            node2.id: node2,
-            node3.id: node3,
-            node4.id: node4,
         }
 
         self.root_node_id = node1.id
@@ -526,18 +498,7 @@ class FlowMapWindow(QMainWindow):
 
 
     def load_node_into_editor(self, node_id: str):
-        node = self.nodes.get(node_id)
-
-        if not node:
-            return
-
-        self.editor_panel.title_input.setText(node.title)
-        self.editor_panel.desc_input.setPlainText(node.description)
-
-        index = self.editor_panel.symbol_combo.findData(node.icon)
-
-        if index >= 0:
-            self.editor_panel.symbol_combo.setCurrentIndex(index)
+        self.controller.load_node_into_editor(node_id)
 
     def save_selected_node(self):
         self.controller.save_selected_node()

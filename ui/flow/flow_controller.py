@@ -131,3 +131,17 @@ class FlowController:
 
         if self.window.current_tool == "delete":
             return
+        
+    def load_node_into_editor(self, node_id: str):
+        node = self.window.nodes.get(node_id)
+
+        if not node:
+            return
+
+        self.window.editor_panel.title_input.setText(node.title)
+        self.window.editor_panel.desc_input.setPlainText(node.description)
+
+        index = self.window.editor_panel.symbol_combo.findData(node.icon)
+
+        if index >= 0:
+            self.window.editor_panel.symbol_combo.setCurrentIndex(index)
