@@ -631,17 +631,7 @@ class FlowMapWindow(QMainWindow):
 
 
     def handle_connector_click(self, parent_id: str):
-        if self.current_tool == "add_node":
-            self.add_child_node(parent_id)
-            return
-
-        if self.current_tool == "branch":
-            # später: Beschreibung am Connector bearbeiten
-            return
-
-        if self.current_tool == "delete":
-            # Branches / Connectoren werden nicht gelöscht
-            return
+        self.controller.handle_connector_click(parent_id)
         
     def position_flow_overlays(self):
         if not hasattr(self, "content"):

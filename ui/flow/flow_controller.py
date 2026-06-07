@@ -120,3 +120,14 @@ class FlowController:
 
         self.window.render_flow()
         self.window.mark_unsaved()
+
+    def handle_connector_click(self, parent_id: str):
+        if self.window.current_tool == "add_node":
+            self.add_child_node(parent_id)
+            return
+
+        if self.window.current_tool == "branch":
+            return
+
+        if self.window.current_tool == "delete":
+            return
