@@ -1,9 +1,12 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
 
+from ui.flow.widgets.flow_point_connector import FlowPointConnector
+
 from ui.flow.flow_layout import (
     calculate_branch_layout,
     build_connections,
+    calculate_connector_height,
 )
 
 
@@ -73,7 +76,7 @@ class FlowRenderer:
             required_width=required_width,
         )
 
-        connector = self.window.create_connector(
+        connector = self.create_connector(
             connections=connections,
             child_count=child_count,
             required_width=required_width,
@@ -90,3 +93,20 @@ class FlowRenderer:
         layout.addLayout(branch_row)
 
         return container
+    
+    def create_connector(self, connections, child_count, required_width):
+        connector_height = calculate_connector_height(
+            child_count,
+            self.window.zoom_factor
+        )
+
+        connector = FlowPointConnector(
+            connections=connections,
+            zoom=self.window.zoom_factor,
+            height=connector_height,
+            parent_window=self.window,
+        )
+
+        connector.setFixedWidth(required_width)
+
+        return connector

@@ -849,21 +849,11 @@ class FlowMapWindow(QMainWindow):
         return card_wrapper
     
     def create_connector(self, connections, child_count, required_width):
-        connector_height = calculate_connector_height(
+        return self.renderer.create_connector(
+            connections,
             child_count,
-            self.zoom_factor
+            required_width,
         )
-
-        connector = FlowPointConnector(
-            connections=connections,
-            zoom=self.zoom_factor,
-            height=connector_height,
-            parent_window=self,
-        )
-
-        connector.setFixedWidth(required_width)
-
-        return connector
     
     def create_children_row(self, node, child_widths, branch_spacing):
         branch_row = QHBoxLayout()
