@@ -1,6 +1,3 @@
-from operator import index
-from platform import node
-
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -437,42 +434,57 @@ class FlowPointConnector(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        parent_color = QColor(40, 100, 255, 255)
-        child_color = QColor(255, 160, 40, 255)
+        color = QColor(95, 170, 255, 210)
 
-        dot_size = int(8 * self.zoom)
-        arrow_size = int(12 * self.zoom)
+        pen = QPen(color)
+        pen.setWidth(max(2, int(3 * self.zoom)))
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
 
         for start_x, end_x in self.connections:
             start = QPointF(start_x, 0)
-            end = QPointF(end_x, self.height() - int(16 * self.zoom))
 
-            # Parent Bottom Anchor = blauer Punkt
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(parent_color)
-            painter.drawEllipse(
-                start,
-                dot_size,
-                dot_size
+            arrow_tip = QPointF(end_x, self.height())
+            line_end = QPointF(
+                end_x,
+                self.height() - int(14 * self.zoom)
             )
 
-            # Child Top Anchor = schwarzer Pfeil
-            arrow = QPolygonF([
-                QPointF(end.x(), end.y() + arrow_size),
-                QPointF(end.x() - arrow_size, end.y() - arrow_size),
-                QPointF(end.x() + arrow_size, end.y() - arrow_size),
-            ])
+            dx = arrow_tip.x() - start.x()
 
-            painter.setBrush(child_color)
-            painter.drawPolygon(arrow)
+            if abs(dx) < 2:
+                painter.drawLine(start, line_end)
+            else:
+                cp1 = QPointF(
+                    start.x(),
+                    start.y() + self.height() * 0.35
+                )
+
+                cp2 = QPointF(
+                    line_end.x(),
+                    line_end.y() - self.height() * 0.35
+                )
+
+                path = QPainterPath()
+                path.moveTo(start)
+                path.cubicTo(cp1, cp2, line_end)
+
+                painter.drawPath(path)
+
+            self.paint_arrow(painter, color, arrow_tip)
 
     def paint_arrow(self, painter, color, end):
         arrow_size = int(10 * self.zoom)
 
+        arrow_tip = QPointF(end.x(), end.y())
+
         arrow = QPolygonF([
-            QPointF(end.x(), end.y() + arrow_size),
-            QPointF(end.x() - arrow_size, end.y() - arrow_size),
-            QPointF(end.x() + arrow_size, end.y() - arrow_size),
+            arrow_tip,
+            QPointF(end.x() - arrow_size, end.y() - arrow_size * 1.6),
+            QPointF(end.x() + arrow_size, end.y() - arrow_size * 1.6),
         ])
 
         painter.setBrush(color)
