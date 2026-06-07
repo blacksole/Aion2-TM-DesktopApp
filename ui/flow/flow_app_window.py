@@ -495,22 +495,7 @@ class FlowMapWindow(QMainWindow):
         return self.renderer.render_node_branch(node_id)
 
     def handle_node_click(self, node_id: str):
-        if self.current_tool == "select":
-            self.select_node(node_id)
-            return
-
-        if self.current_tool == "add_node":
-            self.add_child_node(node_id)
-            return
-
-        if self.current_tool == "branch":
-            self.add_branch_node(node_id)
-            return
-
-        if self.current_tool == "delete":
-            # später: Delete Dialog
-            self.select_node(node_id)
-            return
+        self.controller.handle_node_click(node_id)
 
     def get_icon_symbol(self, icon_key: str):
         icon_map = {
