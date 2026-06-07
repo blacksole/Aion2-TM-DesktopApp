@@ -26,6 +26,7 @@ from ui.flow.flow_layout import (
     calculate_parent_anchor_x,
     calculate_branch_layout,
     build_connections,
+    calculate_connector_height,
 )
 
 from ui.flow.flow_layout import NODE_WIDTH
@@ -997,12 +998,9 @@ class FlowMapWindow(QMainWindow):
         return card_wrapper
     
     def create_connector(self, connections, child_count, required_width):
-        base_connector_height = 70
-        extra_per_child = 14
-
-        connector_height = (
-            base_connector_height
-            + int(self.zoom_factor * child_count * extra_per_child)
+        connector_height = calculate_connector_height(
+            child_count,
+            self.zoom_factor
         )
 
         connector = FlowPointConnector(

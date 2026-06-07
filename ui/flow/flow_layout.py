@@ -10,6 +10,9 @@ DESCRIPTION_SIZE = 13
 
 BRANCH_SPACING = 90
 
+CONNECTOR_BASE_HEIGHT = 70
+CONNECTOR_EXTRA_PER_CHILD = 14
+
 
 def calculate_parent_anchor_x(index: int, count: int, width: int) -> float:
     center = width / 2
@@ -74,6 +77,12 @@ def calculate_branch_layout(node, nodes: dict, zoom_factor: float) -> dict:
         "required_width": required_width,
     }
 
+def calculate_connector_height(child_count: int, zoom_factor: float) -> int:
+    return (
+        CONNECTOR_BASE_HEIGHT
+        + int(zoom_factor * child_count * CONNECTOR_EXTRA_PER_CHILD)
+    )
+
 def build_connections(
     child_count: int,
     child_widths: list[int],
@@ -99,3 +108,4 @@ def build_connections(
         connections.append((start_x, child_top_center_x))
 
     return connections
+
