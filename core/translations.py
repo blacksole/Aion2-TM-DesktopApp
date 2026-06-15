@@ -153,6 +153,11 @@ TRANSLATIONS = {
         "flow_title_placeholder": "Titel",
         "flow_description_placeholder": "Beschreibung",
         "flow_symbol": "Symbol",
+        "flow_optional_node": "Optionaler Knoten",
+
+        "flow_new_node_title": "Neue Kachel",
+        "flow_new_branch_title": "Neuer Branch",
+        "flow_new_node_desc": "Beschreibung hinzufügen.",
 
         "flow_save": "Speichern",
         "flow_load": "Laden",
@@ -350,6 +355,11 @@ TRANSLATIONS = {
         "flow_title_placeholder": "Title",
         "flow_description_placeholder": "Description",
         "flow_symbol": "Symbol",
+        "flow_optional_node": "Optional Node",
+
+        "flow_new_node_title": "New Node",
+        "flow_new_branch_title": "New Branch",
+        "flow_new_node_desc": "Add a description.",
 
         "flow_save": "Save",
         "flow_load": "Load",

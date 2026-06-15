@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QTextEdit,
     QComboBox,
+    QCheckBox,
 )
 
 from PySide6.QtCore import QSize, Qt
@@ -47,6 +48,7 @@ class NodeEditorPanel(QFrame):
 
         self.title_input = QLineEdit()
         self.title_input.setObjectName("FlowInput")
+        self.title_input.setMaxLength(25)
 
         self.desc_label = QLabel()
         self.desc_label.setObjectName("FieldLabel")
@@ -86,6 +88,17 @@ class NodeEditorPanel(QFrame):
             for key, label in self.symbol_options:
                 self.symbol_combo.addItem(label, key)
 
+        self.optional_check = QCheckBox()
+        self.optional_check.setObjectName("FlowOptionalCheck")
+        self.optional_check.setCursor(Qt.PointingHandCursor)
+
+        self.is_dirty = False
+
+        self.title_input.textChanged.connect(self._mark_dirty)
+        self.desc_input.textChanged.connect(self._mark_dirty)
+        self.symbol_combo.currentIndexChanged.connect(self._mark_dirty)
+        self.optional_check.stateChanged.connect(self._mark_dirty)
+
         button_row = QHBoxLayout()
         button_row.setSpacing(14)
 
@@ -105,10 +118,18 @@ class NodeEditorPanel(QFrame):
         layout.addWidget(self.desc_input)
         layout.addWidget(self.symbol_label)
         layout.addWidget(self.symbol_combo)
-        layout.addSpacing(14)
+        layout.addSpacing(8)
+        layout.addWidget(self.optional_check)
+        layout.addSpacing(6)
         layout.addLayout(button_row)
 
         self.update_language(language, tr_func)
+
+    def _mark_dirty(self):
+        self.is_dirty = True
+
+    def mark_clean(self):
+        self.is_dirty = False
 
     def update_language(self, language, tr_func):
         self.language = language
@@ -121,5 +142,6 @@ class NodeEditorPanel(QFrame):
         self.title_label.setText(tr_func(language, "flow_title_placeholder"))
         self.desc_label.setText(tr_func(language, "flow_description_placeholder"))
         self.symbol_label.setText(tr_func(language, "flow_symbol"))
+        self.optional_check.setText(tr_func(language, "flow_optional_node"))
         self.node_cancel_btn.setText(tr_func(language, "cancel"))
         self.node_save_btn.setText(tr_func(language, "flow_save"))

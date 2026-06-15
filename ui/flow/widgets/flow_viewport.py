@@ -54,16 +54,10 @@ class FlowMapViewport(QWidget):
                 self.parent_window.apply_current_tool_cursor()
 
     def wheelEvent(self, event):
-        if event.modifiers() == Qt.ControlModifier:
-            if self.parent_window:
-                delta = event.angleDelta().y()
-
-                if delta > 0:
-                    self.parent_window.adjust_zoom(0.1)
-                else:
-                    self.parent_window.adjust_zoom(-0.1)
-
-            event.accept()
-            return
-
-        super().wheelEvent(event)
+        if self.parent_window:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.parent_window.adjust_zoom(0.1)
+            else:
+                self.parent_window.adjust_zoom(-0.1)
+        event.accept()

@@ -26,6 +26,7 @@ from ui.flow.widgets.flow_viewport import FlowMapViewport
 from ui.flow.widgets.flow_node_card import FlowNodeCard
 from ui.flow.widgets.flow_point_connector import FlowPointConnector
 from ui.flow.widgets.node_editor_panel import NodeEditorPanel
+from ui.flow.widgets.flow_guide_view import FlowGuideView
 from ui.flow.flow_renderer import FlowRenderer
 from ui.flow.flow_controller import FlowController
 
@@ -62,15 +63,12 @@ class FlowMapWindow(QMainWindow):
         top_layout = QHBoxLayout(self.topbar)
         top_layout.setContentsMargins(28, 12, 28, 12)
 
-        self.back_btn = QPushButton("‹")
-        self.back_btn.setObjectName("FlowBackButton")
-        self.back_btn.setFixedSize(46, 46)
-
         self.nodes: dict[str, FlowNode] = {}
         self.root_node_id = None
         self.selected_node_id = None
         self.zoom_factor = 1.0
         self.current_tool = "select"
+        self.current_mode = "edit"
 
         self.renderer = FlowRenderer(self)
         self.controller = FlowController(self)
@@ -97,7 +95,7 @@ class FlowMapWindow(QMainWindow):
         self.zoom_combo.setMaximumHeight(42)
         self.zoom_combo.currentIndexChanged.connect(self.change_zoom)
 
-        self.zoom_hint_label = QLabel("Ctrl + Wheel | Zoom 100%")
+        self.zoom_hint_label = QLabel("Scroll | Zoom 100%")
         self.zoom_hint_label.setObjectName("FlowZoomHintLabel")
 
         
@@ -115,7 +113,14 @@ class FlowMapWindow(QMainWindow):
         mode_layout.addWidget(self.edit_mode_btn)
         mode_layout.addWidget(self.guide_mode_btn)
 
-        top_layout.addWidget(self.back_btn)
+        self.mode_group = QButtonGroup(self)
+        self.mode_group.setExclusive(True)
+        self.mode_group.addButton(self.edit_mode_btn)
+        self.mode_group.addButton(self.guide_mode_btn)
+
+        self.edit_mode_btn.clicked.connect(lambda: self.set_mode("edit"))
+        self.guide_mode_btn.clicked.connect(lambda: self.set_mode("guide"))
+
         top_layout.addWidget(self.plan_title)
 
         top_layout.addStretch()
@@ -226,6 +231,12 @@ class FlowMapWindow(QMainWindow):
 
         self.add_demo_flow()
 
+        self.current_mode = "edit"
+
+        self.guide_view = FlowGuideView(self)
+        self.guide_view.setParent(self.content)
+        self.guide_view.hide()
+
         self.side_panel_wrapper = QWidget()
         self.side_panel_wrapper.setParent(self.content)
         side_wrapper_layout = QVBoxLayout(self.side_panel_wrapper)
@@ -247,8 +258,12 @@ class FlowMapWindow(QMainWindow):
             self.save_selected_node
         )
 
+        self.editor_panel.node_cancel_btn.clicked.connect(
+            self.cancel_selected_node
+        )
+
         self.editor_panel.close_btn.clicked.connect(
-            self.collapse_editor_panel
+            self.cancel_selected_node
         )
 
         side_layout.addWidget(self.editor_panel)
@@ -326,6 +341,8 @@ class FlowMapWindow(QMainWindow):
         root.addWidget(self.content, 1)
         root.addWidget(self.info_bar)
 
+        self.side_panel_wrapper.setVisible(False)
+
         self.content.installEventFilter(self)
         QTimer.singleShot(0, self.position_flow_overlays)
 
@@ -402,8 +419,11 @@ class FlowMapWindow(QMainWindow):
         self.toggle_editor_btn.setChecked(False)
         self.toggle_editor_panel()
 
+    def close_editor_panel(self):
+        self.side_panel_wrapper.setVisible(False)
 
     def expand_editor_panel(self):
+        self.side_panel_wrapper.setVisible(True)
         self.toggle_editor_btn.setChecked(True)
         self.toggle_editor_panel()
 
@@ -432,7 +452,45 @@ class FlowMapWindow(QMainWindow):
                 widget.deleteLater()
 
 
+    def set_mode(self, mode: str):
+        if mode == self.current_mode:
+            return
+
+        if not self.controller.confirm_dirty_before_action():
+            self._revert_mode_buttons()
+            return
+
+        self.current_mode = mode
+
+        is_edit = mode == "edit"
+
+        self.tool_bar.setVisible(is_edit)
+        self.side_panel_wrapper.setVisible(is_edit and self.selected_node_id is not None)
+        self.map_viewport.setVisible(is_edit)
+        self.guide_view.setVisible(not is_edit)
+
+        if not is_edit:
+            self.current_tool = "select"
+            self.select_tool_btn.setChecked(True)
+            self.guide_view.refresh()
+        else:
+            self.render_flow()
+
+        self.position_flow_overlays()
+
+    def _revert_mode_buttons(self):
+        for btn in (self.edit_mode_btn, self.guide_mode_btn):
+            btn.blockSignals(True)
+        self.edit_mode_btn.setChecked(self.current_mode == "edit")
+        self.guide_mode_btn.setChecked(self.current_mode == "guide")
+        for btn in (self.edit_mode_btn, self.guide_mode_btn):
+            btn.blockSignals(False)
+
     def render_flow(self):
+        if self.current_mode == "guide":
+            if hasattr(self, "guide_view"):
+                self.guide_view.refresh()
+            return
         self.renderer.render_flow()
 
     def center_flow_in_viewport(self):
@@ -484,6 +542,12 @@ class FlowMapWindow(QMainWindow):
 
     def add_branch_node(self, parent_id: str):
         self.controller.add_branch_node(parent_id)
+
+    def delete_node(self, node_id: str):
+        self.controller.delete_node(node_id)
+
+    def cancel_selected_node(self):
+        self.controller.cancel_selected_node()
 
     def select_node(self, node_id: str):
         self.controller.select_node(node_id)
@@ -625,6 +689,13 @@ class FlowMapWindow(QMainWindow):
         self.side_panel_wrapper.setFixedHeight(
             content_size.height() - margin * 2
         )
+
+        if hasattr(self, "guide_view"):
+            self.guide_view.setGeometry(
+                0, 0,
+                content_size.width(),
+                content_size.height(),
+            )
 
         self.tool_bar.raise_()
         self.side_panel_wrapper.raise_()

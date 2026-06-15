@@ -1,3 +1,7 @@
+QPushButton {
+    cursor: pointing-hand;
+}
+
 QMenuBar {
     background-color: #1f2937;
     color: #e5e7eb;
@@ -749,12 +753,6 @@ QToolTip {
     border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
 
-#FlowBackButton {
-    background-color: transparent;
-    color: #e5e7eb;
-    border: none;
-    font-size: 34px;
-}
 
 #FlowPlanTitle {
     color: #f8fafc;
@@ -905,6 +903,29 @@ QToolTip {
 #FlowIconButton:checked {
     border: 1px solid rgba(59, 130, 246, 0.95);
     background-color: rgba(37, 99, 235, 0.18);
+}
+
+#FlowOptionalCheck {
+    color: #cbd5e1;
+    font-size: 14px;
+    spacing: 10px;
+}
+
+#FlowOptionalCheck::indicator {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(148, 163, 184, 0.4);
+    border-radius: 5px;
+    background-color: rgba(15, 23, 42, 0.6);
+}
+
+#FlowOptionalCheck::indicator:checked {
+    background-color: rgba(245, 158, 11, 0.85);
+    border-color: #f59e0b;
+}
+
+#FlowOptionalCheck::indicator:hover {
+    border-color: rgba(245, 158, 11, 0.65);
 }
 
 #FlowCancelButton {
@@ -1145,4 +1166,131 @@ QToolTip {
     color: #94a3b8;
     font-size: 11px;
     font-weight: 600;
+}
+
+/* ===== GUIDE MODE ===== */
+
+#FlowGuideView {
+    background-color: transparent;
+}
+
+#GuideInfoBar {
+    background-color: rgba(15, 23, 42, 0.88);
+    border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+#GuideInfoTitle {
+    color: #f8fafc;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+#GuideInfoDesc {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+#GuideInfoIcon {
+    font-size: 22px;
+    color: #334155;
+}
+
+#GuideDoneButton {
+    background-color: rgba(34, 197, 94, 0.14);
+    color: #86efac;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0px 14px;
+}
+
+#GuideDoneButton:hover {
+    background-color: rgba(34, 197, 94, 0.28);
+    border-color: rgba(34, 197, 94, 0.75);
+    color: #ffffff;
+}
+
+#GuideEditButton {
+    background-color: rgba(148, 163, 184, 0.10);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0px 10px;
+}
+
+#GuideEditButton:hover {
+    background-color: rgba(148, 163, 184, 0.22);
+    border-color: rgba(148, 163, 184, 0.55);
+    color: #f8fafc;
+}
+
+/* ===== DELETE CONFIRM DIALOG ===== */
+
+#DeleteConfirmDialog {
+    background-color: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 14px;
+}
+
+#DeleteDialogTitle {
+    color: #f8fafc;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+#DeleteDialogDesc {
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#DeleteDialogOptionBtn {
+    background-color: rgba(37, 99, 235, 0.18);
+    color: #93c5fd;
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    border-radius: 9px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#DeleteDialogOptionBtn:hover {
+    background-color: rgba(37, 99, 235, 0.32);
+    border-color: rgba(96, 165, 250, 0.8);
+    color: #ffffff;
+}
+
+#DeleteDialogDangerBtn {
+    background-color: rgba(185, 28, 28, 0.18);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    border-radius: 9px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#DeleteDialogDangerBtn:hover {
+    background-color: rgba(185, 28, 28, 0.35);
+    border-color: rgba(239, 68, 68, 0.85);
+    color: #ffffff;
+}
+
+#DeleteDialogCancelBtn {
+    background-color: rgba(30, 41, 59, 0.5);
+    color: #64748b;
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    border-radius: 9px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#DeleteDialogCancelBtn:hover {
+    background-color: rgba(30, 41, 59, 0.8);
+    color: #94a3b8;
+    border-color: rgba(100, 116, 139, 0.55);
 }
