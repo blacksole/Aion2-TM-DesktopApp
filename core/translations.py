@@ -110,6 +110,12 @@ TRANSLATIONS = {
         "auto_save_desc": "Profiländerungen automatisch speichern.",
         "show_events_desc": "Event Aufgaben und Event Einkauf anzeigen.",
 
+        "check_updates": "Nach Updates suchen",
+        "check_updates_desc": "Prüft, ob eine neue Version verfügbar ist.",
+        "check_updates_btn": "Jetzt prüfen",
+        "update_available_toast": "Update v{version} verfügbar!",
+        "up_to_date_toast": "Du hast die aktuellste Version.",
+
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",
         "weekly_reset_day": "Wöch. Reset Wochentag",
@@ -315,6 +321,12 @@ TRANSLATIONS = {
         "auto_save": "Auto Save",
         "auto_save_desc": "Automatically save profile changes.",
         "show_events_desc": "Show event tasks and event shopping.",
+
+        "check_updates": "Check for Updates",
+        "check_updates_desc": "Check if a new version is available.",
+        "check_updates_btn": "Check now",
+        "update_available_toast": "Update v{version} available!",
+        "up_to_date_toast": "You have the latest version.",
 
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",

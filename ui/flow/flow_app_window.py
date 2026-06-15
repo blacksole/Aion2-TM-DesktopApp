@@ -387,18 +387,18 @@ class FlowMapWindow(QMainWindow):
     def change_zoom(self):
         self.zoom_factor = self.zoom_combo.currentData()
         self.zoom_hint_label.setText(
-            f"Ctrl + Wheel | Zoom {int(self.zoom_factor * 100)}%"
+            f"Scroll | Zoom {int(self.zoom_factor * 100)}%"
         )
         self.render_flow()
 
     def adjust_zoom(self, delta: float):
         new_zoom = self.zoom_factor + delta
-        new_zoom = max(0.4, min(1.4, new_zoom))
+        new_zoom = max(0.6, min(1.0, new_zoom))
 
         self.zoom_factor = new_zoom
 
         self.zoom_hint_label.setText(
-            f"Ctrl + Wheel | Zoom {int(self.zoom_factor * 100)}%"
+            f"Scroll | Zoom {int(self.zoom_factor * 100)}%"
         )
 
         self.render_flow()
@@ -565,14 +565,38 @@ class FlowMapWindow(QMainWindow):
         self.save_status_label.style().unpolish(self.save_status_label)
         self.save_status_label.style().polish(self.save_status_label)
 
-        QTimer.singleShot(2000, self.mark_saved)
+        parent = self.parent()
+        if parent and hasattr(parent, "save_profile"):
+            parent.save_profile(silent=True)
 
+        QTimer.singleShot(2000, self.mark_saved)
 
     def mark_saved(self):
         self.save_status_label.setText("✓ Saved")
         self.save_status_label.setProperty("state", "saved")
         self.save_status_label.style().unpolish(self.save_status_label)
         self.save_status_label.style().polish(self.save_status_label)
+
+    def get_flow_data(self) -> dict:
+        return {
+            "root_node_id": self.root_node_id,
+            "nodes": {
+                node_id: node.to_dict()
+                for node_id, node in self.nodes.items()
+            },
+        }
+
+    def load_flow_data(self, data: dict):
+        if not data or not data.get("nodes"):
+            return
+        self.nodes = {}
+        for node_dict in data["nodes"].values():
+            node = FlowNode.from_dict(node_dict)
+            self.nodes[node.id] = node
+        self.root_node_id = data.get("root_node_id")
+        self.selected_node_id = None
+        self.close_editor_panel()
+        self.render_flow()
 
     def closeEvent(self, event):
         self.mark_saved()
