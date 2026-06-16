@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 from .settings_dialog import SettingsDialog
 from .update_dialog import UpdateDialog
@@ -11,6 +12,7 @@ from .pages.profile_page import ProfilePage
 from .pages.settings_page import SettingsPage
 from .pages.dashboard_page import DashboardPage
 from .flow.flow_app_window import FlowMapWindow
+from .overlay.overlay_window import OverlayWindow
 from core.translations import tr
 from core.update_checker import UpdateChecker
 from PySide6.QtWidgets import QTimeEdit
@@ -184,7 +186,10 @@ class MainWindow(QMainWindow):
         self.last_daily_reset_date = None
         self.last_weekly_reset_date = None
         self.profile_name = "Default"
-        self.project_root = Path(__file__).resolve().parent.parent
+        if getattr(sys, "frozen", False):
+            self.project_root = Path(sys.executable).parent
+        else:
+            self.project_root = Path(__file__).resolve().parent.parent
         self.profile_dir = self.project_root / "profiles"
         self.profile_dir.mkdir(exist_ok=True)
         self.last_profile_file = self.profile_dir / "last_profile.txt"
@@ -210,6 +215,7 @@ class MainWindow(QMainWindow):
         self.flow_map_window = FlowMapWindow(self, language=self.language, tr_func=tr)
 
         self.setup_ui()
+        self.overlay = OverlayWindow(self)
         self.load_styles()
         self.apply_language()
         self.sync_settings_page()
@@ -223,6 +229,24 @@ class MainWindow(QMainWindow):
         self.countdown_timer.start(1000)
 
         self.update_countdowns()
+
+    def _wire_card(self, card):
+        card.check_btn.clicked.connect(self._on_task_toggled)
+
+    def _on_task_toggled(self):
+        self.refresh()
+        if self.auto_save:
+            self.save_profile(silent=True)
+
+    def _toggle_overlay(self):
+        if self.overlay.isVisible():
+            self.overlay.hide()
+            self.overlay_toggle_btn.setChecked(False)
+        else:
+            self.overlay.refresh()
+            self.overlay.show()
+            self.overlay.raise_()
+            self.overlay_toggle_btn.setChecked(True)
 
     def open_flow_map_window(self):
         if self.flow_map_window is None:
@@ -323,6 +347,12 @@ class MainWindow(QMainWindow):
         self.left_layout.addWidget(self.theme_logo_label)
         self.left_layout.addWidget(self.sidebar)
         self.left_layout.addStretch()
+
+        self.overlay_toggle_btn = QPushButton("⬛  Overlay")
+        self.overlay_toggle_btn.setObjectName("overlayToggleBtn")
+        self.overlay_toggle_btn.setCheckable(True)
+        self.overlay_toggle_btn.clicked.connect(self._toggle_overlay)
+        self.left_layout.addWidget(self.overlay_toggle_btn)
 
         self.content_layout.addWidget(self.page_stack, 1)
         self.content_layout.addWidget(self.toast_label)
@@ -710,6 +740,9 @@ class MainWindow(QMainWindow):
             )
         )
 
+        if hasattr(self, "overlay") and self.overlay.isVisible():
+            self.overlay.refresh()
+
     def load_styles(self):
         style_path = (
             Path(__file__).resolve().parent / "styles.qss"
@@ -933,6 +966,7 @@ class MainWindow(QMainWindow):
                 if item.get("completed", False):
                     card.set_completed(True)
 
+                self._wire_card(card)
                 self.task_lists[tab].append(card)
 
         self.refresh()
@@ -1221,6 +1255,7 @@ class MainWindow(QMainWindow):
                 data.get("event", False),
             )
 
+        self._wire_card(card)
         self.task_lists[self.active_tab].insert(0, card)
         self.refresh()
 

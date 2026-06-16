@@ -16,76 +16,189 @@
         "auto_save": true
     },
     "tasks": {
-        "dailyTasks": [],
-        "weeklyTasks": [],
-        "dailyShopping": [],
-        "weeklyShopping": []
+        "dailyTasks": [
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "Daily Dungeons abschließen",
+                "description": "Alle 3 Daily Dungeons fertig machen",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "Tägliche Quests abgeben",
+                "description": "Hauptstadt Quests abgeben",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "PvP Arena absolvieren",
+                "description": "Mindestens 5 Arena-Kämpfe",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "Ressourcen farmen",
+                "description": "Kräuter und Erze sammeln",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "Login-Bonus abholen",
+                "description": "Täglichen Login-Reward einlösen",
+                "event": false,
+                "completed": true
+            }
+        ],
+        "weeklyTasks": [
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "Wöchentlicher Raid",
+                "description": "Guild Raid mit mindestens 12 Spielern",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "Siegpunkte farmen",
+                "description": "Mindestens 5000 Siegpunkte sammeln",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "Crafting-Auftrag erfüllen",
+                "description": "Wöchentliche Crafting-Quest abschließen",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "Freund-Mission abschließen",
+                "description": "Co-op Mission mit Gildenmitglied",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "Rangliste-Belohnung abholen",
+                "description": "Saisonale Ranglisten-Prämie einlösen",
+                "event": false,
+                "completed": true
+            }
+        ],
+        "dailyShopping": [
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "HP Tränke",
+                "description": "",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "MP Tränke",
+                "description": "",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "Erfahrungs-Stein",
+                "description": "",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "Schnellreise-Stein",
+                "description": "",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "Buff-Essen",
+                "description": "",
+                "event": false,
+                "completed": true
+            }
+        ],
+        "weeklyShopping": [
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "Rüstungsupgrade-Stein",
+                "description": "",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "Waffenverbesserung +5",
+                "description": "",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "Seltenheit-Kristalle",
+                "description": "",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "Gilden-Vorräte",
+                "description": "",
+                "event": false,
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "Kosmetik-Farbe",
+                "description": "",
+                "event": false,
+                "completed": true
+            }
+        ]
     },
     "flow_map": {
         "nodes": {
-            "1838d4a0-f422-4228-a402-24c68a38f5fa": {
-                "id": "1838d4a0-f422-4228-a402-24c68a38f5fa",
+            "cfd9654b-fde9-4bff-9861-8f5b67758f8a": {
+                "id": "cfd9654b-fde9-4bff-9861-8f5b67758f8a",
                 "title": "Char erstellen",
                 "description": "Erstelle einen neuen\nCharakter.",
                 "icon": "character",
                 "status": "active",
                 "completed": false,
-                "x": 4045.0,
-                "y": 3913.0,
-                "children": [
-                    "e96ac568-8a35-4a82-b58b-baa34ac3bfa4",
-                    "168af000-e2e0-4ef2-8b2b-773be9429c7d"
-                ]
-            },
-            "e96ac568-8a35-4a82-b58b-baa34ac3bfa4": {
-                "id": "e96ac568-8a35-4a82-b58b-baa34ac3bfa4",
-                "title": "New Node",
-                "description": "Add a description.",
-                "icon": "level",
-                "status": "locked",
-                "completed": false,
-                "x": 3443.0,
-                "y": 4308.0,
-                "children": []
-            },
-            "168af000-e2e0-4ef2-8b2b-773be9429c7d": {
-                "id": "168af000-e2e0-4ef2-8b2b-773be9429c7d",
-                "title": "New Branch",
-                "description": "Add a description.",
-                "icon": "level",
-                "status": "locked",
-                "completed": false,
-                "x": 4481.666666666667,
-                "y": 4082.333333333334,
-                "children": [
-                    "0be00daf-de4a-4c7b-8c8f-f85e0a698c41"
-                ]
-            },
-            "0be00daf-de4a-4c7b-8c8f-f85e0a698c41": {
-                "id": "0be00daf-de4a-4c7b-8c8f-f85e0a698c41",
-                "title": "New Node",
-                "description": "Add a description.",
-                "icon": "level",
-                "status": "locked",
-                "completed": false,
-                "x": 4121.666666666666,
-                "y": 4286.666666666666,
-                "children": [
-                    "6dd51613-5f49-43c8-911b-244313503b26"
-                ]
-            },
-            "6dd51613-5f49-43c8-911b-244313503b26": {
-                "id": "6dd51613-5f49-43c8-911b-244313503b26",
-                "title": "New Branch",
-                "description": "Add a description.",
-                "icon": "level",
-                "status": "locked",
-                "completed": false,
-                "x": 3821.666666666667,
-                "y": 4516.0,
+                "x": 3780.0,
+                "y": 4000.0,
                 "children": []
             }
         },
-        "root_node_id": "1838d4a0-f422-4228-a402-24c68a38f5fa"
+        "root_node_id": "cfd9654b-fde9-4bff-9861-8f5b67758f8a"
     }
 }

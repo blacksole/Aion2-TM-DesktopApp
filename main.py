@@ -10,7 +10,11 @@ from ui.main_window import MainWindow
 
 
 app = QApplication(sys.argv)
-app_icon = Path(__file__).resolve().parent / "assets" / "icons" / "aion2_tm_icon.ico"
+if getattr(sys, "frozen", False):
+    _base = Path(sys.executable).parent
+else:
+    _base = Path(__file__).resolve().parent
+app_icon = _base / "assets" / "icons" / "aion2_tm_icon.ico"
 app.setWindowIcon(QIcon(str(app_icon)))
 
 auth = AuthManager()

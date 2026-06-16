@@ -1,30 +1,116 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QLineEdit, QScrollArea, 
+    QPushButton, QFrame, QLineEdit, QScrollArea,
     QComboBox, QCheckBox, QButtonGroup
 )
-from PySide6.QtCore import Signal
-from PySide6.QtGui import QIntValidator
+from PySide6.QtCore import Signal, QRect, Qt
+from PySide6.QtGui import QIntValidator, QPainter, QColor, QLinearGradient, QBrush
 
-class TaskStatCard(QFrame):
-    def __init__(self, title, value, color):
+class TaskProgressBar(QFrame):
+    def __init__(self):
         super().__init__()
+        self.setObjectName("TaskProgressBar")
+        self.setFixedHeight(100)
+        self._done = 0
+        self._total = 0
 
-        self.setObjectName("statCard")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 10)
+        outer.setSpacing(8)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(0)
 
-        self.title_label = QLabel(title.upper())
-        self.title_label.setObjectName("statTitle")
+        self._done_val  = QLabel("0")
+        self._open_val  = QLabel("0")
+        self._total_val = QLabel("0")
+        self._pct_val   = QLabel("0%")
+        self._extra_lbl = QLabel("")
+        self._extra_lbl.setObjectName("ProgressExtra")
 
-        self.value_label = QLabel(str(value))
-        self.value_label.setStyleSheet(
-            f"color: {color}; font-size: 30px; font-weight: bold;"
-        )
+        for val, icon, label, val_obj, icon_obj, sub_obj in [
+            (self._done_val,  "✓", "Erledigt", "ProgressDoneVal",  "ProgressDoneIcon",  "ProgressDoneSub"),
+            (self._open_val,  "○", "Offen",    "ProgressOpenVal",  "ProgressOpenIcon",  "ProgressOpenSub"),
+            (self._total_val, "Σ", "Gesamt",   "ProgressTotalVal", "ProgressTotalIcon", "ProgressTotalSub"),
+        ]:
+            icon_lbl = QLabel(icon)
+            icon_lbl.setObjectName(icon_obj)
+            val.setObjectName(val_obj)
+            sub = QLabel(label)
+            sub.setObjectName(sub_obj)
 
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.value_label)
+            col = QVBoxLayout()
+            col.setSpacing(1)
+            col.setContentsMargins(0, 0, 0, 0)
+
+            top_row = QHBoxLayout()
+            top_row.setSpacing(5)
+            top_row.setContentsMargins(0, 0, 0, 0)
+            top_row.addWidget(icon_lbl)
+            top_row.addWidget(val)
+            top_row.addStretch()
+
+            col.addLayout(top_row)
+            col.addWidget(sub)
+
+            stats_row.addLayout(col)
+            stats_row.addSpacing(28)
+
+        stats_row.addWidget(self._extra_lbl, 1)
+
+        self._pct_val.setObjectName("ProgressPct")
+        pct_sub = QLabel("Fortschritt")
+        pct_sub.setObjectName("ProgressPctSub")
+        pct_sub.setAlignment(Qt.AlignRight)
+
+        pct_col = QVBoxLayout()
+        pct_col.setSpacing(1)
+        pct_col.setContentsMargins(0, 0, 0, 0)
+        pct_col.addWidget(self._pct_val)
+        pct_col.addWidget(pct_sub)
+        stats_row.addLayout(pct_col)
+
+        outer.addLayout(stats_row)
+
+        self._bar = QWidget()
+        self._bar.setFixedHeight(8)
+        outer.addWidget(self._bar)
+
+    def update_stats(self, total: int, done: int, open_count: int):
+        self._done = done
+        self._total = total
+        pct = int(done / total * 100) if total > 0 else 0
+        self._done_val.setText(str(done))
+        self._open_val.setText(str(open_count))
+        self._total_val.setText(str(total))
+        self._pct_val.setText(f"{pct}%")
+        self.update()
+
+    def set_extra(self, text: str):
+        self._extra_lbl.setText(text)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        bar = self._bar.geometry()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        # track
+        p.setBrush(QBrush(QColor(15, 23, 42, 180)))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(bar, 4, 4)
+
+        # fill
+        if self._total > 0 and self._done > 0:
+            fill_w = max(8, int(bar.width() * self._done / self._total))
+            fill = QRect(bar.x(), bar.y(), fill_w, bar.height())
+            grad = QLinearGradient(fill.left(), 0, fill.right(), 0)
+            grad.setColorAt(0.0, QColor(6, 182, 212))
+            grad.setColorAt(1.0, QColor(168, 85, 247))
+            p.setBrush(QBrush(grad))
+            p.drawRoundedRect(fill, 4, 4)
+
+        p.end()
 
 class TasksPage(QWidget):
     tab_changed = Signal(str)
@@ -73,29 +159,8 @@ class TasksPage(QWidget):
 
         self.tab_row.addStretch()
         layout.addLayout(self.tab_row)
-        stats_row = QHBoxLayout()
 
-        self.total_card = TaskStatCard(
-            self.tr(self.language, "total"),
-            0,
-            "#22d3ee"
-        )
-
-        self.done_card = TaskStatCard(
-            self.tr(self.language, "done"),
-            0,
-            "#34d399"
-        )
-
-        self.open_card = TaskStatCard(
-            self.tr(self.language, "remaining"),
-            0,
-            "#fbbf24"
-        )
-
-        stats_row.addWidget(self.total_card)
-        stats_row.addWidget(self.done_card)
-        stats_row.addWidget(self.open_card)
+        self.progress_bar = TaskProgressBar()
 
         add_panel = QFrame()
         add_panel.setObjectName("addPanel")
@@ -176,7 +241,7 @@ class TasksPage(QWidget):
 
         add_layout.addWidget(self.add_btn)
         
-        layout.addLayout(stats_row)
+        layout.addWidget(self.progress_bar)
         layout.addWidget(add_panel)
 
         self.sort_row = QHBoxLayout()
@@ -285,10 +350,6 @@ class TasksPage(QWidget):
 
         layout.addWidget(scroll, 1)
 
-        self.footer = QLabel("● Fortschritt: 0%")
-        self.footer.setObjectName("footer")
-
-        layout.addWidget(self.footer)
         self.update_input_mode()
 
 
@@ -332,18 +393,6 @@ class TasksPage(QWidget):
 
         for key, btn in self.tab_buttons.items():
             btn.setText(self.tr(self.language, self.tabs[key]))
-
-        self.total_card.title_label.setText(
-            self.tr(self.language, "total").upper()
-        )
-
-        self.done_card.title_label.setText(
-            self.tr(self.language, "done").upper()
-        )
-
-        self.open_card.title_label.setText(
-            self.tr(self.language, "remaining").upper()
-        )
 
         self.add_btn.setText(
             self.tr(self.language, "add")
@@ -435,9 +484,7 @@ class TasksPage(QWidget):
         )
 
     def update_stats(self, total: int, done: int, open_count: int):
-        self.total_card.value_label.setText(str(total))
-        self.done_card.value_label.setText(str(done))
-        self.open_card.value_label.setText(str(open_count))
+        self.progress_bar.update_stats(total, done, open_count)
 
     def emit_add_task(self):
         title = self.title_input.text().strip()
@@ -507,7 +554,10 @@ class TasksPage(QWidget):
             self.set_filter("all")
 
     def set_footer_text(self, text: str):
-        self.footer.setText(text)
+        if "|" in text:
+            self.progress_bar.set_extra(text.split("|")[1].strip())
+        else:
+            self.progress_bar.set_extra("")
 
     def set_filter(self, filter_key: str):
         self.active_filter = filter_key

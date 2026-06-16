@@ -1427,3 +1427,180 @@ QToolTip {
 #updateDialogSep {
     color: rgba(99, 102, 241, 0.2);
 }
+
+/* ========== TASK PROGRESS BAR ========== */
+
+#TaskProgressBar {
+    background-color: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    border-radius: 10px;
+}
+
+#ProgressDoneIcon { color: #34d399; font-size: 16px; font-weight: 700; }
+#ProgressOpenIcon { color: #fbbf24; font-size: 16px; font-weight: 700; }
+#ProgressTotalIcon { color: #22d3ee; font-size: 16px; font-weight: 700; }
+
+#ProgressDoneVal  { color: #34d399; font-size: 24px; font-weight: 800; }
+#ProgressOpenVal  { color: #fbbf24; font-size: 24px; font-weight: 800; }
+#ProgressTotalVal { color: #22d3ee; font-size: 24px; font-weight: 800; }
+
+#ProgressDoneSub  { color: #34d399; font-size: 11px; font-weight: 600; opacity: 0.7; }
+#ProgressOpenSub  { color: #fbbf24; font-size: 11px; font-weight: 600; opacity: 0.7; }
+#ProgressTotalSub { color: #22d3ee; font-size: 11px; font-weight: 600; opacity: 0.7; }
+
+#ProgressExtra {
+    color: #64748b;
+    font-size: 11px;
+}
+
+#ProgressPct {
+    color: #e2e8f0;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+#ProgressPctSub {
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* ========== OVERLAY TOGGLE BUTTON ========== */
+
+#overlayToggleBtn {
+    background-color: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    border-radius: 8px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 10px;
+    text-align: left;
+}
+
+#overlayToggleBtn:hover {
+    border-color: rgba(59, 130, 246, 0.65);
+    color: #94a3b8;
+}
+
+#overlayToggleBtn:checked {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.7);
+    color: #93c5fd;
+}
+
+/* ========== OVERLAY WINDOW ========== */
+
+#OverlayProfileName {
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 700;
+    background: transparent;
+}
+
+#OverlayIconBtn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-size: 16px;
+    padding: 0px;
+    border-radius: 4px;
+}
+
+#OverlayIconBtn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+}
+
+#OverlayOpacitySlider {
+    background: transparent;
+}
+
+#OverlayOpacitySlider::groove:horizontal {
+    height: 3px;
+    background: rgba(71, 85, 105, 0.5);
+    border-radius: 2px;
+}
+
+#OverlayOpacitySlider::sub-page:horizontal {
+    background: rgba(59, 130, 246, 0.7);
+    border-radius: 2px;
+}
+
+#OverlayOpacitySlider::handle:horizontal {
+    background: #94a3b8;
+    border-radius: 4px;
+    width: 8px;
+    height: 8px;
+    margin: -3px 0;
+}
+
+#OverlayOpacitySlider::handle:horizontal:hover {
+    background: #cbd5e1;
+}
+
+#OverlayCheckBtn {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 3px;
+    color: #64748b;
+    font-size: 10px;
+    padding: 0px;
+}
+
+#OverlayCheckBtn:hover {
+    border-color: rgba(148, 163, 184, 0.7);
+    color: #94a3b8;
+}
+
+#OverlayRowTitle {
+    color: #cbd5e1;
+    font-size: 11px;
+    background: transparent;
+}
+
+#OverlayRowTitleDim {
+    color: #475569;
+    font-size: 11px;
+    background: transparent;
+}
+
+#OverlayEmpty {
+    color: #334155;
+    font-size: 11px;
+    background: transparent;
+}
+
+#OverlayScroll {
+    background: transparent;
+    border: none;
+}
+
+#OverlayContent {
+    background: transparent;
+}
+
+#OverlayMenu {
+    background-color: #0f172a;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 6px;
+    color: #cbd5e1;
+    font-size: 12px;
+    padding: 4px;
+}
+
+#OverlayMenu::item {
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+
+#OverlayMenu::item:selected {
+    background: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+}
+
+#OverlayMenu::item:checked {
+    color: #3b82f6;
+    font-weight: 600;
+}
