@@ -1,227 +1,129 @@
 # Aion2 Task Manager
 
-Modern desktop productivity manager for Aion players.
+**v0.7.0** — Modern desktop productivity manager for Aion players.
 
-Aion2 combines:
-
-* task management
-* shopping organization
-* event timers
-* profile systems
-* modern UI design
-
-into a single lightweight desktop application.
+Aion2 combines task management, shopping organization, event timers, a flow map planner and a profile system into a single lightweight desktop application.
 
 ---
 
-# ✨ Features
+## ✨ Features
 
-## 📋 Task Management
+### 📋 Task Management
 
-Organize your:
-
-* Daily Tasks
-* Weekly Tasks
-* Event Tasks
-
-### Included Features
-
-* Priority system
+* Daily Tasks, Weekly Tasks, Event Tasks
+* Priority system (High / Medium / Low)
 * Progress tracking
-* Dynamic sorting
-* Profile saving
-* Modern task cards
+* Dynamic sorting & filtering
+* Event badge system
 
----
+### 🛒 Shopping Lists
 
-# 🛒 Shopping Lists
-
-Integrated shopping system with:
-
-* Priority support
-* Price tracking
-* Amount tracking
-* Location management
+* Daily Shopping, Weekly Shopping
+* Price tracking with Kinah calculation
+* Amount & location management
 * Dynamic sorting
 
-Perfect for:
+### ⏱ Event Timers
 
-* in-game preparation
-* weekly planning
-* event preparation
-* shopping organization
+* Daily Reset countdown
+* Weekly Reset countdown
+* Shugo Event Timer (configurable interval)
+* Rift Timer (configurable anchor & interval)
 
----
+### 🗺 Flow Map Planner
 
-# ⏱ Event Timers
+* Visual node-based progress planner
+* Edit mode & Guide mode
+* Node status: Completed / Active / Optional / Locked
+* Zoom: 60 % – 100 %
+* Flow map is saved per profile
 
-Built-in timer management for recurring events.
-
-## Included Timers
-
-* Daily Reset
-* Weekly Reset
-* Shugo Timer
-* Rift Timer
-
-### Features
-
-* Adjustable intervals
-* Enable / Disable toggles
-* Visual countdown support
-* Custom timer configuration
-
----
-
-# 🎨 Modern UI
-
-Aion2 was designed with a clean modern desktop layout.
-
-## UI Features
-
-* Responsive layouts
-* Compact settings system
-* Modern dropdown design
-* Theme support
-* Unified styling
-* Smooth workflow
-
----
-
-# 🌈 Themes
-
-Choose from multiple integrated themes.
-
-## Current Themes
-
-* Abyss
-* Inferno
-* Emerald
-* Frostbite
-* Obsidian
-* Void
-
----
-
-# 🌍 Multi-Language Support
-
-Currently supported:
-
-* English
-* German
-
-More languages may be added in future releases.
-
----
-
-# 👤 Profile System
-
-Create and save multiple profiles.
+### 👤 Profile System
 
 Profiles store:
 
-* tasks
-* shopping lists
-* settings
-* theme selection
-* timer settings
-* language settings
+* Tasks & shopping lists
+* Settings, theme, language
+* Timer configuration
+* Flow map layout
+
+### 🔄 Auto-Update System
+
+* Automatic update check on startup (background, non-blocking)
+* Manual check via Settings → General
+* In-app dialog with Markdown changelog
+* One-click in-place installation (downloads ZIP, extracts, clears cache)
+* App restarts automatically after update
+
+### 🌈 Themes
+
+Abyss · Inferno · Emerald · Frostbite · Obsidian · Void
+
+### 🌍 Languages
+
+English · Deutsch
 
 ---
 
-# 🔐 Planned Features
+## 🚀 Download
 
-The project is actively expanding.
+Download the latest release from the [Releases](../../releases/latest) page.
 
-## Planned Systems
-
-* Discord authentication
-* License system
-* Automatic updater
-* GitHub release integration
-* Cloud synchronization
-* Shared profiles
-* Launcher support
+The app checks for updates automatically on startup. When a new version is available, an update button appears in the top-left header.
 
 ---
 
-# 📸 Screenshots
+## 🛠 Requirements
+
+* Python 3.11+
+* PySide6
+
+```bash
+pip install -r requirements.txt
+python main.py
+```
+
+---
+
+## 📸 Screenshots
 
 Screenshots and previews will be added soon.
 
 ---
 
-# 🚀 Download
+## 📘 Changelog
 
-The latest release can be downloaded from:
-
-## GitHub Releases
-
-Download the newest version directly from the Releases section.
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ---
 
-# 🔄 Updates
+## 🔐 Planned Features
 
-Future versions will include:
-
-* in-app update notifications
-* changelog viewer
-* automatic update downloads
-
----
-
-# 📘 Changelog
-
-All important updates are documented in:
-
-```text
-CHANGELOG.md
-```
+* Discord authentication
+* License system
+* Cloud synchronization / shared profiles
+* Launcher support
 
 ---
 
-# ❤️ Project Vision
+## 🛠 Current Status
 
-Aion2 aims to become:
+**v0.7.0** — actively developed.
 
-* modern
-* lightweight
-* visually polished
-* highly customizable
-* event focused
-* profile driven
-
-while remaining fast and easy to use.
+Recent additions:
+* In-app update system with auto-check and one-click install
+* Profile header showing active profile name and app version
+* Flow map saved and restored per profile
+* Zoom limits and improved hint labels in Flow Map
 
 ---
 
-# 🛠 Current Status
+## 📄 License
 
-The application is currently in active development.
-
-Recent focus:
-
-* Settings redesign
-* Shopping overhaul
-* Timer improvements
-* Translation improvements
-* UI consistency
+This project is currently under a custom license.
 
 ---
 
-# 📄 License
+## ❤️ Credits
 
-This project is currently private / custom licensed.
-
----
-
-# ❤️ Credits
-
-Developed with:
-
-* Python
-* PySide6
-* Qt
-* FastAPI
-* GitHub
+Developed with Python · PySide6 · Qt · GitHub Releases API
