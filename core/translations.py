@@ -110,12 +110,6 @@ TRANSLATIONS = {
         "auto_save_desc": "Profiländerungen automatisch speichern.",
         "show_events_desc": "Event Aufgaben und Event Einkauf anzeigen.",
 
-        "check_updates": "Nach Updates suchen",
-        "check_updates_desc": "Prüft, ob eine neue Version verfügbar ist.",
-        "check_updates_btn": "Jetzt prüfen",
-        "update_available_toast": "Update v{version} verfügbar!",
-        "up_to_date_toast": "Du hast die aktuellste Version.",
-
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",
         "weekly_reset_day": "Wöch. Reset Wochentag",
@@ -212,6 +206,13 @@ TRANSLATIONS = {
         "toast_timers_opened": "Timer geöffnet",
         "toast_settings_opened": "Einstellungen geöffnet",
         "toast_profile_opened": 'Profil: "{name}"',
+
+        # ================= UPDATES =================
+        "check_updates": "Nach Updates suchen",
+        "check_updates_desc": "Manuell nach einer neuen App-Version suchen.",
+        "check_updates_btn": "Jetzt prüfen",
+        "update_available_toast": "Update v{version} verfügbar!",
+        "up_to_date_toast": "App ist aktuell.",
     },
 
     "en": {
@@ -322,12 +323,6 @@ TRANSLATIONS = {
         "auto_save_desc": "Automatically save profile changes.",
         "show_events_desc": "Show event tasks and event shopping.",
 
-        "check_updates": "Check for Updates",
-        "check_updates_desc": "Check if a new version is available.",
-        "check_updates_btn": "Check now",
-        "update_available_toast": "Update v{version} available!",
-        "up_to_date_toast": "You have the latest version.",
-
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",
         "weekly_reset_day": "Weekly Reset Day",
@@ -422,6 +417,13 @@ TRANSLATIONS = {
         "toast_timers_opened": "Timers opened",
         "toast_settings_opened": "Settings opened",
         "toast_profile_opened": 'Profile: "{name}"',
+
+        # ================= UPDATES =================
+        "check_updates": "Check for Updates",
+        "check_updates_desc": "Manually check for a new app version.",
+        "check_updates_btn": "Check now",
+        "update_available_toast": "Update v{version} available!",
+        "up_to_date_toast": "App is up to date.",
     }
 }
 

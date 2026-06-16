@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from .settings_dialog import SettingsDialog
+from .update_dialog import UpdateDialog
 from .widgets.header_widget import HeaderWidget
 from .widgets.sidebar_widget import SidebarWidget
 from .widgets.shopping_card import ShoppingCard
@@ -10,7 +11,6 @@ from .pages.profile_page import ProfilePage
 from .pages.settings_page import SettingsPage
 from .pages.dashboard_page import DashboardPage
 from .flow.flow_app_window import FlowMapWindow
-from .update_dialog import UpdateDialog
 from core.translations import tr
 from core.update_checker import UpdateChecker
 from PySide6.QtWidgets import QTimeEdit
@@ -161,7 +161,9 @@ class MainWindow(QMainWindow):
 
         self.auth_manager = auth_manager
         self.auto_save = True
-        
+        self._pending_update = None
+        self._checker = None
+
 
         self.tabs = {
             "dailyTasks": "daily_tasks",
@@ -386,10 +388,11 @@ class MainWindow(QMainWindow):
         self.tasks_page.sort_requested.connect(self.sort_current_list)
         self.tasks_page.filter_changed.connect(self.set_task_filter)
 
+        if hasattr(self.header, "update_btn_clicked"):
+            self.header.update_btn_clicked.connect(self._open_update_dialog)
+
         if hasattr(self.settings_page, "check_update_requested"):
-            self.settings_page.check_update_requested.connect(
-                self._on_manual_update_check
-            )
+            self.settings_page.check_update_requested.connect(self._on_manual_update_check)
 
         QTimer.singleShot(2000, self.run_update_check)
 
@@ -832,8 +835,6 @@ class MainWindow(QMainWindow):
         if not isinstance(data, dict):
             data = {}
 
-        self.header.set_profile(self.profile_name)
-
         self.current_theme = data.get("theme", "abyss")
         self.apply_theme(self.current_theme)
 
@@ -934,11 +935,10 @@ class MainWindow(QMainWindow):
                 self.task_lists[tab].append(card)
 
         self.refresh()
-
-        flow_map_data = data.get("flow_map", {})
-        if self.flow_map_window and flow_map_data:
-            self.flow_map_window.load_flow_data(flow_map_data)
-
+        if self.flow_map_window:
+            self.flow_map_window.load_flow_data(data.get("flow_map", {}))
+        if hasattr(self.header, "set_profile"):
+            self.header.set_profile(self.profile_name)
         self.save_last_profile(profile_path)
         print("Profil geladen:", self.profile_name)
 
@@ -996,10 +996,7 @@ class MainWindow(QMainWindow):
                 for tab, cards in self.task_lists.items()
             },
 
-            "flow_map": (
-                self.flow_map_window.get_flow_data()
-                if self.flow_map_window else {}
-            ),
+            "flow_map": self.flow_map_window.get_flow_data() if self.flow_map_window else {},
         }
 
         profile_path = self.profile_dir / f"{self.profile_name}.json"
@@ -1011,9 +1008,7 @@ class MainWindow(QMainWindow):
 
         print("Profil gespeichert:", profile_path)
         if not silent:
-            self.show_toast(
-                tr(self.language, "profile_saved")
-            )
+            self.show_toast(tr(self.language, "profile_saved"))
 
     def save_last_profile(self, profile_path):
         with open(self.last_profile_file, "w", encoding="utf-8") as f:
@@ -1214,40 +1209,14 @@ class MainWindow(QMainWindow):
         self.refresh()
 
         if self.auto_save:
-            self.save_profile()
+            self.save_profile(silent=True)
 
     def set_profile_name(self, profile_name: str):
         if profile_name:
             self.profile_name = profile_name
             self.profile_page.set_profile_name(profile_name)
-            self.header.set_profile(profile_name)
-
-    def run_update_check(self):
-        self._update_checker = UpdateChecker(self)
-        self._update_checker.update_available.connect(self._on_update_available)
-        self._update_checker.start()
-
-    def _on_update_available(self, version: str, body: str):
-        self._pending_update = (version, body)
-        self.header.show_update(version)
-        self.header.update_btn_clicked.connect(self._open_update_dialog)
-        self.show_toast(tr(self.language, "update_available_toast", version=version))
-
-    def _open_update_dialog(self):
-        if not hasattr(self, "_pending_update"):
-            return
-        version, body = self._pending_update
-        app_root = Path(__file__).resolve().parent.parent
-        dlg = UpdateDialog(version, body, app_root, parent=self)
-        dlg.exec()
-
-    def _on_manual_update_check(self):
-        self._manual_update_checker = UpdateChecker(self)
-        self._manual_update_checker.update_available.connect(self._on_update_available)
-        self._manual_update_checker.up_to_date.connect(
-            lambda: self.show_toast(tr(self.language, "up_to_date_toast"))
-        )
-        self._manual_update_checker.start()
+            if hasattr(self.header, "set_profile"):
+                self.header.set_profile(profile_name)
 
     def change_theme_from_page(self, theme: str):
         self.apply_theme(theme)
@@ -1332,7 +1301,7 @@ class MainWindow(QMainWindow):
         self.toggle_events()
 
         self.update_countdowns()
-        self.save_profile()
+        self.save_profile(silent=True)
 
         self.show_toast(
             tr(self.language, "settings_saved")
@@ -1509,8 +1478,35 @@ class MainWindow(QMainWindow):
         self.refresh()
 
         if self.auto_save:
-            self.save_profile()
+            self.save_profile(silent=True)
 
         self.show_toast(
             tr(self.language, "event_entries_removed")
         )
+
+    def run_update_check(self):
+        self._checker = UpdateChecker()
+        self._checker.update_available.connect(self._on_update_available)
+        self._checker.up_to_date.connect(lambda: None)
+        self._checker.start()
+
+    def _on_update_available(self, version: str, body: str):
+        self._pending_update = (version, body)
+        if hasattr(self.header, "show_update"):
+            self.header.show_update(version)
+
+    def _open_update_dialog(self):
+        if not self._pending_update:
+            return
+        version, body = self._pending_update
+        app_root = Path(__file__).resolve().parent.parent
+        dlg = UpdateDialog(version, body, app_root, parent=self)
+        dlg.exec()
+
+    def _on_manual_update_check(self):
+        self._checker = UpdateChecker()
+        self._checker.update_available.connect(self._on_update_available)
+        self._checker.up_to_date.connect(
+            lambda: self.show_toast(tr(self.language, "up_to_date_toast"))
+        )
+        self._checker.start()

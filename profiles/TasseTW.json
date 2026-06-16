@@ -20,5 +20,21 @@
         "weeklyTasks": [],
         "dailyShopping": [],
         "weeklyShopping": []
+    },
+    "flow_map": {
+        "nodes": {
+            "72890810-2f32-4eb1-ae10-eda584c4ac74": {
+                "id": "72890810-2f32-4eb1-ae10-eda584c4ac74",
+                "title": "Char erstellen",
+                "description": "Erstelle einen neuen\nCharakter.",
+                "icon": "character",
+                "status": "active",
+                "completed": false,
+                "x": 0,
+                "y": 0,
+                "children": []
+            }
+        },
+        "root_node_id": "72890810-2f32-4eb1-ae10-eda584c4ac74"
     }
 }

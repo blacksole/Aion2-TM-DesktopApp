@@ -1,8 +1,6 @@
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QCursor
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
-
 from core.version import APP_VERSION
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 
 
 class HeaderWidget(QWidget):
@@ -19,12 +17,12 @@ class HeaderWidget(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(8)
+        root.setSpacing(6)
 
         top_row = QHBoxLayout()
         top_row.setSpacing(10)
 
-        self.avatar_label = QLabel("D")
+        self.avatar_label = QLabel("P")
         self.avatar_label.setObjectName("profileAvatar")
         self.avatar_label.setFixedSize(42, 42)
         self.avatar_label.setAlignment(Qt.AlignCenter)
@@ -46,12 +44,14 @@ class HeaderWidget(QWidget):
 
         self.update_btn = QPushButton()
         self.update_btn.setObjectName("updateAvailableButton")
-        self.update_btn.setCursor(QCursor(Qt.PointingHandCursor))
         self.update_btn.hide()
         self.update_btn.clicked.connect(self.update_btn_clicked.emit)
 
         root.addLayout(top_row)
         root.addWidget(self.update_btn)
+
+    def update_language(self, language, tr_func):
+        pass
 
     def set_profile(self, name: str):
         self.username_label.setText(name or "Profile")
@@ -60,9 +60,3 @@ class HeaderWidget(QWidget):
     def show_update(self, version: str):
         self.update_btn.setText(f"v{version} verfügbar — Changelog")
         self.update_btn.show()
-
-    def update_language(self, language, tr_func):
-        pass
-
-    def set_discord_user(self, username: str, server: str = ""):
-        self.set_profile(username)

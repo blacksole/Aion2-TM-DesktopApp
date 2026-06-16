@@ -1,4 +1,3 @@
-
 QMenuBar {
     background-color: #1f2937;
     color: #e5e7eb;
@@ -106,55 +105,6 @@ QLineEdit:focus {
 
 #primaryButton:hover {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0891b2, stop:1 #9333ea);
-}
-
-/* ================= UPDATE DIALOG ================= */
-
-#UpdateDialog {
-    background-color: #0f172a;
-}
-
-#updateDialogTitle {
-    color: #e5e7eb;
-    font-size: 18px;
-    font-weight: bold;
-}
-
-#updateDialogSep {
-    color: rgba(148, 163, 184, 0.25);
-}
-
-#updateDialogNotesLabel {
-    color: #94a3b8;
-    font-size: 13px;
-    font-weight: 600;
-}
-
-#updateDialogNotes {
-    background-color: rgba(30, 41, 59, 0.8);
-    border: 1px solid rgba(100, 116, 139, 0.35);
-    border-radius: 10px;
-    color: #cbd5e1;
-    font-size: 13px;
-    padding: 10px;
-}
-
-#updateDialogStatus {
-    color: #06b6d4;
-    font-size: 13px;
-}
-
-#updateDialogLaterBtn {
-    background: rgba(30, 41, 59, 0.8);
-    color: #94a3b8;
-    border: 1px solid rgba(100, 116, 139, 0.4);
-    border-radius: 9px;
-    padding: 10px 16px;
-}
-
-#updateDialogLaterBtn:hover {
-    background: rgba(51, 65, 85, 0.9);
-    color: #e5e7eb;
 }
 
 #taskTitle {
@@ -521,48 +471,6 @@ QDialog[theme="void"] {
 #loginInfo {
     color: #94a3b8;
     font-size: 14px;
-}
-
-/* ================= PROFILE HEADER ================= */
-
-#profileCard {
-    background: rgba(15, 23, 42, 0.55);
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 14px;
-    padding: 4px;
-}
-
-#profileAvatar {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #06b6d4, stop:1 #a855f7);
-    border-radius: 21px;
-    color: white;
-    font-size: 18px;
-    font-weight: bold;
-}
-
-#profileUsername {
-    color: #e5e7eb;
-    font-size: 14px;
-    font-weight: 600;
-}
-
-#profileVersion {
-    color: #94a3b8;
-    font-size: 11px;
-}
-
-#updateAvailableButton {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f59e0b, stop:1 #ef4444);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 12px;
-    font-weight: bold;
-}
-
-#updateAvailableButton:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #dc2626);
 }
 
 /* ================= SIDEBAR ================= */
@@ -1381,4 +1289,103 @@ QToolTip {
     background-color: rgba(30, 41, 59, 0.8);
     color: #94a3b8;
     border-color: rgba(100, 116, 139, 0.55);
+}
+
+/* ========== PROFILE CARD (header) ========== */
+
+#profileCard {
+    background-color: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 14px;
+    padding: 4px;
+}
+
+#profileAvatar {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #6366f1, stop:1 #8b5cf6);
+    border-radius: 21px;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+#profileUsername {
+    color: #e2e8f0;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#profileVersion {
+    color: #64748b;
+    font-size: 11px;
+}
+
+#updateAvailableButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(234, 88, 12, 0.85), stop:1 rgba(220, 38, 38, 0.85));
+    border: 1px solid rgba(251, 146, 60, 0.6);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 8px;
+}
+
+#updateAvailableButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(234, 88, 12, 1.0), stop:1 rgba(220, 38, 38, 1.0));
+    border-color: rgba(251, 146, 60, 0.9);
+}
+
+/* ========== UPDATE DIALOG ========== */
+
+#UpdateDialog {
+    background-color: #0f172a;
+    border-radius: 16px;
+}
+
+#updateDialogTitle {
+    color: #e2e8f0;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+#updateDialogNotesLabel {
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#updateDialogNotes {
+    background-color: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 10px;
+    color: #cbd5e1;
+    font-size: 13px;
+    padding: 12px;
+}
+
+#updateDialogStatus {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+#updateDialogLaterBtn {
+    background-color: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    border-radius: 9px;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 16px;
+}
+
+#updateDialogLaterBtn:hover {
+    background-color: rgba(30, 41, 59, 0.8);
+    color: #94a3b8;
+    border-color: rgba(100, 116, 139, 0.55);
+}
+
+#updateDialogSep {
+    color: rgba(99, 102, 241, 0.2);
 }

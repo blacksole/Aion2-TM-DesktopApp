@@ -403,6 +403,20 @@ class FlowMapWindow(QMainWindow):
 
         self.render_flow()
 
+    def get_flow_data(self) -> dict:
+        return {
+            "nodes": {nid: node.to_dict() for nid, node in self.nodes.items()},
+            "root_node_id": self.root_node_id,
+        }
+
+    def load_flow_data(self, data: dict):
+        if not data:
+            return
+        from core.flow_model import FlowNode
+        raw_nodes = data.get("nodes", {})
+        self.nodes = {nid: FlowNode.from_dict(nd) for nid, nd in raw_nodes.items()}
+        self.root_node_id = data.get("root_node_id")
+        self.selected_node_id = None
 
     def toggle_editor_panel(self):
         visible = self.toggle_editor_btn.isChecked()
@@ -565,38 +579,14 @@ class FlowMapWindow(QMainWindow):
         self.save_status_label.style().unpolish(self.save_status_label)
         self.save_status_label.style().polish(self.save_status_label)
 
-        parent = self.parent()
-        if parent and hasattr(parent, "save_profile"):
-            parent.save_profile(silent=True)
-
         QTimer.singleShot(2000, self.mark_saved)
+
 
     def mark_saved(self):
         self.save_status_label.setText("✓ Saved")
         self.save_status_label.setProperty("state", "saved")
         self.save_status_label.style().unpolish(self.save_status_label)
         self.save_status_label.style().polish(self.save_status_label)
-
-    def get_flow_data(self) -> dict:
-        return {
-            "root_node_id": self.root_node_id,
-            "nodes": {
-                node_id: node.to_dict()
-                for node_id, node in self.nodes.items()
-            },
-        }
-
-    def load_flow_data(self, data: dict):
-        if not data or not data.get("nodes"):
-            return
-        self.nodes = {}
-        for node_dict in data["nodes"].values():
-            node = FlowNode.from_dict(node_dict)
-            self.nodes[node.id] = node
-        self.root_node_id = data.get("root_node_id")
-        self.selected_node_id = None
-        self.close_editor_panel()
-        self.render_flow()
 
     def closeEvent(self, event):
         self.mark_saved()

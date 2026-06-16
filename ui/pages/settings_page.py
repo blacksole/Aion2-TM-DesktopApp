@@ -197,6 +197,10 @@ class SettingsPage(QWidget):
             tr_func(language, "auto_save_desc")
         )
 
+        self.update_check_title.setText(tr_func(language, "check_updates"))
+        self.update_check_desc.setText(tr_func(language, "check_updates_desc"))
+        self.check_update_btn.setText(tr_func(language, "check_updates_btn"))
+
         # ===== RESET TIMER =====
 
         self.reset_timer_title.setText(
@@ -299,10 +303,6 @@ class SettingsPage(QWidget):
             language,
             tr_func
         )
-
-        self.update_check_title.setText(tr_func(language, "check_updates"))
-        self.update_check_desc.setText(tr_func(language, "check_updates_desc"))
-        self.check_update_btn.setText(tr_func(language, "check_updates_btn"))
 
     def _create_language_page(self):
         page = QWidget()
@@ -760,28 +760,21 @@ class SettingsPage(QWidget):
 
         update_row = QFrame()
         update_row.setObjectName("settingsRow")
-
         update_layout = QHBoxLayout(update_row)
         update_layout.setContentsMargins(14, 12, 14, 12)
         update_layout.setSpacing(12)
-
         update_text = QVBoxLayout()
         update_text.setSpacing(2)
-
         self.update_check_title = QLabel()
         self.update_check_title.setObjectName("settingsLabel")
-
         self.update_check_desc = QLabel()
         self.update_check_desc.setObjectName("settingsDescription")
-
         update_text.addWidget(self.update_check_title)
         update_text.addWidget(self.update_check_desc)
-
         self.check_update_btn = QPushButton()
-        self.check_update_btn.setObjectName("primaryButton")
-        self.check_update_btn.setFixedWidth(160)
+        self.check_update_btn.setObjectName("secondaryButton")
+        self.check_update_btn.setFixedWidth(110)
         self.check_update_btn.clicked.connect(self.check_update_requested.emit)
-
         update_layout.addLayout(update_text, 1)
         update_layout.addWidget(self.check_update_btn)
 
@@ -791,7 +784,7 @@ class SettingsPage(QWidget):
         layout.addStretch()
 
         return page
-    
+
     def set_values(self, data: dict):
         # Allgemein
         if hasattr(self, "show_events_btn"):
