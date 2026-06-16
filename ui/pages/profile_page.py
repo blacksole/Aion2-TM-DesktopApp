@@ -11,6 +11,8 @@ class ProfilePage(QWidget):
     reset_requested = Signal()
     clear_events_requested = Signal()
     profile_name_changed = Signal(str)
+    export_requested = Signal()
+    import_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -76,10 +78,18 @@ class ProfilePage(QWidget):
             "and Shopping lists."
         )
 
+        self.export_profile_btn = QPushButton("Export Profile")
+        self.export_profile_btn.setObjectName("tabButton")
+
+        self.import_profile_btn = QPushButton("Import Profile")
+        self.import_profile_btn.setObjectName("tabButton")
+
         self.save_profile_btn.clicked.connect(self.save_requested.emit)
         self.load_profile_btn.clicked.connect(self.load_requested.emit)
         self.reset_profile_btn.clicked.connect(self.reset_requested.emit)
         self.clear_events_btn.clicked.connect(self.clear_events_requested.emit)
+        self.export_profile_btn.clicked.connect(self.export_requested.emit)
+        self.import_profile_btn.clicked.connect(self.import_requested.emit)
 
         button_row.addWidget(self.save_profile_btn)
         button_row.addWidget(self.load_profile_btn)
@@ -87,9 +97,15 @@ class ProfilePage(QWidget):
         button_row.addWidget(self.clear_events_btn)
         button_row.addStretch()
 
+        transfer_row = QHBoxLayout()
+        transfer_row.addWidget(self.export_profile_btn)
+        transfer_row.addWidget(self.import_profile_btn)
+        transfer_row.addStretch()
+
         layout.addWidget(self.title_label)
         layout.addLayout(profile_row)
         layout.addLayout(button_row)
+        layout.addLayout(transfer_row)
         layout.addStretch()
 
     def set_profile_name(self, profile_name: str):
@@ -168,4 +184,12 @@ class ProfilePage(QWidget):
 
         self.clear_events_btn.setToolTip(
             tr_func(language, "clear_events_tooltip")
+        )
+
+        self.export_profile_btn.setText(
+            tr_func(language, "export_profile")
+        )
+
+        self.import_profile_btn.setText(
+            tr_func(language, "import_profile")
         )

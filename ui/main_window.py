@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QTimeEdit
 from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QMenu, QComboBox, QStackedWidget,
+    QPushButton, QFrame, QMenu, QComboBox, QStackedWidget, QFileDialog, QMessageBox,
 )
 from datetime import datetime, timedelta
 from PySide6.QtCore import QTimer
@@ -379,10 +379,11 @@ class MainWindow(QMainWindow):
                 self.clear_event_entries
             )
 
-        if hasattr(self.profile_page, "clear_events_btn"):
-            self.profile_page.clear_events_btn.clicked.connect(
-                self.clear_event_entries
-            )
+        if hasattr(self.profile_page, "export_requested"):
+            self.profile_page.export_requested.connect(self.export_profile)
+
+        if hasattr(self.profile_page, "import_requested"):
+            self.profile_page.import_requested.connect(self.import_profile)
             
         
         self.tasks_page.sort_requested.connect(self.sort_current_list)
@@ -1026,12 +1027,29 @@ class MainWindow(QMainWindow):
             self.load_profile(profile_path)
 
     def reset_profile(self):
+        box = QMessageBox(self)
+        box.setWindowTitle(tr(self.language, "confirm_reset_title"))
+        box.setText(tr(self.language, "confirm_reset_text"))
+        yes_btn = box.addButton(tr(self.language, "confirm_yes"), QMessageBox.DestructiveRole)
+        box.addButton(tr(self.language, "confirm_no"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is not yes_btn:
+            return
+
         self.task_lists = {key: [] for key in self.tabs}
         self.refresh()
+        self.save_profile(silent=True)
 
-        print("Profil zurückgesetzt:", self.profile_name)
-        
     def clear_event_entries(self):
+        box = QMessageBox(self)
+        box.setWindowTitle(tr(self.language, "confirm_clear_events_title"))
+        box.setText(tr(self.language, "confirm_clear_events_text"))
+        yes_btn = box.addButton(tr(self.language, "confirm_yes"), QMessageBox.DestructiveRole)
+        box.addButton(tr(self.language, "confirm_no"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is not yes_btn:
+            return
+
         for tab in self.task_lists:
             self.task_lists[tab] = [
                 card for card in self.task_lists[tab]
@@ -1041,11 +1059,9 @@ class MainWindow(QMainWindow):
         self.refresh()
 
         if self.auto_save:
-            self.save_profile()
+            self.save_profile(silent=True)
 
-        self.show_toast(
-            tr(self.language, "event_entries_removed")
-        )
+        self.show_toast(tr(self.language, "event_entries_removed"))
 
     def apply_language(self):
         self.setWindowTitle("Aion Companion")
@@ -1467,23 +1483,6 @@ class MainWindow(QMainWindow):
         self.active_filter = filter_key
         self.refresh()
 
-    def clear_event_entries(self):
-        for tab in self.task_lists:
-
-            self.task_lists[tab] = [
-                card for card in self.task_lists[tab]
-                if not getattr(card, "is_event", False)
-            ]
-
-        self.refresh()
-
-        if self.auto_save:
-            self.save_profile(silent=True)
-
-        self.show_toast(
-            tr(self.language, "event_entries_removed")
-        )
-
     def run_update_check(self):
         self._checker = UpdateChecker()
         self._checker.update_available.connect(self._on_update_available)
@@ -1510,3 +1509,41 @@ class MainWindow(QMainWindow):
             lambda: self.show_toast(tr(self.language, "up_to_date_toast"))
         )
         self._checker.start()
+
+    def export_profile(self):
+        self.save_profile(silent=True)
+        src = self.profile_dir / f"{self.profile_name}.json"
+        dest, _ = QFileDialog.getSaveFileName(
+            self,
+            tr(self.language, "export_profile"),
+            str(Path.home() / f"{self.profile_name}.json"),
+            "JSON Profile (*.json)",
+        )
+        if not dest:
+            return
+        import shutil
+        shutil.copy2(src, dest)
+        self.show_toast(tr(self.language, "profile_exported"))
+
+    def import_profile(self):
+        src, _ = QFileDialog.getOpenFileName(
+            self,
+            tr(self.language, "import_profile"),
+            str(Path.home()),
+            "JSON Profile (*.json)",
+        )
+        if not src:
+            return
+        try:
+            with open(src, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError
+        except Exception:
+            self.show_toast(tr(self.language, "profile_import_error"))
+            return
+        import shutil
+        dest = self.profile_dir / Path(src).name
+        shutil.copy2(src, dest)
+        self.load_profile(dest)
+        self.show_toast(tr(self.language, "profile_imported"))

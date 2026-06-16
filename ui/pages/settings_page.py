@@ -1,10 +1,14 @@
+import webbrowser
 from pathlib import Path
-from PySide6.QtGui import QIcon
-from PySide6.QtCore import Signal, QTime, QSize
+from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import Signal, QTime, QSize, Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit,QButtonGroup, QGridLayout
+    QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QButtonGroup, QGridLayout,
+    QDialog,
 )
+
+_PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
 
 
 
@@ -200,6 +204,10 @@ class SettingsPage(QWidget):
         self.update_check_title.setText(tr_func(language, "check_updates"))
         self.update_check_desc.setText(tr_func(language, "check_updates_desc"))
         self.check_update_btn.setText(tr_func(language, "check_updates_btn"))
+
+        self.donate_title.setText(tr_func(language, "donate"))
+        self.donate_desc.setText(tr_func(language, "donate_desc"))
+        self.donate_btn.setText(tr_func(language, "donate_btn"))
 
         # ===== RESET TIMER =====
 
@@ -778,12 +786,78 @@ class SettingsPage(QWidget):
         update_layout.addLayout(update_text, 1)
         update_layout.addWidget(self.check_update_btn)
 
+        donate_row = QFrame()
+        donate_row.setObjectName("settingsRow")
+        donate_layout = QHBoxLayout(donate_row)
+        donate_layout.setContentsMargins(14, 12, 14, 12)
+        donate_layout.setSpacing(12)
+        donate_text = QVBoxLayout()
+        donate_text.setSpacing(2)
+        self.donate_title = QLabel()
+        self.donate_title.setObjectName("settingsLabel")
+        self.donate_desc = QLabel()
+        self.donate_desc.setObjectName("settingsDescription")
+        donate_text.addWidget(self.donate_title)
+        donate_text.addWidget(self.donate_desc)
+        self.donate_btn = QPushButton()
+        self.donate_btn.setObjectName("donateButton")
+        self.donate_btn.setFixedWidth(110)
+        self.donate_btn.clicked.connect(lambda: webbrowser.open(_PAYPAL_URL))
+
+        self.donate_qr_btn = QPushButton("QR")
+        self.donate_qr_btn.setObjectName("donateQrButton")
+        self.donate_qr_btn.setFixedSize(36, 36)
+        self.donate_qr_btn.clicked.connect(self._show_qr_dialog)
+
+        donate_layout.addLayout(donate_text, 1)
+        donate_layout.addWidget(self.donate_qr_btn)
+        donate_layout.addWidget(self.donate_btn)
+
         layout.addWidget(event_row)
         layout.addWidget(auto_save_row)
         layout.addWidget(update_row)
+        layout.addWidget(donate_row)
         layout.addStretch()
 
         return page
+
+    def _show_qr_dialog(self):
+        qr_path = self.project_root / "assets" / "images" / "QR-Code.png"
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Donate via PayPal")
+        dialog.setFixedSize(260, 300)
+        dialog.setObjectName("DonateQrDialog")
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        layout.setAlignment(Qt.AlignCenter)
+
+        qr_label = QLabel()
+        qr_label.setAlignment(Qt.AlignCenter)
+
+        pixmap = QPixmap(str(qr_path))
+        if not pixmap.isNull():
+            qr_label.setPixmap(
+                pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        else:
+            qr_label.setText("QR Code nicht gefunden.\nassets/donate_qr.png")
+            qr_label.setAlignment(Qt.AlignCenter)
+
+        hint = QLabel("Mit PayPal-App scannen")
+        hint.setObjectName("donateQrHint")
+        hint.setAlignment(Qt.AlignCenter)
+
+        open_btn = QPushButton("Im Browser öffnen")
+        open_btn.setObjectName("donateButton")
+        open_btn.clicked.connect(lambda: webbrowser.open(_PAYPAL_URL))
+
+        layout.addWidget(qr_label)
+        layout.addWidget(hint)
+        layout.addWidget(open_btn)
+
+        dialog.exec()
 
     def set_values(self, data: dict):
         # Allgemein

@@ -23,8 +23,8 @@
     },
     "flow_map": {
         "nodes": {
-            "72890810-2f32-4eb1-ae10-eda584c4ac74": {
-                "id": "72890810-2f32-4eb1-ae10-eda584c4ac74",
+            "1b2f206f-a443-43fb-a7e6-61828e711ba9": {
+                "id": "1b2f206f-a443-43fb-a7e6-61828e711ba9",
                 "title": "Char erstellen",
                 "description": "Erstelle einen neuen\nCharakter.",
                 "icon": "character",
@@ -35,6 +35,6 @@
                 "children": []
             }
         },
-        "root_node_id": "72890810-2f32-4eb1-ae10-eda584c4ac74"
+        "root_node_id": "1b2f206f-a443-43fb-a7e6-61828e711ba9"
     }
 }

@@ -116,11 +116,10 @@ class FlowController:
             node.completed = True
             node.status = "completed"
 
-            if node.children:
-                next_node = self.window.nodes.get(node.children[0])
-
-                if next_node and next_node.status != "completed":
-                    next_node.status = "active"
+            for child_id in node.children:
+                child = self.window.nodes.get(child_id)
+                if child and child.status not in ("completed", "optional"):
+                    child.status = "active"
 
         self.window.render_flow()
         self.window.mark_unsaved()

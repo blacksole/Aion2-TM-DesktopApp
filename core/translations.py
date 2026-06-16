@@ -213,6 +213,26 @@ TRANSLATIONS = {
         "check_updates_btn": "Jetzt prüfen",
         "update_available_toast": "Update v{version} verfügbar!",
         "up_to_date_toast": "App ist aktuell.",
+
+        # ================= PROFILE TRANSFER =================
+        "export_profile": "Profil exportieren",
+        "import_profile": "Profil importieren",
+        "profile_exported": "✓ Profil exportiert",
+        "profile_imported": "✓ Profil importiert",
+        "profile_import_error": "Ungültige Profil-Datei",
+
+        # ================= DONATE =================
+        "donate": "Unterstützen ❤",
+        "donate_desc": "Die App gefällt dir? Eine kleine Spende hilft bei der Weiterentwicklung.",
+        "donate_btn": "Spenden ☕",
+
+        # ================= CONFIRM DIALOGS =================
+        "confirm_reset_title": "Profil zurücksetzen?",
+        "confirm_reset_text": "Möchtest du dein Profil wirklich zurücksetzen?\n\nAlle Tasks und Shopping-Einträge werden gelöscht.\nEinstellungen und Layout bleiben erhalten.",
+        "confirm_clear_events_title": "Event-Einträge löschen?",
+        "confirm_clear_events_text": "Möchtest du alle Event-Einträge wirklich löschen?\n\nDies betrifft alle Event-Tasks und Event-Shopping-Einträge.",
+        "confirm_yes": "Ja, löschen",
+        "confirm_no": "Abbrechen",
     },
 
     "en": {
@@ -424,6 +444,26 @@ TRANSLATIONS = {
         "check_updates_btn": "Check now",
         "update_available_toast": "Update v{version} available!",
         "up_to_date_toast": "App is up to date.",
+
+        # ================= PROFILE TRANSFER =================
+        "export_profile": "Export Profile",
+        "import_profile": "Import Profile",
+        "profile_exported": "✓ Profile exported",
+        "profile_imported": "✓ Profile imported",
+        "profile_import_error": "Invalid profile file",
+
+        # ================= DONATE =================
+        "donate": "Support ❤",
+        "donate_desc": "Enjoying the app? A small donation helps keep it going.",
+        "donate_btn": "Donate ☕",
+
+        # ================= CONFIRM DIALOGS =================
+        "confirm_reset_title": "Reset Profile?",
+        "confirm_reset_text": "Do you really want to reset your profile?\n\nAll tasks and shopping entries will be deleted.\nSettings and layout will remain unchanged.",
+        "confirm_clear_events_title": "Delete Event Entries?",
+        "confirm_clear_events_text": "Do you really want to delete all event entries?\n\nThis affects all event tasks and event shopping entries.",
+        "confirm_yes": "Yes, delete",
+        "confirm_no": "Cancel",
     }
 }
 
