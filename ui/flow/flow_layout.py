@@ -118,6 +118,53 @@ def compute_node_positions(
     return positions
 
 
+def find_free_child_position(parent_id: str, nodes: dict) -> tuple | None:
+    """
+    Returns (x, y) for a new child of parent_id, avoiding overlap with placed siblings.
+    Returns None if parent has no saved position (let auto-layout handle it instead).
+    """
+    parent = nodes.get(parent_id)
+    if not parent or (parent.x == 0 and parent.y == 0):
+        return None
+
+    px, py = parent.x, parent.y
+    target_y = py + NODE_HEIGHT + CONNECTOR_BASE_HEIGHT
+    step = NODE_WIDTH + BRANCH_SPACING
+
+    # Siblings already placed on canvas (skip nodes at default 0,0)
+    placed_siblings = [
+        nodes[cid] for cid in parent.children
+        if cid in nodes and (nodes[cid].x != 0 or nodes[cid].y != 0)
+    ]
+
+    if not placed_siblings:
+        return px, target_y
+
+    parent_cx = px + NODE_WIDTH / 2
+    left = [s for s in placed_siblings if (s.x + NODE_WIDTH / 2) < parent_cx]
+    right = [s for s in placed_siblings if (s.x + NODE_WIDTH / 2) >= parent_cx]
+
+    if len(right) <= len(left):
+        new_x = (max(s.x for s in right) + step) if right else (px + step)
+        direction = 1
+    else:
+        new_x = (min(s.x for s in left) - step) if left else (px - step)
+        direction = -1
+
+    # Collect x-positions of all nodes at roughly the same row to avoid overlap
+    row_xs = [
+        n.x for n in nodes.values()
+        if (n.x != 0 or n.y != 0) and abs(n.y - target_y) < NODE_HEIGHT + 30
+    ]
+
+    for _ in range(30):
+        if all(abs(new_x - ox) >= step * 0.85 for ox in row_xs):
+            break
+        new_x += direction * step
+
+    return new_x, target_y
+
+
 def build_connections(
     child_count: int,
     child_widths: list[int],

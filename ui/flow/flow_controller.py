@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QMessageBox
 
 from core.flow_model import FlowNode
+from ui.flow.flow_layout import find_free_child_position
 from ui.flow.widgets.delete_confirm_dialog import DeleteConfirmDialog, UnsavedChangesDialog
 
 
@@ -49,6 +50,11 @@ class FlowController:
         new_node.children = old_children
 
         self.window.nodes[new_node.id] = new_node
+
+        pos = find_free_child_position(parent_id, self.window.nodes)
+        if pos:
+            new_node.x, new_node.y = pos
+
         self.window.selected_node_id = new_node.id
 
         self.window.render_flow()
@@ -72,6 +78,11 @@ class FlowController:
         parent_node.children.append(new_node.id)
 
         self.window.nodes[new_node.id] = new_node
+
+        pos = find_free_child_position(parent_id, self.window.nodes)
+        if pos:
+            new_node.x, new_node.y = pos
+
         self.window.selected_node_id = new_node.id
 
         self.window.render_flow()

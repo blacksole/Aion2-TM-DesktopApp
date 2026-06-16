@@ -1,7 +1,7 @@
 {
     "profile_name": "TasseTW",
-    "theme": "abyss",
-    "language": "en",
+    "theme": "inferno",
+    "language": "de",
     "settings": {
         "daily_reset_time": "09:00",
         "weekly_reset_day": "Mo",
@@ -16,189 +16,209 @@
         "auto_save": true
     },
     "tasks": {
-        "dailyTasks": [
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "Daily Dungeons abschließen",
-                "description": "Alle 3 Daily Dungeons fertig machen",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "Tägliche Quests abgeben",
-                "description": "Hauptstadt Quests abgeben",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "PvP Arena absolvieren",
-                "description": "Mindestens 5 Arena-Kämpfe",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "low",
-                "title": "Ressourcen farmen",
-                "description": "Kräuter und Erze sammeln",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "low",
-                "title": "Login-Bonus abholen",
-                "description": "Täglichen Login-Reward einlösen",
-                "event": false,
-                "completed": true
-            }
-        ],
-        "weeklyTasks": [
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "Wöchentlicher Raid",
-                "description": "Guild Raid mit mindestens 12 Spielern",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "Siegpunkte farmen",
-                "description": "Mindestens 5000 Siegpunkte sammeln",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "Crafting-Auftrag erfüllen",
-                "description": "Wöchentliche Crafting-Quest abschließen",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "Freund-Mission abschließen",
-                "description": "Co-op Mission mit Gildenmitglied",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "low",
-                "title": "Rangliste-Belohnung abholen",
-                "description": "Saisonale Ranglisten-Prämie einlösen",
-                "event": false,
-                "completed": true
-            }
-        ],
-        "dailyShopping": [
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "HP Tränke",
-                "description": "",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "MP Tränke",
-                "description": "",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "Erfahrungs-Stein",
-                "description": "",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "Schnellreise-Stein",
-                "description": "",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "low",
-                "title": "Buff-Essen",
-                "description": "",
-                "event": false,
-                "completed": true
-            }
-        ],
-        "weeklyShopping": [
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "Rüstungsupgrade-Stein",
-                "description": "",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "Waffenverbesserung +5",
-                "description": "",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "Seltenheit-Kristalle",
-                "description": "",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "Gilden-Vorräte",
-                "description": "",
-                "event": false,
-                "completed": true
-            },
-            {
-                "type": "task",
-                "priority": "low",
-                "title": "Kosmetik-Farbe",
-                "description": "",
-                "event": false,
-                "completed": true
-            }
-        ]
+        "dailyTasks": [],
+        "weeklyTasks": [],
+        "dailyShopping": [],
+        "weeklyShopping": []
     },
     "flow_map": {
         "nodes": {
-            "cfd9654b-fde9-4bff-9861-8f5b67758f8a": {
-                "id": "cfd9654b-fde9-4bff-9861-8f5b67758f8a",
+            "178fa25a-58e6-4323-89d6-57225b08e405": {
+                "id": "178fa25a-58e6-4323-89d6-57225b08e405",
                 "title": "Char erstellen",
                 "description": "Erstelle einen neuen\nCharakter.",
                 "icon": "character",
-                "status": "active",
-                "completed": false,
+                "status": "completed",
+                "completed": true,
                 "x": 3780.0,
                 "y": 4000.0,
+                "children": [
+                    "68befc90-40ad-4863-942d-10bee01dd800",
+                    "4c4579ac-16f3-484b-8332-6dc6b6d834cc",
+                    "1e837870-a5fe-4c35-8af7-58788b23129f",
+                    "5960c2fa-5974-46cb-8947-808e4820191f",
+                    "d77e1439-2b60-4ce8-93a0-d0616782b8ff",
+                    "078a7b32-abdb-43a1-96e6-67dc01eea174",
+                    "f9b36c50-9a59-4067-b676-204bd6339037"
+                ]
+            },
+            "68befc90-40ad-4863-942d-10bee01dd800": {
+                "id": "68befc90-40ad-4863-942d-10bee01dd800",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "active",
+                "completed": false,
+                "x": 3298.3333333333335,
+                "y": 3824.3333333333335,
+                "children": [
+                    "5cfb2d74-8128-4020-96d1-a4cade5b6855",
+                    "458a2b2d-b5d5-4eb6-9ea2-1763723e81cd",
+                    "8db7bf48-6e0f-4fff-be2c-f320d6b06efc"
+                ]
+            },
+            "4c4579ac-16f3-484b-8332-6dc6b6d834cc": {
+                "id": "4c4579ac-16f3-484b-8332-6dc6b6d834cc",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "completed",
+                "completed": true,
+                "x": 3250.0,
+                "y": 4206.0,
+                "children": [
+                    "61c11113-6b75-4152-b64e-3ee15e1fb4fd"
+                ]
+            },
+            "1e837870-a5fe-4c35-8af7-58788b23129f": {
+                "id": "1e837870-a5fe-4c35-8af7-58788b23129f",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "active",
+                "completed": false,
+                "x": 2720.0,
+                "y": 4206.0,
+                "children": []
+            },
+            "5960c2fa-5974-46cb-8947-808e4820191f": {
+                "id": "5960c2fa-5974-46cb-8947-808e4820191f",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "active",
+                "completed": false,
+                "x": 4310.0,
+                "y": 4206.0,
+                "children": []
+            },
+            "d77e1439-2b60-4ce8-93a0-d0616782b8ff": {
+                "id": "d77e1439-2b60-4ce8-93a0-d0616782b8ff",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "active",
+                "completed": false,
+                "x": 2190.0,
+                "y": 4206.0,
+                "children": []
+            },
+            "078a7b32-abdb-43a1-96e6-67dc01eea174": {
+                "id": "078a7b32-abdb-43a1-96e6-67dc01eea174",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "active",
+                "completed": false,
+                "x": 4840.0,
+                "y": 4206.0,
+                "children": []
+            },
+            "f9b36c50-9a59-4067-b676-204bd6339037": {
+                "id": "f9b36c50-9a59-4067-b676-204bd6339037",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "active",
+                "completed": false,
+                "x": 5370.0,
+                "y": 4206.0,
+                "children": []
+            },
+            "61c11113-6b75-4152-b64e-3ee15e1fb4fd": {
+                "id": "61c11113-6b75-4152-b64e-3ee15e1fb4fd",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "active",
+                "completed": false,
+                "x": 3143.3333333333335,
+                "y": 4378.666666666667,
+                "children": [
+                    "4b3d5d95-2c5a-4585-b1a4-7c00f4000eb3",
+                    "cfa55bc0-aff6-4571-a95e-aa5996a98a1e",
+                    "fc72f5ab-4aaf-4a70-9b59-6f8c6aba9b87",
+                    "8851093e-9956-45f6-b34d-5a7ab371ede8"
+                ]
+            },
+            "5cfb2d74-8128-4020-96d1-a4cade5b6855": {
+                "id": "5cfb2d74-8128-4020-96d1-a4cade5b6855",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 3780.0,
+                "y": 4412.0,
+                "children": []
+            },
+            "4b3d5d95-2c5a-4585-b1a4-7c00f4000eb3": {
+                "id": "4b3d5d95-2c5a-4585-b1a4-7c00f4000eb3",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 3250.0,
+                "y": 4618.0,
+                "children": []
+            },
+            "cfa55bc0-aff6-4571-a95e-aa5996a98a1e": {
+                "id": "cfa55bc0-aff6-4571-a95e-aa5996a98a1e",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 2720.0,
+                "y": 4618.0,
+                "children": []
+            },
+            "fc72f5ab-4aaf-4a70-9b59-6f8c6aba9b87": {
+                "id": "fc72f5ab-4aaf-4a70-9b59-6f8c6aba9b87",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 3780.0,
+                "y": 4618.0,
+                "children": []
+            },
+            "8851093e-9956-45f6-b34d-5a7ab371ede8": {
+                "id": "8851093e-9956-45f6-b34d-5a7ab371ede8",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 2190.0,
+                "y": 4618.0,
+                "children": []
+            },
+            "458a2b2d-b5d5-4eb6-9ea2-1763723e81cd": {
+                "id": "458a2b2d-b5d5-4eb6-9ea2-1763723e81cd",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 2768.3333333333335,
+                "y": 4030.3333333333335,
+                "children": []
+            },
+            "8db7bf48-6e0f-4fff-be2c-f320d6b06efc": {
+                "id": "8db7bf48-6e0f-4fff-be2c-f320d6b06efc",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 4310.0,
+                "y": 4030.3333333333335,
                 "children": []
             }
         },
-        "root_node_id": "cfd9654b-fde9-4bff-9861-8f5b67758f8a"
+        "root_node_id": "178fa25a-58e6-4323-89d6-57225b08e405"
     }
 }

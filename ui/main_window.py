@@ -1533,7 +1533,7 @@ class MainWindow(QMainWindow):
         if not self._pending_update:
             return
         version, body = self._pending_update
-        app_root = Path(__file__).resolve().parent.parent
+        app_root = self.project_root
         dlg = UpdateDialog(version, body, app_root, parent=self)
         dlg.exec()
 
@@ -1544,6 +1544,10 @@ class MainWindow(QMainWindow):
             lambda: self.show_toast(tr(self.language, "up_to_date_toast"))
         )
         self._checker.start()
+
+    def closeEvent(self, event):
+        self.save_profile(silent=True)
+        event.accept()
 
     def export_profile(self):
         self.save_profile(silent=True)
