@@ -1,14 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
-from PySide6.QtCore import Qt
-
-from ui.flow.widgets.flow_point_connector import FlowPointConnector
-
-from ui.flow.flow_layout import (
-    calculate_branch_layout,
-    build_connections,
-    calculate_connector_height,
-)
-
+from ui.flow.flow_layout import compute_node_positions, NODE_WIDTH
 
 
 class FlowRenderer:
@@ -16,125 +6,36 @@ class FlowRenderer:
         self.window = window
 
     def render_flow(self):
-        self.window.clear_map_layout()
+        self.window.clear_node_cards()
         self.window.connectors = []
 
         if not self.window.root_node_id:
             return
 
-        branch_widget = self.render_node_branch(
-            self.window.root_node_id
-        )
+        root = self.window.nodes.get(self.window.root_node_id)
+        if root and (root.x != 0 or root.y != 0):
+            origin_x = root.x + NODE_WIDTH / 2
+            origin_y = root.y
+        else:
+            origin_x = 4000.0
+            origin_y = 4000.0
 
-        self.window.map_layout.addWidget(
-            branch_widget,
-            alignment=self.window.qt_align_top_center()
+        auto = compute_node_positions(
+            self.window.root_node_id, self.window.nodes, origin_x, origin_y
         )
+        for node_id, (ax, ay) in auto.items():
+            node = self.window.nodes.get(node_id)
+            if node and node.x == 0 and node.y == 0:
+                node.x = ax
+                node.y = ay
 
-        self.window.map_area.adjustSize()
+        zoom = self.window.zoom_factor
+        for node_id, node in self.window.nodes.items():
+            card = self.window.create_node_card(node)
+            card.setParent(self.window.map_area)
+            card.move(int(node.x * zoom), int(node.y * zoom))
+            card.show()
+            self.window.node_cards[node_id] = card
+
+        self.window.map_area.update()
         self.window.schedule_center_flow()
-
-    def render_node_branch(self, node_id: str):
-        node = self.window.nodes.get(node_id)
-
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-
-        if not node:
-            return container
-
-        layout_data = calculate_branch_layout(
-            node,
-            self.window.nodes,
-            self.window.zoom_factor
-        )
-
-        branch_spacing = layout_data["branch_spacing"]
-        node_width = layout_data["node_width"]
-        child_count = layout_data["child_count"]
-        child_widths = layout_data["child_widths"]
-        required_width = layout_data["required_width"]
-
-        container.setMinimumWidth(required_width)
-
-        card = self.window.create_node_card(node)
-        card_wrapper = self.create_card_wrapper(card, required_width)
-
-        layout.addWidget(card_wrapper, alignment=Qt.AlignCenter)
-
-        if child_count == 0:
-            return container
-
-        connections = build_connections(
-            child_count=child_count,
-            child_widths=child_widths,
-            branch_spacing=branch_spacing,
-            node_width=node_width,
-            required_width=required_width,
-        )
-
-        connector = self.create_connector(
-            connections=connections,
-            child_count=child_count,
-            required_width=required_width,
-        )
-
-        layout.addWidget(connector, alignment=Qt.AlignCenter)
-
-        branch_row = self.create_children_row(
-            node=node,
-            child_widths=child_widths,
-            branch_spacing=branch_spacing,
-        )
-
-        layout.addLayout(branch_row)
-
-        return container
-    
-    def create_connector(self, connections, child_count, required_width):
-        connector_height = calculate_connector_height(
-            child_count,
-            self.window.zoom_factor
-        )
-
-        connector = FlowPointConnector(
-            connections=connections,
-            zoom=self.window.zoom_factor,
-            height=connector_height,
-            parent_window=self.window,
-        )
-
-        connector.setFixedWidth(required_width)
-
-        return connector
-    
-    def create_card_wrapper(self, card, required_width):
-        card_wrapper = QWidget()
-        card_wrapper.setFixedWidth(required_width)
-
-        card_layout = QHBoxLayout(card_wrapper)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
-        card_layout.addWidget(card, alignment=Qt.AlignHCenter)
-
-        return card_wrapper
-    
-    def create_children_row(self, node, child_widths, branch_spacing):
-        branch_row = QHBoxLayout()
-        branch_row.setContentsMargins(0, 0, 0, 0)
-        branch_row.setSpacing(branch_spacing)
-        branch_row.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-
-        for index, child_id in enumerate(node.children):
-            child_widget = self.render_node_branch(child_id)
-            child_widget.setFixedWidth(child_widths[index])
-
-            branch_row.addWidget(
-                child_widget,
-                alignment=Qt.AlignTop | Qt.AlignHCenter
-            )
-
-        return branch_row

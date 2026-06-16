@@ -83,6 +83,41 @@ def calculate_connector_height(child_count: int, zoom_factor: float) -> int:
         + int(zoom_factor * child_count * CONNECTOR_EXTRA_PER_CHILD)
     )
 
+def compute_node_positions(
+    root_id: str,
+    nodes: dict,
+    origin_x: float = 4000.0,
+    origin_y: float = 4000.0,
+) -> dict:
+    positions = {}
+
+    def layout(node_id, center_x, y):
+        node = nodes.get(node_id)
+        if not node:
+            return
+        positions[node_id] = (center_x - NODE_WIDTH / 2, y)
+        if not node.children:
+            return
+        child_widths = [
+            calculate_subtree_width(child_id, nodes, 1.0)
+            for child_id in node.children
+        ]
+        total = sum(child_widths) + (len(node.children) - 1) * BRANCH_SPACING
+        child_y = y + NODE_HEIGHT + CONNECTOR_BASE_HEIGHT
+        start_center = center_x - total / 2
+        for i, child_id in enumerate(node.children):
+            child_center = (
+                start_center
+                + sum(child_widths[:i])
+                + i * BRANCH_SPACING
+                + child_widths[i] / 2
+            )
+            layout(child_id, child_center, child_y)
+
+    layout(root_id, origin_x, origin_y)
+    return positions
+
+
 def build_connections(
     child_count: int,
     child_widths: list[int],

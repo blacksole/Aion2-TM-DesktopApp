@@ -75,11 +75,11 @@ def update_mouse_position_debug_label(window, pos, source_widget):
 
     node_center_text = "Nodes Center: -"
 
-    if window.map_layout.count() > 0:
-        flow_widget = window.map_layout.itemAt(0).widget()
+    if window.node_cards:
+        first_card = next(iter(window.node_cards.values()))
 
-        if flow_widget:
-            flow_center = flow_widget.geometry().center()
+        if first_card:
+            flow_center = first_card.geometry().center()
 
             node_center_global = window.map_area.mapToGlobal(flow_center)
             node_center_viewport = window.map_viewport.mapFromGlobal(

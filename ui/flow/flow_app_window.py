@@ -24,9 +24,10 @@ from ui.flow.flow_debug import (
 from ui.flow.widgets.flow_canvas import FlowCanvas
 from ui.flow.widgets.flow_viewport import FlowMapViewport
 from ui.flow.widgets.flow_node_card import FlowNodeCard
-from ui.flow.widgets.flow_point_connector import FlowPointConnector
+from ui.flow.widgets.flow_map_area import FlowMapArea
 from ui.flow.widgets.node_editor_panel import NodeEditorPanel
 from ui.flow.widgets.flow_guide_view import FlowGuideView
+from ui.flow.flow_layout import NODE_WIDTH, NODE_HEIGHT
 from ui.flow.flow_renderer import FlowRenderer
 from ui.flow.flow_controller import FlowController
 
@@ -215,17 +216,10 @@ class FlowMapWindow(QMainWindow):
         
         self.map_viewport.setParent(self.content)
 
-        self.map_area = QWidget(self.map_viewport)
-        self.map_area.resize(3000, 3000)
+        self.map_area = FlowMapArea(self, self.map_viewport)
         self.map_area.move(20, 0)
-
-        self.map_area.setMouseTracking(True)
-
         self.map_viewport.set_pan_target(self.map_area)
-
-        self.map_layout = QVBoxLayout(self.map_area)
-        self.map_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-        self.map_layout.setSpacing(0)
+        self.node_cards: dict = {}
 
 
 
@@ -457,13 +451,10 @@ class FlowMapWindow(QMainWindow):
         self.render_flow()
 
 
-    def clear_map_layout(self):
-        while self.map_layout.count():
-            item = self.map_layout.takeAt(0)
-            widget = item.widget()
-
-            if widget:
-                widget.deleteLater()
+    def clear_node_cards(self):
+        for card in self.node_cards.values():
+            card.deleteLater()
+        self.node_cards = {}
 
 
     def set_mode(self, mode: str):
@@ -508,27 +499,26 @@ class FlowMapWindow(QMainWindow):
         self.renderer.render_flow()
 
     def center_flow_in_viewport(self):
-        if self.map_layout.count() == 0:
+        if not self.root_node_id or not self.nodes:
             return
 
-        flow_widget = self.map_layout.itemAt(0).widget()
-
-        if not flow_widget:
+        root = self.nodes.get(self.root_node_id)
+        if not root:
             return
 
-        self.map_area.adjustSize()
-        flow_widget.adjustSize()
+        zoom = self.zoom_factor
+        card_center_x = root.x * zoom + NODE_WIDTH * zoom / 2
+        card_center_y = root.y * zoom + NODE_HEIGHT * zoom / 2
 
-        flow_center = flow_widget.geometry().center()
         viewport_center = self.map_viewport.rect().center()
 
-        new_x = viewport_center.x() - flow_center.x()
-        new_y = viewport_center.y() - flow_center.y()
+        new_x = viewport_center.x() - card_center_x
+        new_y = viewport_center.y() - card_center_y
 
-        self.map_area.move(new_x, new_y)
+        self.map_area.move(int(new_x), int(new_y))
 
     def render_node_branch(self, node_id: str):
-        return self.renderer.render_node_branch(node_id)
+        pass
 
     def handle_node_click(self, node_id: str):
         self.controller.handle_node_click(node_id)
@@ -683,8 +673,8 @@ class FlowMapWindow(QMainWindow):
         self.map_viewport.lower()
 
         self.map_area.resize(
-            max(5000, content_size.width() * 3),
-            max(5000, content_size.height() * 3)
+            max(8000, content_size.width() * 5),
+            max(8000, content_size.height() * 8)
         )
 
         margin = 18
@@ -742,29 +732,48 @@ class FlowMapWindow(QMainWindow):
             lambda checked=False, node_id=node.id: self.toggle_node_completed(node_id)
         )
 
-        card.mousePressEvent = (
-            lambda event, node_id=node.id: self.handle_node_click(node_id)
-        )
+        drag_state = {"dragging": False, "start_global": None, "start_node": (0.0, 0.0)}
+
+        def on_press(event, n=node, c=card):
+            if event.button() != Qt.LeftButton:
+                return
+            drag_state["dragging"] = False
+            drag_state["start_global"] = event.globalPosition().toPoint()
+            drag_state["start_node"] = (n.x, n.y)
+            if self.current_tool != "select":
+                self.handle_node_click(n.id)
+
+        def on_move(event, n=node, c=card):
+            if not (event.buttons() & Qt.LeftButton):
+                return
+            if self.current_tool != "select" or drag_state["start_global"] is None:
+                return
+            delta = event.globalPosition().toPoint() - drag_state["start_global"]
+            if not drag_state["dragging"]:
+                if abs(delta.x()) > 5 or abs(delta.y()) > 5:
+                    drag_state["dragging"] = True
+            if drag_state["dragging"]:
+                sx, sy = drag_state["start_node"]
+                n.x = sx + delta.x() / self.zoom_factor
+                n.y = sy + delta.y() / self.zoom_factor
+                c.move(int(n.x * self.zoom_factor), int(n.y * self.zoom_factor))
+                self.map_area.update()
+
+        def on_release(event, n=node):
+            if event.button() != Qt.LeftButton:
+                return
+            if self.current_tool == "select" and not drag_state["dragging"]:
+                self.handle_node_click(n.id)
+            if drag_state["dragging"]:
+                self.mark_unsaved()
+            drag_state["dragging"] = False
+            drag_state["start_global"] = None
+
+        card.mousePressEvent = on_press
+        card.mouseMoveEvent = on_move
+        card.mouseReleaseEvent = on_release
 
         return card
-    
-    def create_card_wrapper(self, card, required_width):
-        return self.renderer.create_card_wrapper(card, required_width)
-    
-
-    def create_connector(self, connections, child_count, required_width):
-        return self.renderer.create_connector(
-            connections,
-            child_count,
-            required_width,
-        )
-    
-    def create_children_row(self, node, child_widths, branch_spacing):
-        return self.renderer.create_children_row(
-            node,
-            child_widths,
-            branch_spacing,
-        )
     
     def qt_align_top_center(self):
         return Qt.AlignTop | Qt.AlignHCenter

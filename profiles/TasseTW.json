@@ -23,18 +23,69 @@
     },
     "flow_map": {
         "nodes": {
-            "1b2f206f-a443-43fb-a7e6-61828e711ba9": {
-                "id": "1b2f206f-a443-43fb-a7e6-61828e711ba9",
+            "1838d4a0-f422-4228-a402-24c68a38f5fa": {
+                "id": "1838d4a0-f422-4228-a402-24c68a38f5fa",
                 "title": "Char erstellen",
                 "description": "Erstelle einen neuen\nCharakter.",
                 "icon": "character",
                 "status": "active",
                 "completed": false,
-                "x": 0,
-                "y": 0,
+                "x": 4045.0,
+                "y": 3913.0,
+                "children": [
+                    "e96ac568-8a35-4a82-b58b-baa34ac3bfa4",
+                    "168af000-e2e0-4ef2-8b2b-773be9429c7d"
+                ]
+            },
+            "e96ac568-8a35-4a82-b58b-baa34ac3bfa4": {
+                "id": "e96ac568-8a35-4a82-b58b-baa34ac3bfa4",
+                "title": "New Node",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 3443.0,
+                "y": 4308.0,
+                "children": []
+            },
+            "168af000-e2e0-4ef2-8b2b-773be9429c7d": {
+                "id": "168af000-e2e0-4ef2-8b2b-773be9429c7d",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 4481.666666666667,
+                "y": 4082.333333333334,
+                "children": [
+                    "0be00daf-de4a-4c7b-8c8f-f85e0a698c41"
+                ]
+            },
+            "0be00daf-de4a-4c7b-8c8f-f85e0a698c41": {
+                "id": "0be00daf-de4a-4c7b-8c8f-f85e0a698c41",
+                "title": "New Node",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 4121.666666666666,
+                "y": 4286.666666666666,
+                "children": [
+                    "6dd51613-5f49-43c8-911b-244313503b26"
+                ]
+            },
+            "6dd51613-5f49-43c8-911b-244313503b26": {
+                "id": "6dd51613-5f49-43c8-911b-244313503b26",
+                "title": "New Branch",
+                "description": "Add a description.",
+                "icon": "level",
+                "status": "locked",
+                "completed": false,
+                "x": 3821.666666666667,
+                "y": 4516.0,
                 "children": []
             }
         },
-        "root_node_id": "1b2f206f-a443-43fb-a7e6-61828e711ba9"
+        "root_node_id": "1838d4a0-f422-4228-a402-24c68a38f5fa"
     }
 }
