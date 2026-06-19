@@ -4,6 +4,7 @@ from ui.flow.flow_layout import compute_node_positions, NODE_WIDTH
 class FlowRenderer:
     def __init__(self, window):
         self.window = window
+        self._first_render = True
 
     def render_flow(self):
         self.window.clear_node_cards()
@@ -38,4 +39,6 @@ class FlowRenderer:
             self.window.node_cards[node_id] = card
 
         self.window.map_area.update()
-        self.window.schedule_center_flow()
+        if self._first_render:
+            self._first_render = False
+            self.window.schedule_center_flow()

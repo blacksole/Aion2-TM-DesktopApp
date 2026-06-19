@@ -1263,11 +1263,16 @@ class MainWindow(QMainWindow):
             self.save_profile(silent=True)
 
     def set_profile_name(self, profile_name: str):
-        if profile_name:
-            self.profile_name = profile_name
-            self.profile_page.set_profile_name(profile_name)
-            if hasattr(self.header, "set_profile"):
-                self.header.set_profile(profile_name)
+        if not profile_name or profile_name == self.profile_name:
+            return
+        old_path = self.profile_dir / f"{self.profile_name}.json"
+        self.profile_name = profile_name
+        self.profile_page.set_profile_name(profile_name)
+        if hasattr(self.header, "set_profile"):
+            self.header.set_profile(profile_name)
+        self.save_profile(silent=True)
+        if old_path.exists():
+            old_path.unlink(missing_ok=True)
 
     def change_theme_from_page(self, theme: str):
         self.apply_theme(theme)

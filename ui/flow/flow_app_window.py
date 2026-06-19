@@ -411,6 +411,9 @@ class FlowMapWindow(QMainWindow):
         self.nodes = {nid: FlowNode.from_dict(nd) for nid, nd in raw_nodes.items()}
         self.root_node_id = data.get("root_node_id")
         self.selected_node_id = None
+        self.renderer._first_render = True
+        if self.isVisible():
+            self.render_flow()
 
     def toggle_editor_panel(self):
         visible = self.toggle_editor_btn.isChecked()
@@ -568,6 +571,10 @@ class FlowMapWindow(QMainWindow):
         self.save_status_label.setProperty("state", "saving")
         self.save_status_label.style().unpolish(self.save_status_label)
         self.save_status_label.style().polish(self.save_status_label)
+
+        main = self.parent()
+        if main and hasattr(main, "save_profile"):
+            main.save_profile(silent=True)
 
         QTimer.singleShot(2000, self.mark_saved)
 
