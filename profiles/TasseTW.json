@@ -13,7 +13,10 @@
         "riss_enabled": true,
         "riss_anchor_hour": 0,
         "riss_interval_text": "1 Stunde",
-        "auto_save": true
+        "auto_save": true,
+        "notification_enabled": false,
+        "notification_warn_minutes": 5,
+        "notification_sound": "C:\\Windows\\Media\\Alarm05.wav"
     },
     "tasks": {
         "dailyTasks": [],
@@ -159,8 +162,8 @@
                 "icon": "level",
                 "status": "locked",
                 "completed": false,
-                "x": 3250.0,
-                "y": 4618.0,
+                "x": 3474.0,
+                "y": 4430.0,
                 "children": []
             },
             "cfa55bc0-aff6-4571-a95e-aa5996a98a1e": {

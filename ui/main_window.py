@@ -1,5 +1,9 @@
+import glob
 import json
+import os
+import shutil
 import sys
+import winsound
 from pathlib import Path
 from .settings_dialog import SettingsDialog
 from .update_dialog import UpdateDialog
@@ -20,6 +24,7 @@ from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QMenu, QComboBox, QStackedWidget, QFileDialog, QMessageBox,
+    QSystemTrayIcon,
 )
 from datetime import datetime, timedelta
 from PySide6.QtCore import QTimer
@@ -190,8 +195,12 @@ class MainWindow(QMainWindow):
             self.project_root = Path(sys.executable).parent
         else:
             self.project_root = Path(__file__).resolve().parent.parent
-        self.profile_dir = self.project_root / "profiles"
-        self.profile_dir.mkdir(exist_ok=True)
+        self.app_config_dir = Path(os.environ["APPDATA"]) / "Aion2 TM"
+        self.app_config_path = self.app_config_dir / "config.json"
+        self.app_config_dir.mkdir(parents=True, exist_ok=True)
+
+        self.profile_dir = self._resolve_profile_dir()
+        self.profile_dir.mkdir(parents=True, exist_ok=True)
         self.last_profile_file = self.profile_dir / "last_profile.txt"
         self.profile_edit_mode = False
 
@@ -205,6 +214,12 @@ class MainWindow(QMainWindow):
         self.riss_anchor_hour = 0
         self.riss_interval_hours = 1
         self.riss_interval_text = "1 Stunde"
+
+        self.notification_enabled = False
+        self.notification_warn_minutes = 1
+        self.notification_sound = ""
+        self._shugo_notified = False
+        self._riss_notified = False
 
         self.weekly_reset_day = "Mo"
 
@@ -228,6 +243,7 @@ class MainWindow(QMainWindow):
         self.countdown_timer.timeout.connect(self.update_countdowns)
         self.countdown_timer.start(1000)
 
+        self._setup_tray_icon()
         self.update_countdowns()
 
     def _wire_card(self, card):
@@ -424,6 +440,9 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.settings_page, "check_update_requested"):
             self.settings_page.check_update_requested.connect(self._on_manual_update_check)
+
+        if hasattr(self.settings_page, "profile_dir_changed"):
+            self.settings_page.profile_dir_changed.connect(self.change_profile_dir)
 
         QTimer.singleShot(2000, self.run_update_check)
 
@@ -644,12 +663,32 @@ class MainWindow(QMainWindow):
             seconds = (next_shugo - now).total_seconds()
             shugo_text = self.format_countdown(seconds)
             self.timers_page.set_shugo_countdown(shugo_text)
+            if self.notification_enabled:
+                warn_secs = self.notification_warn_minutes * 60
+                if not self._shugo_notified and 0 < seconds <= warn_secs:
+                    self._shugo_notified = True
+                    self._fire_notification(
+                        "Shugo",
+                        f"Shugo spawnt in {self.notification_warn_minutes} Min!"
+                    )
+                elif seconds > warn_secs:
+                    self._shugo_notified = False
 
         if self.riss_enabled:
             next_riss = self.get_next_riss_time()
             seconds = (next_riss - now).total_seconds()
             riss_text = self.format_countdown(seconds)
             self.timers_page.set_riss_countdown(riss_text)
+            if self.notification_enabled:
+                warn_secs = self.notification_warn_minutes * 60
+                if not self._riss_notified and 0 < seconds <= warn_secs:
+                    self._riss_notified = True
+                    self._fire_notification(
+                        "Riss",
+                        f"Riss öffnet sich in {self.notification_warn_minutes} Min!"
+                    )
+                elif seconds > warn_secs:
+                    self._riss_notified = False
 
         self.check_auto_resets()
 
@@ -789,6 +828,32 @@ class MainWindow(QMainWindow):
         return 1
 
 
+    def _setup_tray_icon(self):
+        icon = self.windowIcon()
+        self.tray_icon = QSystemTrayIcon(icon, self)
+        self.tray_icon.show()
+
+    def _fire_notification(self, title: str, message: str):
+        if hasattr(self, "tray_icon"):
+            self.tray_icon.showMessage(
+                title, message,
+                QSystemTrayIcon.MessageIcon.Information,
+                5000,
+            )
+        if self.notification_sound and os.path.isfile(self.notification_sound):
+            winsound.PlaySound(
+                self.notification_sound,
+                winsound.SND_FILENAME | winsound.SND_ASYNC,
+            )
+
+    @staticmethod
+    def get_windows_sounds() -> dict:
+        sounds = {"-- Kein Sound --": ""}
+        for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
+            name = os.path.splitext(os.path.basename(path))[0]
+            sounds[name] = path
+        return sounds
+
     def format_countdown(self, seconds):
         seconds = max(0, int(seconds))
         minutes, sec = divmod(seconds, 60)
@@ -883,6 +948,9 @@ class MainWindow(QMainWindow):
 
         self.show_events = settings.get("show_events", True)
         self.auto_save = settings.get("auto_save", True)
+        self.notification_enabled = settings.get("notification_enabled", False)
+        self.notification_warn_minutes = settings.get("notification_warn_minutes", 1)
+        self.notification_sound = settings.get("notification_sound", "")
         self.shugo_enabled = settings.get("shugo_enabled", False)
         self.shugo_start_minute = settings.get("shugo_start_minute", 15)
         self.shugo_interval_text = settings.get("shugo_interval_text", "30 min")
@@ -1021,6 +1089,10 @@ class MainWindow(QMainWindow):
                 "riss_interval_text": self.riss_interval_text,
 
                 "auto_save": self.auto_save,
+
+                "notification_enabled": self.notification_enabled,
+                "notification_warn_minutes": self.notification_warn_minutes,
+                "notification_sound": self.notification_sound,
             },
 
             "tasks": {
@@ -1044,6 +1116,45 @@ class MainWindow(QMainWindow):
         print("Profil gespeichert:", profile_path)
         if not silent:
             self.show_toast(tr(self.language, "profile_saved"))
+
+    def _resolve_profile_dir(self) -> Path:
+        # 1. User hat explizit einen Pfad gesetzt → immer bevorzugen
+        if self.app_config_path.exists():
+            try:
+                cfg = json.loads(self.app_config_path.read_text(encoding="utf-8"))
+                custom = cfg.get("profile_dir", "")
+                if custom:
+                    p = Path(custom)
+                    if p.exists():
+                        return p
+            except Exception:
+                pass
+
+        # 2. Bestehender profiles-Ordner neben der App / EXE
+        local_dir = self.project_root / "profiles"
+        if local_dir.exists():
+            return local_dir
+
+        # 3. Neue Installation → AppData
+        return Path(os.environ["APPDATA"]) / "Aion2 TM" / "Profiles"
+
+    def _save_app_config(self):
+        cfg = {"profile_dir": str(self.profile_dir)}
+        self.app_config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+    def change_profile_dir(self, new_path: str):
+        new_dir = Path(new_path)
+        new_dir.mkdir(parents=True, exist_ok=True)
+        for f in self.profile_dir.glob("*.json"):
+            dest = new_dir / f.name
+            if not dest.exists():
+                shutil.copy2(f, dest)
+        self.profile_dir = new_dir
+        self.last_profile_file = self.profile_dir / "last_profile.txt"
+        self._save_app_config()
+        if hasattr(self, "settings_page"):
+            self.settings_page.update_profile_dir_label(str(self.profile_dir))
+        self.show_toast("Profilpfad gespeichert")
 
     def save_last_profile(self, profile_path):
         with open(self.last_profile_file, "w", encoding="utf-8") as f:
@@ -1265,14 +1376,31 @@ class MainWindow(QMainWindow):
     def set_profile_name(self, profile_name: str):
         if not profile_name or profile_name == self.profile_name:
             return
-        old_path = self.profile_dir / f"{self.profile_name}.json"
+        old_name = self.profile_name
+        old_path = self.profile_dir / f"{old_name}.json"
         self.profile_name = profile_name
         self.profile_page.set_profile_name(profile_name)
         if hasattr(self.header, "set_profile"):
             self.header.set_profile(profile_name)
         self.save_profile(silent=True)
-        if old_path.exists():
+        if old_name == "Default":
+            self._create_default_profile()
+        elif old_path.exists():
             old_path.unlink(missing_ok=True)
+
+    def _create_default_profile(self):
+        default_path = self.profile_dir / "Default.json"
+        if not default_path.exists():
+            import json as _json
+            _json.dump(
+                {"profile_name": "Default", "theme": self.current_theme,
+                 "language": self.language, "tasks": {
+                     "dailyTasks": [], "weeklyTasks": [],
+                     "dailyShopping": [], "weeklyShopping": []},
+                 "flow_map": {}},
+                open(default_path, "w", encoding="utf-8"),
+                indent=4, ensure_ascii=False,
+            )
 
     def change_theme_from_page(self, theme: str):
         self.apply_theme(theme)
@@ -1404,6 +1532,10 @@ class MainWindow(QMainWindow):
         self.timers_page.set_shugo_visible(self.shugo_enabled)
         self.timers_page.set_riss_visible(self.riss_enabled)
 
+        self.notification_enabled = data.get("notification_enabled", self.notification_enabled)
+        self.notification_warn_minutes = data.get("notification_warn_minutes", self.notification_warn_minutes)
+        self.notification_sound = data.get("notification_sound", self.notification_sound)
+
     def change_theme_from_page(self, theme: str):
         self.apply_theme(theme)
         self.save_profile()
@@ -1431,6 +1563,12 @@ class MainWindow(QMainWindow):
             "riss_interval_text": self.riss_interval_text,
 
             "auto_save": self.auto_save,
+
+            "notification_enabled": self.notification_enabled,
+            "notification_warn_minutes": self.notification_warn_minutes,
+            "notification_sound": self.notification_sound,
+
+            "profile_dir": str(self.profile_dir),
         })
 
 

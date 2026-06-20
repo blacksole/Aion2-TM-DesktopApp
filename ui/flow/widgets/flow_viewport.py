@@ -56,8 +56,9 @@ class FlowMapViewport(QWidget):
     def wheelEvent(self, event):
         if self.parent_window:
             delta = event.angleDelta().y()
+            mouse_pos = event.position().toPoint()
             if delta > 0:
-                self.parent_window.adjust_zoom(0.1)
+                self.parent_window.adjust_zoom(0.1, mouse_pos)
             else:
-                self.parent_window.adjust_zoom(-0.1)
+                self.parent_window.adjust_zoom(-0.1, mouse_pos)
         event.accept()

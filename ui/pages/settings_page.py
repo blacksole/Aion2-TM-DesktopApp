@@ -1,11 +1,15 @@
+import glob
+import os
+import subprocess
 import webbrowser
+import winsound
 from pathlib import Path
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Signal, QTime, QSize, Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QButtonGroup, QGridLayout,
-    QDialog,
+    QDialog, QFileDialog, QLineEdit,
 )
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
@@ -20,6 +24,7 @@ class SettingsPage(QWidget):
     weekly_reset_time_changed = Signal(str)
     settings_save_requested = Signal(dict)
     check_update_requested = Signal()
+    profile_dir_changed = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -58,6 +63,7 @@ class SettingsPage(QWidget):
         self.btn_advanced_timer = QPushButton()
         self.btn_layout = QPushButton()
         self.btn_language = QPushButton()
+        self.btn_profiles = QPushButton()
 
         self.setting_buttons = [
             self.btn_general,
@@ -65,6 +71,7 @@ class SettingsPage(QWidget):
             self.btn_advanced_timer,
             self.btn_layout,
             self.btn_language,
+            self.btn_profiles,
         ]
 
         for button in self.setting_buttons:
@@ -87,11 +94,14 @@ class SettingsPage(QWidget):
 
         self.language_page = self._create_language_page()
 
+        self.profiles_page = self._create_profiles_page()
+
         self.content_stack.addWidget(self.general_page)
         self.content_stack.addWidget(self.reset_timer_page)
         self.content_stack.addWidget(self.advanced_timer_page)
         self.content_stack.addWidget(self.layout_page)
         self.content_stack.addWidget(self.language_page)
+        self.content_stack.addWidget(self.profiles_page)
 
         body_layout.addWidget(self.settings_sidebar)
         body_layout.addWidget(self.content_stack, 1)
@@ -142,6 +152,9 @@ class SettingsPage(QWidget):
         self.btn_language.clicked.connect(
             lambda: self._show_section(4, self.btn_language)
         )
+        self.btn_profiles.clicked.connect(
+            lambda: self._show_section(5, self.btn_profiles)
+        )
 
     def _show_section(self, index, active_button):
         self.content_stack.setCurrentIndex(index)
@@ -178,6 +191,18 @@ class SettingsPage(QWidget):
         self.btn_advanced_timer.setText(tr_func(language, "advanced_timer"))
         self.btn_layout.setText(tr_func(language, "layout"))
         self.btn_language.setText(tr_func(language, "language"))
+        self.btn_profiles.setText("Profiles" if language == "en" else "Profile")
+
+        self.profiles_title.setText("Profiles" if language == "en" else "Profile")
+        self.profiles_path_title.setText(
+            "Profile folder" if language == "en" else "Profilordner"
+        )
+        self.profiles_change_btn.setText(
+            "Change..." if language == "en" else "Ändern..."
+        )
+        self.profiles_open_btn.setText(
+            "Open folder" if language == "en" else "Ordner öffnen"
+        )
 
         # ===== GENERAL =====
 
@@ -273,6 +298,18 @@ class SettingsPage(QWidget):
 
         self.riss_interval_label.setText(
             tr_func(language, "interval")
+        )
+
+        self.notif_desc.setText(
+            "Benachrichtigung vor Shugo & Riss Spawn"
+            if language == "de" else
+            "Notification before Shugo & Rift spawn"
+        )
+        self.notif_warn_label.setText(
+            "Vorwarnung" if language == "de" else "Warn before"
+        )
+        self.notif_sound_title.setText(
+            "Benachrichtigungston" if language == "de" else "Notification Sound"
         )
 
         # ===== LANGUAGE =====
@@ -562,6 +599,12 @@ class SettingsPage(QWidget):
 
             "show_events": self.show_events_btn.isChecked(),
             "auto_save": self.auto_save_btn.isChecked(),
+
+            "notification_enabled": self.notif_enabled_btn.isChecked(),
+            "notification_warn_minutes": self.notif_warn_combo.currentData(),
+            "notification_sound": self._sound_paths.get(
+                self.notif_sound_combo.currentText(), ""
+            ),
         }
 
         self.settings_save_requested.emit(data)
@@ -675,8 +718,80 @@ class SettingsPage(QWidget):
         riss_layout.addWidget(self.riss_interval_combo)
         riss_layout.addWidget(self.riss_enabled_btn)
 
+        # ===== NOTIFICATION ROW =====
+        notif_row = QFrame()
+        notif_row.setObjectName("settingsRow")
+
+        notif_layout = QHBoxLayout(notif_row)
+        notif_layout.setContentsMargins(14, 12, 14, 12)
+        notif_layout.setSpacing(12)
+
+        notif_text = QVBoxLayout()
+        notif_text.setSpacing(2)
+
+        self.notif_title = QLabel("Windows Notifications")
+        self.notif_title.setObjectName("settingsLabel")
+
+        self.notif_desc = QLabel()
+        self.notif_desc.setObjectName("settingsDescription")
+
+        notif_text.addWidget(self.notif_title)
+        notif_text.addWidget(self.notif_desc)
+
+        self.notif_enabled_btn = QPushButton("Off")
+        self.notif_enabled_btn.setCheckable(True)
+        self.notif_enabled_btn.setObjectName("toggleButton")
+        self.notif_enabled_btn.setFixedWidth(70)
+
+        self.notif_warn_combo = QComboBox()
+        self.notif_warn_combo.setObjectName("settingsCombo")
+        self.notif_warn_combo.setFixedWidth(100)
+        self.notif_warn_combo.addItem("1 min", 1)
+        self.notif_warn_combo.addItem("5 min", 5)
+        self.notif_warn_combo.addItem("10 min", 10)
+
+        self.notif_warn_label = QLabel()
+        self.notif_warn_label.setObjectName("settingsInlineLabel")
+
+        notif_layout.addLayout(notif_text, 1)
+        notif_layout.addWidget(self.notif_warn_label)
+        notif_layout.addWidget(self.notif_warn_combo)
+        notif_layout.addWidget(self.notif_enabled_btn)
+
+        # ===== SOUND ROW =====
+        sound_row = QFrame()
+        sound_row.setObjectName("settingsRow")
+
+        sound_layout = QHBoxLayout(sound_row)
+        sound_layout.setContentsMargins(14, 12, 14, 12)
+        sound_layout.setSpacing(12)
+
+        sound_text = QVBoxLayout()
+        sound_text.setSpacing(2)
+
+        self.notif_sound_title = QLabel("Notification Sound")
+        self.notif_sound_title.setObjectName("settingsLabel")
+
+        sound_text.addWidget(self.notif_sound_title)
+
+        self.notif_sound_combo = QComboBox()
+        self.notif_sound_combo.setObjectName("settingsCombo")
+        self.notif_sound_combo.setFixedWidth(260)
+        self._populate_sound_combo()
+
+        self.notif_test_btn = QPushButton("▶ Test")
+        self.notif_test_btn.setObjectName("secondaryButton")
+        self.notif_test_btn.setFixedWidth(70)
+        self.notif_test_btn.clicked.connect(self._preview_sound)
+
+        sound_layout.addLayout(sound_text, 1)
+        sound_layout.addWidget(self.notif_sound_combo)
+        sound_layout.addWidget(self.notif_test_btn)
+
         layout.addWidget(shugo_row)
         layout.addWidget(riss_row)
+        layout.addWidget(notif_row)
+        layout.addWidget(sound_row)
         layout.addStretch()
 
         self.shugo_enabled_btn.toggled.connect(
@@ -687,7 +802,26 @@ class SettingsPage(QWidget):
             lambda checked: self.riss_enabled_btn.setText("On" if checked else "Off")
         )
 
+        self.notif_enabled_btn.toggled.connect(
+            lambda checked: self.notif_enabled_btn.setText("On" if checked else "Off")
+        )
+
         return page
+
+    def _populate_sound_combo(self):
+        self.notif_sound_combo.clear()
+        self._sound_paths = {"-- Kein Sound --": ""}
+        self.notif_sound_combo.addItem("-- Kein Sound --")
+        for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
+            name = os.path.splitext(os.path.basename(path))[0]
+            self._sound_paths[name] = path
+            self.notif_sound_combo.addItem(name)
+
+    def _preview_sound(self):
+        name = self.notif_sound_combo.currentText()
+        path = self._sound_paths.get(name, "")
+        if path and os.path.isfile(path):
+            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
     
     def _create_general_page(self):
         page = QWidget()
@@ -933,6 +1067,27 @@ class SettingsPage(QWidget):
             self.auto_save_btn.setChecked(auto_save)
             self.auto_save_btn.setText("On" if auto_save else "Off")
 
+        if hasattr(self, "notif_enabled_btn"):
+            enabled = data.get("notification_enabled", False)
+            self.notif_enabled_btn.setChecked(enabled)
+            self.notif_enabled_btn.setText("On" if enabled else "Off")
+
+        if hasattr(self, "notif_warn_combo"):
+            warn = data.get("notification_warn_minutes", 1)
+            idx = self.notif_warn_combo.findData(warn)
+            if idx >= 0:
+                self.notif_warn_combo.setCurrentIndex(idx)
+
+        if hasattr(self, "notif_sound_combo"):
+            sound_path = data.get("notification_sound", "")
+            target_name = os.path.splitext(os.path.basename(sound_path))[0] if sound_path else "-- Kein Sound --"
+            index = self.notif_sound_combo.findText(target_name)
+            if index >= 0:
+                self.notif_sound_combo.setCurrentIndex(index)
+
+        if hasattr(self, "profiles_path_label"):
+            self.profiles_path_label.setText(data.get("profile_dir", ""))
+
     def get_selected_theme(self):
         if not hasattr(self, "theme_buttons"):
             return "abyss"
@@ -942,3 +1097,72 @@ class SettingsPage(QWidget):
                 return theme_key
 
         return "abyss"
+
+    def _create_profiles_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(18)
+
+        self.profiles_title = QLabel("Profiles")
+        self.profiles_title.setObjectName("settingsSectionTitle")
+        layout.addWidget(self.profiles_title)
+
+        # ===== CURRENT PATH ROW =====
+        path_row = QFrame()
+        path_row.setObjectName("settingsRow")
+        path_layout = QVBoxLayout(path_row)
+        path_layout.setContentsMargins(14, 14, 14, 14)
+        path_layout.setSpacing(8)
+
+        self.profiles_path_title = QLabel("Profilordner")
+        self.profiles_path_title.setObjectName("settingsLabel")
+
+        self.profiles_path_label = QLineEdit()
+        self.profiles_path_label.setObjectName("settingsPathLabel")
+        self.profiles_path_label.setReadOnly(True)
+        self.profiles_path_label.setMinimumHeight(34)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        self.profiles_change_btn = QPushButton()
+        self.profiles_change_btn.setObjectName("secondaryButton")
+        self.profiles_change_btn.setFixedHeight(36)
+        self.profiles_change_btn.clicked.connect(self._pick_profile_dir)
+
+        self.profiles_open_btn = QPushButton()
+        self.profiles_open_btn.setObjectName("secondaryButton")
+        self.profiles_open_btn.setFixedHeight(36)
+        self.profiles_open_btn.clicked.connect(self._open_profile_dir)
+
+        btn_row.addWidget(self.profiles_change_btn)
+        btn_row.addWidget(self.profiles_open_btn)
+        btn_row.addStretch()
+
+        path_layout.addWidget(self.profiles_path_title)
+        path_layout.addWidget(self.profiles_path_label)
+        path_layout.addLayout(btn_row)
+
+        layout.addWidget(path_row)
+        layout.addStretch()
+
+        return page
+
+    def _pick_profile_dir(self):
+        current = self.profiles_path_label.text()
+        new_path = QFileDialog.getExistingDirectory(
+            self, "Profilordner wählen", current
+        )
+        if new_path:
+            self.profiles_path_label.setText(new_path)
+            self.profile_dir_changed.emit(new_path)
+
+    def _open_profile_dir(self):
+        path = self.profiles_path_label.text()
+        if path and os.path.isdir(path):
+            subprocess.Popen(f'explorer "{path}"')
+
+    def update_profile_dir_label(self, path: str):
+        if hasattr(self, "profiles_path_label"):
+            self.profiles_path_label.setText(path)

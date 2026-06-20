@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QFrame,
-    QComboBox,
     QButtonGroup,
 )
 from PySide6.QtCore import  Qt, QSize, QTimer
@@ -85,17 +84,6 @@ class FlowMapWindow(QMainWindow):
         self.guide_mode_btn.setObjectName("FlowModeButton")
         self.guide_mode_btn.setCheckable(True)
 
-        self.zoom_combo = QComboBox()
-        self.zoom_combo.setObjectName("FlowZoomCombo")
-        self.zoom_combo.addItem("100%", 1.0)
-        self.zoom_combo.addItem("80%", 0.8)
-        self.zoom_combo.addItem("60%", 0.6)
-        self.zoom_combo.setCurrentIndex(0)
-        self.zoom_combo.setFixedHeight(42)
-        self.zoom_combo.setMinimumHeight(42)
-        self.zoom_combo.setMaximumHeight(42)
-        self.zoom_combo.currentIndexChanged.connect(self.change_zoom)
-
         self.zoom_hint_label = QLabel("Scroll | Zoom 100%")
         self.zoom_hint_label.setObjectName("FlowZoomHintLabel")
 
@@ -128,7 +116,6 @@ class FlowMapWindow(QMainWindow):
         top_layout.addWidget(self.mode_tabs)
         top_layout.addStretch()
 
-        top_layout.addWidget(self.zoom_combo)
         top_layout.addWidget(self.zoom_hint_label)
         top_layout.setSpacing(10)
         top_layout.addWidget(self.save_status_label)
@@ -149,6 +136,20 @@ class FlowMapWindow(QMainWindow):
         tool_layout = QVBoxLayout(self.tool_bar)
         tool_layout.setContentsMargins(8, 8, 8, 8)
         tool_layout.setSpacing(10)
+
+        self.home_btn = QPushButton()
+        self.home_btn.setIcon(QIcon(str(self.flow_icon_dir / "home_icon.png")))
+        self.home_btn.setIconSize(QSize(28, 28))
+        self.home_btn.setObjectName("FlowHomeBtn")
+        self.home_btn.setToolTip("Go to Root")
+        tool_layout.addWidget(self.home_btn)
+        self.home_btn.clicked.connect(self.center_flow_in_viewport)
+
+        separator = QFrame()
+        separator.setObjectName("FlowToolSeparator")
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFixedHeight(1)
+        tool_layout.addWidget(separator)
 
         self.tool_group = QButtonGroup(self)
         self.tool_group.setExclusive(True)
@@ -378,24 +379,31 @@ class FlowMapWindow(QMainWindow):
             "● " + tr_func(language, "status_locked_short")
         )
 
-    def change_zoom(self):
-        self.zoom_factor = self.zoom_combo.currentData()
-        self.zoom_hint_label.setText(
-            f"Scroll | Zoom {int(self.zoom_factor * 100)}%"
-        )
-        self.render_flow()
+    def adjust_zoom(self, delta: float, mouse_pos=None):
+        old_zoom = self.zoom_factor
+        new_zoom = max(0.6, min(1.0, old_zoom + delta))
 
-    def adjust_zoom(self, delta: float):
-        new_zoom = self.zoom_factor + delta
-        new_zoom = max(0.6, min(1.0, new_zoom))
+        if new_zoom == old_zoom:
+            return
+
+        old_map_x = self.map_area.x()
+        old_map_y = self.map_area.y()
 
         self.zoom_factor = new_zoom
-
         self.zoom_hint_label.setText(
             f"Scroll | Zoom {int(self.zoom_factor * 100)}%"
         )
-
         self.render_flow()
+
+        if mouse_pos is not None:
+            mx = mouse_pos.x()
+            my = mouse_pos.y()
+            content_x = (mx - old_map_x) / old_zoom
+            content_y = (my - old_map_y) / old_zoom
+            self.map_area.move(
+                int(mx - content_x * new_zoom),
+                int(my - content_y * new_zoom),
+            )
 
     def get_flow_data(self) -> dict:
         return {
