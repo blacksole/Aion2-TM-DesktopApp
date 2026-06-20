@@ -1,6 +1,6 @@
+import os
 import sys
 import shutil
-import tempfile
 import zipfile
 import urllib.request
 from pathlib import Path
@@ -19,41 +19,67 @@ class _InstallerThread(QThread):
     finished = Signal()
     failed = Signal(str)
 
-    def __init__(self, version: str, app_root: Path, parent=None):
+    def __init__(self, version: str, asset_url: str, app_root: Path, parent=None):
         super().__init__(parent)
-        tag = f"v{version}" if not version.startswith("v") else version
-        self.zip_url = (
-            f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}"
-            f"/archive/refs/tags/{tag}.zip"
-        )
+        self.version = version
+        self.asset_url = asset_url
         self.app_root = app_root
+        self.bat_path: Path | None = None
 
     def run(self):
         try:
-            with tempfile.TemporaryDirectory() as tmp:
-                tmp_path = Path(tmp)
-                zip_path = tmp_path / "update.zip"
+            is_frozen = getattr(sys, "frozen", False)
 
-                self.status.emit("Herunterladen...")
-                req = urllib.request.Request(
-                    self.zip_url,
-                    headers={"User-Agent": "Aion2-TM-Updater"},
+            # Persistent temp dir so files survive until bat runs
+            tmp_dir = Path(os.environ.get("TEMP", "/tmp")) / "Aion2TM_update"
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            tmp_dir.mkdir(parents=True)
+
+            zip_path = tmp_dir / "update.zip"
+
+            # Prefer release asset; fall back to source archive for dev mode
+            download_url = self.asset_url
+            if not download_url:
+                tag = f"v{self.version}" if not self.version.startswith("v") else self.version
+                download_url = (
+                    f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}"
+                    f"/archive/refs/tags/{tag}.zip"
                 )
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    zip_path.write_bytes(resp.read())
 
-                self.status.emit("Entpacken...")
-                extract_dir = tmp_path / "extracted"
-                with zipfile.ZipFile(zip_path) as zf:
-                    zf.extractall(extract_dir)
+            self.status.emit("Herunterladen...")
+            req = urllib.request.Request(
+                download_url,
+                headers={"User-Agent": "Aion2-TM-Updater"},
+            )
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                zip_path.write_bytes(resp.read())
 
+            self.status.emit("Entpacken...")
+            extract_dir = tmp_dir / "extracted"
+            extract_dir.mkdir()
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(extract_dir)
+
+            if is_frozen and self.asset_url:
+                # EXE-Modus: Batch-Skript schreibt Dateien nach dem Beenden
+                self.status.emit("Updater vorbereiten...")
+                app_dir = Path(sys.executable).parent
+                exe_name = Path(sys.executable).name
+                bat_path = tmp_dir / "aion2_updater.bat"
+                bat_path.write_text(
+                    f"@echo off\n"
+                    f"timeout /t 2 /nobreak > nul\n"
+                    f"robocopy \"{extract_dir}\" \"{app_dir}\" /E /IS /IT /IM /XD __pycache__ /NFL /NDL /NJH /NJS\n"
+                    f"start \"\" \"{app_dir}\\{exe_name}\"\n"
+                    f"rd /s /q \"{tmp_dir}\"\n",
+                    encoding="utf-8",
+                )
+                self.bat_path = bat_path
+            else:
+                # Dev-Modus: Quellcode direkt kopieren
                 extracted_root = next(extract_dir.iterdir())
-
                 self.status.emit("Installieren...")
                 self._copy_dir(extracted_root, self.app_root)
-
-                # Remove __pycache__ so Python recompiles from fresh source
-                self.status.emit("Cache leeren...")
                 for pycache in self.app_root.rglob("__pycache__"):
                     shutil.rmtree(pycache, ignore_errors=True)
 
@@ -78,9 +104,10 @@ class _InstallerThread(QThread):
 
 
 class UpdateDialog(QDialog):
-    def __init__(self, version: str, body: str, app_root: Path, parent=None):
+    def __init__(self, version: str, body: str, asset_url: str, app_root: Path, parent=None):
         super().__init__(parent)
         self.version = version
+        self.asset_url = asset_url
         self.app_root = app_root
         self._thread = None
         self._setup_ui(body)
@@ -148,7 +175,7 @@ class UpdateDialog(QDialog):
         self.status_label.show()
         self.status_label.setText("Vorbereitung...")
 
-        self._thread = _InstallerThread(self.version, self.app_root, parent=self)
+        self._thread = _InstallerThread(self.version, self.asset_url, self.app_root, parent=self)
         self._thread.status.connect(self.status_label.setText)
         self._thread.finished.connect(self._on_done)
         self._thread.failed.connect(self._on_failed)
@@ -171,6 +198,14 @@ class UpdateDialog(QDialog):
 
     def _restart(self):
         import subprocess
-        subprocess.Popen([sys.executable] + sys.argv)
+        if self._thread and self._thread.bat_path and self._thread.bat_path.exists():
+            # EXE-Modus: Batch-Skript übernimmt Neustart
+            subprocess.Popen(
+                ["cmd.exe", "/c", str(self._thread.bat_path)],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        else:
+            # Dev-Modus: direkt neu starten
+            subprocess.Popen([sys.executable] + sys.argv)
         self.accept()
         QApplication.instance().quit()

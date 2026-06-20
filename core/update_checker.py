@@ -11,7 +11,7 @@ _API_URL = (
 
 
 class UpdateChecker(QThread):
-    update_available = Signal(str, str)  # (version, body)
+    update_available = Signal(str, str, str)  # (version, body, asset_url)
     up_to_date = Signal()
 
     def run(self):
@@ -26,8 +26,14 @@ class UpdateChecker(QThread):
             tag = (data.get("tag_name") or "").lstrip("v")
             body = data.get("body") or ""
 
+            asset_url = ""
+            for asset in data.get("assets", []):
+                if asset.get("name", "").endswith(".zip"):
+                    asset_url = asset.get("browser_download_url", "")
+                    break
+
             if tag and self._is_newer(tag, APP_VERSION):
-                self.update_available.emit(tag, body)
+                self.update_available.emit(tag, body, asset_url)
             else:
                 self.up_to_date.emit()
         except Exception:

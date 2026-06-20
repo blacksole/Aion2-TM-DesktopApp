@@ -19,10 +19,110 @@
         "notification_sound": "C:\\Windows\\Media\\Alarm05.wav"
     },
     "tasks": {
-        "dailyTasks": [],
-        "weeklyTasks": [],
-        "dailyShopping": [],
-        "weeklyShopping": []
+        "dailyTasks": [
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "2x Nightmare",
+                "description": "",
+                "event": false,
+                "completed": false
+            }
+        ],
+        "weeklyTasks": [
+            {
+                "type": "task",
+                "priority": "low",
+                "title": "Ascension Trial x3",
+                "description": "",
+                "event": false,
+                "completed": false
+            }
+        ],
+        "dailyShopping": [
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "1",
+                "title": "Skins",
+                "location": "Black Market",
+                "price": "",
+                "event": false,
+                "completed": false
+            }
+        ],
+        "weeklyShopping": [
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "21",
+                "title": "Odyle",
+                "location": "Wind Shop Special",
+                "price": "",
+                "event": false,
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "21",
+                "title": "Exped./Trans Entries",
+                "location": "Wind Shop Special",
+                "price": "",
+                "event": false,
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "21",
+                "title": "Daily Dungeon Entries",
+                "location": "Wind Shop Special",
+                "price": "",
+                "event": false,
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "21",
+                "title": "Daily Dungeon Instant Clear",
+                "location": "Wind Shop Special",
+                "price": "",
+                "event": false,
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "14",
+                "title": "Instant Clear Nightmare",
+                "location": "Wind Shop Special",
+                "price": "",
+                "event": false,
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "1",
+                "title": "Ludra Ticket",
+                "location": "Wind Shop Special",
+                "price": "",
+                "event": false,
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "10",
+                "title": "Soulcrystal",
+                "location": "Nightmare Shop",
+                "price": "",
+                "event": false,
+                "completed": false
+            }
+        ]
     },
     "flow_map": {
         "nodes": {

@@ -1667,17 +1667,17 @@ class MainWindow(QMainWindow):
         self._checker.up_to_date.connect(lambda: None)
         self._checker.start()
 
-    def _on_update_available(self, version: str, body: str):
-        self._pending_update = (version, body)
+    def _on_update_available(self, version: str, body: str, asset_url: str):
+        self._pending_update = (version, body, asset_url)
         if hasattr(self.header, "show_update"):
             self.header.show_update(version)
 
     def _open_update_dialog(self):
         if not self._pending_update:
             return
-        version, body = self._pending_update
+        version, body, asset_url = self._pending_update
         app_root = self.project_root
-        dlg = UpdateDialog(version, body, app_root, parent=self)
+        dlg = UpdateDialog(version, body, asset_url, app_root, parent=self)
         dlg.exec()
 
     def _on_manual_update_check(self):
