@@ -30,6 +30,13 @@ class _InstallerThread(QThread):
         try:
             is_frozen = getattr(sys, "frozen", False)
 
+            if is_frozen and not self.asset_url:
+                self.failed.emit(
+                    "Kein Download-Asset für diese Version gefunden.\n"
+                    "Bitte die neue Version manuell von GitHub herunterladen."
+                )
+                return
+
             # Persistent temp dir so files survive until bat runs
             tmp_dir = Path(os.environ.get("TEMP", "/tmp")) / "Aion2TM_update"
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -37,14 +44,10 @@ class _InstallerThread(QThread):
 
             zip_path = tmp_dir / "update.zip"
 
-            # Prefer release asset; fall back to source archive for dev mode
-            download_url = self.asset_url
-            if not download_url:
-                tag = f"v{self.version}" if not self.version.startswith("v") else self.version
-                download_url = (
-                    f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}"
-                    f"/archive/refs/tags/{tag}.zip"
-                )
+            download_url = self.asset_url or (
+                f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}"
+                f"/archive/refs/tags/v{self.version.lstrip('v')}.zip"
+            )
 
             self.status.emit("Herunterladen...")
             req = urllib.request.Request(
@@ -60,8 +63,14 @@ class _InstallerThread(QThread):
             with zipfile.ZipFile(zip_path) as zf:
                 zf.extractall(extract_dir)
 
-            if is_frozen and self.asset_url:
-                # EXE-Modus: Batch-Skript schreibt Dateien nach dem Beenden
+            if is_frozen:
+                # EXE-Modus: prüfen ob ZIP einen Unterordner hat (z.B. "Aion2 TM v0.8.4/")
+                entries = list(extract_dir.iterdir())
+                if len(entries) == 1 and entries[0].is_dir():
+                    source_dir = entries[0]
+                else:
+                    source_dir = extract_dir
+
                 self.status.emit("Updater vorbereiten...")
                 app_dir = Path(sys.executable).parent
                 exe_name = Path(sys.executable).name
@@ -69,7 +78,7 @@ class _InstallerThread(QThread):
                 bat_path.write_text(
                     f"@echo off\n"
                     f"timeout /t 2 /nobreak > nul\n"
-                    f"robocopy \"{extract_dir}\" \"{app_dir}\" /E /IS /IT /IM /XD __pycache__ /NFL /NDL /NJH /NJS\n"
+                    f"robocopy \"{source_dir}\" \"{app_dir}\" /E /IS /IT /IM /XD __pycache__ /NFL /NDL /NJH /NJS\n"
                     f"start \"\" \"{app_dir}\\{exe_name}\"\n"
                     f"rd /s /q \"{tmp_dir}\"\n",
                     encoding="utf-8",
