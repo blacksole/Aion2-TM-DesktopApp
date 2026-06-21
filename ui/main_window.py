@@ -163,10 +163,9 @@ class TaskCard(QFrame):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, auth_manager=None):
+    def __init__(self):
         super().__init__()
 
-        self.auth_manager = auth_manager
         self.auto_save = True
         self._pending_update = None
         self._checker = None
@@ -1384,14 +1383,19 @@ class MainWindow(QMainWindow):
 
 
     def load_last_profile(self):
-        if not self.last_profile_file.exists():
-            return
+        if self.last_profile_file.exists():
+            try:
+                profile_path = Path(self.last_profile_file.read_text(encoding="utf-8").strip())
+                if profile_path.exists():
+                    self.load_profile(profile_path)
+                    return
+            except Exception:
+                pass
 
-        with open(self.last_profile_file, "r", encoding="utf-8") as f:
-            profile_path = Path(f.read().strip())
-
-        if profile_path.exists():
-            self.load_profile(profile_path)
+        # Fallback: erstes verfügbares Profil laden
+        profiles = sorted(self.profile_dir.glob("*.json"))
+        if profiles:
+            self.load_profile(profiles[0])
 
     def reset_profile(self):
         box = QMessageBox(self)
