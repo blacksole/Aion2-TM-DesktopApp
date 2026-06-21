@@ -330,9 +330,11 @@ class MainWindow(QMainWindow):
         title = p.title_input.text().strip()
         if not title:
             return
+        prio_map = {"low": "priority_low", "medium": "priority_middle", "high": "priority_high"}
+        prio_text = tr(self.language, prio_map.get(priority, priority))
         if isinstance(card, ShoppingCard):
             card.priority = priority
-            card.priority_label.setText(priority.upper())
+            card.priority_label.setText(prio_text)
             card.title = title
             card.title_label.setText(title)
             card.amount = p.amount_input.text().strip() or "1"
@@ -343,7 +345,7 @@ class MainWindow(QMainWindow):
             card.info_label.setText(f"{card.location} • {card.price_display}")
         else:
             card.priority_value = priority
-            card.priority.setText(priority.upper())
+            card.priority.setText(prio_text)
             card.title_label.setText(title)
             desc = p.desc_input.text().strip()
             card.desc_label.setText(desc)
@@ -1441,6 +1443,27 @@ class MainWindow(QMainWindow):
         self.settings_page.update_language(self.language, tr)
         self.profile_page.update_language(self.language, tr)
         self.tasks_page.update_language(self.language)
+
+        if self.flow_map_window:
+            self.flow_map_window.update_language(self.language, tr)
+
+        # Update priority labels + event badges on all existing cards
+        prio_display = {
+            "low":    tr(self.language, "priority_low"),
+            "medium": tr(self.language, "priority_middle"),
+            "high":   tr(self.language, "priority_high"),
+        }
+        event_text = tr(self.language, "event_badge")
+        for cards in self.task_lists.values():
+            for card in cards:
+                if isinstance(card, ShoppingCard):
+                    raw = card.priority
+                    card.priority_label.setText(prio_display.get(raw, raw))
+                else:
+                    raw = card.priority_value
+                    card.priority.setText(prio_display.get(raw, raw))
+                if card.is_event and hasattr(card, "event_badge"):
+                    card.event_badge.setText(event_text)
 
         self.sidebar.update_language(self.language, tr)
         self.header.update_language(self.language, tr)

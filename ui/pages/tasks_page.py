@@ -28,6 +28,7 @@ class TaskProgressBar(QFrame):
         self._extra_lbl = QLabel("")
         self._extra_lbl.setObjectName("ProgressExtra")
 
+        self._sub_labels = []
         for val, icon, label, val_obj, icon_obj, sub_obj in [
             (self._done_val,  "✓", "Erledigt", "ProgressDoneVal",  "ProgressDoneIcon",  "ProgressDoneSub"),
             (self._open_val,  "○", "Offen",    "ProgressOpenVal",  "ProgressOpenIcon",  "ProgressOpenSub"),
@@ -38,6 +39,7 @@ class TaskProgressBar(QFrame):
             val.setObjectName(val_obj)
             sub = QLabel(label)
             sub.setObjectName(sub_obj)
+            self._sub_labels.append(sub)
 
             col = QVBoxLayout()
             col.setSpacing(1)
@@ -59,8 +61,9 @@ class TaskProgressBar(QFrame):
         stats_row.addWidget(self._extra_lbl, 1)
 
         self._pct_val.setObjectName("ProgressPct")
-        pct_sub = QLabel("Fortschritt")
-        pct_sub.setObjectName("ProgressPctSub")
+        self._pct_sub = QLabel("Fortschritt")
+        self._pct_sub.setObjectName("ProgressPctSub")
+        pct_sub = self._pct_sub
         pct_sub.setAlignment(Qt.AlignRight)
 
         pct_col = QVBoxLayout()
@@ -85,6 +88,11 @@ class TaskProgressBar(QFrame):
         self._total_val.setText(str(total))
         self._pct_val.setText(f"{pct}%")
         self.update()
+
+    def update_language(self, language: str, tr_func):
+        for sub, key in zip(self._sub_labels, ["done", "remaining", "total"]):
+            sub.setText(tr_func(language, key))
+        self._pct_sub.setText(tr_func(language, "progress"))
 
     def set_extra(self, text: str):
         self._extra_lbl.setText(text)
@@ -482,6 +490,12 @@ class TasksPage(QWidget):
         self.filter_event_btn.setText(
             self.tr(self.language, "filter_by_events")
         )
+
+        self.event_input.setText(
+            self.tr(self.language, "filter_by_events")
+        )
+
+        self.progress_bar.update_language(language, self.tr)
 
     def update_stats(self, total: int, done: int, open_count: int):
         self.progress_bar.update_stats(total, done, open_count)

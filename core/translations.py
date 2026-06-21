@@ -131,6 +131,27 @@ TRANSLATIONS = {
         "on": "Ein",
         "off": "Aus",
 
+        # ================= TIMER INTERVALS =================
+        "timer_30min": "30 min",
+        "timer_1h":    "1 Stunde",
+        "timer_2h":    "2 Stunden",
+        "timer_3h":    "3 Stunden",
+
+        # ================= WEEKDAY ABBREVIATIONS =================
+        "day_Mo": "Mo",
+        "day_Di": "Di",
+        "day_Mi": "Mi",
+        "day_Do": "Do",
+        "day_Fr": "Fr",
+        "day_Sa": "Sa",
+        "day_So": "So",
+
+        # ================= MISC =================
+        "no_sound":        "Kein Sound",
+        "test_sound":      "▶ Test",
+        "win_notif_title": "Windows Benachrichtigungen",
+        "min_abbr":        "Min",
+
         # ================= PLAN / FLOW MAP =================
         "plan": "Plan",
 
@@ -181,6 +202,21 @@ TRANSLATIONS = {
         "status_active_short": "Aktiv",
         "status_optional_short": "Optional",
         "status_locked_short": "Gesperrt",
+
+        # ================= FLOW MAP UI =================
+        "flow_saved": "✓ Gespeichert",
+        "flow_saving": "Speichern...",
+        "flow_zoom_hint": "Scrollen | Zoom {pct}%",
+        "flow_tooltip_home": "Zur Wurzel",
+        "flow_tooltip_select": "Auswählen",
+        "flow_tooltip_add_node": "Knoten hinzufügen",
+        "flow_tooltip_branch": "Branch",
+        "flow_tooltip_delete": "Löschen",
+        "flow_tooltip_new_map": "Neue Map erstellen",
+        "flow_tooltip_delete_map": "Aktuelle Map löschen",
+        "flow_tooltip_reset_map": "Map zurücksetzen",
+        "flow_tool_prefix": "Werkzeug:",
+        "event_badge": "EVENT",
 
         # ================= TIME VALUES =================
         "30_min": "30 Min",
@@ -233,6 +269,268 @@ TRANSLATIONS = {
         "confirm_clear_events_text": "Möchtest du alle Event-Einträge wirklich löschen?\n\nDies betrifft alle Event-Tasks und Event-Shopping-Einträge.",
         "confirm_yes": "Ja, löschen",
         "confirm_no": "Abbrechen",
+    },
+
+    "ru": {
+
+        # ================= APP =================
+        "app_title": "Менеджер задач и покупок",
+
+        # ================= PROFILE =================
+        "current_profile": 'Текущий профиль: "{name}"',
+        "save_profile": "Сохранить профиль",
+        "load_profile": "Загрузить профиль ▾",
+        "reset_profile": "Сбросить профиль",
+        "profile_saved": "Профиль сохранён",
+        "profile": "Профиль",
+        "profile_subtitle": "Управление и сохранение профилей",
+
+        "reset_profile_tooltip":
+        "Удаляет все текущие задачи и записи покупок "
+        "из этого профиля.\n\n"
+        "Настройки и макет профиля остаются без изменений.",
+
+        # ================= GENERAL =================
+        "add": "+ Добавить",
+        "save": "Сохранить",
+        "cancel": "Отмена",
+        "title": "Название",
+        "description": "Описание или место",
+        "progress": "Прогресс",
+
+        # ================= DISCORD =================
+        "discord_connected": "Discord подключён",
+        "discord_not_connected": "Discord не подключён",
+        "online": "В сети",
+        "offline": "Не в сети",
+
+        # ================= TASKS =================
+        "daily_tasks": "📋 Ежедневные задачи",
+        "weekly_tasks": "📅 Еженедельные задачи",
+        "event_tasks": "🎉 Событийные задачи",
+        "tasks": "Задачи",
+        "tasks_subtitle": "Ежедневные, еженедельные и событийные задачи",
+
+        # ================= SHOPPING =================
+        "daily_shopping": "🛒 Ежедневные покупки",
+        "weekly_shopping": "🛍️ Еженедельные покупки",
+        "event_shopping": "🎁 Событийные покупки",
+        "priority": "Приоритет",
+        "priority_low": "Низкий",
+        "priority_middle": "Средний",
+        "priority_high": "Высокий",
+        "location": "Место",
+        "amount": "Количество",
+        "price": "Цена",
+
+        "daily_total_price": "Ежедневная общая стоимость",
+        "weekly_total_price": "Еженедельная общая стоимость",
+        "event_total_price": "Стоимость события",
+
+        # ================= CLEAR EVENTS =================
+        "clear_events": "Удалить события",
+        "clear_events_tooltip":
+            "Удаляет все событийные записи из задач "
+            "и списков покупок.\n\n"
+            "Обычные ежедневные и еженедельные записи остаются.",
+        "event_entries_removed": "✓ Событийные записи удалены",
+
+        # ================= SORTING =================
+        "sort_by": "Сортировка ▾",
+        "sort_by_title": "Название",
+        "sort_by_location": "Место",
+        "sort_by_price": "Цена",
+        "sort_by_priority": "Приоритет",
+
+        # ================= FILTERING =================
+        "filter_by": "Фильтр ▾",
+        "filter_by_all": "Все",
+        "filter_by_events": "Событие",
+
+        # ================= STATS =================
+        "total": "Всего",
+        "done": "Выполнено",
+        "remaining": "Осталось",
+
+        # ================= TIMERS =================
+        "daily_reset": "Ежедн. сброс",
+        "weekly_reset": "Еженед. сброс",
+        "more_timers": "Дополнительные таймеры",
+        "show_shugo": "Показать таймер Shugo",
+        "show_riss": "Показать таймер Riss",
+        "timers": "Таймеры",
+        "timers_subtitle": "Таймеры сброса и расширенные таймеры",
+        "shugo": "Shugo",
+        "riss": "Riss",
+
+        # ================= SETTINGS =================
+        "settings": "Настройки",
+        "general": "Основные",
+        "layout": "Интерфейс",
+        "language": "Язык",
+        "display": "Отображение",
+        "system_time": "Системное время",
+        "settings_saved": "Настройки сохранены",
+        "settings_title": "Настройки",
+        "settings_subtitle": "Настройки приложения, интерфейса и таймеров",
+
+        # ================= SETTINGS GENERAL =================
+        "auto_save": "Автосохранение",
+        "auto_save_desc": "Автоматически сохранять изменения профиля.",
+        "show_events_desc": "Показывать событийные задачи и покупки.",
+
+        # ================= RESET SETTINGS =================
+        "reset_timer": "Таймер сброса",
+        "weekly_reset_day": "День еженедельного сброса",
+        "weekly_reset_time": "Время еженедельного сброса",
+
+        # ================= ADVANCED TIMER =================
+        "advanced_timer": "Расширенные таймеры",
+        "shugo_timer": "Таймер Shugo",
+        "shugo_timer_desc": "Включить обратный отсчёт для событий Shugo.",
+        "shugo_start": "Начало события Shugo (мин)",
+        "shugo_interval": "Интервал Shugo",
+        "riss_timer": "Таймер Riss",
+        "riss_timer_desc": "Включить обратный отсчёт для повторяющихся событий Riss.",
+        "riss_anchor": "Ориентировочное начало Riss (время)",
+        "riss_interval": "Интервал Riss",
+        "start": "Начало",
+        "interval": "Интервал",
+        "anchor": "Привязка",
+        "on": "Вкл",
+        "off": "Выкл",
+
+        # ================= TIMER INTERVALS =================
+        "timer_30min": "30 мин",
+        "timer_1h":    "1 час",
+        "timer_2h":    "2 часа",
+        "timer_3h":    "3 часа",
+
+        # ================= WEEKDAY ABBREVIATIONS =================
+        "day_Mo": "Пн",
+        "day_Di": "Вт",
+        "day_Mi": "Ср",
+        "day_Do": "Чт",
+        "day_Fr": "Пт",
+        "day_Sa": "Сб",
+        "day_So": "Вс",
+
+        # ================= MISC =================
+        "no_sound":        "Без звука",
+        "test_sound":      "▶ Тест",
+        "win_notif_title": "Уведомления Windows",
+        "min_abbr":        "мин",
+
+        # ================= PLAN / FLOW MAP =================
+        "plan": "План",
+        "toast_plan_opened": "План открыт",
+        "flow_title": "Блок-схема",
+        "flow_window_title": "Карта блок-схемы",
+
+        "flow_add_node": "Добавить узел",
+        "flow_edit_node": "Редактировать узел",
+        "flow_delete_node": "Удалить узел",
+        "flow_node_edit": "РЕДАКТИРОВАНИЕ УЗЛА",
+
+        "flow_edit_mode": "Редактировать план",
+        "flow_guide_mode": "Режим гида",
+
+        "flow_title_placeholder": "Название",
+        "flow_description_placeholder": "Описание",
+        "flow_symbol": "Символ",
+        "flow_optional_node": "Необязательный узел",
+
+        "flow_new_node_title": "Новый узел",
+        "flow_new_branch_title": "Новая ветка",
+        "flow_new_node_desc": "Добавить описание.",
+
+        "flow_save": "Сохранить",
+        "flow_load": "Загрузить",
+
+        "flow_status_colors": "СТАТУС И ЦВЕТА",
+        "status_completed": "Зелёный  =  Выполнено",
+        "status_active": "Синий    =  Активно",
+        "status_optional": "Жёлтый  =  Опционально / В процессе",
+        "status_locked": "Серый    =  Будущее / Заблокировано",
+
+        "flow_info_text": (
+            "Плитки можно отметить как выполненные, нажав на галочку.\n"
+            "Следующий шаг автоматически станет активным."
+        ),
+
+        "flow_start_hint": "Нажмите (+), чтобы создать первую плитку.",
+
+        "status_completed_short": "Выполнено",
+        "status_active_short": "Активно",
+        "status_optional_short": "Опционально",
+        "status_locked_short": "Заблокировано",
+
+        # ================= FLOW MAP UI =================
+        "flow_saved": "✓ Сохранено",
+        "flow_saving": "Сохранение...",
+        "flow_zoom_hint": "Прокрутка | Масштаб {pct}%",
+        "flow_tooltip_home": "К корню",
+        "flow_tooltip_select": "Выбрать",
+        "flow_tooltip_add_node": "Добавить узел",
+        "flow_tooltip_branch": "Ветка",
+        "flow_tooltip_delete": "Удалить",
+        "flow_tooltip_new_map": "Новая карта",
+        "flow_tooltip_delete_map": "Удалить текущую карту",
+        "flow_tooltip_reset_map": "Сбросить карту",
+        "flow_tool_prefix": "Инструмент:",
+        "event_badge": "СОБЫТИЕ",
+
+        # ================= TIME VALUES =================
+        "30_min": "30 мин",
+        "1_hour": "1 час",
+        "2_hour": "2 часа",
+        "3_hour": "3 часа",
+
+        # ================= LANGUAGE =================
+        "select_language": "Выбрать язык",
+        "application_language": "Язык приложения",
+        "language_desc": "Выберите язык интерфейса приложения.",
+
+        # ================= PLACEHOLDERS =================
+        "placeholder_daily_tasks": "Название ежедневной задачи",
+        "placeholder_weekly_tasks": "Название еженедельной задачи",
+        "placeholder_event_tasks": "Название событийной задачи",
+        "placeholder_daily_shopping": "Название ежедневной покупки",
+        "placeholder_weekly_shopping": "Название еженедельной покупки",
+        "placeholder_event_shopping": "Название событийной покупки",
+
+        # ================= TOASTS =================
+        "toast_tasks_opened": "Задачи открыты",
+        "toast_timers_opened": "Таймеры открыты",
+        "toast_settings_opened": "Настройки открыты",
+        "toast_profile_opened": 'Профиль: "{name}"',
+
+        # ================= UPDATES =================
+        "check_updates": "Проверить обновления",
+        "check_updates_desc": "Вручную проверить наличие новой версии приложения.",
+        "check_updates_btn": "Проверить",
+        "update_available_toast": "Доступно обновление v{version}!",
+        "up_to_date_toast": "Приложение актуально.",
+
+        # ================= PROFILE TRANSFER =================
+        "export_profile": "Экспорт профиля",
+        "import_profile": "Импорт профиля",
+        "profile_exported": "✓ Профиль экспортирован",
+        "profile_imported": "✓ Профиль импортирован",
+        "profile_import_error": "Неверный файл профиля",
+
+        # ================= DONATE =================
+        "donate": "Поддержать ❤",
+        "donate_desc": "Нравится приложение? Небольшое пожертвование помогает развитию.",
+        "donate_btn": "Пожертвовать ☕",
+
+        # ================= CONFIRM DIALOGS =================
+        "confirm_reset_title": "Сбросить профиль?",
+        "confirm_reset_text": "Вы действительно хотите сбросить профиль?\n\nВсе задачи и записи покупок будут удалены.\nНастройки и макет останутся без изменений.",
+        "confirm_clear_events_title": "Удалить событийные записи?",
+        "confirm_clear_events_text": "Вы действительно хотите удалить все событийные записи?\n\nЭто затронет все событийные задачи и покупки.",
+        "confirm_yes": "Да, удалить",
+        "confirm_no": "Отмена",
     },
 
     "en": {
@@ -364,6 +662,27 @@ TRANSLATIONS = {
         "on": "On",
         "off": "Off",
 
+        # ================= TIMER INTERVALS =================
+        "timer_30min": "30 min",
+        "timer_1h":    "1 hour",
+        "timer_2h":    "2 hours",
+        "timer_3h":    "3 hours",
+
+        # ================= WEEKDAY ABBREVIATIONS =================
+        "day_Mo": "Mo",
+        "day_Di": "Tu",
+        "day_Mi": "We",
+        "day_Do": "Th",
+        "day_Fr": "Fr",
+        "day_Sa": "Sa",
+        "day_So": "Su",
+
+        # ================= MISC =================
+        "no_sound":        "No Sound",
+        "test_sound":      "▶ Test",
+        "win_notif_title": "Windows Notifications",
+        "min_abbr":        "min",
+
         # ================= TOAST PLANS =================
         "toast_plan_opened": "Plan opened",
         "plan": "Plan",
@@ -412,6 +731,21 @@ TRANSLATIONS = {
         "status_optional_short": "Optional",
         "status_locked_short": "Locked",
 
+
+        # ================= FLOW MAP UI =================
+        "flow_saved": "✓ Saved",
+        "flow_saving": "Saving...",
+        "flow_zoom_hint": "Scroll | Zoom {pct}%",
+        "flow_tooltip_home": "Go to Root",
+        "flow_tooltip_select": "Select",
+        "flow_tooltip_add_node": "Add Node",
+        "flow_tooltip_branch": "Branch",
+        "flow_tooltip_delete": "Delete",
+        "flow_tooltip_new_map": "New Map",
+        "flow_tooltip_delete_map": "Delete current map",
+        "flow_tooltip_reset_map": "Reset map",
+        "flow_tool_prefix": "Tool:",
+        "event_badge": "EVENT",
 
         # ================= TIME VALUES =================
         "30_min": "30 Min",

@@ -419,6 +419,24 @@ class FlowMapWindow(QMainWindow):
             "● " + tr_func(language, "status_locked_short")
         )
 
+        # Tooltips
+        self.new_map_btn.setToolTip(tr_func(language, "flow_tooltip_new_map"))
+        self.delete_map_btn.setToolTip(tr_func(language, "flow_tooltip_delete_map"))
+        self.reset_map_btn.setToolTip(tr_func(language, "flow_tooltip_reset_map"))
+        self.home_btn.setToolTip(tr_func(language, "flow_tooltip_home"))
+        self.select_tool_btn.setToolTip(tr_func(language, "flow_tooltip_select"))
+        self.add_node_tool_btn.setToolTip(tr_func(language, "flow_tooltip_add_node"))
+        self.branch_tool_btn.setToolTip(tr_func(language, "flow_tooltip_branch"))
+        self.delete_tool_btn.setToolTip(tr_func(language, "flow_tooltip_delete"))
+
+        # Save status + zoom
+        self.save_status_label.setText(tr_func(language, "flow_saved"))
+        self.zoom_hint_label.setText(
+            tr_func(language, "flow_zoom_hint", pct=int(self.zoom_factor * 100))
+        )
+
+        self.update_active_tool_label()
+
     def adjust_zoom(self, delta: float, mouse_pos=None):
         old_zoom = self.zoom_factor
         new_zoom = max(0.6, min(1.0, old_zoom + delta))
@@ -431,7 +449,7 @@ class FlowMapWindow(QMainWindow):
 
         self.zoom_factor = new_zoom
         self.zoom_hint_label.setText(
-            f"Scroll | Zoom {int(self.zoom_factor * 100)}%"
+            self.tr_func(self.language, "flow_zoom_hint", pct=int(self.zoom_factor * 100))
         )
         self.render_flow()
 
@@ -615,7 +633,7 @@ class FlowMapWindow(QMainWindow):
         self.controller.save_selected_node()
 
     def mark_unsaved(self):
-        self.save_status_label.setText("Saving...")
+        self.save_status_label.setText(self.tr_func(self.language, "flow_saving"))
         self.save_status_label.setProperty("state", "saving")
         self.save_status_label.style().unpolish(self.save_status_label)
         self.save_status_label.style().polish(self.save_status_label)
@@ -628,7 +646,7 @@ class FlowMapWindow(QMainWindow):
 
 
     def mark_saved(self):
-        self.save_status_label.setText("✓ Saved")
+        self.save_status_label.setText(self.tr_func(self.language, "flow_saved"))
         self.save_status_label.setProperty("state", "saved")
         self.save_status_label.style().unpolish(self.save_status_label)
         self.save_status_label.style().polish(self.save_status_label)
@@ -659,16 +677,18 @@ class FlowMapWindow(QMainWindow):
         self.render_flow()
 
     def update_active_tool_label(self):
-        names = {
-            "select": "Select",
-            "add_node": "Add Node",
-            "branch": "Branch",
-            "delete": "Delete",
+        if not self.tr_func:
+            return
+        tool_key_map = {
+            "select":   "flow_tooltip_select",
+            "add_node": "flow_tooltip_add_node",
+            "branch":   "flow_tooltip_branch",
+            "delete":   "flow_tooltip_delete",
         }
-
-        self.active_tool_label.setText(
-            f"Tool: {names.get(self.current_tool, 'Select')}"
-        )
+        tr_key = tool_key_map.get(self.current_tool, "flow_tooltip_select")
+        prefix = self.tr_func(self.language, "flow_tool_prefix")
+        name   = self.tr_func(self.language, tr_key)
+        self.active_tool_label.setText(f"{prefix} {name}")
 
     
     def set_tool_cursor(self, filename: str):

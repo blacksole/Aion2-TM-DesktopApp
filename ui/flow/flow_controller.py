@@ -162,7 +162,7 @@ class FlowController:
         if self._editor_is_dirty():
             current_node = self.window.nodes.get(self.window.selected_node_id)
             title = current_node.title if current_node else "Node"
-            dialog = UnsavedChangesDialog(title, parent=self.window)
+            dialog = UnsavedChangesDialog(title, language=self.window.language, parent=self.window)
             if not dialog.exec():
                 return
             action = dialog.get_action()
@@ -176,11 +176,11 @@ class FlowController:
 
     def delete_node(self, node_id: str):
         if node_id == self.window.root_node_id:
-            QMessageBox.information(
-                self.window,
-                "Nicht möglich",
-                "Der Root-Node kann nicht gelöscht werden.",
-            )
+            _msg = {
+                "de": ("Nicht möglich", "Der Root-Node kann nicht gelöscht werden."),
+                "ru": ("Невозможно", "Корневой узел не может быть удалён."),
+            }.get(self.window.language, ("Not possible", "The root node cannot be deleted."))
+            QMessageBox.information(self.window, _msg[0], _msg[1])
             return
 
         node = self.window.nodes.get(node_id)
@@ -190,7 +190,7 @@ class FlowController:
         parent_id = self._find_parent_id(node_id)
         has_children = bool(node.children)
 
-        dialog = DeleteConfirmDialog(node.title, has_children, parent=self.window)
+        dialog = DeleteConfirmDialog(node.title, has_children, language=self.window.language, parent=self.window)
         if not dialog.exec():
             return
 
@@ -242,7 +242,7 @@ class FlowController:
             return True
         current_node = self.window.nodes.get(self.window.selected_node_id)
         title = current_node.title if current_node else "Node"
-        dialog = UnsavedChangesDialog(title, parent=self.window)
+        dialog = UnsavedChangesDialog(title, language=self.window.language, parent=self.window)
         if not dialog.exec():
             return False
         action = dialog.get_action()

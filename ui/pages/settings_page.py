@@ -30,6 +30,8 @@ class SettingsPage(QWidget):
         super().__init__()
 
         self.project_root = Path(__file__).resolve().parent.parent.parent
+        self._cur_lang = "de"
+        self._cur_tr = None
 
         self.setup_ui()
 
@@ -173,7 +175,16 @@ class SettingsPage(QWidget):
             tr_func(language, "off")
         )
 
+    def _set_toggle(self, btn, checked):
+        if self._cur_tr:
+            self._update_toggle_text(btn, checked, self._cur_lang, self._cur_tr)
+        else:
+            btn.setText("On" if checked else "Off")
+
     def update_language(self, language: str, tr_func):
+        self._cur_lang = language
+        self._cur_tr = tr_func
+
         self.title_label.setText(
             tr_func(language, "settings_title")
         )
@@ -191,17 +202,17 @@ class SettingsPage(QWidget):
         self.btn_advanced_timer.setText(tr_func(language, "advanced_timer"))
         self.btn_layout.setText(tr_func(language, "layout"))
         self.btn_language.setText(tr_func(language, "language"))
-        self.btn_profiles.setText("Profiles" if language == "en" else "Profile")
-
-        self.profiles_title.setText("Profiles" if language == "en" else "Profile")
+        _profiles_label = {"en": "Profiles", "de": "Profile", "ru": "Профили"}
+        self.btn_profiles.setText(_profiles_label.get(language, "Profiles"))
+        self.profiles_title.setText(_profiles_label.get(language, "Profiles"))
         self.profiles_path_title.setText(
-            "Profile folder" if language == "en" else "Profilordner"
+            {"en": "Profile folder", "de": "Profilordner", "ru": "Папка профилей"}.get(language, "Profile folder")
         )
         self.profiles_change_btn.setText(
-            "Change..." if language == "en" else "Ändern..."
+            {"en": "Change...", "de": "Ändern...", "ru": "Изменить..."}.get(language, "Change...")
         )
         self.profiles_open_btn.setText(
-            "Open folder" if language == "en" else "Ordner öffnen"
+            {"en": "Open folder", "de": "Ordner öffnen", "ru": "Открыть папку"}.get(language, "Open folder")
         )
 
         # ===== GENERAL =====
@@ -264,6 +275,13 @@ class SettingsPage(QWidget):
             tr_func
         )
 
+        self._update_toggle_text(
+            self.notif_enabled_btn,
+            self.notif_enabled_btn.isChecked(),
+            language,
+            tr_func
+        )
+
         self.advanced_timer_title.setText(
             tr_func(language, "advanced_timer")
         )
@@ -301,16 +319,63 @@ class SettingsPage(QWidget):
         )
 
         self.notif_desc.setText(
-            "Benachrichtigung vor Shugo & Riss Spawn"
-            if language == "de" else
-            "Notification before Shugo & Rift spawn"
+            {"de": "Benachrichtigung vor Shugo & Riss Spawn", "ru": "Уведомление перед появлением Shugo и Riss"}.get(
+                language, "Notification before Shugo & Rift spawn"
+            )
         )
         self.notif_warn_label.setText(
-            "Vorwarnung" if language == "de" else "Warn before"
+            {"de": "Vorwarnung", "ru": "Предупреждение"}.get(language, "Warn before")
         )
         self.notif_sound_title.setText(
-            "Benachrichtigungston" if language == "de" else "Notification Sound"
+            {"de": "Benachrichtigungston", "ru": "Звук уведомления"}.get(language, "Notification Sound")
         )
+        self.notif_title.setText(tr_func(language, "win_notif_title"))
+        self.notif_test_btn.setText(tr_func(language, "test_sound"))
+
+        # ===== WARN COMBO =====
+        if hasattr(self, "notif_warn_combo"):
+            cur_warn = self.notif_warn_combo.currentData()
+            m = tr_func(language, "min_abbr")
+            self.notif_warn_combo.blockSignals(True)
+            self.notif_warn_combo.clear()
+            for v in [1, 5, 10]:
+                self.notif_warn_combo.addItem(f"{v} {m}", v)
+            idx = self.notif_warn_combo.findData(cur_warn)
+            self.notif_warn_combo.setCurrentIndex(max(0, idx))
+            self.notif_warn_combo.blockSignals(False)
+
+        # ===== INTERVAL COMBOS =====
+        _shugo_keys = ["30min", "1h", "2h", "3h"]
+        _riss_keys = ["1h", "2h", "3h"]
+
+        if hasattr(self, "shugo_interval_combo"):
+            cur = self.shugo_interval_combo.currentData()
+            self.shugo_interval_combo.blockSignals(True)
+            self.shugo_interval_combo.clear()
+            for k in _shugo_keys:
+                self.shugo_interval_combo.addItem(tr_func(language, f"timer_{k}"), k)
+            idx = self.shugo_interval_combo.findData(cur)
+            self.shugo_interval_combo.setCurrentIndex(max(0, idx))
+            self.shugo_interval_combo.blockSignals(False)
+
+        if hasattr(self, "riss_interval_combo"):
+            cur = self.riss_interval_combo.currentData()
+            self.riss_interval_combo.blockSignals(True)
+            self.riss_interval_combo.clear()
+            for k in _riss_keys:
+                self.riss_interval_combo.addItem(tr_func(language, f"timer_{k}"), k)
+            idx = self.riss_interval_combo.findData(cur)
+            self.riss_interval_combo.setCurrentIndex(max(0, idx))
+            self.riss_interval_combo.blockSignals(False)
+
+        # ===== WEEKDAY BUTTONS =====
+        if hasattr(self, "weekly_day_buttons") and hasattr(self, "_day_tr_keys"):
+            for btn, tr_key in zip(self.weekly_day_buttons, self._day_tr_keys):
+                btn.setText(tr_func(language, tr_key))
+
+        # ===== NO-SOUND LABEL =====
+        if hasattr(self, "notif_sound_combo") and self.notif_sound_combo.count() > 0:
+            self.notif_sound_combo.setItemText(0, f"-- {tr_func(language, 'no_sound')} --")
 
         # ===== LANGUAGE =====
 
@@ -367,6 +432,7 @@ class SettingsPage(QWidget):
         self.language_combo.setObjectName("settingsCombo")
         self.language_combo.addItem("English", "en")
         self.language_combo.addItem("Deutsch", "de")
+        self.language_combo.addItem("Русский", "ru")
 
         layout.addWidget(self.language_title)
         layout.addWidget(self.language_desc)
@@ -524,14 +590,17 @@ class SettingsPage(QWidget):
         day_layout.setSpacing(4)
 
         self.weekly_day_buttons = []
+        _day_keys = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+        self._day_tr_keys = ["day_Mo", "day_Di", "day_Mi", "day_Do", "day_Fr", "day_Sa", "day_So"]
 
-        for day in ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]:
-            btn = QPushButton(day)
+        for day_key in _day_keys:
+            btn = QPushButton(day_key)
+            btn.setProperty("day_key", day_key)
             btn.setCheckable(True)
             btn.setObjectName("dayButton")
             btn.setFixedSize(34, 28)
 
-            if day == "Mo":
+            if day_key == "Mo":
                 btn.setChecked(True)
 
             self.weekly_day_group.addButton(btn)
@@ -575,7 +644,7 @@ class SettingsPage(QWidget):
     def _emit_weekly_day_changed(self):
         checked_button = self.weekly_day_group.checkedButton()
         if checked_button:
-            self.weekly_reset_day_changed.emit(checked_button.text())
+            self.weekly_reset_day_changed.emit(checked_button.property("day_key"))
 
 
     def _emit_weekly_time_changed(self):
@@ -587,24 +656,22 @@ class SettingsPage(QWidget):
             "language": self.language_combo.currentData(),
             "theme": self.get_selected_theme(),
             "daily_reset_time": self.daily_reset_time.time().toString("HH:mm"),
-            "weekly_reset_day": self.weekly_day_group.checkedButton().text(),
+            "weekly_reset_day": self.weekly_day_group.checkedButton().property("day_key"),
             "weekly_reset_time": self.weekly_reset_time.time().toString("HH:mm"),
             "shugo_enabled": self.shugo_enabled_btn.isChecked(),
             "shugo_start_minute": int(self.shugo_minute_combo.currentText()),
-            "shugo_interval_text": self.shugo_interval_combo.currentText(),
+            "shugo_interval_text": self.shugo_interval_combo.currentData(),
 
             "riss_enabled": self.riss_enabled_btn.isChecked(),
             "riss_anchor_hour": int(self.riss_anchor_combo.currentText()),
-            "riss_interval_text": self.riss_interval_combo.currentText(),
+            "riss_interval_text": self.riss_interval_combo.currentData(),
 
             "show_events": self.show_events_btn.isChecked(),
             "auto_save": self.auto_save_btn.isChecked(),
 
             "notification_enabled": self.notif_enabled_btn.isChecked(),
             "notification_warn_minutes": self.notif_warn_combo.currentData(),
-            "notification_sound": self._sound_paths.get(
-                self.notif_sound_combo.currentText(), ""
-            ),
+            "notification_sound": self.notif_sound_combo.currentData() or "",
         }
 
         self.settings_save_requested.emit(data)
@@ -652,9 +719,10 @@ class SettingsPage(QWidget):
 
         self.shugo_interval_combo = QComboBox()
         self.shugo_interval_combo.setObjectName("settingsCombo")
-        self.shugo_interval_combo.addItems([
-            "30 min", "1 Stunde", "2 Stunden", "3 Stunden"
-        ])
+        self.shugo_interval_combo.addItem("30 min", "30min")
+        self.shugo_interval_combo.addItem("1 Stunde", "1h")
+        self.shugo_interval_combo.addItem("2 Stunden", "2h")
+        self.shugo_interval_combo.addItem("3 Stunden", "3h")
         self.shugo_interval_combo.setFixedWidth(120)
 
         shugo_layout.addLayout(shugo_text, 1)
@@ -702,9 +770,9 @@ class SettingsPage(QWidget):
 
         self.riss_interval_combo = QComboBox()
         self.riss_interval_combo.setObjectName("settingsCombo")
-        self.riss_interval_combo.addItems([
-            "1 Stunde", "2 Stunden", "3 Stunden"
-        ])
+        self.riss_interval_combo.addItem("1 Stunde", "1h")
+        self.riss_interval_combo.addItem("2 Stunden", "2h")
+        self.riss_interval_combo.addItem("3 Stunden", "3h")
         self.riss_interval_combo.setFixedWidth(120)
 
         riss_layout.addLayout(riss_text, 1)
@@ -729,7 +797,7 @@ class SettingsPage(QWidget):
         notif_text = QVBoxLayout()
         notif_text.setSpacing(2)
 
-        self.notif_title = QLabel("Windows Notifications")
+        self.notif_title = QLabel()
         self.notif_title.setObjectName("settingsLabel")
 
         self.notif_desc = QLabel()
@@ -795,31 +863,28 @@ class SettingsPage(QWidget):
         layout.addStretch()
 
         self.shugo_enabled_btn.toggled.connect(
-            lambda checked: self.shugo_enabled_btn.setText("On" if checked else "Off")
+            lambda checked: self._set_toggle(self.shugo_enabled_btn, checked)
         )
 
         self.riss_enabled_btn.toggled.connect(
-            lambda checked: self.riss_enabled_btn.setText("On" if checked else "Off")
+            lambda checked: self._set_toggle(self.riss_enabled_btn, checked)
         )
 
         self.notif_enabled_btn.toggled.connect(
-            lambda checked: self.notif_enabled_btn.setText("On" if checked else "Off")
+            lambda checked: self._set_toggle(self.notif_enabled_btn, checked)
         )
 
         return page
 
     def _populate_sound_combo(self):
         self.notif_sound_combo.clear()
-        self._sound_paths = {"-- Kein Sound --": ""}
-        self.notif_sound_combo.addItem("-- Kein Sound --")
+        self.notif_sound_combo.addItem("-- No Sound --", "")
         for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
             name = os.path.splitext(os.path.basename(path))[0]
-            self._sound_paths[name] = path
-            self.notif_sound_combo.addItem(name)
+            self.notif_sound_combo.addItem(name, path)
 
     def _preview_sound(self):
-        name = self.notif_sound_combo.currentText()
-        path = self._sound_paths.get(name, "")
+        path = self.notif_sound_combo.currentData() or ""
         if path and os.path.isfile(path):
             winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
     
@@ -864,7 +929,7 @@ class SettingsPage(QWidget):
         self.auto_save_btn.setFixedWidth(70)
 
         self.auto_save_btn.toggled.connect(
-            lambda checked: self.auto_save_btn.setText("On" if checked else "Off")
+            lambda checked: self._set_toggle(self.auto_save_btn, checked)
         )
 
         auto_save_layout.addLayout(auto_save_text, 1)
@@ -894,7 +959,7 @@ class SettingsPage(QWidget):
         self.show_events_btn.setFixedWidth(70)
 
         self.show_events_btn.toggled.connect(
-            lambda checked: self.show_events_btn.setText("On" if checked else "Off")
+            lambda checked: self._set_toggle(self.show_events_btn, checked)
         )
 
         row_layout.addLayout(text_layout, 1)
@@ -998,7 +1063,7 @@ class SettingsPage(QWidget):
         if hasattr(self, "show_events_btn"):
             show_events = data.get("show_events", True)
             self.show_events_btn.setChecked(show_events)
-            self.show_events_btn.setText("On" if show_events else "Off")
+            self._set_toggle(self.show_events_btn, show_events)
 
         # Language
         if hasattr(self, "language_combo"):
@@ -1021,7 +1086,7 @@ class SettingsPage(QWidget):
         if hasattr(self, "weekly_day_buttons"):
             weekly_day = data.get("weekly_reset_day", "Mo")
             for btn in self.weekly_day_buttons:
-                btn.setChecked(btn.text() == weekly_day)
+                btn.setChecked(btn.property("day_key") == weekly_day)
 
         if hasattr(self, "weekly_reset_time"):
             h, m = map(int, data.get("weekly_reset_time", "09:00").split(":"))
@@ -1031,7 +1096,7 @@ class SettingsPage(QWidget):
         if hasattr(self, "shugo_enabled_btn"):
             enabled = data.get("shugo_enabled", False)
             self.shugo_enabled_btn.setChecked(enabled)
-            self.shugo_enabled_btn.setText("On" if enabled else "Off")
+            self._set_toggle(self.shugo_enabled_btn, enabled)
 
         if hasattr(self, "shugo_minute_combo"):
             value = str(data.get("shugo_start_minute", 15)).zfill(2)
@@ -1040,15 +1105,17 @@ class SettingsPage(QWidget):
                 self.shugo_minute_combo.setCurrentIndex(index)
 
         if hasattr(self, "shugo_interval_combo"):
-            value = data.get("shugo_interval_text", "30 min")
-            index = self.shugo_interval_combo.findText(value)
+            value = data.get("shugo_interval_text", "30min")
+            _compat = {"30 min": "30min", "1 Stunde": "1h", "2 Stunden": "2h", "3 Stunden": "3h"}
+            key = _compat.get(value, value)
+            index = self.shugo_interval_combo.findData(key)
             if index >= 0:
                 self.shugo_interval_combo.setCurrentIndex(index)
 
         if hasattr(self, "riss_enabled_btn"):
             enabled = data.get("riss_enabled", False)
             self.riss_enabled_btn.setChecked(enabled)
-            self.riss_enabled_btn.setText("On" if enabled else "Off")
+            self._set_toggle(self.riss_enabled_btn, enabled)
 
         if hasattr(self, "riss_anchor_combo"):
             value = str(data.get("riss_anchor_hour", 0)).zfill(2)
@@ -1057,20 +1124,22 @@ class SettingsPage(QWidget):
                 self.riss_anchor_combo.setCurrentIndex(index)
 
         if hasattr(self, "riss_interval_combo"):
-            value = data.get("riss_interval_text", "1 Stunde")
-            index = self.riss_interval_combo.findText(value)
+            value = data.get("riss_interval_text", "1h")
+            _compat = {"1 Stunde": "1h", "2 Stunden": "2h", "3 Stunden": "3h"}
+            key = _compat.get(value, value)
+            index = self.riss_interval_combo.findData(key)
             if index >= 0:
                 self.riss_interval_combo.setCurrentIndex(index)
 
         if hasattr(self, "auto_save_btn"):
             auto_save = data.get("auto_save", True)
             self.auto_save_btn.setChecked(auto_save)
-            self.auto_save_btn.setText("On" if auto_save else "Off")
+            self._set_toggle(self.auto_save_btn, auto_save)
 
         if hasattr(self, "notif_enabled_btn"):
             enabled = data.get("notification_enabled", False)
             self.notif_enabled_btn.setChecked(enabled)
-            self.notif_enabled_btn.setText("On" if enabled else "Off")
+            self._set_toggle(self.notif_enabled_btn, enabled)
 
         if hasattr(self, "notif_warn_combo"):
             warn = data.get("notification_warn_minutes", 1)
@@ -1080,8 +1149,7 @@ class SettingsPage(QWidget):
 
         if hasattr(self, "notif_sound_combo"):
             sound_path = data.get("notification_sound", "")
-            target_name = os.path.splitext(os.path.basename(sound_path))[0] if sound_path else "-- Kein Sound --"
-            index = self.notif_sound_combo.findText(target_name)
+            index = self.notif_sound_combo.findData(sound_path)
             if index >= 0:
                 self.notif_sound_combo.setCurrentIndex(index)
 

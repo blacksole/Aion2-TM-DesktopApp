@@ -1,7 +1,7 @@
 {
     "profile_name": "TasseTW",
     "theme": "emerald",
-    "language": "de",
+    "language": "en",
     "settings": {
         "daily_reset_time": "09:00",
         "weekly_reset_day": "Mo",
@@ -9,10 +9,10 @@
         "show_events": true,
         "shugo_enabled": true,
         "shugo_start_minute": 15,
-        "shugo_interval_text": "30 min",
+        "shugo_interval_text": "30min",
         "riss_enabled": true,
         "riss_anchor_hour": 0,
-        "riss_interval_text": "1 Stunde",
+        "riss_interval_text": "1h",
         "auto_save": true,
         "notification_enabled": false,
         "notification_warn_minutes": 5,
@@ -324,7 +324,23 @@
                 }
             },
             "root_node_id": "178fa25a-58e6-4323-89d6-57225b08e405"
+        },
+        "Map 2": {
+            "nodes": {
+                "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c": {
+                    "id": "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c",
+                    "title": "New Node",
+                    "description": "",
+                    "icon": "character",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3780.0,
+                    "y": 4000.0,
+                    "children": []
+                }
+            },
+            "root_node_id": "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c"
         }
     },
-    "active_flow_map": "Map 1"
+    "active_flow_map": "Map 2"
 }
