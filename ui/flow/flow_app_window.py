@@ -9,8 +9,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFrame,
     QButtonGroup,
+    QComboBox,
 )
-from PySide6.QtCore import  Qt, QSize, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer, Signal
 from PySide6.QtGui import QPixmap, QIcon, QCursor
 
 from core.flow_model import FlowNode
@@ -31,6 +32,11 @@ from ui.flow.flow_renderer import FlowRenderer
 from ui.flow.flow_controller import FlowController
 
 class FlowMapWindow(QMainWindow):
+    map_switch_requested = Signal(str)
+    map_add_requested = Signal()
+    map_delete_requested = Signal()
+    map_reset_requested = Signal()
+
     def __init__(self, parent=None, language="en", tr_func=None):
         super().__init__(parent)
 
@@ -72,8 +78,24 @@ class FlowMapWindow(QMainWindow):
 
         self.renderer = FlowRenderer(self)
         self.controller = FlowController(self)
-        self.plan_title = QLabel("Aion Classic Progress")
-        self.plan_title.setObjectName("FlowPlanTitle")
+
+        self.map_name_combo = QComboBox()
+        self.map_name_combo.setObjectName("FlowMapCombo")
+        self.map_name_combo.setMinimumWidth(160)
+        self.map_name_combo.addItem("Map 1")
+        self.map_name_combo.currentTextChanged.connect(self._on_map_combo_changed)
+
+        self.new_map_btn = QPushButton("+")
+        self.new_map_btn.setObjectName("FlowNewMapBtn")
+        self.new_map_btn.setFixedSize(34, 34)
+        self.new_map_btn.setToolTip("Neue Map erstellen")
+        self.new_map_btn.clicked.connect(self.map_add_requested.emit)
+
+        self.delete_map_btn = QPushButton("🗑")
+        self.delete_map_btn.setObjectName("FlowDeleteMapBtn")
+        self.delete_map_btn.setFixedSize(34, 34)
+        self.delete_map_btn.setToolTip("Aktuelle Map löschen")
+        self.delete_map_btn.clicked.connect(lambda: self.map_delete_requested.emit())
 
         self.edit_mode_btn = QPushButton()
         self.edit_mode_btn.setObjectName("FlowModeButton")
@@ -110,7 +132,12 @@ class FlowMapWindow(QMainWindow):
         self.edit_mode_btn.clicked.connect(lambda: self.set_mode("edit"))
         self.guide_mode_btn.clicked.connect(lambda: self.set_mode("guide"))
 
-        top_layout.addWidget(self.plan_title)
+        map_selector_row = QHBoxLayout()
+        map_selector_row.setSpacing(6)
+        map_selector_row.addWidget(self.map_name_combo)
+        map_selector_row.addWidget(self.new_map_btn)
+        map_selector_row.addWidget(self.delete_map_btn)
+        top_layout.addLayout(map_selector_row)
 
         top_layout.addStretch()
         top_layout.addWidget(self.mode_tabs)
@@ -211,6 +238,19 @@ class FlowMapWindow(QMainWindow):
             tool_layout.addWidget(button)
 
         tool_layout.addStretch()
+
+        sep_bottom = QFrame()
+        sep_bottom.setObjectName("FlowToolSeparator")
+        sep_bottom.setFrameShape(QFrame.HLine)
+        sep_bottom.setFixedHeight(1)
+        tool_layout.addWidget(sep_bottom)
+
+        self.reset_map_btn = QPushButton("↺")
+        self.reset_map_btn.setObjectName("FlowResetMapBtn")
+        self.reset_map_btn.setFixedSize(44, 44)
+        self.reset_map_btn.setToolTip("Map zurücksetzen")
+        self.reset_map_btn.clicked.connect(self.map_reset_requested.emit)
+        tool_layout.addWidget(self.reset_map_btn)
 
         self.map_viewport = FlowMapViewport(self)
         self.map_viewport.setMouseTracking(True)
@@ -796,3 +836,16 @@ class FlowMapWindow(QMainWindow):
 
     def schedule_center_flow(self):
         QTimer.singleShot(0, self.center_flow_in_viewport)
+
+    def set_map_list(self, names: list, active_name: str):
+        self.map_name_combo.blockSignals(True)
+        self.map_name_combo.clear()
+        for name in names:
+            self.map_name_combo.addItem(name)
+        idx = self.map_name_combo.findText(active_name)
+        self.map_name_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.map_name_combo.blockSignals(False)
+
+    def _on_map_combo_changed(self, text: str):
+        if text:
+            self.map_switch_requested.emit(text)

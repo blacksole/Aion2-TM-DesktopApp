@@ -142,6 +142,12 @@ QLineEdit:focus {
     border-radius: 8px;
 }
 
+/* abyss (default) */
+#taskCard[selected="true"] {
+    border: 2px solid rgba(96, 165, 250, 0.9);
+    background-color: rgba(37, 99, 235, 0.1);
+}
+
 #priorityMedium {
     color: #fbbf24;
     background-color: rgba(245, 158, 11, 0.12);
@@ -399,12 +405,22 @@ QWidget[theme="inferno"] #taskCard {
     border: 1px solid rgba(249, 115, 22, 0.45);
 }
 
+QWidget[theme="inferno"] #taskCard[selected="true"] {
+    border: 2px solid rgba(249, 115, 22, 0.95);
+    background-color: rgba(249, 115, 22, 0.12);
+}
+
 QWidget[theme="emerald"] #statCard,
 QWidget[theme="emerald"] #timerCard,
 QWidget[theme="emerald"] #addPanel,
 QWidget[theme="emerald"] #taskCard {
     background-color: rgba(11, 31, 23, 0.72);
     border: 1px solid rgba(16, 185, 129, 0.45);
+}
+
+QWidget[theme="emerald"] #taskCard[selected="true"] {
+    border: 2px solid rgba(16, 185, 129, 0.95);
+    background-color: rgba(16, 185, 129, 0.1);
 }
 
 QWidget[theme="frostbite"] #statCard,
@@ -415,6 +431,11 @@ QWidget[theme="frostbite"] #taskCard {
     border: 1px solid rgba(96, 165, 250, 0.45);
 }
 
+QWidget[theme="frostbite"] #taskCard[selected="true"] {
+    border: 2px solid rgba(147, 197, 253, 0.95);
+    background-color: rgba(147, 197, 253, 0.1);
+}
+
 QWidget[theme="obsidian"] #statCard,
 QWidget[theme="obsidian"] #timerCard,
 QWidget[theme="obsidian"] #addPanel,
@@ -423,12 +444,22 @@ QWidget[theme="obsidian"] #taskCard {
     border: 1px solid rgba(251, 191, 36, 0.45);
 }
 
+QWidget[theme="obsidian"] #taskCard[selected="true"] {
+    border: 2px solid rgba(251, 191, 36, 0.95);
+    background-color: rgba(251, 191, 36, 0.1);
+}
+
 QWidget[theme="void"] #statCard,
 QWidget[theme="void"] #timerCard,
 QWidget[theme="void"] #addPanel,
 QWidget[theme="void"] #taskCard {
     background-color: rgba(35, 18, 54, 0.74);
     border: 1px solid rgba(192, 132, 252, 0.45);
+}
+
+QWidget[theme="void"] #taskCard[selected="true"] {
+    border: 2px solid rgba(192, 132, 252, 0.95);
+    background-color: rgba(192, 132, 252, 0.1);
 }
 
 #settingsThemeContainer {
@@ -1212,6 +1243,74 @@ QToolTip {
     background-color: rgba(148, 163, 184, 0.2);
     border: none;
     max-height: 1px;
+}
+
+#FlowResetMapBtn {
+    background-color: rgba(2, 6, 23, 0.42);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 10px;
+    min-width: 44px; max-width: 44px;
+    min-height: 44px; max-height: 44px;
+    color: #94a3b8;
+    font-size: 20px;
+    padding: 0px;
+}
+
+#FlowResetMapBtn:hover {
+    background-color: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: #f87171;
+}
+
+#FlowMapCombo {
+    background-color: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 10px;
+    min-height: 32px;
+}
+
+#FlowMapCombo::drop-down {
+    border: none;
+    width: 20px;
+}
+
+#FlowNewMapBtn {
+    background-color: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 18px;
+    font-weight: 700;
+    min-width: 34px; max-width: 34px;
+    min-height: 34px; max-height: 34px;
+    padding: 0px;
+}
+
+#FlowNewMapBtn:hover {
+    background-color: rgba(37, 99, 235, 0.18);
+    border: 1px solid rgba(96, 165, 250, 0.6);
+    color: #60a5fa;
+}
+
+#FlowDeleteMapBtn {
+    background-color: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 15px;
+    min-width: 34px; max-width: 34px;
+    min-height: 34px; max-height: 34px;
+    padding: 0px;
+}
+
+#FlowDeleteMapBtn:hover {
+    background-color: rgba(220, 38, 38, 0.18);
+    border: 1px solid rgba(248, 113, 113, 0.6);
+    color: #f87171;
 }
 
 #FlowMouseDebugLabel {

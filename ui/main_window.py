@@ -107,9 +107,9 @@ class TaskCard(QFrame):
         title_row.addStretch()
 
         text_box.addLayout(title_row)
-
-        if description:
-            text_box.addWidget(self.desc_label)
+        text_box.addWidget(self.desc_label)
+        if not description:
+            self.desc_label.hide()
 
         self.priority_value = priority
         self.priority = QLabel(priority.upper())
@@ -227,7 +227,14 @@ class MainWindow(QMainWindow):
             key: [] for key in self.tabs
         }
 
+        self.flow_maps: dict = {}
+        self.active_flow_map_name: str = "Map 1"
+
         self.flow_map_window = FlowMapWindow(self, language=self.language, tr_func=tr)
+        self.flow_map_window.map_switch_requested.connect(self._switch_flow_map)
+        self.flow_map_window.map_add_requested.connect(self._add_flow_map)
+        self.flow_map_window.map_delete_requested.connect(self._delete_flow_map)
+        self.flow_map_window.map_reset_requested.connect(self._reset_flow_map)
 
         self.setup_ui()
         self.overlay = OverlayWindow(self)
@@ -243,16 +250,131 @@ class MainWindow(QMainWindow):
         self.countdown_timer.timeout.connect(self.update_countdowns)
         self.countdown_timer.start(1000)
 
+        self._editing_card = None
         self._setup_tray_icon()
         self.update_countdowns()
 
     def _wire_card(self, card):
         card.check_btn.clicked.connect(self._on_task_toggled)
+        card.delete_btn.clicked.disconnect()
+        card.delete_btn.clicked.connect(lambda checked=False, c=card: self._delete_card(c))
+        card.setCursor(Qt.PointingHandCursor)
+
+        def on_press(event, c=card):
+            if event.button() == Qt.LeftButton:
+                child = c.childAt(event.pos())
+                if not isinstance(child, QPushButton):
+                    if self._editing_card is c:
+                        self._cancel_edit()
+                    else:
+                        self._start_editing(c)
+            type(c).mousePressEvent(c, event)
+
+        card.mousePressEvent = on_press
 
     def _on_task_toggled(self):
         self.refresh()
         if self.auto_save:
             self.save_profile(silent=True)
+
+    def _delete_card(self, card):
+        if self._editing_card is card:
+            self._cancel_edit()
+        for cards in self.task_lists.values():
+            if card in cards:
+                cards.remove(card)
+                break
+        card.deleteLater()
+        self.refresh()
+        if self.auto_save:
+            self.save_profile(silent=True)
+
+    def _set_card_selected(self, card, selected: bool):
+        card.setProperty("selected", selected)
+        card.style().unpolish(card)
+        card.style().polish(card)
+
+    def _start_editing(self, card):
+        if self._editing_card is not None:
+            self._set_card_selected(self._editing_card, False)
+        self._editing_card = card
+        self._set_card_selected(card, True)
+        p = self.tasks_page
+        priority_val = card.priority if isinstance(card, ShoppingCard) else card.priority_value
+        idx = p.priority_input.findData(priority_val)
+        p.priority_input.setCurrentIndex(idx if idx >= 0 else 0)
+        p.title_input.setText(card.title if isinstance(card, ShoppingCard) else card.title_label.text())
+        if isinstance(card, ShoppingCard):
+            p.amount_input.setText(str(card.amount))
+            p.location_input.setText(card.location)
+            p.price_input.setText(str(card.price))
+        else:
+            p.desc_input.setText(card.desc_label.text())
+        p.add_btn.setText("Aktualisieren")
+        try:
+            p.add_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        p.add_btn.clicked.connect(self._apply_card_edit)
+        try:
+            p.desc_input.returnPressed.disconnect(p.emit_add_task)
+        except (RuntimeError, TypeError):
+            pass
+        p.title_input.setFocus()
+
+    def _apply_card_edit(self):
+        card = self._editing_card
+        if card is None:
+            return
+        p = self.tasks_page
+        priority = p.priority_input.currentData()
+        title = p.title_input.text().strip()
+        if not title:
+            return
+        if isinstance(card, ShoppingCard):
+            card.priority = priority
+            card.priority_label.setText(priority.upper())
+            card.title = title
+            card.title_label.setText(title)
+            card.amount = p.amount_input.text().strip() or "1"
+            card.amount_label.setText(f"{card.amount}x")
+            card.location = p.location_input.text().strip()
+            card.price = p.price_input.text().strip() or "0"
+            card.price_display = card.format_kinah_price(card.price)
+            card.info_label.setText(f"{card.location} • {card.price_display}")
+        else:
+            card.priority_value = priority
+            card.priority.setText(priority.upper())
+            card.title_label.setText(title)
+            desc = p.desc_input.text().strip()
+            card.desc_label.setText(desc)
+            card.desc_label.setVisible(bool(desc))
+        self._cancel_edit()
+        if self.auto_save:
+            self.save_profile(silent=True)
+
+    def _cancel_edit(self):
+        if self._editing_card is not None:
+            self._set_card_selected(self._editing_card, False)
+        self._editing_card = None
+        p = self.tasks_page
+        p.add_btn.setText(tr(self.language, "add"))
+        try:
+            p.add_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        p.add_btn.clicked.connect(p.emit_add_task)
+        try:
+            p.desc_input.returnPressed.disconnect()
+        except RuntimeError:
+            pass
+        p.desc_input.returnPressed.connect(p.emit_add_task)
+        p.title_input.clear()
+        p.desc_input.clear()
+        p.amount_input.clear()
+        p.location_input.clear()
+        p.price_input.clear()
+        p.priority_input.setCurrentIndex(1)
 
     def _toggle_overlay(self):
         if self.overlay.isVisible():
@@ -266,12 +388,94 @@ class MainWindow(QMainWindow):
 
     def open_flow_map_window(self):
         if self.flow_map_window is None:
-            self.flow_map_window = FlowMapWindow(self)
+            self.flow_map_window = FlowMapWindow(self, language=self.language, tr_func=tr)
+            self.flow_map_window.map_switch_requested.connect(self._switch_flow_map)
+            self.flow_map_window.map_add_requested.connect(self._add_flow_map)
+            self.flow_map_window.map_delete_requested.connect(self._delete_flow_map)
+            self.flow_map_window.map_reset_requested.connect(self._reset_flow_map)
 
+        self.flow_map_window.set_map_list(list(self.flow_maps.keys()) or ["Map 1"], self.active_flow_map_name)
         self.flow_map_window.show()
         self.flow_map_window.raise_()
         self.flow_map_window.activateWindow()
         self.flow_map_window.render_flow()
+
+    def _switch_flow_map(self, name: str):
+        if name == self.active_flow_map_name or not name:
+            return
+        if self.flow_map_window:
+            self.flow_maps[self.active_flow_map_name] = self.flow_map_window.get_flow_data()
+        self.active_flow_map_name = name
+        if self.flow_map_window:
+            self.flow_map_window.load_flow_data(self.flow_maps.get(name, {}))
+        if self.auto_save:
+            self.save_profile(silent=True)
+
+    def _add_flow_map(self):
+        i = 2
+        while f"Map {i}" in self.flow_maps:
+            i += 1
+        name = f"Map {i}"
+        if self.flow_map_window:
+            self.flow_maps[self.active_flow_map_name] = self.flow_map_window.get_flow_data()
+        from core.flow_model import FlowNode
+        root = FlowNode(title="New Node", description="", icon="character", status="active")
+        self.flow_maps[name] = {"nodes": {root.id: root.to_dict()}, "root_node_id": root.id}
+        self.active_flow_map_name = name
+        if self.flow_map_window:
+            self.flow_map_window.load_flow_data(self.flow_maps[name])
+            self.flow_map_window.set_map_list(list(self.flow_maps.keys()), name)
+        if self.auto_save:
+            self.save_profile(silent=True)
+
+    def _delete_flow_map(self):
+        if len(self.flow_maps) <= 1:
+            QMessageBox.information(
+                self.flow_map_window,
+                "Map löschen",
+                "Mindestens eine Map muss vorhanden bleiben.",
+            )
+            return
+        name = self.active_flow_map_name
+        reply = QMessageBox.question(
+            self.flow_map_window,
+            "Map löschen",
+            f'Die Map "{name}" wird gelöscht. Fortfahren?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        names = list(self.flow_maps.keys())
+        idx = names.index(name)
+        del self.flow_maps[name]
+        remaining = list(self.flow_maps.keys())
+        new_active = remaining[max(0, idx - 1)]
+        self.active_flow_map_name = new_active
+        if self.flow_map_window:
+            self.flow_map_window.load_flow_data(self.flow_maps[new_active])
+            self.flow_map_window.set_map_list(remaining, new_active)
+        if self.auto_save:
+            self.save_profile(silent=True)
+
+    def _reset_flow_map(self):
+        reply = QMessageBox.question(
+            self.flow_map_window,
+            "Map zurücksetzen",
+            f'Die Map "{self.active_flow_map_name}" wird geleert. Fortfahren?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        from core.flow_model import FlowNode
+        root = FlowNode(title="New Node", description="", icon="character", status="active")
+        empty = {"nodes": {root.id: root.to_dict()}, "root_node_id": root.id}
+        self.flow_maps[self.active_flow_map_name] = empty
+        if self.flow_map_window:
+            self.flow_map_window.load_flow_data(empty)
+        if self.auto_save:
+            self.save_profile(silent=True)
 
 
     def setup_ui(self):
@@ -1038,8 +1242,20 @@ class MainWindow(QMainWindow):
                 self.task_lists[tab].append(card)
 
         self.refresh()
+        raw_maps = data.get("flow_maps")
+        old_map = data.get("flow_map", {})
+        if raw_maps:
+            self.flow_maps = raw_maps
+            self.active_flow_map_name = data.get("active_flow_map", next(iter(raw_maps)))
+        elif old_map:
+            self.flow_maps = {"Map 1": old_map}
+            self.active_flow_map_name = "Map 1"
+        else:
+            self.flow_maps = {}
+            self.active_flow_map_name = "Map 1"
         if self.flow_map_window:
-            self.flow_map_window.load_flow_data(data.get("flow_map", {}))
+            self.flow_map_window.load_flow_data(self.flow_maps.get(self.active_flow_map_name, {}))
+            self.flow_map_window.set_map_list(list(self.flow_maps.keys()) or ["Map 1"], self.active_flow_map_name)
         if hasattr(self.header, "set_profile"):
             self.header.set_profile(self.profile_name)
         self.save_last_profile(profile_path)
@@ -1067,6 +1283,11 @@ class MainWindow(QMainWindow):
             "completed": card.completed,
         }
     
+    def _get_all_flow_maps(self) -> dict:
+        if self.flow_map_window:
+            self.flow_maps[self.active_flow_map_name] = self.flow_map_window.get_flow_data()
+        return self.flow_maps
+
     def save_profile(self, silent=False):
         data = {
             "profile_name": self.profile_name,
@@ -1103,7 +1324,8 @@ class MainWindow(QMainWindow):
                 for tab, cards in self.task_lists.items()
             },
 
-            "flow_map": self.flow_map_window.get_flow_data() if self.flow_map_window else {},
+            "flow_maps": self._get_all_flow_maps(),
+            "active_flow_map": self.active_flow_map_name,
         }
 
         profile_path = self.profile_dir / f"{self.profile_name}.json"
