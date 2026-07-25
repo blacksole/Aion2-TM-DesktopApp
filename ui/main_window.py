@@ -216,6 +216,11 @@ class MainWindow(QMainWindow):
 
         self.notification_enabled = False
         self.notification_warn_minutes = 1
+        self.notification_sync = True
+        self.notification_shugo_enabled = False
+        self.notification_shugo_warn_minutes = 1
+        self.notification_riss_enabled = False
+        self.notification_riss_warn_minutes = 1
         self.notification_sound = ""
         self._shugo_notified = False
         self._riss_notified = False
@@ -868,14 +873,19 @@ class MainWindow(QMainWindow):
             seconds = (next_shugo - now).total_seconds()
             shugo_text = self.format_countdown(seconds)
             self.timers_page.set_shugo_countdown(shugo_text)
-            if self.notification_enabled:
-                warn_secs = self.notification_warn_minutes * 60
-                if not self._shugo_notified and 0 < seconds <= warn_secs:
+            if self.notification_sync:
+                shugo_notif_on = self.notification_enabled
+                shugo_warn_min = self.notification_warn_minutes
+            else:
+                shugo_notif_on = self.notification_shugo_enabled
+                shugo_warn_min = self.notification_shugo_warn_minutes
+            if shugo_notif_on:
+                warn_secs = shugo_warn_min * 60
+                if not self._shugo_notified and 0 <= seconds <= warn_secs:
                     self._shugo_notified = True
-                    self._fire_notification(
-                        "Shugo",
-                        f"Shugo spawnt in {self.notification_warn_minutes} Min!"
-                    )
+                    mins = shugo_warn_min
+                    msg = f"Shugo spawnt jetzt!" if mins == 0 else f"Shugo spawnt in {mins} Min!"
+                    self._fire_notification("Shugo", msg)
                 elif seconds > warn_secs:
                     self._shugo_notified = False
 
@@ -884,14 +894,19 @@ class MainWindow(QMainWindow):
             seconds = (next_riss - now).total_seconds()
             riss_text = self.format_countdown(seconds)
             self.timers_page.set_riss_countdown(riss_text)
-            if self.notification_enabled:
-                warn_secs = self.notification_warn_minutes * 60
-                if not self._riss_notified and 0 < seconds <= warn_secs:
+            if self.notification_sync:
+                riss_notif_on = self.notification_enabled
+                riss_warn_min = self.notification_warn_minutes
+            else:
+                riss_notif_on = self.notification_riss_enabled
+                riss_warn_min = self.notification_riss_warn_minutes
+            if riss_notif_on:
+                warn_secs = riss_warn_min * 60
+                if not self._riss_notified and 0 <= seconds <= warn_secs:
                     self._riss_notified = True
-                    self._fire_notification(
-                        "Riss",
-                        f"Riss öffnet sich in {self.notification_warn_minutes} Min!"
-                    )
+                    mins = riss_warn_min
+                    msg = f"Riss öffnet sich jetzt!" if mins == 0 else f"Riss öffnet sich in {mins} Min!"
+                    self._fire_notification("Riss", msg)
                 elif seconds > warn_secs:
                     self._riss_notified = False
 
@@ -1155,6 +1170,11 @@ class MainWindow(QMainWindow):
         self.auto_save = settings.get("auto_save", True)
         self.notification_enabled = settings.get("notification_enabled", False)
         self.notification_warn_minutes = settings.get("notification_warn_minutes", 1)
+        self.notification_sync = settings.get("notification_sync", True)
+        self.notification_shugo_enabled = settings.get("notification_shugo_enabled", False)
+        self.notification_shugo_warn_minutes = settings.get("notification_shugo_warn_minutes", 1)
+        self.notification_riss_enabled = settings.get("notification_riss_enabled", False)
+        self.notification_riss_warn_minutes = settings.get("notification_riss_warn_minutes", 1)
         self.notification_sound = settings.get("notification_sound", "")
         self.shugo_enabled = settings.get("shugo_enabled", False)
         self.shugo_start_minute = settings.get("shugo_start_minute", 15)
@@ -1314,6 +1334,11 @@ class MainWindow(QMainWindow):
 
                 "notification_enabled": self.notification_enabled,
                 "notification_warn_minutes": self.notification_warn_minutes,
+                "notification_sync": self.notification_sync,
+                "notification_shugo_enabled": self.notification_shugo_enabled,
+                "notification_shugo_warn_minutes": self.notification_shugo_warn_minutes,
+                "notification_riss_enabled": self.notification_riss_enabled,
+                "notification_riss_warn_minutes": self.notification_riss_warn_minutes,
                 "notification_sound": self.notification_sound,
             },
 
@@ -1783,6 +1808,11 @@ class MainWindow(QMainWindow):
 
         self.notification_enabled = data.get("notification_enabled", self.notification_enabled)
         self.notification_warn_minutes = data.get("notification_warn_minutes", self.notification_warn_minutes)
+        self.notification_sync = data.get("notification_sync", self.notification_sync)
+        self.notification_shugo_enabled = data.get("notification_shugo_enabled", self.notification_shugo_enabled)
+        self.notification_shugo_warn_minutes = data.get("notification_shugo_warn_minutes", self.notification_shugo_warn_minutes)
+        self.notification_riss_enabled = data.get("notification_riss_enabled", self.notification_riss_enabled)
+        self.notification_riss_warn_minutes = data.get("notification_riss_warn_minutes", self.notification_riss_warn_minutes)
         self.notification_sound = data.get("notification_sound", self.notification_sound)
 
     def change_theme_from_page(self, theme: str):
@@ -1815,6 +1845,11 @@ class MainWindow(QMainWindow):
 
             "notification_enabled": self.notification_enabled,
             "notification_warn_minutes": self.notification_warn_minutes,
+            "notification_sync": self.notification_sync,
+            "notification_shugo_enabled": self.notification_shugo_enabled,
+            "notification_shugo_warn_minutes": self.notification_shugo_warn_minutes,
+            "notification_riss_enabled": self.notification_riss_enabled,
+            "notification_riss_warn_minutes": self.notification_riss_warn_minutes,
             "notification_sound": self.notification_sound,
 
             "profile_dir": str(self.profile_dir),

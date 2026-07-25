@@ -323,26 +323,65 @@ class SettingsPage(QWidget):
                 language, "Notification before Shugo & Rift spawn"
             )
         )
-        self.notif_warn_label.setText(
-            {"de": "Vorwarnung", "ru": "Предупреждение"}.get(language, "Warn before")
-        )
+        self.notif_warn_label.setText(tr_func(language, "notif_warn_label"))
         self.notif_sound_title.setText(
             {"de": "Benachrichtigungston", "ru": "Звук уведомления"}.get(language, "Notification Sound")
         )
         self.notif_title.setText(tr_func(language, "win_notif_title"))
         self.notif_test_btn.setText(tr_func(language, "test_sound"))
 
-        # ===== WARN COMBO =====
+        if hasattr(self, "notif_shugo_warn_label"):
+            self.notif_shugo_warn_label.setText(tr_func(language, "notif_shugo_warn"))
+        if hasattr(self, "notif_riss_warn_label"):
+            self.notif_riss_warn_label.setText(tr_func(language, "notif_riss_warn"))
+
+        if hasattr(self, "notif_sync_btn"):
+            synced = self.notif_sync_btn.isChecked()
+            key = "notif_sync" if synced else "notif_nosync"
+            self.notif_sync_btn.setText(tr_func(language, key))
+
+        self._update_toggle_text(
+            self.notif_shugo_enabled_btn,
+            self.notif_shugo_enabled_btn.isChecked(),
+            language, tr_func
+        )
+        self._update_toggle_text(
+            self.notif_riss_enabled_btn,
+            self.notif_riss_enabled_btn.isChecked(),
+            language, tr_func
+        )
+
+        # ===== WARN COMBOS =====
+        m = tr_func(language, "min_abbr")
         if hasattr(self, "notif_warn_combo"):
             cur_warn = self.notif_warn_combo.currentData()
-            m = tr_func(language, "min_abbr")
             self.notif_warn_combo.blockSignals(True)
             self.notif_warn_combo.clear()
-            for v in [1, 5, 10]:
+            for v in [0, 1, 5, 10]:
                 self.notif_warn_combo.addItem(f"{v} {m}", v)
             idx = self.notif_warn_combo.findData(cur_warn)
             self.notif_warn_combo.setCurrentIndex(max(0, idx))
             self.notif_warn_combo.blockSignals(False)
+
+        if hasattr(self, "notif_shugo_warn_combo"):
+            cur = self.notif_shugo_warn_combo.currentData()
+            self.notif_shugo_warn_combo.blockSignals(True)
+            self.notif_shugo_warn_combo.clear()
+            for v in [0, 1, 3, 5]:
+                self.notif_shugo_warn_combo.addItem(f"{v} {m}", v)
+            idx = self.notif_shugo_warn_combo.findData(cur)
+            self.notif_shugo_warn_combo.setCurrentIndex(max(0, idx))
+            self.notif_shugo_warn_combo.blockSignals(False)
+
+        if hasattr(self, "notif_riss_warn_combo"):
+            cur = self.notif_riss_warn_combo.currentData()
+            self.notif_riss_warn_combo.blockSignals(True)
+            self.notif_riss_warn_combo.clear()
+            for v in [0, 1, 5, 10]:
+                self.notif_riss_warn_combo.addItem(f"{v} {m}", v)
+            idx = self.notif_riss_warn_combo.findData(cur)
+            self.notif_riss_warn_combo.setCurrentIndex(max(0, idx))
+            self.notif_riss_warn_combo.blockSignals(False)
 
         # ===== INTERVAL COMBOS =====
         _shugo_keys = ["30min", "1h", "2h", "3h"]
@@ -671,6 +710,11 @@ class SettingsPage(QWidget):
 
             "notification_enabled": self.notif_enabled_btn.isChecked(),
             "notification_warn_minutes": self.notif_warn_combo.currentData(),
+            "notification_sync": self.notif_sync_btn.isChecked(),
+            "notification_shugo_enabled": self.notif_shugo_enabled_btn.isChecked(),
+            "notification_shugo_warn_minutes": self.notif_shugo_warn_combo.currentData(),
+            "notification_riss_enabled": self.notif_riss_enabled_btn.isChecked(),
+            "notification_riss_warn_minutes": self.notif_riss_warn_combo.currentData(),
             "notification_sound": self.notif_sound_combo.currentData() or "",
         }
 
@@ -790,9 +834,13 @@ class SettingsPage(QWidget):
         notif_row = QFrame()
         notif_row.setObjectName("settingsRow")
 
-        notif_layout = QHBoxLayout(notif_row)
-        notif_layout.setContentsMargins(14, 12, 14, 12)
-        notif_layout.setSpacing(12)
+        notif_outer = QVBoxLayout(notif_row)
+        notif_outer.setContentsMargins(14, 12, 14, 12)
+        notif_outer.setSpacing(8)
+
+        # Header row: title/desc + sync toggle
+        notif_header = QHBoxLayout()
+        notif_header.setSpacing(12)
 
         notif_text = QVBoxLayout()
         notif_text.setSpacing(2)
@@ -806,25 +854,100 @@ class SettingsPage(QWidget):
         notif_text.addWidget(self.notif_title)
         notif_text.addWidget(self.notif_desc)
 
+        self.notif_sync_btn = QPushButton("Synchron")
+        self.notif_sync_btn.setCheckable(True)
+        self.notif_sync_btn.setChecked(True)
+        self.notif_sync_btn.setObjectName("toggleButton")
+        self.notif_sync_btn.setFixedWidth(140)
+
+        notif_header.addLayout(notif_text, 1)
+        notif_header.addWidget(self.notif_sync_btn)
+        notif_outer.addLayout(notif_header)
+
+        # ── Synchronized sub-row ──────────────────────────────────────────
+        self._notif_sync_row = QWidget()
+        sync_row_layout = QHBoxLayout(self._notif_sync_row)
+        sync_row_layout.setContentsMargins(0, 0, 0, 0)
+        sync_row_layout.setSpacing(10)
+
+        self.notif_warn_label = QLabel()
+        self.notif_warn_label.setObjectName("settingsInlineLabel")
+
+        self.notif_warn_combo = QComboBox()
+        self.notif_warn_combo.setObjectName("settingsCombo")
+        self.notif_warn_combo.setFixedWidth(100)
+        self.notif_warn_combo.addItem("0 min", 0)
+        self.notif_warn_combo.addItem("1 min", 1)
+        self.notif_warn_combo.addItem("5 min", 5)
+        self.notif_warn_combo.addItem("10 min", 10)
+        self.notif_warn_combo.setCurrentIndex(1)
+
         self.notif_enabled_btn = QPushButton("Off")
         self.notif_enabled_btn.setCheckable(True)
         self.notif_enabled_btn.setObjectName("toggleButton")
         self.notif_enabled_btn.setFixedWidth(70)
 
-        self.notif_warn_combo = QComboBox()
-        self.notif_warn_combo.setObjectName("settingsCombo")
-        self.notif_warn_combo.setFixedWidth(100)
-        self.notif_warn_combo.addItem("1 min", 1)
-        self.notif_warn_combo.addItem("5 min", 5)
-        self.notif_warn_combo.addItem("10 min", 10)
+        sync_row_layout.addStretch()
+        sync_row_layout.addWidget(self.notif_warn_label)
+        sync_row_layout.addWidget(self.notif_warn_combo)
+        sync_row_layout.addWidget(self.notif_enabled_btn)
 
-        self.notif_warn_label = QLabel()
-        self.notif_warn_label.setObjectName("settingsInlineLabel")
+        notif_outer.addWidget(self._notif_sync_row)
 
-        notif_layout.addLayout(notif_text, 1)
-        notif_layout.addWidget(self.notif_warn_label)
-        notif_layout.addWidget(self.notif_warn_combo)
-        notif_layout.addWidget(self.notif_enabled_btn)
+        # ── Not-Synchronized sub-rows ─────────────────────────────────────
+        self._notif_nosync_widget = QWidget()
+        nosync_layout = QVBoxLayout(self._notif_nosync_widget)
+        nosync_layout.setContentsMargins(0, 0, 0, 0)
+        nosync_layout.setSpacing(4)
+
+        # Shugo sub-row
+        nosync_shugo = QHBoxLayout()
+        nosync_shugo.setSpacing(10)
+        self.notif_shugo_warn_label = QLabel()
+        self.notif_shugo_warn_label.setObjectName("settingsInlineLabel")
+        self.notif_shugo_warn_combo = QComboBox()
+        self.notif_shugo_warn_combo.setObjectName("settingsCombo")
+        self.notif_shugo_warn_combo.setFixedWidth(100)
+        self.notif_shugo_warn_combo.addItem("0 min", 0)
+        self.notif_shugo_warn_combo.addItem("1 min", 1)
+        self.notif_shugo_warn_combo.addItem("3 min", 3)
+        self.notif_shugo_warn_combo.addItem("5 min", 5)
+        self.notif_shugo_warn_combo.setCurrentIndex(1)
+        self.notif_shugo_enabled_btn = QPushButton("Off")
+        self.notif_shugo_enabled_btn.setCheckable(True)
+        self.notif_shugo_enabled_btn.setObjectName("toggleButton")
+        self.notif_shugo_enabled_btn.setFixedWidth(70)
+        nosync_shugo.addStretch()
+        nosync_shugo.addWidget(self.notif_shugo_warn_label)
+        nosync_shugo.addWidget(self.notif_shugo_warn_combo)
+        nosync_shugo.addWidget(self.notif_shugo_enabled_btn)
+        nosync_layout.addLayout(nosync_shugo)
+
+        # Riss sub-row
+        nosync_riss = QHBoxLayout()
+        nosync_riss.setSpacing(10)
+        self.notif_riss_warn_label = QLabel()
+        self.notif_riss_warn_label.setObjectName("settingsInlineLabel")
+        self.notif_riss_warn_combo = QComboBox()
+        self.notif_riss_warn_combo.setObjectName("settingsCombo")
+        self.notif_riss_warn_combo.setFixedWidth(100)
+        self.notif_riss_warn_combo.addItem("0 min", 0)
+        self.notif_riss_warn_combo.addItem("1 min", 1)
+        self.notif_riss_warn_combo.addItem("5 min", 5)
+        self.notif_riss_warn_combo.addItem("10 min", 10)
+        self.notif_riss_warn_combo.setCurrentIndex(1)
+        self.notif_riss_enabled_btn = QPushButton("Off")
+        self.notif_riss_enabled_btn.setCheckable(True)
+        self.notif_riss_enabled_btn.setObjectName("toggleButton")
+        self.notif_riss_enabled_btn.setFixedWidth(70)
+        nosync_riss.addStretch()
+        nosync_riss.addWidget(self.notif_riss_warn_label)
+        nosync_riss.addWidget(self.notif_riss_warn_combo)
+        nosync_riss.addWidget(self.notif_riss_enabled_btn)
+        nosync_layout.addLayout(nosync_riss)
+
+        self._notif_nosync_widget.setVisible(False)
+        notif_outer.addWidget(self._notif_nosync_widget)
 
         # ===== SOUND ROW =====
         sound_row = QFrame()
@@ -874,7 +997,27 @@ class SettingsPage(QWidget):
             lambda checked: self._set_toggle(self.notif_enabled_btn, checked)
         )
 
+        self.notif_shugo_enabled_btn.toggled.connect(
+            lambda checked: self._set_toggle(self.notif_shugo_enabled_btn, checked)
+        )
+
+        self.notif_riss_enabled_btn.toggled.connect(
+            lambda checked: self._set_toggle(self.notif_riss_enabled_btn, checked)
+        )
+
+        self.notif_sync_btn.toggled.connect(self._on_notif_sync_toggled)
+
         return page
+
+    def _on_notif_sync_toggled(self, checked: bool):
+        lang = self._cur_lang
+        tr = self._cur_tr
+        if checked:
+            self.notif_sync_btn.setText(tr(lang, "notif_sync") if tr else "Synchron")
+        else:
+            self.notif_sync_btn.setText(tr(lang, "notif_nosync") if tr else "Nicht-Synchron")
+        self._notif_sync_row.setVisible(checked)
+        self._notif_nosync_widget.setVisible(not checked)
 
     def _populate_sound_combo(self):
         self.notif_sound_combo.clear()
@@ -1146,6 +1289,40 @@ class SettingsPage(QWidget):
             idx = self.notif_warn_combo.findData(warn)
             if idx >= 0:
                 self.notif_warn_combo.setCurrentIndex(idx)
+
+        if hasattr(self, "notif_sync_btn"):
+            synced = data.get("notification_sync", True)
+            self.notif_sync_btn.blockSignals(True)
+            self.notif_sync_btn.setChecked(synced)
+            self.notif_sync_btn.blockSignals(False)
+            lang = self._cur_lang
+            tr = self._cur_tr
+            key = "notif_sync" if synced else "notif_nosync"
+            self.notif_sync_btn.setText(tr(lang, key) if tr else ("Synchron" if synced else "Nicht-Synchron"))
+            self._notif_sync_row.setVisible(synced)
+            self._notif_nosync_widget.setVisible(not synced)
+
+        if hasattr(self, "notif_shugo_enabled_btn"):
+            v = data.get("notification_shugo_enabled", False)
+            self.notif_shugo_enabled_btn.setChecked(v)
+            self._set_toggle(self.notif_shugo_enabled_btn, v)
+
+        if hasattr(self, "notif_shugo_warn_combo"):
+            w = data.get("notification_shugo_warn_minutes", 1)
+            idx = self.notif_shugo_warn_combo.findData(w)
+            if idx >= 0:
+                self.notif_shugo_warn_combo.setCurrentIndex(idx)
+
+        if hasattr(self, "notif_riss_enabled_btn"):
+            v = data.get("notification_riss_enabled", False)
+            self.notif_riss_enabled_btn.setChecked(v)
+            self._set_toggle(self.notif_riss_enabled_btn, v)
+
+        if hasattr(self, "notif_riss_warn_combo"):
+            w = data.get("notification_riss_warn_minutes", 1)
+            idx = self.notif_riss_warn_combo.findData(w)
+            if idx >= 0:
+                self.notif_riss_warn_combo.setCurrentIndex(idx)
 
         if hasattr(self, "notif_sound_combo"):
             sound_path = data.get("notification_sound", "")

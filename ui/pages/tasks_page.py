@@ -3,8 +3,8 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QLineEdit, QScrollArea,
     QComboBox, QCheckBox, QButtonGroup
 )
-from PySide6.QtCore import Signal, QRect, Qt
-from PySide6.QtGui import QIntValidator, QPainter, QColor, QLinearGradient, QBrush
+from PySide6.QtCore import Signal, QRect, Qt, QRegularExpression
+from PySide6.QtGui import QIntValidator, QRegularExpressionValidator, QPainter, QColor, QLinearGradient, QBrush
 
 class TaskProgressBar(QFrame):
     def __init__(self):
@@ -219,7 +219,7 @@ class TasksPage(QWidget):
 
         self.price_input = QLineEdit()
         self.price_input.setValidator(
-            QIntValidator(0, 999999999)
+            QRegularExpressionValidator(QRegularExpression(r"^\d{0,9}([.,]\d{0,3})?$"))
         )
         self.price_input.setPlaceholderText(
             f"{self.tr(self.language, 'price')} (K)"

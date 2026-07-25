@@ -255,6 +255,9 @@ class OverlayWindow(QWidget):
                     continue
                 priority = getattr(card, "priority_value", None) or getattr(card, "priority", "middle")
                 title = card.title_label.text()
+                amount = getattr(card, "amount", None)
+                if amount and str(amount) not in ("0", "1", ""):
+                    title = f"{amount}x {title}"
                 row = OverlayTaskRow(tab_key, i, title, priority)
                 row.check_btn.clicked.connect(
                     lambda _, tk=tab_key, idx=i: self._toggle_task(tk, idx)

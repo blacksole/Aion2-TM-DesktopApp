@@ -32,8 +32,12 @@ class FlowGuideCanvas(QWidget):
         self.parent_view = parent_view
         self._node_positions: dict[str, QPoint] = {}
         self._hovered_id: str | None = None
+        self._pan_offset = QPoint(0, 0)
+        self._drag_start: QPoint | None = None
+        self._dragging = False
         self.setMouseTracking(True)
         self.setMinimumHeight(220)
+        self.setCursor(Qt.OpenHandCursor)
 
     def set_node_positions(self, positions: dict[str, QPoint]):
         self._node_positions = positions
@@ -52,12 +56,12 @@ class FlowGuideCanvas(QWidget):
         for node_id, pos in self._node_positions.items():
             node = nodes.get(node_id)
             if node:
-                self._draw_node(painter, node, pos)
+                self._draw_node(painter, node, pos + self._pan_offset)
 
         for node_id, pos in self._node_positions.items():
             node = nodes.get(node_id)
             if node:
-                self._draw_label(painter, node, pos)
+                self._draw_label(painter, node, pos + self._pan_offset)
 
     def _draw_all_lines(self, painter, node_id: str, nodes: dict):
         node = nodes.get(node_id)
@@ -70,7 +74,7 @@ class FlowGuideCanvas(QWidget):
         for child_id in node.children:
             child_pos = self._node_positions.get(child_id)
             if child_pos:
-                painter.drawLine(pos, child_pos)
+                painter.drawLine(pos + self._pan_offset, child_pos + self._pan_offset)
             self._draw_all_lines(painter, child_id, nodes)
 
     def _draw_node(self, painter, node: FlowNode, pos: QPoint):
@@ -143,13 +147,32 @@ class FlowGuideCanvas(QWidget):
 
     def _node_at(self, pos: QPoint) -> str | None:
         for node_id, node_pos in self._node_positions.items():
-            dx = pos.x() - node_pos.x()
-            dy = pos.y() - node_pos.y()
+            adjusted = node_pos + self._pan_offset
+            dx = pos.x() - adjusted.x()
+            dy = pos.y() - adjusted.y()
             if dx * dx + dy * dy <= (NODE_RADIUS + 8) ** 2:
                 return node_id
         return None
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start = event.pos()
+            self._dragging = False
+            self.setCursor(Qt.ClosedHandCursor)
+        super().mousePressEvent(event)
+
     def mouseMoveEvent(self, event):
+        if self._drag_start is not None and (event.buttons() & Qt.LeftButton):
+            delta = event.pos() - self._drag_start
+            if not self._dragging and (abs(delta.x()) > 4 or abs(delta.y()) > 4):
+                self._dragging = True
+            if self._dragging:
+                self._pan_offset += delta
+                self._drag_start = event.pos()
+                self._hovered_id = None
+                self.update()
+                return
+
         hit = self._node_at(event.pos())
         if hit != self._hovered_id:
             self._hovered_id = hit
@@ -161,17 +184,32 @@ class FlowGuideCanvas(QWidget):
                 self.setCursor(Qt.PointingHandCursor)
             else:
                 self.parent_view.revert_to_selected_info()
-                self.setCursor(Qt.ArrowCursor)
+                self.setCursor(Qt.OpenHandCursor)
         super().mouseMoveEvent(event)
 
-    def mousePressEvent(self, event):
+    def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
+            if not self._dragging:
+                hit = self._node_at(event.pos())
+                if hit:
+                    self.parent_view.select_node(hit)
+                else:
+                    self.parent_view.deselect_node()
+            self._drag_start = None
+            self._dragging = False
             hit = self._node_at(event.pos())
-            if hit:
-                self.parent_view.select_node(hit)
-            else:
-                self.parent_view.deselect_node()
-        super().mousePressEvent(event)
+            self.setCursor(Qt.PointingHandCursor if hit else Qt.OpenHandCursor)
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        scroll_speed = 40
+        if event.modifiers() & Qt.ShiftModifier:
+            self._pan_offset += QPoint(scroll_speed if delta > 0 else -scroll_speed, 0)
+        else:
+            self._pan_offset += QPoint(0, scroll_speed if delta > 0 else -scroll_speed)
+        self.update()
+        event.accept()
 
     def leaveEvent(self, event):
         self._hovered_id = None

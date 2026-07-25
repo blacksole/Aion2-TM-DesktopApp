@@ -14,8 +14,13 @@
         "riss_anchor_hour": 0,
         "riss_interval_text": "1h",
         "auto_save": true,
-        "notification_enabled": false,
-        "notification_warn_minutes": 5,
+        "notification_enabled": true,
+        "notification_warn_minutes": 0,
+        "notification_sync": true,
+        "notification_shugo_enabled": false,
+        "notification_shugo_warn_minutes": 0,
+        "notification_riss_enabled": false,
+        "notification_riss_warn_minutes": 0,
         "notification_sound": "C:\\Windows\\Media\\Alarm05.wav"
     },
     "tasks": {

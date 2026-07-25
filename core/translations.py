@@ -151,6 +151,11 @@ TRANSLATIONS = {
         "test_sound":      "▶ Test",
         "win_notif_title": "Windows Benachrichtigungen",
         "min_abbr":        "Min",
+        "notif_sync":      "Synchron",
+        "notif_nosync":    "Nicht-Synchron",
+        "notif_shugo_warn": "Shugo Vorwarnung",
+        "notif_riss_warn":  "Riss Vorwarnung",
+        "notif_warn_label": "Vorwarnung",
 
         # ================= PLAN / FLOW MAP =================
         "plan": "Plan",
@@ -420,6 +425,11 @@ TRANSLATIONS = {
         "test_sound":      "▶ Тест",
         "win_notif_title": "Уведомления Windows",
         "min_abbr":        "мин",
+        "notif_sync":      "Синхронно",
+        "notif_nosync":    "Не синхронно",
+        "notif_shugo_warn": "Предупр. Shugo",
+        "notif_riss_warn":  "Предупр. Riss",
+        "notif_warn_label": "Предупреждение",
 
         # ================= PLAN / FLOW MAP =================
         "plan": "План",
@@ -682,6 +692,11 @@ TRANSLATIONS = {
         "test_sound":      "▶ Test",
         "win_notif_title": "Windows Notifications",
         "min_abbr":        "min",
+        "notif_sync":      "Synchronized",
+        "notif_nosync":    "Separate",
+        "notif_shugo_warn": "Shugo Warn",
+        "notif_riss_warn":  "Riss Warn",
+        "notif_warn_label": "Warn before",
 
         # ================= TOAST PLANS =================
         "toast_plan_opened": "Plan opened",
