@@ -222,6 +222,8 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = False
         self.notification_riss_warn_minutes = 1
         self.notification_sound = ""
+        self.dps_meter_path = ""
+        self.dps_meter_autostart = False
         self._shugo_notified = False
         self._riss_notified = False
 
@@ -654,6 +656,9 @@ class MainWindow(QMainWindow):
         if hasattr(self.settings_page, "profile_dir_changed"):
             self.settings_page.profile_dir_changed.connect(self.change_profile_dir)
 
+        if hasattr(self.settings_page, "dps_start_requested"):
+            self.settings_page.dps_start_requested.connect(self._start_dps_meter)
+
         QTimer.singleShot(2000, self.run_update_check)
 
     def open_main_menu(self):
@@ -1053,6 +1058,23 @@ class MainWindow(QMainWindow):
         self.tray_icon = QSystemTrayIcon(icon, self)
         self.tray_icon.show()
 
+    def _launch_dps_meter_if_configured(self):
+        if self.dps_meter_autostart and self.dps_meter_path:
+            self._start_dps_meter(self.dps_meter_path)
+
+    def _start_dps_meter(self, path: str):
+        import os
+        if not path:
+            return
+        if not os.path.isfile(path):
+            print(f"[DPS Meter] Datei nicht gefunden: {path}")
+            return
+        try:
+            os.startfile(path)
+            print(f"[DPS Meter] Gestartet: {path}")
+        except Exception as e:
+            print(f"[DPS Meter] Fehler beim Starten: {e}")
+
     def _fire_notification(self, title: str, message: str):
         if hasattr(self, "tray_icon"):
             self.tray_icon.showMessage(
@@ -1176,6 +1198,9 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = settings.get("notification_riss_enabled", False)
         self.notification_riss_warn_minutes = settings.get("notification_riss_warn_minutes", 1)
         self.notification_sound = settings.get("notification_sound", "")
+        self.dps_meter_path = settings.get("dps_meter_path", "")
+        self.dps_meter_autostart = settings.get("dps_meter_autostart", False)
+        self._launch_dps_meter_if_configured()
         self.shugo_enabled = settings.get("shugo_enabled", False)
         self.shugo_start_minute = settings.get("shugo_start_minute", 15)
         self.shugo_interval_text = settings.get("shugo_interval_text", "30 min")
@@ -1340,6 +1365,8 @@ class MainWindow(QMainWindow):
                 "notification_riss_enabled": self.notification_riss_enabled,
                 "notification_riss_warn_minutes": self.notification_riss_warn_minutes,
                 "notification_sound": self.notification_sound,
+                "dps_meter_path": self.dps_meter_path,
+                "dps_meter_autostart": self.dps_meter_autostart,
             },
 
             "tasks": {
@@ -1814,6 +1841,11 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = data.get("notification_riss_enabled", self.notification_riss_enabled)
         self.notification_riss_warn_minutes = data.get("notification_riss_warn_minutes", self.notification_riss_warn_minutes)
         self.notification_sound = data.get("notification_sound", self.notification_sound)
+        old_path = self.dps_meter_path
+        self.dps_meter_path = data.get("dps_meter_path", self.dps_meter_path)
+        self.dps_meter_autostart = data.get("dps_meter_autostart", self.dps_meter_autostart)
+        if self.dps_meter_autostart and self.dps_meter_path and self.dps_meter_path != old_path:
+            self._start_dps_meter(self.dps_meter_path)
 
     def change_theme_from_page(self, theme: str):
         self.apply_theme(theme)
@@ -1851,6 +1883,8 @@ class MainWindow(QMainWindow):
             "notification_riss_enabled": self.notification_riss_enabled,
             "notification_riss_warn_minutes": self.notification_riss_warn_minutes,
             "notification_sound": self.notification_sound,
+            "dps_meter_path": self.dps_meter_path,
+            "dps_meter_autostart": self.dps_meter_autostart,
 
             "profile_dir": str(self.profile_dir),
         })

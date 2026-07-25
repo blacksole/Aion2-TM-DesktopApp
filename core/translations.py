@@ -109,6 +109,12 @@ TRANSLATIONS = {
         "auto_save": "Automatisch speichern",
         "auto_save_desc": "Profiländerungen automatisch speichern.",
         "show_events_desc": "Event Aufgaben und Event Einkauf anzeigen.",
+        "autostart":        "Autostart",
+        "autostart_desc":   "Programm automatisch beim Windows-Start starten.",
+        "dps_meter":        "DPS Meter",
+        "dps_meter_desc":   "Externe Anwendung beim Programmstart mitöffnen.",
+        "dps_meter_browse": "Durchsuchen",
+        "dps_meter_start":  "Mit TM starten",
 
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",
@@ -383,6 +389,12 @@ TRANSLATIONS = {
         "auto_save": "Автосохранение",
         "auto_save_desc": "Автоматически сохранять изменения профиля.",
         "show_events_desc": "Показывать событийные задачи и покупки.",
+        "autostart":        "Автозапуск",
+        "autostart_desc":   "Запускать программу автоматически при старте Windows.",
+        "dps_meter":        "DPS Meter",
+        "dps_meter_desc":   "Открывать внешнее приложение при запуске программы.",
+        "dps_meter_browse": "Обзор",
+        "dps_meter_start":  "Запускать с TM",
 
         # ================= RESET SETTINGS =================
         "reset_timer": "Таймер сброса",
@@ -650,6 +662,12 @@ TRANSLATIONS = {
         "auto_save": "Auto Save",
         "auto_save_desc": "Automatically save profile changes.",
         "show_events_desc": "Show event tasks and event shopping.",
+        "autostart":        "Autostart",
+        "autostart_desc":   "Launch the program automatically on Windows startup.",
+        "dps_meter":        "DPS Meter",
+        "dps_meter_desc":   "Open an external application when the program starts.",
+        "dps_meter_browse": "Browse",
+        "dps_meter_start":  "Start with TM",
 
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",

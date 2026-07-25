@@ -93,14 +93,16 @@ class OverlayGuideRow(_ColoredRow):
         layout.setContentsMargins(_BORDER_W + 6, 0, 8, 0)
         layout.setSpacing(6)
 
-        dot = QLabel("●")
-        dot.setFixedWidth(12)
-        dot.setStyleSheet(
-            f"color: rgba({color.red()},{color.green()},{color.blue()},220); font-size: 10px;"
-        )
+        can_toggle = status in ("active", "completed")
+
+        self.check_btn = QPushButton("✓" if status == "completed" else "○")
+        self.check_btn.setObjectName("OverlayCheckBtn")
+        self.check_btn.setFixedSize(16, 16)
+        self.check_btn.setEnabled(can_toggle)
+        self.check_btn.setCursor(Qt.PointingHandCursor if can_toggle else Qt.ArrowCursor)
 
         obj = "OverlayRowTitle" if status != "locked" else "OverlayRowTitleDim"
-        title_lbl = QLabel(title if len(title) <= 36 else title[:35] + "…")
+        title_lbl = QLabel(title if len(title) <= 34 else title[:33] + "…")
         title_lbl.setObjectName(obj)
 
         status_map = {"active": "ACTV", "locked": "LOCK", "completed": "DONE", "optional": "OPT"}
@@ -112,7 +114,7 @@ class OverlayGuideRow(_ColoredRow):
         status_lbl.setFixedWidth(34)
         status_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        layout.addWidget(dot)
+        layout.addWidget(self.check_btn)
         layout.addWidget(title_lbl, 1)
         layout.addWidget(status_lbl)
 
@@ -275,12 +277,23 @@ class OverlayWindow(QWidget):
             return
         count = 0
         for node in fw.nodes.values():
-            if node.status in ("active", "locked"):
+            if node.status in ("active", "locked", "completed"):
                 row = OverlayGuideRow(node.id, node.title, node.status)
+                if node.status in ("active", "completed"):
+                    row.check_btn.clicked.connect(
+                        lambda _, nid=node.id: self._toggle_node(nid)
+                    )
                 self._content_layout.insertWidget(self._content_layout.count() - 1, row)
                 count += 1
         if count == 0:
             self._add_empty("All steps completed ✓")
+
+    def _toggle_node(self, node_id: str):
+        fw = getattr(self.main_window, "flow_map_window", None)
+        if fw:
+            fw.toggle_node_completed(node_id)
+            self.main_window.save_profile(silent=True)
+            self.refresh()
 
     def _add_empty(self, text: str):
         lbl = QLabel(text)
