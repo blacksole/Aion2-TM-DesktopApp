@@ -238,10 +238,6 @@ class SettingsPage(QWidget):
             tr_func(language, "auto_save_desc")
         )
 
-        self.autostart_title.setText(tr_func(language, "autostart"))
-        self.autostart_desc.setText(tr_func(language, "autostart_desc"))
-        self._update_toggle_text(self.autostart_btn, self.autostart_btn.isChecked(), language, tr_func)
-
         self.dps_title.setText(tr_func(language, "dps_meter"))
         self.dps_desc.setText(tr_func(language, "dps_meter_desc"))
         self.dps_browse_btn.setText(tr_func(language, "dps_meter_browse"))
@@ -717,7 +713,6 @@ class SettingsPage(QWidget):
 
             "show_events": self.show_events_btn.isChecked(),
             "auto_save": self.auto_save_btn.isChecked(),
-            "autostart": self.autostart_btn.isChecked(),
             "dps_meter_path": self.dps_path_input.text().strip(),
             "dps_meter_autostart": self.dps_autostart_btn.isChecked(),
 
@@ -1022,20 +1017,6 @@ class SettingsPage(QWidget):
 
         return page
 
-    def _on_autostart_toggled(self, checked: bool):
-        from core.autostart import set_autostart
-        self._set_toggle(self.autostart_btn, checked)
-        if not set_autostart(checked):
-            # Dev mode: no EXE → show note in desc
-            self.autostart_desc.setText(
-                "(Nur im EXE-Modus verfügbar)" if checked else
-                {"de": "Programm automatisch beim Windows-Start starten.",
-                 "ru": "Запускать программу автоматически при старте Windows."}.get(
-                    self._cur_lang,
-                    "Launch the program automatically on Windows startup."
-                )
-            )
-
     def _browse_dps_exe(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "DPS Meter auswählen", "", "Anwendung (*.exe)"
@@ -1189,28 +1170,6 @@ class SettingsPage(QWidget):
         donate_layout.addWidget(self.donate_qr_btn)
         donate_layout.addWidget(self.donate_btn)
 
-        # ===== AUTOSTART ROW =====
-        autostart_row = QFrame()
-        autostart_row.setObjectName("settingsRow")
-        autostart_layout = QHBoxLayout(autostart_row)
-        autostart_layout.setContentsMargins(14, 12, 14, 12)
-        autostart_layout.setSpacing(12)
-        autostart_text = QVBoxLayout()
-        autostart_text.setSpacing(2)
-        self.autostart_title = QLabel()
-        self.autostart_title.setObjectName("settingsLabel")
-        self.autostart_desc = QLabel()
-        self.autostart_desc.setObjectName("settingsDescription")
-        autostart_text.addWidget(self.autostart_title)
-        autostart_text.addWidget(self.autostart_desc)
-        self.autostart_btn = QPushButton("Off")
-        self.autostart_btn.setCheckable(True)
-        self.autostart_btn.setObjectName("toggleButton")
-        self.autostart_btn.setFixedWidth(70)
-        self.autostart_btn.toggled.connect(self._on_autostart_toggled)
-        autostart_layout.addLayout(autostart_text, 1)
-        autostart_layout.addWidget(self.autostart_btn)
-
         # ===== DPS METER ROW =====
         dps_row = QFrame()
         dps_row.setObjectName("settingsRow")
@@ -1261,7 +1220,6 @@ class SettingsPage(QWidget):
 
         layout.addWidget(event_row)
         layout.addWidget(auto_save_row)
-        layout.addWidget(autostart_row)
         layout.addWidget(dps_row)
         layout.addWidget(update_row)
         layout.addWidget(donate_row)
@@ -1313,14 +1271,6 @@ class SettingsPage(QWidget):
             show_events = data.get("show_events", True)
             self.show_events_btn.setChecked(show_events)
             self._set_toggle(self.show_events_btn, show_events)
-
-        if hasattr(self, "autostart_btn"):
-            from core.autostart import get_autostart
-            v = get_autostart()
-            self.autostart_btn.blockSignals(True)
-            self.autostart_btn.setChecked(v)
-            self.autostart_btn.blockSignals(False)
-            self._set_toggle(self.autostart_btn, v)
 
         if hasattr(self, "dps_path_input"):
             self.dps_path_input.setText(data.get("dps_meter_path", ""))
