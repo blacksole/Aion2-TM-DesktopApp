@@ -1,5 +1,5 @@
 APP_NAME = "Aion2 Taskmanager"
-APP_VERSION = "0.8.8"
+APP_VERSION = "0.9.0"
 
 GITHUB_USER = "blacksole"
 GITHUB_REPO = "Aion2-TM-DesktopApp"

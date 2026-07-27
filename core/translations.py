@@ -113,6 +113,10 @@ TRANSLATIONS = {
         "dps_meter_desc":   "Externe Anwendung beim Programmstart mitöffnen.",
         "dps_meter_browse": "Durchsuchen",
         "dps_meter_start":  "Mit TM starten",
+        "about":            "Über Aion2 TM",
+        "about_desc":       "Task Manager für Aion2 — Tägliche & wöchentliche Aufgaben, Timer, Flow Map.",
+        "about_github":     "GitHub",
+        "about_copy_ver":   "Version kopieren",
 
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",
@@ -121,6 +125,7 @@ TRANSLATIONS = {
 
         # ================= ADVANCED TIMER =================
         "advanced_timer": "Erweiterte Timer",
+        "notifications": "Benachrichtigungen",
         "shugo_timer": "Shugo Timer",
         "shugo_timer_desc": "Countdown für Shugo Events aktivieren.",
         "shugo_start": "Shugo Event Start (Min)",
@@ -391,6 +396,10 @@ TRANSLATIONS = {
         "dps_meter_desc":   "Открывать внешнее приложение при запуске программы.",
         "dps_meter_browse": "Обзор",
         "dps_meter_start":  "Запускать с TM",
+        "about":            "Об Aion2 TM",
+        "about_desc":       "Менеджер задач для Aion2 — Ежедневные и еженедельные задачи, таймеры, Flow Map.",
+        "about_github":     "GitHub",
+        "about_copy_ver":   "Скопировать версию",
 
         # ================= RESET SETTINGS =================
         "reset_timer": "Таймер сброса",
@@ -399,6 +408,7 @@ TRANSLATIONS = {
 
         # ================= ADVANCED TIMER =================
         "advanced_timer": "Расширенные таймеры",
+        "notifications": "Уведомления",
         "shugo_timer": "Таймер Shugo",
         "shugo_timer_desc": "Включить обратный отсчёт для событий Shugo.",
         "shugo_start": "Начало события Shugo (мин)",
@@ -662,6 +672,10 @@ TRANSLATIONS = {
         "dps_meter_desc":   "Open an external application when the program starts.",
         "dps_meter_browse": "Browse",
         "dps_meter_start":  "Start with TM",
+        "about":            "About Aion2 TM",
+        "about_desc":       "Task Manager for Aion2 — Daily & weekly tasks, timers, Flow Map.",
+        "about_github":     "GitHub",
+        "about_copy_ver":   "Copy version",
 
         # ================= RESET SETTINGS =================
         "reset_timer": "Reset Timer",
@@ -670,6 +684,7 @@ TRANSLATIONS = {
 
         # ================= ADVANCED TIMER =================
         "advanced_timer": "Advanced Timer",
+        "notifications": "Notifications",
         "shugo_timer": "Shugo Timer",
         "shugo_timer_desc": "Enable spawn countdown for Shugo events.",
         "shugo_start": "Shugo Event Start (Min)",

@@ -15,6 +15,7 @@ from .pages.timers_page import TimersPage
 from .pages.profile_page import ProfilePage
 from .pages.settings_page import SettingsPage
 from .pages.dashboard_page import DashboardPage
+from .pages.about_page import AboutPage
 from .flow.flow_app_window import FlowMapWindow
 from .overlay.overlay_window import OverlayWindow
 from core.translations import tr
@@ -250,7 +251,10 @@ class MainWindow(QMainWindow):
         self.refresh()
         self.sort_current_list("priority")
 
-        self.load_last_profile()
+        if not self.app_config_path.exists():
+            self._show_first_run_dialog()
+        else:
+            self.load_last_profile()
 
         self.countdown_timer = QTimer(self)
         self.countdown_timer.timeout.connect(self.update_countdowns)
@@ -552,6 +556,7 @@ class MainWindow(QMainWindow):
         self.timers_page = TimersPage()
         self.profile_page = ProfilePage()
         self.settings_page = SettingsPage()
+        self.about_page = AboutPage()
 
         self.page_indexes = {
             "dashboard": 0,
@@ -559,6 +564,7 @@ class MainWindow(QMainWindow):
             "timers": 2,
             "profile": 3,
             "settings": 4,
+            "about": 5,
         }
 
         self.page_stack.addWidget(self.dashboard_page)
@@ -566,6 +572,7 @@ class MainWindow(QMainWindow):
         self.page_stack.addWidget(self.timers_page)
         self.page_stack.addWidget(self.profile_page)
         self.page_stack.addWidget(self.settings_page)
+        self.page_stack.addWidget(self.about_page)
 
         self.page_stack.setCurrentWidget(self.tasks_page)
 
@@ -1198,8 +1205,6 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = settings.get("notification_riss_enabled", False)
         self.notification_riss_warn_minutes = settings.get("notification_riss_warn_minutes", 1)
         self.notification_sound = settings.get("notification_sound", "")
-        self.dps_meter_path = settings.get("dps_meter_path", "")
-        self.dps_meter_autostart = settings.get("dps_meter_autostart", False)
         self._launch_dps_meter_if_configured()
         self.shugo_enabled = settings.get("shugo_enabled", False)
         self.shugo_start_minute = settings.get("shugo_start_minute", 15)
@@ -1365,8 +1370,6 @@ class MainWindow(QMainWindow):
                 "notification_riss_enabled": self.notification_riss_enabled,
                 "notification_riss_warn_minutes": self.notification_riss_warn_minutes,
                 "notification_sound": self.notification_sound,
-                "dps_meter_path": self.dps_meter_path,
-                "dps_meter_autostart": self.dps_meter_autostart,
             },
 
             "tasks": {
@@ -1397,6 +1400,8 @@ class MainWindow(QMainWindow):
         if self.app_config_path.exists():
             try:
                 cfg = json.loads(self.app_config_path.read_text(encoding="utf-8"))
+                self.dps_meter_path = cfg.get("dps_meter_path", "")
+                self.dps_meter_autostart = cfg.get("dps_meter_autostart", False)
                 custom = cfg.get("profile_dir", "")
                 if custom:
                     p = Path(custom)
@@ -1414,21 +1419,40 @@ class MainWindow(QMainWindow):
         return Path(os.environ["APPDATA"]) / "Aion2 TM" / "Profiles"
 
     def _save_app_config(self):
-        cfg = {"profile_dir": str(self.profile_dir)}
+        cfg = {
+            "profile_dir": str(self.profile_dir),
+            "dps_meter_path": self.dps_meter_path,
+            "dps_meter_autostart": self.dps_meter_autostart,
+        }
         self.app_config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+    def _show_first_run_dialog(self):
+        from ui.first_run_dialog import FirstRunDialog
+        dlg = FirstRunDialog(self)
+        dlg.exec()
+        if dlg.chosen_path:
+            self.change_profile_dir(dlg.chosen_path)
+        else:
+            self.load_last_profile()
 
     def change_profile_dir(self, new_path: str):
         new_dir = Path(new_path)
         new_dir.mkdir(parents=True, exist_ok=True)
-        for f in self.profile_dir.glob("*.json"):
-            dest = new_dir / f.name
-            if not dest.exists():
-                shutil.copy2(f, dest)
+
+        # Nur kopieren wenn der Zielordner noch keine Profile enthält
+        target_has_profiles = any(new_dir.glob("*.json"))
+        if not target_has_profiles:
+            for f in self.profile_dir.glob("*.json"):
+                shutil.copy2(f, new_dir / f.name)
+
         self.profile_dir = new_dir
         self.last_profile_file = self.profile_dir / "last_profile.txt"
         self._save_app_config()
         if hasattr(self, "settings_page"):
             self.settings_page.update_profile_dir_label(str(self.profile_dir))
+
+        # Vorhandenes Profil aus dem neuen Ordner laden statt leeren Stand zu behalten
+        self.load_last_profile()
         self.show_toast("Profilpfad gespeichert")
 
     def save_last_profile(self, profile_path):
@@ -1644,6 +1668,9 @@ class MainWindow(QMainWindow):
                 tr(self.language, "toast_profile_opened", name=self.profile_name)
             )
 
+        elif page_key == "about":
+            self.about_page.update_language(self.language, tr)
+
     def add_task_from_page(self, data):
         shopping_tabs = [
             "dailyShopping",
@@ -1844,6 +1871,7 @@ class MainWindow(QMainWindow):
         old_path = self.dps_meter_path
         self.dps_meter_path = data.get("dps_meter_path", self.dps_meter_path)
         self.dps_meter_autostart = data.get("dps_meter_autostart", self.dps_meter_autostart)
+        self._save_app_config()
         if self.dps_meter_autostart and self.dps_meter_path and self.dps_meter_path != old_path:
             self._start_dps_meter(self.dps_meter_path)
 

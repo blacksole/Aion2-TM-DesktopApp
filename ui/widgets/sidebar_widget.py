@@ -17,6 +17,7 @@ class SidebarWidget(QWidget):
             "plan": "plan",
             "profile": "profile",
             "settings": "settings",
+            "about": "about",
         }
 
         layout = QVBoxLayout(self)
