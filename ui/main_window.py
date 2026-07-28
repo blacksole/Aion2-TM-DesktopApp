@@ -199,6 +199,9 @@ class MainWindow(QMainWindow):
         self.app_config_path = self.app_config_dir / "config.json"
         self.app_config_dir.mkdir(parents=True, exist_ok=True)
 
+        self.dps_meter_path = ""
+        self.dps_meter_autostart = False
+
         self.profile_dir = self._resolve_profile_dir()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         self.last_profile_file = self.profile_dir / "last_profile.txt"
@@ -208,7 +211,6 @@ class MainWindow(QMainWindow):
         self.shugo_start_minute = 15
         self.shugo_interval_minutes = 30
         self.shugo_interval_text = "30 min"
-
 
         self.riss_enabled = False
         self.riss_anchor_hour = 0
@@ -223,8 +225,6 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = False
         self.notification_riss_warn_minutes = 1
         self.notification_sound = ""
-        self.dps_meter_path = ""
-        self.dps_meter_autostart = False
         self._shugo_notified = False
         self._riss_notified = False
 
