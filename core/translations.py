@@ -139,6 +139,11 @@ TRANSLATIONS = {
         "anchor": "Anker",
         "on": "Ein",
         "off": "Aus",
+        "custom_timer":        "Custom Timer",
+        "custom_timer_edit":   "Bearbeiten",
+        "reset_timer_help":    "Zeigt die verbleibende Zeit bis zum täglichen und wöchentlichen Server-Reset an.",
+        "advanced_timer_help": "Konfigurierbare Timer für Shugo- und Riss-Spawn-Zeiten mit individuellem Intervall.",
+        "custom_timer_help":   "Erstelle eigene Timer mit individuellem Intervall, Farbe und Anzeigeformat (max. 2).",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 min",
@@ -422,6 +427,11 @@ TRANSLATIONS = {
         "anchor": "Привязка",
         "on": "Вкл",
         "off": "Выкл",
+        "custom_timer":        "Custom Timer",
+        "custom_timer_edit":   "Изменить",
+        "reset_timer_help":    "Показывает оставшееся время до ежедневного и еженедельного сброса сервера.",
+        "advanced_timer_help": "Настраиваемые таймеры для событий Shugo и Riss с индивидуальным интервалом.",
+        "custom_timer_help":   "Создавайте собственные таймеры с интервалом, цветом и форматом (макс. 2).",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 мин",
@@ -698,6 +708,11 @@ TRANSLATIONS = {
         "anchor": "Anchor",
         "on": "On",
         "off": "Off",
+        "custom_timer":        "Custom Timer",
+        "custom_timer_edit":   "Edit",
+        "reset_timer_help":    "Shows the remaining time until the daily and weekly server reset.",
+        "advanced_timer_help": "Configurable timers for Shugo and Rift spawn times with custom intervals.",
+        "custom_timer_help":   "Create custom timers with individual interval, color and display format (max. 2).",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 min",

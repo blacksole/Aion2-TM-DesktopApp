@@ -9,8 +9,9 @@ from PySide6.QtCore import Signal, QTime, QSize, Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QButtonGroup, QGridLayout,
-    QDialog, QFileDialog, QLineEdit,
+    QDialog, QFileDialog, QLineEdit, QScrollArea,
 )
+from ui.custom_timer_dialog import CustomTimerDialog
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
 
@@ -33,6 +34,8 @@ class SettingsPage(QWidget):
         self.project_root = Path(__file__).resolve().parent.parent.parent
         self._cur_lang = "de"
         self._cur_tr = None
+
+        self._custom_timer_configs = []  # max 2 entries
 
         self.setup_ui()
 
@@ -106,8 +109,14 @@ class SettingsPage(QWidget):
         self.content_stack.addWidget(self.language_page)       # 4
         self.content_stack.addWidget(self.profiles_page)       # 5
 
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setWidget(self.content_stack)
+
         body_layout.addWidget(self.settings_sidebar)
-        body_layout.addWidget(self.content_stack, 1)
+        body_layout.addWidget(scroll_area, 1)
 
         root_layout.addLayout(body_layout, 1)
 
@@ -252,6 +261,7 @@ class SettingsPage(QWidget):
         self.reset_timer_title.setText(
             tr_func(language, "reset_timer")
         )
+        self._reset_help_btn.setToolTip(tr_func(language, "reset_timer_help"))
 
         self.daily_reset_label.setText(
             tr_func(language, "daily_reset")
@@ -287,15 +297,15 @@ class SettingsPage(QWidget):
         self.advanced_timer_title.setText(
             tr_func(language, "advanced_timer")
         )
+        self._advanced_help_btn.setToolTip(tr_func(language, "advanced_timer_help"))
+
+        self.custom_timer_title.setText(tr_func(language, "custom_timer"))
+        self._ct_help_btn.setToolTip(tr_func(language, "custom_timer_help"))
 
         self.notifications_title.setText(tr_func(language, "notifications"))
 
         self.shugo_title.setText(
             tr_func(language, "shugo_timer")
-        )
-
-        self.shugo_desc.setText(
-            tr_func(language, "shugo_timer_desc")
         )
 
         self.shugo_start_label.setText(
@@ -308,10 +318,6 @@ class SettingsPage(QWidget):
 
         self.riss_title.setText(
             tr_func(language, "riss_timer")
-        )
-
-        self.riss_desc.setText(
-            tr_func(language, "riss_timer_desc")
         )
 
         self.riss_anchor_label.setText(
@@ -419,6 +425,12 @@ class SettingsPage(QWidget):
         # ===== NO-SOUND LABEL =====
         if hasattr(self, "notif_sound_combo") and self.notif_sound_combo.count() > 0:
             self.notif_sound_combo.setItemText(0, f"-- {tr_func(language, 'no_sound')} --")
+
+        # ===== CUSTOM TIMER SOUNDS =====
+        if hasattr(self, "_custom_sound_combos"):
+            for i, combo in enumerate(self._custom_sound_combos):
+                if combo.count() > 0:
+                    combo.setItemText(0, f"-- {tr_func(language, 'no_sound')} --")
 
         # ===== LANGUAGE =====
 
@@ -591,7 +603,17 @@ class SettingsPage(QWidget):
         # ── Reset Timer ──────────────────────────────────────────────────
         self.reset_timer_title = QLabel()
         self.reset_timer_title.setObjectName("settingsSectionTitle")
-        layout.addWidget(self.reset_timer_title)
+        _reset_hdr = QHBoxLayout()
+        _reset_hdr.addWidget(self.reset_timer_title)
+        _reset_hdr.addStretch()
+        self._reset_help_btn = QPushButton("?")
+        self._reset_help_btn.setObjectName("helpButton")
+        self._reset_help_btn.setFixedSize(22, 22)
+        self._reset_help_btn.setToolTip(
+            "Zeigt die verbleibende Zeit bis zum täglichen und wöchentlichen Server-Reset an."
+        )
+        _reset_hdr.addWidget(self._reset_help_btn)
+        layout.addLayout(_reset_hdr)
 
         # Daily reset
         daily_row = QFrame()
@@ -653,7 +675,17 @@ class SettingsPage(QWidget):
         # ── Advanced Timer ───────────────────────────────────────────────
         self.advanced_timer_title = QLabel()
         self.advanced_timer_title.setObjectName("settingsSectionTitle")
-        layout.addWidget(self.advanced_timer_title)
+        _adv_hdr = QHBoxLayout()
+        _adv_hdr.addWidget(self.advanced_timer_title)
+        _adv_hdr.addStretch()
+        self._advanced_help_btn = QPushButton("?")
+        self._advanced_help_btn.setObjectName("helpButton")
+        self._advanced_help_btn.setFixedSize(22, 22)
+        self._advanced_help_btn.setToolTip(
+            "Konfigurierbare Timer für Shugo- und Riss-Spawn-Zeiten mit individuellem Intervall."
+        )
+        _adv_hdr.addWidget(self._advanced_help_btn)
+        layout.addLayout(_adv_hdr)
 
         # Shugo row
         shugo_row = QFrame()
@@ -665,10 +697,7 @@ class SettingsPage(QWidget):
         shugo_text.setSpacing(2)
         self.shugo_title = QLabel()
         self.shugo_title.setObjectName("settingsLabel")
-        self.shugo_desc = QLabel()
-        self.shugo_desc.setObjectName("settingsDescription")
         shugo_text.addWidget(self.shugo_title)
-        shugo_text.addWidget(self.shugo_desc)
         self.shugo_enabled_btn = QPushButton("Off")
         self.shugo_enabled_btn.setCheckable(True)
         self.shugo_enabled_btn.setObjectName("toggleButton")
@@ -705,10 +734,7 @@ class SettingsPage(QWidget):
         riss_text.setSpacing(2)
         self.riss_title = QLabel()
         self.riss_title.setObjectName("settingsLabel")
-        self.riss_desc = QLabel()
-        self.riss_desc.setObjectName("settingsDescription")
         riss_text.addWidget(self.riss_title)
-        riss_text.addWidget(self.riss_desc)
         self.riss_enabled_btn = QPushButton("Off")
         self.riss_enabled_btn.setCheckable(True)
         self.riss_enabled_btn.setObjectName("toggleButton")
@@ -736,6 +762,36 @@ class SettingsPage(QWidget):
 
         layout.addWidget(shugo_row)
         layout.addWidget(riss_row)
+
+        # ── Custom Timer ─────────────────────────────────────────────────
+        ct_header_row = QHBoxLayout()
+        self.custom_timer_title = QLabel("Custom Timer")
+        self.custom_timer_title.setObjectName("settingsSectionTitle")
+        self._ct_help_btn = QPushButton("?")
+        self._ct_help_btn.setObjectName("helpButton")
+        self._ct_help_btn.setFixedSize(22, 22)
+        self._ct_help_btn.setToolTip(
+            "Erstelle eigene Timer mit individuellem Intervall, Farbe und Anzeigeformat (max. 2)."
+        )
+        self._add_ct_btn = QPushButton("＋")
+        self._add_ct_btn.setObjectName("secondaryButton")
+        self._add_ct_btn.setFixedWidth(44)
+        self._add_ct_btn.setFixedHeight(32)
+        self._add_ct_btn.clicked.connect(self._add_custom_timer)
+        ct_header_row.addWidget(self.custom_timer_title)
+        ct_header_row.addWidget(self._ct_help_btn)
+        ct_header_row.addStretch()
+        ct_header_row.addWidget(self._add_ct_btn)
+        layout.addLayout(ct_header_row)
+
+        self._custom_ct_container = QWidget()
+        self._custom_ct_layout = QVBoxLayout(self._custom_ct_container)
+        self._custom_ct_layout.setContentsMargins(0, 0, 0, 0)
+        self._custom_ct_layout.setSpacing(8)
+        layout.addWidget(self._custom_ct_container)
+
+        self._custom_rows = []
+
         layout.addStretch()
 
         self.daily_reset_time.timeChanged.connect(self._emit_daily_reset_changed)
@@ -795,6 +851,22 @@ class SettingsPage(QWidget):
             "notification_riss_enabled": self.notif_riss_enabled_btn.isChecked(),
             "notification_riss_warn_minutes": self.notif_riss_warn_combo.currentData(),
             "notification_sound": self.notif_sound_combo.currentData() or "",
+
+            "custom_timers": [
+                {
+                    "enabled": cfg.get("enabled", False),
+                    "name": cfg["name"],
+                    "color": cfg["color"],
+                    "interval_minutes": cfg["interval_minutes"],
+                    "display_format": cfg.get("display_format", "hh:mm:ss"),
+                    "notification_sound": (
+                        self._custom_sound_combos[i].currentData() or ""
+                        if hasattr(self, "_custom_sound_combos") and i < len(self._custom_sound_combos)
+                        else ""
+                    ),
+                }
+                for i, cfg in enumerate(self._custom_timer_configs)
+            ],
         }
 
         self.settings_save_requested.emit(data)
@@ -962,6 +1034,53 @@ class SettingsPage(QWidget):
 
         layout.addWidget(notif_row)
         layout.addWidget(sound_row)
+
+        # ── Custom Timer Sounds ───────────────────────────────────────────
+        self.custom_notif_section_title = QLabel("Custom Timer")
+        self.custom_notif_section_title.setObjectName("settingsSectionTitle")
+        self.custom_notif_section_title.setVisible(False)
+        layout.addWidget(self.custom_notif_section_title)
+
+        self._custom_notif_rows = []
+        self._custom_notif_labels = []
+        self._custom_sound_combos = []
+
+        for i in range(2):
+            ct_sound_row = QFrame()
+            ct_sound_row.setObjectName("settingsRow")
+            ct_sound_row.setVisible(False)
+            ct_sound_layout = QHBoxLayout(ct_sound_row)
+            ct_sound_layout.setContentsMargins(14, 12, 14, 12)
+            ct_sound_layout.setSpacing(12)
+
+            ct_name_lbl = QLabel(f"Timer {i + 1}")
+            ct_name_lbl.setObjectName("settingsLabel")
+            ct_name_lbl.setFixedWidth(100)
+
+            ct_combo = QComboBox()
+            ct_combo.setObjectName("settingsCombo")
+            ct_combo.setFixedWidth(240)
+            ct_combo.addItem("-- No Sound --", "")
+            for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
+                name = os.path.splitext(os.path.basename(path))[0]
+                ct_combo.addItem(name, path)
+
+            ct_test_btn = QPushButton("▶ Test")
+            ct_test_btn.setObjectName("secondaryButton")
+            ct_test_btn.setFixedWidth(70)
+            ct_test_btn.clicked.connect(
+                lambda checked=False, combo=ct_combo: self._preview_custom_sound(combo)
+            )
+
+            ct_sound_layout.addWidget(ct_name_lbl)
+            ct_sound_layout.addWidget(ct_combo, 1)
+            ct_sound_layout.addWidget(ct_test_btn)
+
+            layout.addWidget(ct_sound_row)
+            self._custom_notif_rows.append(ct_sound_row)
+            self._custom_notif_labels.append(ct_name_lbl)
+            self._custom_sound_combos.append(ct_combo)
+
         layout.addStretch()
 
         self.notif_enabled_btn.toggled.connect(
@@ -1303,6 +1422,26 @@ class SettingsPage(QWidget):
         if hasattr(self, "profiles_path_label"):
             self.profiles_path_label.setText(data.get("profile_dir", ""))
 
+        if "custom_timers" in data:
+            self._custom_timer_configs = []
+            for ct in data["custom_timers"][:2]:
+                self._custom_timer_configs.append({
+                    "enabled": ct.get("enabled", False),
+                    "name": ct.get("name", ""),
+                    "color": ct.get("color", "#22d3ee"),
+                    "interval_minutes": ct.get("interval_minutes", 30),
+                    "display_format": ct.get("display_format", "hh:mm:ss"),
+                    "notification_sound": ct.get("notification_sound", ""),
+                })
+            if hasattr(self, "_custom_ct_layout"):
+                self._rebuild_custom_timer_rows()
+            for i, ct in enumerate(self._custom_timer_configs):
+                if hasattr(self, "_custom_sound_combos") and i < len(self._custom_sound_combos):
+                    sound = ct.get("notification_sound", "")
+                    idx = self._custom_sound_combos[i].findData(sound)
+                    if idx >= 0:
+                        self._custom_sound_combos[i].setCurrentIndex(idx)
+
     def get_selected_theme(self):
         if not hasattr(self, "theme_buttons"):
             return "abyss"
@@ -1377,6 +1516,145 @@ class SettingsPage(QWidget):
         path = self.profiles_path_label.text()
         if path and os.path.isdir(path):
             subprocess.Popen(f'explorer "{path}"')
+
+    def _add_custom_timer(self):
+        if len(self._custom_timer_configs) >= 2:
+            return
+        dlg = CustomTimerDialog(parent=self)
+        if dlg.exec():
+            values = dlg.get_values()
+            self._custom_timer_configs.append({
+                "enabled": False,
+                "name": values["name"],
+                "color": values["color"],
+                "interval_minutes": values["interval_minutes"],
+                "display_format": values.get("display_format", "hh:mm:ss"),
+                "notification_sound": "",
+            })
+            self._rebuild_custom_timer_rows()
+
+    def _edit_custom_timer(self, idx: int):
+        if idx >= len(self._custom_timer_configs):
+            return
+        cfg = self._custom_timer_configs[idx]
+        dlg = CustomTimerDialog(
+            name=cfg["name"],
+            color=cfg["color"],
+            interval_minutes=cfg["interval_minutes"],
+            display_format=cfg.get("display_format", "hh:mm:ss"),
+            parent=self,
+        )
+        if dlg.exec():
+            values = dlg.get_values()
+            cfg["name"] = values["name"]
+            cfg["color"] = values["color"]
+            cfg["interval_minutes"] = values["interval_minutes"]
+            cfg["display_format"] = values.get("display_format", "hh:mm:ss")
+            self._rebuild_custom_timer_rows()
+
+    def _remove_custom_timer(self, idx: int):
+        if idx < len(self._custom_timer_configs):
+            del self._custom_timer_configs[idx]
+            self._rebuild_custom_timer_rows()
+
+    def _rebuild_custom_timer_rows(self):
+        # Clear existing row widgets
+        while self._custom_ct_layout.count():
+            item = self._custom_ct_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._custom_rows = []
+
+        for i, cfg in enumerate(self._custom_timer_configs):
+            row = self._build_custom_timer_row(i, cfg)
+            self._custom_ct_layout.addWidget(row)
+
+        # Show "+" only when fewer than 2 timers
+        self._add_ct_btn.setVisible(len(self._custom_timer_configs) < 2)
+        self._update_custom_notif_visibility()
+
+    def _build_custom_timer_row(self, idx: int, cfg: dict) -> QFrame:
+        row = QFrame()
+        row.setObjectName("settingsRow")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(14, 12, 14, 12)
+        row_layout.setSpacing(10)
+
+        color_dot = QLabel("●")
+        color_dot.setFixedWidth(18)
+        color_dot.setStyleSheet(f"color: {cfg['color']}; font-size: 18px;")
+
+        name_lbl = QLabel(cfg["name"])
+        name_lbl.setObjectName("settingsLabel")
+
+        interval_lbl = QLabel(self._format_interval(cfg["interval_minutes"]))
+        interval_lbl.setObjectName("settingsDescription")
+
+        edit_btn = QPushButton("Bearbeiten")
+        edit_btn.setObjectName("secondaryButton")
+        edit_btn.setFixedWidth(110)
+        edit_btn.clicked.connect(lambda checked=False, i=idx: self._edit_custom_timer(i))
+
+        remove_btn = QPushButton("✕")
+        remove_btn.setObjectName("secondaryButton")
+        remove_btn.setFixedWidth(36)
+        remove_btn.clicked.connect(lambda checked=False, i=idx: self._remove_custom_timer(i))
+
+        toggle_btn = QPushButton()
+        toggle_btn.setCheckable(True)
+        toggle_btn.setChecked(cfg.get("enabled", False))
+        toggle_btn.setObjectName("toggleButton")
+        toggle_btn.setFixedWidth(70)
+        self._set_toggle(toggle_btn, cfg.get("enabled", False))
+        toggle_btn.toggled.connect(
+            lambda checked, i=idx, btn=toggle_btn: self._on_custom_timer_toggled(i, checked, btn)
+        )
+
+        row_layout.addWidget(color_dot)
+        row_layout.addWidget(name_lbl)
+        row_layout.addWidget(interval_lbl)
+        row_layout.addStretch()
+        row_layout.addWidget(edit_btn)
+        row_layout.addWidget(remove_btn)
+        row_layout.addWidget(toggle_btn)
+
+        self._custom_rows.append((toggle_btn, color_dot, name_lbl))
+        return row
+
+    def _on_custom_timer_toggled(self, idx: int, checked: bool, btn=None):
+        if idx < len(self._custom_timer_configs):
+            self._custom_timer_configs[idx]["enabled"] = checked
+        if btn:
+            self._set_toggle(btn, checked)
+
+    def _update_custom_notif_visibility(self):
+        count = len(self._custom_timer_configs)
+        has_any = count > 0
+        if hasattr(self, "custom_notif_section_title"):
+            self.custom_notif_section_title.setVisible(has_any)
+        for i in range(2):
+            if hasattr(self, "_custom_notif_rows") and i < len(self._custom_notif_rows):
+                self._custom_notif_rows[i].setVisible(i < count)
+                if i < count:
+                    cfg = self._custom_timer_configs[i]
+                    self._custom_notif_labels[i].setText(cfg["name"])
+
+    @staticmethod
+    def _format_interval(minutes: int) -> str:
+        if minutes < 60:
+            return f"{minutes} min"
+        if minutes == 60:
+            return "1 Std."
+        if minutes == 90:
+            return "1,5 Std."
+        if minutes == 120:
+            return "2 Std."
+        return f"{minutes} min"
+
+    def _preview_custom_sound(self, combo):
+        path = combo.currentData() or ""
+        if path and os.path.isfile(path):
+            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
 
     def update_profile_dir_label(self, path: str):
         if hasattr(self, "profiles_path_label"):

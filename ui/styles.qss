@@ -231,6 +231,26 @@ QDialog {
     background-color: rgba(15, 23, 42, 0.9);
 }
 
+#helpButton {
+    background-color: transparent;
+    color: #64748b;
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    border-radius: 11px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0px;
+}
+
+#helpButton:hover {
+    background-color: rgba(100, 116, 139, 0.15);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+#helpButton:pressed {
+    background-color: rgba(100, 116, 139, 0.25);
+}
+
 #settingsPathLabel {
     background-color: rgba(15, 23, 42, 0.7);
     color: #94a3b8;

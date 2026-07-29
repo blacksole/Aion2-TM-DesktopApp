@@ -228,6 +228,9 @@ class MainWindow(QMainWindow):
         self._shugo_notified = False
         self._riss_notified = False
 
+        self.custom_timers = []  # max 2, dynamisch
+        self._custom_notified = [False, False]
+
         self.weekly_reset_day = "Mo"
 
         self.task_lists = {
@@ -504,7 +507,7 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         self.setWindowTitle(self.tr("app.title"))
         self.resize(1200, 800)
-        self.setMinimumSize(1000, 700)
+        self.setMinimumSize(1100, 820)
         icon_path = self.project_root / "assets" / "icons" / "aion2_tm_icon.ico"
         self.setWindowIcon(QIcon(str(icon_path)))
 
@@ -922,6 +925,19 @@ class MainWindow(QMainWindow):
                 elif seconds > warn_secs:
                     self._riss_notified = False
 
+        for i, ct in enumerate(self.custom_timers[:2]):
+            if ct.get("enabled") and ct.get("name"):
+                next_ct = self._get_next_custom_timer_time(ct["interval_minutes"])
+                seconds = (next_ct - now).total_seconds()
+                fmt = ct.get("display_format", "hh:mm:ss")
+                ct_text = self._format_custom_countdown(seconds, fmt)
+                self.timers_page.set_custom_timer_countdown(i, ct_text)
+                if not self._custom_notified[i] and 0 <= seconds <= 10:
+                    self._custom_notified[i] = True
+                    self._fire_custom_notification(ct["name"], ct.get("notification_sound", ""))
+                elif seconds > 10:
+                    self._custom_notified[i] = False
+
         self.check_auto_resets()
 
     def select_tab(self, tab):
@@ -1148,6 +1164,35 @@ class MainWindow(QMainWindow):
 
         return anchor
             
+    def _get_next_custom_timer_time(self, interval_minutes: int) -> "datetime":
+        now = datetime.now()
+        interval = timedelta(minutes=interval_minutes)
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elapsed_secs = (now - midnight).total_seconds()
+        intervals_passed = int(elapsed_secs / interval.total_seconds())
+        return midnight + interval * (intervals_passed + 1)
+
+    @staticmethod
+    def _format_custom_countdown(seconds: float, fmt: str) -> str:
+        s = max(0, int(seconds))
+        if fmt == "mm:ss":
+            total_minutes, secs = divmod(s, 60)
+            return f"{total_minutes:02}:{secs:02}"
+        # default: hh:mm:ss
+        minutes, secs = divmod(s, 60)
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours:02}:{minutes:02}:{secs:02}"
+
+    def _fire_custom_notification(self, name: str, sound_path: str):
+        if hasattr(self, "tray_icon"):
+            self.tray_icon.showMessage(
+                name, f"{name} Timer abgelaufen!",
+                QSystemTrayIcon.MessageIcon.Information,
+                5000,
+            )
+        if sound_path and os.path.isfile(sound_path):
+            winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+
     def open_profile_menu(self):
         menu = QMenu(self)
 
@@ -1222,6 +1267,14 @@ class MainWindow(QMainWindow):
 
         self.timers_page.set_shugo_visible(self.shugo_enabled)
         self.timers_page.set_riss_visible(self.riss_enabled)
+
+        self.custom_timers = settings.get("custom_timers", [])[:2]
+        self._custom_notified = [False, False]
+        for i, ct in enumerate(self.custom_timers[:2]):
+            visible = ct.get("enabled", False) and bool(ct.get("name", ""))
+            self.timers_page.set_custom_timer_visible(i, visible)
+            if visible:
+                self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"), ct.get("display_format", "hh:mm:ss"))
 
         self.toggle_events()
         self.update_countdowns()
@@ -1370,6 +1423,7 @@ class MainWindow(QMainWindow):
                 "notification_riss_enabled": self.notification_riss_enabled,
                 "notification_riss_warn_minutes": self.notification_riss_warn_minutes,
                 "notification_sound": self.notification_sound,
+                "custom_timers": self.custom_timers,
             },
 
             "tasks": {
@@ -1868,6 +1922,15 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = data.get("notification_riss_enabled", self.notification_riss_enabled)
         self.notification_riss_warn_minutes = data.get("notification_riss_warn_minutes", self.notification_riss_warn_minutes)
         self.notification_sound = data.get("notification_sound", self.notification_sound)
+        if "custom_timers" in data:
+            self.custom_timers = data["custom_timers"][:2]
+            self._custom_notified = [False, False]
+            for i, ct in enumerate(self.custom_timers[:2]):
+                visible = ct.get("enabled", False) and bool(ct.get("name", ""))
+                self.timers_page.set_custom_timer_visible(i, visible)
+                if visible:
+                    self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"), ct.get("display_format", "hh:mm:ss"))
+
         old_path = self.dps_meter_path
         self.dps_meter_path = data.get("dps_meter_path", self.dps_meter_path)
         self.dps_meter_autostart = data.get("dps_meter_autostart", self.dps_meter_autostart)
@@ -1915,6 +1978,8 @@ class MainWindow(QMainWindow):
             "dps_meter_autostart": self.dps_meter_autostart,
 
             "profile_dir": str(self.profile_dir),
+
+            "custom_timers": self.custom_timers,
         })
 
 
