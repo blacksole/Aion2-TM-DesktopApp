@@ -144,6 +144,8 @@ TRANSLATIONS = {
         "reset_timer_help":    "Zeigt die verbleibende Zeit bis zum täglichen und wöchentlichen Server-Reset an.",
         "advanced_timer_help": "Konfigurierbare Timer für Shugo- und Riss-Spawn-Zeiten mit individuellem Intervall.",
         "custom_timer_help":   "Erstelle eigene Timer mit individuellem Intervall, Farbe und Anzeigeformat (max. 2).",
+        "shugo_help":          "Start gibt an, ab welcher Minute innerhalb einer Stunde der Timer beginnt.\nZ.B.: 0:15, 0:30, 0:45, 0:00",
+        "riss_help":           "Anker ist der Startzeitpunkt des Timers.\nMitternacht, 01:00, 02:00 Uhr + Intervall",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 min",
@@ -432,6 +434,8 @@ TRANSLATIONS = {
         "reset_timer_help":    "Показывает оставшееся время до ежедневного и еженедельного сброса сервера.",
         "advanced_timer_help": "Настраиваемые таймеры для событий Shugo и Riss с индивидуальным интервалом.",
         "custom_timer_help":   "Создавайте собственные таймеры с интервалом, цветом и форматом (макс. 2).",
+        "shugo_help":          "Начало — с какой минуты внутри часа срабатывает таймер.\nНапр.: 0:15, 0:30, 0:45, 0:00",
+        "riss_help":           "Привязка — начальная точка отсчёта таймера.\nПолночь, 01:00, 02:00 ночи + интервал",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 мин",
@@ -713,6 +717,8 @@ TRANSLATIONS = {
         "reset_timer_help":    "Shows the remaining time until the daily and weekly server reset.",
         "advanced_timer_help": "Configurable timers for Shugo and Rift spawn times with custom intervals.",
         "custom_timer_help":   "Create custom timers with individual interval, color and display format (max. 2).",
+        "shugo_help":          "Start means when does it start within 1 Hour.\nF.e.: 0:15, 0:30, 0:45, 0:00",
+        "riss_help":           "Anchor means what time your Timer starts at.\nMidnight, 01:00, 02:00 at Night + Interval",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 min",

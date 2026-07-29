@@ -307,6 +307,7 @@ class SettingsPage(QWidget):
         self.shugo_title.setText(
             tr_func(language, "shugo_timer")
         )
+        self.shugo_help_btn.setToolTip(tr_func(language, "shugo_help"))
 
         self.shugo_start_label.setText(
             tr_func(language, "start")
@@ -319,6 +320,7 @@ class SettingsPage(QWidget):
         self.riss_title.setText(
             tr_func(language, "riss_timer")
         )
+        self.riss_help_btn.setToolTip(tr_func(language, "riss_help"))
 
         self.riss_anchor_label.setText(
             tr_func(language, "anchor")
@@ -693,11 +695,16 @@ class SettingsPage(QWidget):
         shugo_layout = QHBoxLayout(shugo_row)
         shugo_layout.setContentsMargins(14, 12, 14, 12)
         shugo_layout.setSpacing(12)
-        shugo_text = QVBoxLayout()
-        shugo_text.setSpacing(2)
+        shugo_text = QHBoxLayout()
+        shugo_text.setSpacing(6)
         self.shugo_title = QLabel()
         self.shugo_title.setObjectName("settingsLabel")
+        self.shugo_help_btn = QPushButton("?")
+        self.shugo_help_btn.setObjectName("helpButton")
+        self.shugo_help_btn.setFixedSize(22, 22)
         shugo_text.addWidget(self.shugo_title)
+        shugo_text.addWidget(self.shugo_help_btn)
+        shugo_text.addStretch()
         self.shugo_enabled_btn = QPushButton("Off")
         self.shugo_enabled_btn.setCheckable(True)
         self.shugo_enabled_btn.setObjectName("toggleButton")
@@ -730,11 +737,16 @@ class SettingsPage(QWidget):
         riss_layout = QHBoxLayout(riss_row)
         riss_layout.setContentsMargins(14, 12, 14, 12)
         riss_layout.setSpacing(12)
-        riss_text = QVBoxLayout()
-        riss_text.setSpacing(2)
+        riss_text = QHBoxLayout()
+        riss_text.setSpacing(6)
         self.riss_title = QLabel()
         self.riss_title.setObjectName("settingsLabel")
+        self.riss_help_btn = QPushButton("?")
+        self.riss_help_btn.setObjectName("helpButton")
+        self.riss_help_btn.setFixedSize(22, 22)
         riss_text.addWidget(self.riss_title)
+        riss_text.addWidget(self.riss_help_btn)
+        riss_text.addStretch()
         self.riss_enabled_btn = QPushButton("Off")
         self.riss_enabled_btn.setCheckable(True)
         self.riss_enabled_btn.setObjectName("toggleButton")
