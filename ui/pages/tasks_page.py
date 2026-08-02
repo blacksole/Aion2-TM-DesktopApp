@@ -341,6 +341,11 @@ class TasksPage(QWidget):
 
         self.sort_row.addStretch()
 
+        self._reset_hint_label = QLabel()
+        self._reset_hint_label.setObjectName("resetHintLabel")
+        self._reset_hint_label.setVisible(False)
+        self.sort_row.addWidget(self._reset_hint_label)
+
         layout.addLayout(self.sort_row)
 
         scroll = QScrollArea()
@@ -395,6 +400,14 @@ class TasksPage(QWidget):
         self.location_input.setVisible(is_shopping)
         self.price_input.setVisible(is_shopping)
         self.sort_price_btn.setVisible(is_shopping)
+
+    def set_reset_hint(self, prefix: str, countdown: str, visible: bool):
+        if visible:
+            self._reset_hint_label.setText(
+                f'<span style="color:#64748b;font-weight:500;">{prefix}</span>'
+                f' <span style="color:#22d3ee;font-weight:700;">{countdown}</span>'
+            )
+        self._reset_hint_label.setVisible(visible)
 
     def update_language(self, language: str):
         self.language = language

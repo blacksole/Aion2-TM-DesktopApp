@@ -13,6 +13,7 @@ class ProfilePage(QWidget):
     profile_name_changed = Signal(str)
     export_requested = Signal()
     import_requested = Signal()
+    duplicate_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -78,6 +79,9 @@ class ProfilePage(QWidget):
             "and Shopping lists."
         )
 
+        self.duplicate_profile_btn = QPushButton("Duplicate Profile")
+        self.duplicate_profile_btn.setObjectName("tabButton")
+
         self.export_profile_btn = QPushButton("Export Profile")
         self.export_profile_btn.setObjectName("tabButton")
 
@@ -88,6 +92,7 @@ class ProfilePage(QWidget):
         self.load_profile_btn.clicked.connect(self.load_requested.emit)
         self.reset_profile_btn.clicked.connect(self.reset_requested.emit)
         self.clear_events_btn.clicked.connect(self.clear_events_requested.emit)
+        self.duplicate_profile_btn.clicked.connect(self.duplicate_requested.emit)
         self.export_profile_btn.clicked.connect(self.export_requested.emit)
         self.import_profile_btn.clicked.connect(self.import_requested.emit)
 
@@ -95,6 +100,7 @@ class ProfilePage(QWidget):
         button_row.addWidget(self.load_profile_btn)
         button_row.addWidget(self.reset_profile_btn)
         button_row.addWidget(self.clear_events_btn)
+        button_row.addWidget(self.duplicate_profile_btn)
         button_row.addStretch()
 
         transfer_row = QHBoxLayout()
@@ -184,6 +190,10 @@ class ProfilePage(QWidget):
 
         self.clear_events_btn.setToolTip(
             tr_func(language, "clear_events_tooltip")
+        )
+
+        self.duplicate_profile_btn.setText(
+            tr_func(language, "duplicate_profile")
         )
 
         self.export_profile_btn.setText(

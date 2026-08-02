@@ -146,6 +146,7 @@ TRANSLATIONS = {
         "custom_timer_help":   "Erstelle eigene Timer mit individuellem Intervall, Farbe und Anzeigeformat (max. 2).",
         "shugo_help":          "Start gibt an, ab welcher Minute innerhalb einer Stunde der Timer beginnt.\nZ.B.: 0:15, 0:30, 0:45, 0:00",
         "riss_help":           "Anker ist der Startzeitpunkt des Timers.\nMitternacht, 01:00, 02:00 Uhr + Intervall",
+        "reset_at":            "Reset in:",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 min",
@@ -213,9 +214,11 @@ TRANSLATIONS = {
         "status_locked": "Grau  =  Zukünftig / Gesperrt",
 
         "flow_info_text": (
-            "Kacheln können durch Klicken auf den Haken als erledigt markiert werden.\n"
-            "Der nächste Schritt wird automatisch als aktiv markiert."
+            "Kacheln können durch Klicken auf den Haken als erledigt markiert werden. "
+            "Der nächste Schritt wird automatisch als aktiv markiert.  |  "
+            "Strg + Klick: Mehrere Nodes auswählen"
         ),
+        "flow_move_children": "Kinder mitbewegen",
 
         "flow_start_hint": "Klicke auf (+), um die erste Kachel zu erstellen.",
 
@@ -228,6 +231,8 @@ TRANSLATIONS = {
         "flow_saved": "✓ Gespeichert",
         "flow_saving": "Speichern...",
         "flow_zoom_hint": "Scrollen | Zoom {pct}%",
+        "flow_mark_done":      "✓  Als erledigt markieren",
+        "flow_mark_open":      "↩  Als offen markieren",
         "flow_tooltip_home": "Zur Wurzel",
         "flow_tooltip_select": "Auswählen",
         "flow_tooltip_add_node": "Knoten hinzufügen",
@@ -274,6 +279,10 @@ TRANSLATIONS = {
         # ================= PROFILE TRANSFER =================
         "export_profile": "Profil exportieren",
         "import_profile": "Profil importieren",
+        "duplicate_profile": "Profil duplizieren",
+        "duplicate_profile_title": "Profil duplizieren",
+        "duplicate_profile_label": "Name des neuen Profils:",
+        "duplicate_profile_success": "Profil \"{name}\" wurde erstellt.",
         "profile_exported": "✓ Profil exportiert",
         "profile_imported": "✓ Profil importiert",
         "profile_import_error": "Ungültige Profil-Datei",
@@ -290,6 +299,17 @@ TRANSLATIONS = {
         "confirm_clear_events_text": "Möchtest du alle Event-Einträge wirklich löschen?\n\nDies betrifft alle Event-Tasks und Event-Shopping-Einträge.",
         "confirm_yes": "Ja, löschen",
         "confirm_no": "Abbrechen",
+
+        # ================= TRAY =================
+        "tray_minimize_title": "Beim Schließen im Tray minimieren?",
+        "tray_minimize_text": "Soll das Programm beim Schließen im System-Tray verbleiben\noder wirklich beendet werden?",
+        "tray_minimize_yes": "Im Tray minimieren",
+        "tray_minimize_no": "Beenden",
+        "tray_open": "Öffnen",
+        "tray_exit": "Beenden",
+        "tray_running": "Aion2 TM läuft im Hintergrund.",
+        "tray_setting": "Im Tray minimieren",
+        "tray_setting_desc": "Beim Schließen im System-Tray verbleiben statt zu beenden.",
     },
 
     "ru": {
@@ -436,6 +456,7 @@ TRANSLATIONS = {
         "custom_timer_help":   "Создавайте собственные таймеры с интервалом, цветом и форматом (макс. 2).",
         "shugo_help":          "Начало — с какой минуты внутри часа срабатывает таймер.\nНапр.: 0:15, 0:30, 0:45, 0:00",
         "riss_help":           "Привязка — начальная точка отсчёта таймера.\nПолночь, 01:00, 02:00 ночи + интервал",
+        "reset_at":            "Сброс через:",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 мин",
@@ -496,9 +517,11 @@ TRANSLATIONS = {
         "status_locked": "Серый    =  Будущее / Заблокировано",
 
         "flow_info_text": (
-            "Плитки можно отметить как выполненные, нажав на галочку.\n"
-            "Следующий шаг автоматически станет активным."
+            "Плитки можно отметить как выполненные, нажав на галочку. "
+            "Следующий шаг автоматически станет активным.  |  "
+            "Ctrl + клик: выбрать несколько узлов"
         ),
+        "flow_move_children": "Перемещать дочерние узлы",
 
         "flow_start_hint": "Нажмите (+), чтобы создать первую плитку.",
 
@@ -511,6 +534,8 @@ TRANSLATIONS = {
         "flow_saved": "✓ Сохранено",
         "flow_saving": "Сохранение...",
         "flow_zoom_hint": "Прокрутка | Масштаб {pct}%",
+        "flow_mark_done":      "✓  Отметить как выполненное",
+        "flow_mark_open":      "↩  Отметить как открытое",
         "flow_tooltip_home": "К корню",
         "flow_tooltip_select": "Выбрать",
         "flow_tooltip_add_node": "Добавить узел",
@@ -557,6 +582,10 @@ TRANSLATIONS = {
         # ================= PROFILE TRANSFER =================
         "export_profile": "Экспорт профиля",
         "import_profile": "Импорт профиля",
+        "duplicate_profile": "Дублировать профиль",
+        "duplicate_profile_title": "Дублировать профиль",
+        "duplicate_profile_label": "Имя нового профиля:",
+        "duplicate_profile_success": "Профиль \"{name}\" создан.",
         "profile_exported": "✓ Профиль экспортирован",
         "profile_imported": "✓ Профиль импортирован",
         "profile_import_error": "Неверный файл профиля",
@@ -573,6 +602,17 @@ TRANSLATIONS = {
         "confirm_clear_events_text": "Вы действительно хотите удалить все событийные записи?\n\nЭто затронет все событийные задачи и покупки.",
         "confirm_yes": "Да, удалить",
         "confirm_no": "Отмена",
+
+        # ================= TRAY =================
+        "tray_minimize_title": "Свернуть в трей при закрытии?",
+        "tray_minimize_text": "Свернуть программу в системный трей\nили завершить её?",
+        "tray_minimize_yes": "Свернуть в трей",
+        "tray_minimize_no": "Завершить",
+        "tray_open": "Открыть",
+        "tray_exit": "Выйти",
+        "tray_running": "Aion2 TM работает в фоне.",
+        "tray_setting": "Свернуть в трей",
+        "tray_setting_desc": "При закрытии оставаться в системном трее.",
     },
 
     "en": {
@@ -719,6 +759,7 @@ TRANSLATIONS = {
         "custom_timer_help":   "Create custom timers with individual interval, color and display format (max. 2).",
         "shugo_help":          "Start means when does it start within 1 Hour.\nF.e.: 0:15, 0:30, 0:45, 0:00",
         "riss_help":           "Anchor means what time your Timer starts at.\nMidnight, 01:00, 02:00 at Night + Interval",
+        "reset_at":            "Reset in:",
 
         # ================= TIMER INTERVALS =================
         "timer_30min": "30 min",
@@ -783,9 +824,11 @@ TRANSLATIONS = {
         "status_locked": "Gray   =  Future / Locked",
 
         "flow_info_text": (
-            "Tiles can be marked as completed by clicking the checkmark.\n"
-            "The next step will automatically be marked as active."
+            "Tiles can be marked as completed by clicking the checkmark. "
+            "The next step will automatically be marked as active.  |  "
+            "Ctrl + Click: Select multiple nodes"
         ),
+        "flow_move_children": "Move children with parent",
 
         "flow_start_hint": "Click (+) to create the first card.",
 
@@ -799,6 +842,8 @@ TRANSLATIONS = {
         "flow_saved": "✓ Saved",
         "flow_saving": "Saving...",
         "flow_zoom_hint": "Scroll | Zoom {pct}%",
+        "flow_mark_done":      "✓  Mark as completed",
+        "flow_mark_open":      "↩  Mark as open",
         "flow_tooltip_home": "Go to Root",
         "flow_tooltip_select": "Select",
         "flow_tooltip_add_node": "Add Node",
@@ -845,6 +890,10 @@ TRANSLATIONS = {
         # ================= PROFILE TRANSFER =================
         "export_profile": "Export Profile",
         "import_profile": "Import Profile",
+        "duplicate_profile": "Duplicate Profile",
+        "duplicate_profile_title": "Duplicate Profile",
+        "duplicate_profile_label": "Name of the new profile:",
+        "duplicate_profile_success": "Profile \"{name}\" has been created.",
         "profile_exported": "✓ Profile exported",
         "profile_imported": "✓ Profile imported",
         "profile_import_error": "Invalid profile file",
@@ -861,6 +910,17 @@ TRANSLATIONS = {
         "confirm_clear_events_text": "Do you really want to delete all event entries?\n\nThis affects all event tasks and event shopping entries.",
         "confirm_yes": "Yes, delete",
         "confirm_no": "Cancel",
+
+        # ================= TRAY =================
+        "tray_minimize_title": "Minimize to tray on close?",
+        "tray_minimize_text": "Should the program minimize to the system tray\nor close completely?",
+        "tray_minimize_yes": "Minimize to tray",
+        "tray_minimize_no": "Close",
+        "tray_open": "Open",
+        "tray_exit": "Exit",
+        "tray_running": "Aion2 TM is running in the background.",
+        "tray_setting": "Minimize to tray",
+        "tray_setting_desc": "Stay in the system tray instead of closing.",
     }
 }
 

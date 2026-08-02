@@ -145,7 +145,8 @@ class FlowController:
             return
 
         panel = self.window.editor_panel
-        node.title = panel.title_input.text().strip()
+        old_title = node.title
+        node.title = panel.title_input.text().strip() or old_title
         node.description = panel.desc_input.toPlainText().strip()
         node.icon = panel.symbol_combo.currentData()
 
@@ -154,9 +155,16 @@ class FlowController:
         elif node.status == "optional":
             node.status = "locked"
 
+        is_root = self.window.selected_node_id == self.window.root_node_id
+        if is_root and node.title != old_title:
+            # Tell main_window to rename the map key to the new root title
+            mw_name = self.window.map_name_combo.currentText()
+            self.window.root_renamed.emit(mw_name, node.title)
+
         panel.mark_clean()
         self.window.render_flow()
         self.window.mark_unsaved()
+        self.window.close_editor_panel()
 
     def cancel_selected_node(self):
         if self._editor_is_dirty():

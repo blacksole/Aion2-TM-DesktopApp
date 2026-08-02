@@ -19,10 +19,26 @@
             {
                 "title": "Task1",
                 "description": "",
-                "completed": false
+                "completed": true
+            },
+            {
+                "title": "Tägliche Quest",
+                "description": "",
+                "completed": true
+            },
+            {
+                "title": "Instanz laufen",
+                "description": "",
+                "completed": true
             }
         ],
-        "weeklyTasks": [],
+        "weeklyTasks": [
+            {
+                "title": "Wöchentliche Quest",
+                "description": "",
+                "completed": true
+            }
+        ],
         "eventTasks": [],
         "dailyShopping": [],
         "weeklyShopping": [],

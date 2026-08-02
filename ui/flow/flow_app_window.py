@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QButtonGroup,
     QComboBox,
+    QCheckBox,
 )
 from PySide6.QtCore import Qt, QSize, QTimer, Signal
 from PySide6.QtGui import QPixmap, QIcon, QCursor
@@ -36,6 +37,8 @@ class FlowMapWindow(QMainWindow):
     map_add_requested = Signal()
     map_delete_requested = Signal()
     map_reset_requested = Signal()
+    root_renamed = Signal(str, str)   # (old_map_name, new_map_name)
+    map_overlay_changed = Signal(bool)
 
     def __init__(self, parent=None, language="en", tr_func=None):
         super().__init__(parent)
@@ -132,11 +135,18 @@ class FlowMapWindow(QMainWindow):
         self.edit_mode_btn.clicked.connect(lambda: self.set_mode("edit"))
         self.guide_mode_btn.clicked.connect(lambda: self.set_mode("guide"))
 
+        self.overlay_cb = QCheckBox()
+        self.overlay_cb.setObjectName("FlowOverlayCb")
+        self.overlay_cb.setToolTip("Diese Map im Overlay anzeigen")
+        self.overlay_cb.toggled.connect(self.map_overlay_changed.emit)
+
         map_selector_row = QHBoxLayout()
         map_selector_row.setSpacing(6)
         map_selector_row.addWidget(self.map_name_combo)
         map_selector_row.addWidget(self.new_map_btn)
         map_selector_row.addWidget(self.delete_map_btn)
+        map_selector_row.addSpacing(8)
+        map_selector_row.addWidget(self.overlay_cb)
         top_layout.addLayout(map_selector_row)
 
         top_layout.addStretch()
@@ -261,8 +271,8 @@ class FlowMapWindow(QMainWindow):
         self.map_area.move(20, 0)
         self.map_viewport.set_pan_target(self.map_area)
         self.node_cards: dict = {}
-
-
+        self.selected_node_ids: set = set()
+        self.move_children_with_parent: bool = False
 
         self.add_demo_flow()
 
@@ -366,6 +376,15 @@ class FlowMapWindow(QMainWindow):
         info_layout.addWidget(self.info_icon)
         info_layout.addWidget(self.info_text)
         info_layout.addStretch()
+
+        self.move_children_cb = QCheckBox()
+        self.move_children_cb.setObjectName("FlowMoveChildrenCb")
+        self.move_children_cb.stateChanged.connect(
+            lambda state: setattr(self, "move_children_with_parent", bool(state))
+        )
+        info_layout.addWidget(self.move_children_cb)
+        info_layout.addSpacing(22)
+
         info_layout.addWidget(self.footer_status_title)
         info_layout.addWidget(self.footer_completed)
         info_layout.addWidget(self.footer_active)
@@ -397,8 +416,11 @@ class FlowMapWindow(QMainWindow):
         self.guide_mode_btn.setText(tr_func(language, "flow_guide_mode"))
 
         self.info_text.setText(tr_func(language, "flow_info_text"))
+        self.move_children_cb.setText(tr_func(language, "flow_move_children"))
 
         self.editor_panel.update_language(language, tr_func)
+        if hasattr(self, "guide_view"):
+            self.guide_view.update_language(language, tr_func)
         self.footer_status_title.setText(
             tr_func(language, "flow_status_colors") + ":"
         )
@@ -428,6 +450,16 @@ class FlowMapWindow(QMainWindow):
         self.add_node_tool_btn.setToolTip(tr_func(language, "flow_tooltip_add_node"))
         self.branch_tool_btn.setToolTip(tr_func(language, "flow_tooltip_branch"))
         self.delete_tool_btn.setToolTip(tr_func(language, "flow_tooltip_delete"))
+        _overlay_tooltip = {
+            "de": "Diese Map im Overlay anzeigen",
+            "ru": "Показывать эту карту в оверлее",
+        }.get(language, "Show this map in the overlay")
+        self.overlay_cb.setToolTip(_overlay_tooltip)
+        _overlay_text = {
+            "de": "Overlay",
+            "ru": "Оверлей",
+        }.get(language, "Overlay")
+        self.overlay_cb.setText(_overlay_text)
 
         # Save status + zoom
         self.save_status_label.setText(tr_func(language, "flow_saved"))
@@ -467,6 +499,7 @@ class FlowMapWindow(QMainWindow):
         return {
             "nodes": {nid: node.to_dict() for nid, node in self.nodes.items()},
             "root_node_id": self.root_node_id,
+            "show_in_overlay": self.overlay_cb.isChecked(),
         }
 
     def load_flow_data(self, data: dict):
@@ -477,6 +510,9 @@ class FlowMapWindow(QMainWindow):
         self.nodes = {nid: FlowNode.from_dict(nd) for nid, nd in raw_nodes.items()}
         self.root_node_id = data.get("root_node_id")
         self.selected_node_id = None
+        self.overlay_cb.blockSignals(True)
+        self.overlay_cb.setChecked(data.get("show_in_overlay", False))
+        self.overlay_cb.blockSignals(False)
         self.renderer._first_render = True
         if self.isVisible():
             self.render_flow()
@@ -524,7 +560,28 @@ class FlowMapWindow(QMainWindow):
         for card in self.node_cards.values():
             card.deleteLater()
         self.node_cards = {}
+        self.selected_node_ids.clear()
 
+    def _get_all_descendants(self, node_id: str) -> list:
+        result = []
+        stack = list(self.nodes.get(node_id, FlowNode("", "")).children)
+        seen = set()
+        while stack:
+            nid = stack.pop()
+            if nid in seen:
+                continue
+            seen.add(nid)
+            result.append(nid)
+            if nid in self.nodes:
+                stack.extend(self.nodes[nid].children)
+        return result
+
+    def _refresh_card_highlights(self):
+        for nid, card in self.node_cards.items():
+            selected = nid in self.selected_node_ids
+            card.setProperty("multiSelected", selected)
+            card.style().unpolish(card)
+            card.style().polish(card)
 
     def set_mode(self, mode: str):
         if mode == self.current_mode:
@@ -797,6 +854,7 @@ class FlowMapWindow(QMainWindow):
             status=node.status,
             zoom=self.zoom_factor,
             parent_window=self,
+            parent=self.map_area,
         )
 
         card.add_node_hint_btn.clicked.connect(
@@ -807,7 +865,13 @@ class FlowMapWindow(QMainWindow):
             lambda checked=False, node_id=node.id: self.toggle_node_completed(node_id)
         )
 
-        drag_state = {"dragging": False, "start_global": None, "start_node": (0.0, 0.0)}
+        drag_state = {
+            "dragging": False,
+            "start_global": None,
+            "start_node": (0.0, 0.0),
+            "multi_starts": {},
+            "child_starts": {},
+        }
 
         def on_press(event, n=node, c=card):
             if event.button() != Qt.LeftButton:
@@ -815,7 +879,33 @@ class FlowMapWindow(QMainWindow):
             drag_state["dragging"] = False
             drag_state["start_global"] = event.globalPosition().toPoint()
             drag_state["start_node"] = (n.x, n.y)
-            if self.current_tool != "select":
+
+            if self.current_tool == "select":
+                ctrl = bool(event.modifiers() & Qt.ControlModifier)
+                if ctrl:
+                    if n.id in self.selected_node_ids:
+                        self.selected_node_ids.discard(n.id)
+                    else:
+                        self.selected_node_ids.add(n.id)
+                    self._refresh_card_highlights()
+
+                drag_state["multi_starts"] = {
+                    nid: (self.nodes[nid].x, self.nodes[nid].y)
+                    for nid in self.selected_node_ids
+                    if nid in self.nodes
+                }
+                if self.move_children_with_parent:
+                    child_starts = {}
+                    primary = self.selected_node_ids if self.selected_node_ids else {n.id}
+                    for nid in primary:
+                        for desc_id in self._get_all_descendants(nid):
+                            if desc_id not in primary and desc_id not in child_starts:
+                                if desc_id in self.nodes:
+                                    child_starts[desc_id] = (self.nodes[desc_id].x, self.nodes[desc_id].y)
+                    drag_state["child_starts"] = child_starts
+                else:
+                    drag_state["child_starts"] = {}
+            else:
                 self.handle_node_click(n.id)
 
         def on_move(event, n=node, c=card):
@@ -829,16 +919,37 @@ class FlowMapWindow(QMainWindow):
                     drag_state["dragging"] = True
             if drag_state["dragging"]:
                 sx, sy = drag_state["start_node"]
-                n.x = sx + delta.x() / self.zoom_factor
-                n.y = sy + delta.y() / self.zoom_factor
+                dx = delta.x() / self.zoom_factor
+                dy = delta.y() / self.zoom_factor
+                n.x = sx + dx
+                n.y = sy + dy
                 c.move(int(n.x * self.zoom_factor), int(n.y * self.zoom_factor))
+
+                for nid, (nx, ny) in drag_state["multi_starts"].items():
+                    if nid != n.id and nid in self.nodes and nid in self.node_cards:
+                        other = self.nodes[nid]
+                        other.x = nx + dx
+                        other.y = ny + dy
+                        self.node_cards[nid].move(int(other.x * self.zoom_factor), int(other.y * self.zoom_factor))
+
+                for nid, (nx, ny) in drag_state["child_starts"].items():
+                    if nid in self.nodes and nid in self.node_cards:
+                        other = self.nodes[nid]
+                        other.x = nx + dx
+                        other.y = ny + dy
+                        self.node_cards[nid].move(int(other.x * self.zoom_factor), int(other.y * self.zoom_factor))
+
                 self.map_area.update()
 
         def on_release(event, n=node):
             if event.button() != Qt.LeftButton:
                 return
+            ctrl = bool(event.modifiers() & Qt.ControlModifier)
             if self.current_tool == "select" and not drag_state["dragging"]:
-                self.handle_node_click(n.id)
+                if not ctrl:
+                    self.selected_node_ids.clear()
+                    self._refresh_card_highlights()
+                    self.handle_node_click(n.id)
             if drag_state["dragging"]:
                 self.mark_unsaved()
             drag_state["dragging"] = False

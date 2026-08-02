@@ -271,29 +271,66 @@ class OverlayWindow(QWidget):
             self._add_empty("No active tasks ✓")
 
     def _populate_guide(self):
-        fw = getattr(self.main_window, "flow_map_window", None)
-        if not fw or not getattr(fw, "nodes", None):
+        mw = self.main_window
+        fw = getattr(mw, "flow_map_window", None)
+        if not fw:
             self._add_empty("No flow loaded")
             return
+
+        from core.flow_model import FlowNode
+
+        # Collect all maps marked for overlay; use live data for the active map
+        all_maps = dict(getattr(mw, "flow_maps", {}))
+        active_name = getattr(mw, "active_flow_map_name", None)
+        if fw and active_name:
+            all_maps[active_name] = fw.get_flow_data()
+
         count = 0
-        for node in fw.nodes.values():
-            if node.status in ("active", "locked", "completed"):
-                row = OverlayGuideRow(node.id, node.title, node.status)
-                if node.status in ("active", "completed"):
-                    row.check_btn.clicked.connect(
-                        lambda _, nid=node.id: self._toggle_node(nid)
-                    )
-                self._content_layout.insertWidget(self._content_layout.count() - 1, row)
-                count += 1
+        for map_name, map_data in all_maps.items():
+            if not map_data.get("show_in_overlay", False):
+                continue
+            nodes = {
+                nid: FlowNode.from_dict(nd)
+                for nid, nd in map_data.get("nodes", {}).items()
+            }
+            for node in nodes.values():
+                if node.status in ("active", "locked", "completed"):
+                    row = OverlayGuideRow(node.id, node.title, node.status)
+                    if node.status in ("active", "completed"):
+                        row.check_btn.clicked.connect(
+                            lambda _, nid=node.id, mn=map_name: self._toggle_node(nid, mn)
+                        )
+                    self._content_layout.insertWidget(self._content_layout.count() - 1, row)
+                    count += 1
+
         if count == 0:
             self._add_empty("All steps completed ✓")
 
-    def _toggle_node(self, node_id: str):
-        fw = getattr(self.main_window, "flow_map_window", None)
-        if fw:
-            fw.toggle_node_completed(node_id)
-            self.main_window.save_profile(silent=True)
-            self.refresh()
+    def _toggle_node(self, node_id: str, map_name: str = None):
+        mw = self.main_window
+        fw = getattr(mw, "flow_map_window", None)
+        active_name = getattr(mw, "active_flow_map_name", None)
+
+        if map_name is None or map_name == active_name:
+            if fw:
+                fw.toggle_node_completed(node_id)
+        else:
+            from core.flow_model import FlowNode
+            map_data = getattr(mw, "flow_maps", {}).get(map_name, {})
+            node_data = map_data.get("nodes", {}).get(node_id)
+            if node_data:
+                node = FlowNode.from_dict(node_data)
+                if node.status == "completed":
+                    node.status = "active"
+                    node.completed = False
+                else:
+                    node.status = "completed"
+                    node.completed = True
+                node_data["status"] = node.status
+                node_data["completed"] = node.completed
+
+        mw.save_profile(silent=True)
+        self.refresh()
 
     def _add_empty(self, text: str):
         lbl = QLabel(text)

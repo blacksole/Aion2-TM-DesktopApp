@@ -33,7 +33,6 @@ class FlowRenderer:
         zoom = self.window.zoom_factor
         for node_id, node in self.window.nodes.items():
             card = self.window.create_node_card(node)
-            card.setParent(self.window.map_area)
             card.move(int(node.x * zoom), int(node.y * zoom))
             card.show()
             self.window.node_cards[node_id] = card

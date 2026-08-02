@@ -263,6 +263,9 @@ class FlowGuideView(QWidget):
         text_col.addWidget(self.info_title)
         text_col.addWidget(self.info_desc)
 
+        self._language = "de"
+        self._tr_func = None
+
         self.done_btn = QPushButton("✓  Als erledigt markieren")
         self.done_btn.setObjectName("GuideDoneButton")
         self.done_btn.setFixedSize(220, 44)
@@ -362,9 +365,9 @@ class FlowGuideView(QWidget):
         self.edit_btn.setVisible(is_selected)
 
         if node.status == "completed":
-            self.done_btn.setText("↩  Als offen markieren")
+            self.done_btn.setText(self._tr("flow_mark_open"))
         else:
-            self.done_btn.setText("✓  Als erledigt markieren")
+            self.done_btn.setText(self._tr("flow_mark_done"))
 
     def clear_node_info(self):
         self.info_icon_label.setStyleSheet("color: #334155; font-size: 22px;")
@@ -372,6 +375,16 @@ class FlowGuideView(QWidget):
         self.info_desc.setText("")
         self.done_btn.setVisible(False)
         self.edit_btn.setVisible(False)
+
+    def update_language(self, language: str, tr_func):
+        self._language = language
+        self._tr_func = tr_func
+
+    def _tr(self, key: str) -> str:
+        if self._tr_func:
+            return self._tr_func(self._language, key)
+        _fallback = {"flow_mark_done": "✓  Als erledigt markieren", "flow_mark_open": "↩  Als offen markieren"}
+        return _fallback.get(key, key)
 
     def _on_done_clicked(self):
         if not self._selected_node_id:

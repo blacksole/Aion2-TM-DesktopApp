@@ -22,8 +22,9 @@ class FlowNodeCard(QFrame):
         status="active",
         zoom=1.0,
         parent_window=None,
+        parent=None,
     ):
-        super().__init__()
+        super().__init__(parent)
 
         self.setObjectName("FlowNodeCard")
         self.setProperty("status", status)

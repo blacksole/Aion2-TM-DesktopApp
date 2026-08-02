@@ -231,6 +231,11 @@ QDialog {
     background-color: rgba(15, 23, 42, 0.9);
 }
 
+#resetHintLabel {
+    font-size: 13px;
+    padding-right: 4px;
+}
+
 #helpButton {
     background-color: transparent;
     color: #64748b;
@@ -883,6 +888,49 @@ QToolTip {
 
 #FlowNodeCard[status="locked"] {
     border: 1px solid rgba(107, 114, 128, 0.8);
+}
+
+#FlowNodeCard[multiSelected="true"] {
+    border: 2px solid #22d3ee;
+    background-color: rgba(34, 211, 238, 0.08);
+}
+
+#FlowMoveChildrenCb {
+    color: #94a3b8;
+    font-size: 12px;
+    spacing: 6px;
+}
+
+#FlowMoveChildrenCb::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    border-radius: 4px;
+    background-color: transparent;
+}
+
+#FlowMoveChildrenCb::indicator:checked {
+    background-color: #22d3ee;
+    border-color: #22d3ee;
+}
+
+#FlowOverlayCb {
+    color: #94a3b8;
+    font-size: 12px;
+    spacing: 6px;
+}
+
+#FlowOverlayCb::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    border-radius: 4px;
+    background-color: transparent;
+}
+
+#FlowOverlayCb::indicator:checked {
+    background-color: #a78bfa;
+    border-color: #a78bfa;
 }
 
 #FlowNodeIcon {

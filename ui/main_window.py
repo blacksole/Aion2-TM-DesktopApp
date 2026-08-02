@@ -25,7 +25,7 @@ from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QMenu, QComboBox, QStackedWidget, QFileDialog, QMessageBox,
-    QSystemTrayIcon,
+    QSystemTrayIcon, QInputDialog,
 )
 from datetime import datetime, timedelta
 from PySide6.QtCore import QTimer
@@ -190,6 +190,8 @@ class MainWindow(QMainWindow):
         self.weekly_reset_time = "09:00"
         self.last_daily_reset_date = None
         self.last_weekly_reset_date = None
+        self._daily_countdown_text = "--:--:--"
+        self._weekly_countdown_text = "--:--:--"
         self.profile_name = "Default"
         if getattr(sys, "frozen", False):
             self.project_root = Path(sys.executable).parent
@@ -201,6 +203,7 @@ class MainWindow(QMainWindow):
 
         self.dps_meter_path = ""
         self.dps_meter_autostart = False
+        self.minimize_to_tray = None  # None = not asked yet
 
         self.profile_dir = self._resolve_profile_dir()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
@@ -245,6 +248,8 @@ class MainWindow(QMainWindow):
         self.flow_map_window.map_add_requested.connect(self._add_flow_map)
         self.flow_map_window.map_delete_requested.connect(self._delete_flow_map)
         self.flow_map_window.map_reset_requested.connect(self._reset_flow_map)
+        self.flow_map_window.root_renamed.connect(self._on_flow_map_root_renamed)
+        self.flow_map_window.map_overlay_changed.connect(self._on_flow_map_overlay_changed)
 
         self.setup_ui()
         self.overlay = OverlayWindow(self)
@@ -258,6 +263,8 @@ class MainWindow(QMainWindow):
             self._show_first_run_dialog()
         else:
             self.load_last_profile()
+
+        self._launch_dps_meter_if_configured()
 
         self.countdown_timer = QTimer(self)
         self.countdown_timer.timeout.connect(self.update_countdowns)
@@ -652,8 +659,10 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.profile_page, "import_requested"):
             self.profile_page.import_requested.connect(self.import_profile)
-            
-        
+
+        if hasattr(self.profile_page, "duplicate_requested"):
+            self.profile_page.duplicate_requested.connect(self.duplicate_profile)
+
         self.tasks_page.sort_requested.connect(self.sort_current_list)
         self.tasks_page.filter_changed.connect(self.set_task_filter)
 
@@ -876,12 +885,16 @@ class MainWindow(QMainWindow):
         daily_next = self.get_next_daily_reset()
         daily_seconds = (daily_next - now).total_seconds()
         daily_text = self.format_reset_countdown(daily_seconds)
+        self._daily_countdown_text = daily_text
         self.timers_page.set_daily_countdown(daily_text)
 
         weekly_next = self.get_next_weekly_reset()
         weekly_seconds = (weekly_next - now).total_seconds()
         weekly_text = self.format_reset_countdown(weekly_seconds)
+        self._weekly_countdown_text = weekly_text
         self.timers_page.set_weekly_countdown(weekly_text)
+
+        self._update_task_reset_hint()
 
         if self.shugo_enabled:
             next_shugo = self.get_next_shugo_time()
@@ -896,12 +909,12 @@ class MainWindow(QMainWindow):
                 shugo_warn_min = self.notification_shugo_warn_minutes
             if shugo_notif_on:
                 warn_secs = shugo_warn_min * 60
-                if not self._shugo_notified and 0 <= seconds <= warn_secs:
+                check_secs = warn_secs if warn_secs > 0 else 10
+                if not self._shugo_notified and 0 <= seconds <= check_secs:
                     self._shugo_notified = True
-                    mins = shugo_warn_min
-                    msg = f"Shugo spawnt jetzt!" if mins == 0 else f"Shugo spawnt in {mins} Min!"
+                    msg = "Shugo spawnt jetzt!" if shugo_warn_min == 0 else f"Shugo spawnt in {shugo_warn_min} Min!"
                     self._fire_notification("Shugo", msg)
-                elif seconds > warn_secs:
+                elif seconds > check_secs:
                     self._shugo_notified = False
 
         if self.riss_enabled:
@@ -917,12 +930,12 @@ class MainWindow(QMainWindow):
                 riss_warn_min = self.notification_riss_warn_minutes
             if riss_notif_on:
                 warn_secs = riss_warn_min * 60
-                if not self._riss_notified and 0 <= seconds <= warn_secs:
+                check_secs = warn_secs if warn_secs > 0 else 10
+                if not self._riss_notified and 0 <= seconds <= check_secs:
                     self._riss_notified = True
-                    mins = riss_warn_min
-                    msg = f"Riss öffnet sich jetzt!" if mins == 0 else f"Riss öffnet sich in {mins} Min!"
+                    msg = "Riss öffnet sich jetzt!" if riss_warn_min == 0 else f"Riss öffnet sich in {riss_warn_min} Min!"
                     self._fire_notification("Riss", msg)
-                elif seconds > warn_secs:
+                elif seconds > check_secs:
                     self._riss_notified = False
 
         for i, ct in enumerate(self.custom_timers[:2]):
@@ -942,8 +955,18 @@ class MainWindow(QMainWindow):
 
     def select_tab(self, tab):
         self.active_tab = tab
-
+        self._update_task_reset_hint()
         self.refresh()
+
+    def _update_task_reset_hint(self):
+        tab = self.tasks_page.active_tab
+        prefix = tr(self.language, "reset_at")
+        if tab in ("dailyTasks", "dailyShopping"):
+            self.tasks_page.set_reset_hint(prefix, self._daily_countdown_text, True)
+        elif tab in ("weeklyTasks", "weeklyShopping"):
+            self.tasks_page.set_reset_hint(prefix, self._weekly_countdown_text, True)
+        else:
+            self.tasks_page.set_reset_hint("", "", False)
 
     def refresh(self):
 
@@ -1079,7 +1102,76 @@ class MainWindow(QMainWindow):
     def _setup_tray_icon(self):
         icon = self.windowIcon()
         self.tray_icon = QSystemTrayIcon(icon, self)
+
+        tray_menu = QMenu(self)
+        self._tray_open_action = tray_menu.addAction(tr(self.language, "tray_open"))
+        self._tray_open_action.triggered.connect(self._restore_from_tray)
+        tray_menu.addSeparator()
+        self._tray_exit_action = tray_menu.addAction(tr(self.language, "tray_exit"))
+        self._tray_exit_action.triggered.connect(self._quit_app)
+        self.tray_icon.setContextMenu(tray_menu)
+
+        self.tray_icon.activated.connect(self._on_tray_activated)
         self.tray_icon.show()
+
+    def _on_tray_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._restore_from_tray()
+
+    def _restore_from_tray(self):
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def _quit_app(self):
+        self._force_quit = True
+        self.close()
+
+    def closeEvent(self, event):
+        if getattr(self, "_force_quit", False):
+            event.accept()
+            return
+
+        if self.minimize_to_tray is True:
+            event.ignore()
+            self.hide()
+            self.tray_icon.showMessage(
+                "Aion2 TM",
+                tr(self.language, "tray_running"),
+                QSystemTrayIcon.MessageIcon.Information,
+                3000,
+            )
+            return
+
+        if self.minimize_to_tray is None:
+            box = QMessageBox(self)
+            box.setWindowTitle(tr(self.language, "tray_minimize_title"))
+            box.setText(tr(self.language, "tray_minimize_text"))
+            tray_btn = box.addButton(
+                tr(self.language, "tray_minimize_yes"), QMessageBox.AcceptRole
+            )
+            close_btn = box.addButton(
+                tr(self.language, "tray_minimize_no"), QMessageBox.RejectRole
+            )
+            box.exec()
+            if box.clickedButton() is tray_btn:
+                self.minimize_to_tray = True
+                self._save_app_config()
+                event.ignore()
+                self.hide()
+                self.tray_icon.showMessage(
+                    "Aion2 TM",
+                    tr(self.language, "tray_running"),
+                    QSystemTrayIcon.MessageIcon.Information,
+                    3000,
+                )
+            else:
+                self.minimize_to_tray = False
+                self._save_app_config()
+                event.accept()
+            return
+
+        event.accept()
 
     def _launch_dps_meter_if_configured(self):
         if self.dps_meter_autostart and self.dps_meter_path:
@@ -1240,6 +1332,12 @@ class MainWindow(QMainWindow):
         self.weekly_reset_day = settings.get("weekly_reset_day", "Mo")
         self.weekly_reset_time = settings.get("weekly_reset_time", "09:00")
 
+        from datetime import date as _date
+        _d = settings.get("last_daily_reset_date")
+        self.last_daily_reset_date = _date.fromisoformat(_d) if _d else None
+        _w = settings.get("last_weekly_reset_date")
+        self.last_weekly_reset_date = _date.fromisoformat(_w) if _w else None
+
         self.show_events = settings.get("show_events", True)
         self.auto_save = settings.get("auto_save", True)
         self.notification_enabled = settings.get("notification_enabled", False)
@@ -1250,7 +1348,6 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = settings.get("notification_riss_enabled", False)
         self.notification_riss_warn_minutes = settings.get("notification_riss_warn_minutes", 1)
         self.notification_sound = settings.get("notification_sound", "")
-        self._launch_dps_meter_if_configured()
         self.shugo_enabled = settings.get("shugo_enabled", False)
         self.shugo_start_minute = settings.get("shugo_start_minute", 15)
         self.shugo_interval_text = settings.get("shugo_interval_text", "30 min")
@@ -1392,6 +1489,25 @@ class MainWindow(QMainWindow):
             self.flow_maps[self.active_flow_map_name] = self.flow_map_window.get_flow_data()
         return self.flow_maps
 
+    def _on_flow_map_root_renamed(self, old_name: str, new_name: str):
+        if old_name not in self.flow_maps or old_name == new_name:
+            return
+        if new_name in self.flow_maps:
+            return  # Name already taken — don't rename
+        data = self.flow_map_window.get_flow_data()
+        self.flow_maps[new_name] = data
+        del self.flow_maps[old_name]
+        self.active_flow_map_name = new_name
+        self.flow_map_window.set_map_list(list(self.flow_maps.keys()), new_name)
+        if self.auto_save:
+            self.save_profile(silent=True)
+
+    def _on_flow_map_overlay_changed(self, checked: bool):
+        data = self.flow_map_window.get_flow_data()
+        self.flow_maps[self.active_flow_map_name] = data
+        if self.auto_save:
+            self.save_profile(silent=True)
+
     def save_profile(self, silent=False):
         data = {
             "profile_name": self.profile_name,
@@ -1424,6 +1540,14 @@ class MainWindow(QMainWindow):
                 "notification_riss_warn_minutes": self.notification_riss_warn_minutes,
                 "notification_sound": self.notification_sound,
                 "custom_timers": self.custom_timers,
+                "last_daily_reset_date": (
+                    self.last_daily_reset_date.isoformat()
+                    if self.last_daily_reset_date else None
+                ),
+                "last_weekly_reset_date": (
+                    self.last_weekly_reset_date.isoformat()
+                    if self.last_weekly_reset_date else None
+                ),
             },
 
             "tasks": {
@@ -1456,6 +1580,8 @@ class MainWindow(QMainWindow):
                 cfg = json.loads(self.app_config_path.read_text(encoding="utf-8"))
                 self.dps_meter_path = cfg.get("dps_meter_path", "")
                 self.dps_meter_autostart = cfg.get("dps_meter_autostart", False)
+                raw_mtt = cfg.get("minimize_to_tray", None)
+                self.minimize_to_tray = bool(raw_mtt) if raw_mtt is not None else None
                 custom = cfg.get("profile_dir", "")
                 if custom:
                     p = Path(custom)
@@ -1477,6 +1603,7 @@ class MainWindow(QMainWindow):
             "profile_dir": str(self.profile_dir),
             "dps_meter_path": self.dps_meter_path,
             "dps_meter_autostart": self.dps_meter_autostart,
+            "minimize_to_tray": self.minimize_to_tray,
         }
         self.app_config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
@@ -1597,6 +1724,10 @@ class MainWindow(QMainWindow):
 
         self.sidebar.update_language(self.language, tr)
         self.header.update_language(self.language, tr)
+
+        if hasattr(self, "_tray_open_action"):
+            self._tray_open_action.setText(tr(self.language, "tray_open"))
+            self._tray_exit_action.setText(tr(self.language, "tray_exit"))
 
         self.refresh()
 
@@ -1931,6 +2062,9 @@ class MainWindow(QMainWindow):
                 if visible:
                     self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"), ct.get("display_format", "hh:mm:ss"))
 
+        if "minimize_to_tray" in data:
+            self.minimize_to_tray = data["minimize_to_tray"]
+
         old_path = self.dps_meter_path
         self.dps_meter_path = data.get("dps_meter_path", self.dps_meter_path)
         self.dps_meter_autostart = data.get("dps_meter_autostart", self.dps_meter_autostart)
@@ -1976,6 +2110,7 @@ class MainWindow(QMainWindow):
             "notification_sound": self.notification_sound,
             "dps_meter_path": self.dps_meter_path,
             "dps_meter_autostart": self.dps_meter_autostart,
+            "minimize_to_tray": bool(self.minimize_to_tray),
 
             "profile_dir": str(self.profile_dir),
 
@@ -2102,6 +2237,45 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.save_profile(silent=True)
         event.accept()
+
+    def duplicate_profile(self):
+        self.save_profile(silent=True)
+
+        default_name = f"{self.profile_name} (2)"
+        new_name, ok = QInputDialog.getText(
+            self,
+            tr(self.language, "duplicate_profile_title"),
+            tr(self.language, "duplicate_profile_label"),
+            text=default_name,
+        )
+        if not ok or not new_name.strip():
+            return
+
+        new_name = new_name.strip()
+        dest_path = self.profile_dir / f"{new_name}.json"
+
+        if dest_path.exists():
+            QMessageBox.warning(
+                self,
+                tr(self.language, "duplicate_profile_title"),
+                f'"{new_name}" existiert bereits.',
+            )
+            return
+
+        src_path = self.profile_dir / f"{self.profile_name}.json"
+        with open(src_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        data["profile_name"] = new_name
+        data.setdefault("settings", {})["last_daily_reset_date"] = None
+        data["settings"]["last_weekly_reset_date"] = None
+
+        with open(dest_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+
+        self.show_toast(
+            tr(self.language, "duplicate_profile_success", name=new_name)
+        )
 
     def export_profile(self):
         self.save_profile(silent=True)

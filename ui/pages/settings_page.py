@@ -247,6 +247,10 @@ class SettingsPage(QWidget):
             tr_func(language, "auto_save_desc")
         )
 
+        self.tray_title.setText(tr_func(language, "tray_setting"))
+        self.tray_desc.setText(tr_func(language, "tray_setting_desc"))
+        self._update_toggle_text(self.tray_minimize_btn, self.tray_minimize_btn.isChecked(), language, tr_func)
+
         self.dps_title.setText(tr_func(language, "dps_meter"))
         self.dps_desc.setText(tr_func(language, "dps_meter_desc"))
         self.dps_browse_btn.setText(tr_func(language, "dps_meter_browse"))
@@ -852,6 +856,7 @@ class SettingsPage(QWidget):
 
             "show_events": self.show_events_btn.isChecked(),
             "auto_save": self.auto_save_btn.isChecked(),
+            "minimize_to_tray": self.tray_minimize_btn.isChecked(),
             "dps_meter_path": self.dps_path_input.text().strip(),
             "dps_meter_autostart": self.dps_autostart_btn.isChecked(),
 
@@ -1286,8 +1291,34 @@ class SettingsPage(QWidget):
         dps_path_row.addWidget(self.dps_start_btn)
         dps_outer.addLayout(dps_path_row)
 
+        # ===== TRAY ROW =====
+        tray_row = QFrame()
+        tray_row.setObjectName("settingsRow")
+        tray_layout = QHBoxLayout(tray_row)
+        tray_layout.setContentsMargins(14, 12, 14, 12)
+        tray_layout.setSpacing(12)
+        tray_text = QVBoxLayout()
+        tray_text.setSpacing(2)
+        self.tray_title = QLabel()
+        self.tray_title.setObjectName("settingsLabel")
+        self.tray_desc = QLabel()
+        self.tray_desc.setObjectName("settingsDescription")
+        tray_text.addWidget(self.tray_title)
+        tray_text.addWidget(self.tray_desc)
+        self.tray_minimize_btn = QPushButton("Off")
+        self.tray_minimize_btn.setCheckable(True)
+        self.tray_minimize_btn.setChecked(False)
+        self.tray_minimize_btn.setObjectName("toggleButton")
+        self.tray_minimize_btn.setFixedWidth(70)
+        self.tray_minimize_btn.toggled.connect(
+            lambda checked: self._set_toggle(self.tray_minimize_btn, checked)
+        )
+        tray_layout.addLayout(tray_text, 1)
+        tray_layout.addWidget(self.tray_minimize_btn)
+
         layout.addWidget(event_row)
         layout.addWidget(auto_save_row)
+        layout.addWidget(tray_row)
         layout.addWidget(dps_row)
         layout.addWidget(update_row)
         layout.addStretch()
@@ -1308,6 +1339,11 @@ class SettingsPage(QWidget):
             v = data.get("dps_meter_autostart", False)
             self.dps_autostart_btn.setChecked(v)
             self._set_toggle(self.dps_autostart_btn, v)
+
+        if hasattr(self, "tray_minimize_btn"):
+            v = bool(data.get("minimize_to_tray", False))
+            self.tray_minimize_btn.setChecked(v)
+            self._set_toggle(self.tray_minimize_btn, v)
 
         # Language
         if hasattr(self, "language_combo"):
