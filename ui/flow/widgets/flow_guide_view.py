@@ -223,8 +223,8 @@ class FlowGuideCanvas(QWidget):
 
 
 class FlowGuideView(QWidget):
-    def __init__(self, window):
-        super().__init__()
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
 
         self.window = window
         self.setObjectName("FlowGuideView")

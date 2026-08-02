@@ -15,8 +15,8 @@ from PySide6.QtGui import QIcon
 
 
 class NodeEditorPanel(QFrame):
-    def __init__(self, language="en", tr_func=None, icon_dir=None):
-        super().__init__()
+    def __init__(self, language="en", tr_func=None, icon_dir=None, parent=None):
+        super().__init__(parent)
 
         self.language = language
         self.tr_func = tr_func

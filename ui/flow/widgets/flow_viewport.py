@@ -2,8 +2,8 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt
 
 class FlowMapViewport(QWidget):
-    def __init__(self, parent_window=None):
-        super().__init__()
+    def __init__(self, parent_window=None, parent=None):
+        super().__init__(parent)
 
         self.parent_window = parent_window
 

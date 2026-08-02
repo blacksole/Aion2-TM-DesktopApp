@@ -157,7 +157,7 @@ class FlowMapWindow(QMainWindow):
         top_layout.setSpacing(10)
         top_layout.addWidget(self.save_status_label)
 
-        self.content = QWidget()
+        self.content = QWidget(self.canvas)
         self.content.setObjectName("FlowContentOverlay")
         content_overlay_layout = QVBoxLayout(self.content)
         content_overlay_layout.setContentsMargins(0, 0, 0, 0)
@@ -165,10 +165,9 @@ class FlowMapWindow(QMainWindow):
 
         # ====== TOOLBAR & MAP AREA ======= #
 
-        self.tool_bar = QFrame()
+        self.tool_bar = QFrame(self.content)
         self.tool_bar.setObjectName("FlowToolBar")
         self.tool_bar.setFixedWidth(64)
-        self.tool_bar.setParent(self.content)
 
         tool_layout = QVBoxLayout(self.tool_bar)
         tool_layout.setContentsMargins(8, 8, 8, 8)
@@ -262,10 +261,8 @@ class FlowMapWindow(QMainWindow):
         self.reset_map_btn.clicked.connect(self.map_reset_requested.emit)
         tool_layout.addWidget(self.reset_map_btn)
 
-        self.map_viewport = FlowMapViewport(self)
+        self.map_viewport = FlowMapViewport(parent_window=self, parent=self.content)
         self.map_viewport.setMouseTracking(True)
-        
-        self.map_viewport.setParent(self.content)
 
         self.map_area = FlowMapArea(self, self.map_viewport)
         self.map_area.move(20, 0)
@@ -278,17 +275,15 @@ class FlowMapWindow(QMainWindow):
 
         self.current_mode = "edit"
 
-        self.guide_view = FlowGuideView(self)
-        self.guide_view.setParent(self.content)
+        self.guide_view = FlowGuideView(self, parent=self.content)
         self.guide_view.hide()
 
-        self.side_panel_wrapper = QWidget()
-        self.side_panel_wrapper.setParent(self.content)
+        self.side_panel_wrapper = QWidget(self.content)
         side_wrapper_layout = QVBoxLayout(self.side_panel_wrapper)
         side_wrapper_layout.setContentsMargins(0, 0, 0, 0)
         side_wrapper_layout.setSpacing(8)
 
-        self.side_panel = QWidget()
+        self.side_panel = QWidget(self.side_panel_wrapper)
         side_layout = QVBoxLayout(self.side_panel)
         side_layout.setContentsMargins(0, 0, 0, 0)
         side_layout.setSpacing(16)
@@ -296,7 +291,8 @@ class FlowMapWindow(QMainWindow):
         self.editor_panel = NodeEditorPanel(
             language,
             tr_func,
-            icon_dir=self.flow_icon_dir
+            icon_dir=self.flow_icon_dir,
+            parent=self.side_panel,
         )
 
         self.editor_panel.node_save_btn.clicked.connect(
@@ -483,7 +479,7 @@ class FlowMapWindow(QMainWindow):
         self.zoom_hint_label.setText(
             self.tr_func(self.language, "flow_zoom_hint", pct=int(self.zoom_factor * 100))
         )
-        self.render_flow()
+        self._apply_zoom_to_cards()
 
         if mouse_pos is not None:
             mx = mouse_pos.x()
@@ -558,9 +554,19 @@ class FlowMapWindow(QMainWindow):
 
     def clear_node_cards(self):
         for card in self.node_cards.values():
+            card.hide()
             card.deleteLater()
         self.node_cards = {}
         self.selected_node_ids.clear()
+
+    def _apply_zoom_to_cards(self):
+        zoom = self.zoom_factor
+        for node_id, card in self.node_cards.items():
+            node = self.nodes.get(node_id)
+            if node:
+                card.apply_zoom(zoom, node.description)
+                card.move(int(node.x * zoom), int(node.y * zoom))
+        self.map_area.update()
 
     def _get_all_descendants(self, node_id: str) -> list:
         result = []

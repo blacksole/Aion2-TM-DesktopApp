@@ -264,6 +264,10 @@ class MainWindow(QMainWindow):
         else:
             self.load_last_profile()
 
+        # Pre-create the native OS window handle so first show() has no flash
+        if self.flow_map_window:
+            self.flow_map_window.winId()
+
         self._launch_dps_meter_if_configured()
 
         self.countdown_timer = QTimer(self)
@@ -417,10 +421,10 @@ class MainWindow(QMainWindow):
             self.flow_map_window.map_reset_requested.connect(self._reset_flow_map)
 
         self.flow_map_window.set_map_list(list(self.flow_maps.keys()) or ["Map 1"], self.active_flow_map_name)
+        self.flow_map_window.render_flow()  # build cards while still hidden
         self.flow_map_window.show()
         self.flow_map_window.raise_()
         self.flow_map_window.activateWindow()
-        self.flow_map_window.render_flow()
 
     def _switch_flow_map(self, name: str):
         if name == self.active_flow_map_name or not name:

@@ -7,10 +7,15 @@ class FlowRenderer:
         self._first_render = True
 
     def render_flow(self):
+        map_area = self.window.map_area
+        map_area.setUpdatesEnabled(False)
+
         self.window.clear_node_cards()
         self.window.connectors = []
 
         if not self.window.root_node_id:
+            map_area.setUpdatesEnabled(True)
+            map_area.update()
             return
 
         root = self.window.nodes.get(self.window.root_node_id)
@@ -37,7 +42,9 @@ class FlowRenderer:
             card.show()
             self.window.node_cards[node_id] = card
 
-        self.window.map_area.update()
+        map_area.setUpdatesEnabled(True)
+        map_area.update()
+
         if self._first_render:
             self._first_render = False
             self.window.schedule_center_flow()

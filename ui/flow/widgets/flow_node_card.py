@@ -150,3 +150,23 @@ class FlowNodeCard(QFrame):
         self.add_node_hint_btn.style().polish(self.add_node_hint_btn)
 
         super().leaveEvent(event)
+
+    def apply_zoom(self, zoom: float, description: str = ""):
+        self.setFixedSize(int(NODE_WIDTH * zoom), int(NODE_HEIGHT * zoom))
+        self.icon_box.setFixedSize(int(ICON_BOX_SIZE * zoom), int(ICON_BOX_SIZE * zoom))
+
+        title_size = TITLE_SIZE if zoom >= 1.0 else (16 if zoom >= 0.8 else 15)
+        self.title_label.setStyleSheet(f"font-size: {title_size}px; font-weight: 700;")
+
+        desc_size = DESCRIPTION_SIZE if zoom >= 1.0 else (12 if zoom >= 0.8 else 1)
+        self.desc_label.setStyleSheet(f"font-size: {desc_size}px;")
+        self.desc_label.setVisible(zoom >= 0.8)
+
+        if zoom >= 1.0:
+            self.desc_label.setText(description)
+        elif zoom >= 0.8:
+            self.desc_label.setText(
+                description[:45] + "..." if len(description) > 45 else description
+            )
+        else:
+            self.desc_label.setText("")
