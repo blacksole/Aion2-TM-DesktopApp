@@ -871,11 +871,14 @@ class SettingsPage(QWidget):
 
             "custom_timers": [
                 {
-                    "enabled": cfg.get("enabled", False),
-                    "name": cfg["name"],
-                    "color": cfg["color"],
-                    "interval_minutes": cfg["interval_minutes"],
-                    "display_format": cfg.get("display_format", "hh:mm:ss"),
+                    "enabled":          cfg.get("enabled", False),
+                    "name":             cfg.get("name", ""),
+                    "color":            cfg.get("color", "#22d3ee"),
+                    "timer_mode":       cfg.get("timer_mode", "hourly"),
+                    "reset_time":       cfg.get("reset_time", "09:00"),
+                    "reset_day":        cfg.get("reset_day", "Mo"),
+                    "interval_minutes": cfg.get("interval_minutes", 60),
+                    "interval_seconds": cfg.get("interval_seconds", 3600),
                     "notification_sound": (
                         self._custom_sound_combos[i].currentData() or ""
                         if hasattr(self, "_custom_sound_combos") and i < len(self._custom_sound_combos)
@@ -1473,14 +1476,18 @@ class SettingsPage(QWidget):
         if "custom_timers" in data:
             self._custom_timer_configs = []
             for ct in data["custom_timers"][:2]:
-                self._custom_timer_configs.append({
-                    "enabled": ct.get("enabled", False),
-                    "name": ct.get("name", ""),
-                    "color": ct.get("color", "#22d3ee"),
-                    "interval_minutes": ct.get("interval_minutes", 30),
-                    "display_format": ct.get("display_format", "hh:mm:ss"),
+                cfg = {
+                    "enabled":          ct.get("enabled", False),
+                    "name":             ct.get("name", ""),
+                    "color":            ct.get("color", "#22d3ee"),
+                    "timer_mode":       ct.get("timer_mode", "hourly"),
+                    "reset_time":       ct.get("reset_time", "09:00"),
+                    "reset_day":        ct.get("reset_day", "Mo"),
+                    "interval_minutes": ct.get("interval_minutes", 60),
+                    "interval_seconds": ct.get("interval_seconds", 3600),
                     "notification_sound": ct.get("notification_sound", ""),
-                })
+                }
+                self._custom_timer_configs.append(cfg)
             if hasattr(self, "_custom_ct_layout"):
                 self._rebuild_custom_timer_rows()
             for i, ct in enumerate(self._custom_timer_configs):
@@ -1573,11 +1580,8 @@ class SettingsPage(QWidget):
             values = dlg.get_values()
             self._custom_timer_configs.append({
                 "enabled": False,
-                "name": values["name"],
-                "color": values["color"],
-                "interval_minutes": values["interval_minutes"],
-                "display_format": values.get("display_format", "hh:mm:ss"),
                 "notification_sound": "",
+                **values,
             })
             self._rebuild_custom_timer_rows()
 
@@ -1586,18 +1590,23 @@ class SettingsPage(QWidget):
             return
         cfg = self._custom_timer_configs[idx]
         dlg = CustomTimerDialog(
-            name=cfg["name"],
-            color=cfg["color"],
-            interval_minutes=cfg["interval_minutes"],
-            display_format=cfg.get("display_format", "hh:mm:ss"),
+            name=cfg.get("name", ""),
+            color=cfg.get("color", "#22d3ee"),
+            timer_mode=cfg.get("timer_mode", "hourly"),
+            reset_time=cfg.get("reset_time", "09:00"),
+            reset_day=cfg.get("reset_day", "Mo"),
+            interval_minutes=cfg.get("interval_minutes", 60),
+            interval_seconds=cfg.get("interval_seconds", 3600),
             parent=self,
         )
         if dlg.exec():
             values = dlg.get_values()
-            cfg["name"] = values["name"]
-            cfg["color"] = values["color"]
-            cfg["interval_minutes"] = values["interval_minutes"]
-            cfg["display_format"] = values.get("display_format", "hh:mm:ss")
+            for field in ("name", "color", "timer_mode", "reset_time",
+                          "reset_day", "interval_minutes", "interval_seconds"):
+                if field in values:
+                    cfg[field] = values[field]
+                else:
+                    cfg.pop(field, None)
             self._rebuild_custom_timer_rows()
 
     def _remove_custom_timer(self, idx: int):
@@ -1635,7 +1644,7 @@ class SettingsPage(QWidget):
         name_lbl = QLabel(cfg["name"])
         name_lbl.setObjectName("settingsLabel")
 
-        interval_lbl = QLabel(self._format_interval(cfg["interval_minutes"]))
+        interval_lbl = QLabel(self._format_timer_summary(cfg))
         interval_lbl.setObjectName("settingsDescription")
 
         edit_btn = QPushButton("Bearbeiten")
@@ -1688,16 +1697,25 @@ class SettingsPage(QWidget):
                     self._custom_notif_labels[i].setText(cfg["name"])
 
     @staticmethod
-    def _format_interval(minutes: int) -> str:
-        if minutes < 60:
-            return f"{minutes} min"
-        if minutes == 60:
-            return "1 Std."
-        if minutes == 90:
-            return "1,5 Std."
-        if minutes == 120:
-            return "2 Std."
-        return f"{minutes} min"
+    def _format_timer_summary(cfg: dict) -> str:
+        mode = cfg.get("timer_mode", "hourly")
+        if mode == "daily":
+            return f"Täglich {cfg.get('reset_time', '09:00')}"
+        if mode == "weekly":
+            day = cfg.get("reset_day", "Mo")
+            t = cfg.get("reset_time", "09:00")
+            return f"Wöchentlich {day} {t}"
+        if mode == "hourly":
+            mins = cfg.get("interval_minutes", 60)
+            h, m = divmod(mins, 60)
+            if m == 0:
+                return f"Alle {h}h"
+            return f"Alle {h}h {m}min"
+        # custom
+        secs = cfg.get("interval_seconds", 3600)
+        h, rem = divmod(secs, 3600)
+        m, s = divmod(rem, 60)
+        return f"{h:02}:{m:02}:{s:02}"
 
     def _preview_custom_sound(self, combo):
         path = combo.currentData() or ""

@@ -944,10 +944,27 @@ class MainWindow(QMainWindow):
 
         for i, ct in enumerate(self.custom_timers[:2]):
             if ct.get("enabled") and ct.get("name"):
-                next_ct = self._get_next_custom_timer_time(ct["interval_minutes"])
-                seconds = (next_ct - now).total_seconds()
-                fmt = ct.get("display_format", "hh:mm:ss")
-                ct_text = self._format_custom_countdown(seconds, fmt)
+                mode = ct.get("timer_mode", "hourly")
+                if mode == "daily":
+                    next_ct = self._get_next_daily_custom_time(ct.get("reset_time", "09:00"))
+                    seconds = (next_ct - now).total_seconds()
+                    ct_text = self.format_reset_countdown(seconds)
+                elif mode == "weekly":
+                    next_ct = self._get_next_weekly_custom_time(
+                        ct.get("reset_day", "Mo"), ct.get("reset_time", "09:00")
+                    )
+                    seconds = (next_ct - now).total_seconds()
+                    ct_text = self.format_reset_countdown(seconds)
+                elif mode == "custom":
+                    next_ct = self._get_next_custom_timer_time_seconds(
+                        max(60, ct.get("interval_seconds", 3600))
+                    )
+                    seconds = (next_ct - now).total_seconds()
+                    ct_text = self._format_custom_countdown(seconds, "hh:mm:ss")
+                else:  # hourly (default, backward compat)
+                    next_ct = self._get_next_custom_timer_time(ct.get("interval_minutes", 60))
+                    seconds = (next_ct - now).total_seconds()
+                    ct_text = self._format_custom_countdown(seconds, "hh:mm:ss")
                 self.timers_page.set_custom_timer_countdown(i, ct_text)
                 if not self._custom_notified[i] and 0 <= seconds <= 10:
                     self._custom_notified[i] = True
@@ -1268,6 +1285,38 @@ class MainWindow(QMainWindow):
         intervals_passed = int(elapsed_secs / interval.total_seconds())
         return midnight + interval * (intervals_passed + 1)
 
+    def _get_next_custom_timer_time_seconds(self, interval_seconds: int) -> "datetime":
+        now = datetime.now()
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elapsed = (now - midnight).total_seconds()
+        intervals_passed = int(elapsed / interval_seconds)
+        return midnight + timedelta(seconds=interval_seconds * (intervals_passed + 1))
+
+    @staticmethod
+    def _get_next_daily_custom_time(reset_time_str: str) -> "datetime":
+        now = datetime.now()
+        h, m = map(int, reset_time_str.split(":"))
+        reset = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        if reset <= now:
+            reset += timedelta(days=1)
+        return reset
+
+    @staticmethod
+    def _get_next_weekly_custom_time(day_str: str, reset_time_str: str) -> "datetime":
+        now = datetime.now()
+        day_map = {"Mo": 0, "Di": 1, "Mi": 2, "Do": 3, "Fr": 4, "Sa": 5, "So": 6}
+        target_weekday = day_map.get(day_str, 0)
+        h, m = map(int, reset_time_str.split(":"))
+        days_ahead = target_weekday - now.weekday()
+        if days_ahead < 0:
+            days_ahead += 7
+        reset = (now + timedelta(days=days_ahead)).replace(
+            hour=h, minute=m, second=0, microsecond=0
+        )
+        if reset <= now:
+            reset += timedelta(days=7)
+        return reset
+
     @staticmethod
     def _format_custom_countdown(seconds: float, fmt: str) -> str:
         s = max(0, int(seconds))
@@ -1370,12 +1419,15 @@ class MainWindow(QMainWindow):
         self.timers_page.set_riss_visible(self.riss_enabled)
 
         self.custom_timers = settings.get("custom_timers", [])[:2]
+        for ct in self.custom_timers:
+            if "timer_mode" not in ct:
+                ct["timer_mode"] = "hourly"
         self._custom_notified = [False, False]
         for i, ct in enumerate(self.custom_timers[:2]):
             visible = ct.get("enabled", False) and bool(ct.get("name", ""))
             self.timers_page.set_custom_timer_visible(i, visible)
             if visible:
-                self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"), ct.get("display_format", "hh:mm:ss"))
+                self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"))
 
         self.toggle_events()
         self.update_countdowns()
@@ -1816,21 +1868,22 @@ class MainWindow(QMainWindow):
         weekly_hour, weekly_minute = map(int, self.weekly_reset_time.split(":"))
         target_weekday = day_map.get(self.weekly_reset_day, 0)
 
-        weekly_reset_time_today = now.replace(
-            hour=weekly_hour,
-            minute=weekly_minute,
-            second=0,
-            microsecond=0
+        # Berechne den letzten vergangenen Reset-Zeitpunkt (unabhängig vom heutigen Wochentag)
+        days_ago = (now.weekday() - target_weekday) % 7
+        last_weekly_reset_dt = (
+            now.replace(hour=weekly_hour, minute=weekly_minute, second=0, microsecond=0)
+            - timedelta(days=days_ago)
         )
+        if last_weekly_reset_dt > now:
+            last_weekly_reset_dt -= timedelta(days=7)
+        last_weekly_reset_date = last_weekly_reset_dt.date()
 
-        if now.weekday() == target_weekday and now >= weekly_reset_time_today:
-            if self.last_weekly_reset_date != now.date():
-                self.reset_tasks_for_tabs([
-                    "weeklyTasks",
-                    "weeklyShopping"
-                ])
-
-                self.last_weekly_reset_date = now.date()
+        if self.last_weekly_reset_date is None or self.last_weekly_reset_date < last_weekly_reset_date:
+            self.reset_tasks_for_tabs([
+                "weeklyTasks",
+                "weeklyShopping"
+            ])
+            self.last_weekly_reset_date = last_weekly_reset_date
 
     def handle_sidebar_page_changed(self, page_key: str):
         print("Sidebar clicked:", page_key)
@@ -2059,12 +2112,15 @@ class MainWindow(QMainWindow):
         self.notification_sound = data.get("notification_sound", self.notification_sound)
         if "custom_timers" in data:
             self.custom_timers = data["custom_timers"][:2]
+            for ct in self.custom_timers:
+                if "timer_mode" not in ct:
+                    ct["timer_mode"] = "hourly"
             self._custom_notified = [False, False]
             for i, ct in enumerate(self.custom_timers[:2]):
                 visible = ct.get("enabled", False) and bool(ct.get("name", ""))
                 self.timers_page.set_custom_timer_visible(i, visible)
                 if visible:
-                    self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"), ct.get("display_format", "hh:mm:ss"))
+                    self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"))
 
         if "minimize_to_tray" in data:
             self.minimize_to_tray = data["minimize_to_tray"]
