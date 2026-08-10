@@ -9,7 +9,7 @@ from PySide6.QtCore import Signal, QTime, QSize, Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QButtonGroup, QGridLayout,
-    QDialog, QFileDialog, QLineEdit, QScrollArea,
+    QDialog, QFileDialog, QLineEdit, QScrollArea, QInputDialog, QTabWidget,
 )
 from ui.custom_timer_dialog import CustomTimerDialog
 
@@ -35,7 +35,8 @@ class SettingsPage(QWidget):
         self._cur_lang = "de"
         self._cur_tr = None
 
-        self._custom_timer_configs = []  # max 2 entries
+        self._custom_timer_configs = []
+        self._timer_categories = ["Custom Timer"]
 
         self.setup_ui()
 
@@ -303,7 +304,12 @@ class SettingsPage(QWidget):
         )
         self._advanced_help_btn.setToolTip(tr_func(language, "advanced_timer_help"))
 
-        self.custom_timer_title.setText(tr_func(language, "custom_timer"))
+        self.custom_timer_title.setText(
+            {"de": "Kategorien", "en": "Categories", "ru": "Категории"}.get(language, "Kategorien")
+        )
+        self._timer_section_lbl.setText(
+            {"de": "Timer", "en": "Timer", "ru": "Таймеры"}.get(language, "Timer")
+        )
         self._ct_help_btn.setToolTip(tr_func(language, "custom_timer_help"))
 
         self.notifications_title.setText(tr_func(language, "notifications"))
@@ -601,9 +607,18 @@ class SettingsPage(QWidget):
 
     def _create_timer_page(self):
         page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(24, 16, 24, 24)
+        page_layout.setSpacing(0)
 
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
+        self._timer_tab_widget = QTabWidget()
+        self._timer_tab_widget.setObjectName("settingsTabWidget")
+        page_layout.addWidget(self._timer_tab_widget, 1)
+
+        # ━━━━━━━━━━━━━━━━━━━━━━ TAB 1: Standard ━━━━━━━━━━━━━━━━━━━━━━━━
+        standard_tab = QWidget()
+        layout = QVBoxLayout(standard_tab)
+        layout.setContentsMargins(4, 20, 4, 8)
         layout.setSpacing(18)
 
         # ── Reset Timer ──────────────────────────────────────────────────
@@ -778,28 +793,54 @@ class SettingsPage(QWidget):
 
         layout.addWidget(shugo_row)
         layout.addWidget(riss_row)
+        layout.addStretch()
 
-        # ── Custom Timer ─────────────────────────────────────────────────
-        ct_header_row = QHBoxLayout()
-        self.custom_timer_title = QLabel("Custom Timer")
+        self._timer_tab_widget.addTab(standard_tab, "Standard")
+
+        # ━━━━━━━━━━━━━━━━━━━━━━ TAB 2: Custom ━━━━━━━━━━━━━━━━━━━━━━━━━━
+        custom_tab = QWidget()
+        layout = QVBoxLayout(custom_tab)
+        layout.setContentsMargins(4, 20, 4, 8)
+        layout.setSpacing(12)
+
+        # ── Kategorien Header ────────────────────────────────────────────
+        cat_hdr = QHBoxLayout()
+        self.custom_timer_title = QLabel("Kategorien")
         self.custom_timer_title.setObjectName("settingsSectionTitle")
         self._ct_help_btn = QPushButton("?")
         self._ct_help_btn.setObjectName("helpButton")
         self._ct_help_btn.setFixedSize(22, 22)
         self._ct_help_btn.setToolTip(
-            "Erstelle eigene Timer mit individuellem Intervall, Farbe und Anzeigeformat (max. 2)."
+            "Erstelle bis zu 4 Gruppen, um Timer auf der Timer-Seite unter eigenen Überschriften anzuzeigen."
         )
+        cat_hdr.addWidget(self.custom_timer_title)
+        cat_hdr.addWidget(self._ct_help_btn)
+        cat_hdr.addStretch()
+        layout.addLayout(cat_hdr)
+
+        # ── Kategorien-Verwaltung ────────────────────────────────────────
+        self._cat_rows_container = QWidget()
+        self._cat_rows_layout = QVBoxLayout(self._cat_rows_container)
+        self._cat_rows_layout.setContentsMargins(0, 0, 0, 4)
+        self._cat_rows_layout.setSpacing(4)
+        layout.addWidget(self._cat_rows_container)
+        self._rebuild_category_rows()
+
+        # ── Timer Header ─────────────────────────────────────────────────
+        timer_hdr = QHBoxLayout()
+        self._timer_section_lbl = QLabel("Timer")
+        self._timer_section_lbl.setObjectName("settingsSectionTitle")
         self._add_ct_btn = QPushButton("＋")
         self._add_ct_btn.setObjectName("secondaryButton")
         self._add_ct_btn.setFixedWidth(44)
         self._add_ct_btn.setFixedHeight(32)
         self._add_ct_btn.clicked.connect(self._add_custom_timer)
-        ct_header_row.addWidget(self.custom_timer_title)
-        ct_header_row.addWidget(self._ct_help_btn)
-        ct_header_row.addStretch()
-        ct_header_row.addWidget(self._add_ct_btn)
-        layout.addLayout(ct_header_row)
+        timer_hdr.addWidget(self._timer_section_lbl)
+        timer_hdr.addStretch()
+        timer_hdr.addWidget(self._add_ct_btn)
+        layout.addLayout(timer_hdr)
 
+        # ── Timer Liste ──────────────────────────────────────────────────
         self._custom_ct_container = QWidget()
         self._custom_ct_layout = QVBoxLayout(self._custom_ct_container)
         self._custom_ct_layout.setContentsMargins(0, 0, 0, 0)
@@ -807,9 +848,11 @@ class SettingsPage(QWidget):
         layout.addWidget(self._custom_ct_container)
 
         self._custom_rows = []
-
         layout.addStretch()
 
+        self._timer_tab_widget.addTab(custom_tab, "Custom")
+
+        # ── Signals ──────────────────────────────────────────────────────
         self.daily_reset_time.timeChanged.connect(self._emit_daily_reset_changed)
         for btn in self.weekly_day_buttons:
             btn.clicked.connect(self._emit_weekly_day_changed)
@@ -869,6 +912,7 @@ class SettingsPage(QWidget):
             "notification_riss_warn_minutes": self.notif_riss_warn_combo.currentData(),
             "notification_sound": self.notif_sound_combo.currentData() or "",
 
+            "timer_categories": self._timer_categories,
             "custom_timers": [
                 {
                     "enabled":          cfg.get("enabled", False),
@@ -879,6 +923,8 @@ class SettingsPage(QWidget):
                     "reset_day":        cfg.get("reset_day", "Mo"),
                     "interval_minutes": cfg.get("interval_minutes", 60),
                     "interval_seconds": cfg.get("interval_seconds", 3600),
+                    "start_time":       cfg.get("start_time", "00:00"),
+                    "category":         cfg.get("category", self._timer_categories[0] if self._timer_categories else "Custom Timer"),
                     "notification_sound": (
                         self._custom_sound_combos[i].currentData() or ""
                         if hasattr(self, "_custom_sound_combos") and i < len(self._custom_sound_combos)
@@ -1065,7 +1111,7 @@ class SettingsPage(QWidget):
         self._custom_notif_labels = []
         self._custom_sound_combos = []
 
-        for i in range(2):
+        for i in range(8):
             ct_sound_row = QFrame()
             ct_sound_row.setObjectName("settingsRow")
             ct_sound_row.setVisible(False)
@@ -1473,9 +1519,16 @@ class SettingsPage(QWidget):
         if hasattr(self, "profiles_path_label"):
             self.profiles_path_label.setText(data.get("profile_dir", ""))
 
+        if "timer_categories" in data:
+            cats = data["timer_categories"]
+            if isinstance(cats, list) and cats:
+                self._timer_categories = [str(c) for c in cats]
+            else:
+                self._timer_categories = ["Custom Timer"]
+
         if "custom_timers" in data:
             self._custom_timer_configs = []
-            for ct in data["custom_timers"][:2]:
+            for ct in data["custom_timers"][:8]:
                 cfg = {
                     "enabled":          ct.get("enabled", False),
                     "name":             ct.get("name", ""),
@@ -1485,11 +1538,15 @@ class SettingsPage(QWidget):
                     "reset_day":        ct.get("reset_day", "Mo"),
                     "interval_minutes": ct.get("interval_minutes", 60),
                     "interval_seconds": ct.get("interval_seconds", 3600),
+                    "start_time":       ct.get("start_time", "00:00"),
+                    "category":         ct.get("category", self._timer_categories[0] if self._timer_categories else "Custom Timer"),
                     "notification_sound": ct.get("notification_sound", ""),
                 }
                 self._custom_timer_configs.append(cfg)
             if hasattr(self, "_custom_ct_layout"):
                 self._rebuild_custom_timer_rows()
+            if hasattr(self, "_cat_rows_layout"):
+                self._rebuild_category_rows()
             for i, ct in enumerate(self._custom_timer_configs):
                 if hasattr(self, "_custom_sound_combos") and i < len(self._custom_sound_combos):
                     sound = ct.get("notification_sound", "")
@@ -1572,10 +1629,87 @@ class SettingsPage(QWidget):
         if path and os.path.isdir(path):
             subprocess.Popen(f'explorer "{path}"')
 
-    def _add_custom_timer(self):
-        if len(self._custom_timer_configs) >= 2:
+    def _rebuild_category_rows(self):
+        while self._cat_rows_layout.count():
+            item = self._cat_rows_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        for cat in self._timer_categories:
+            self._cat_rows_layout.addWidget(self._build_category_row(cat))
+        if len(self._timer_categories) < 4:
+            add_btn = QPushButton("＋ Kategorie hinzufügen")
+            add_btn.setObjectName("secondaryButton")
+            add_btn.clicked.connect(self._add_category)
+            self._cat_rows_layout.addWidget(add_btn)
+
+    def _build_category_row(self, cat_name: str) -> QFrame:
+        row = QFrame()
+        row.setObjectName("settingsRow")
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(14, 6, 14, 6)
+        rl.setSpacing(8)
+        dot = QLabel("●")
+        dot.setFixedWidth(16)
+        dot.setStyleSheet("color: #22d3ee; font-size: 14px;")
+        name_lbl = QLabel(cat_name)
+        name_lbl.setObjectName("settingsLabel")
+        rename_btn = QPushButton("Umbenennen")
+        rename_btn.setObjectName("secondaryButton")
+        rename_btn.setFixedWidth(110)
+        rename_btn.clicked.connect(lambda checked=False, cn=cat_name: self._rename_category(cn))
+        rl.addWidget(dot)
+        rl.addWidget(name_lbl, 1)
+        rl.addWidget(rename_btn)
+        has_timers = any(
+            cfg.get("category", self._timer_categories[0]) == cat_name
+            for cfg in self._custom_timer_configs
+        )
+        if len(self._timer_categories) > 1 and not has_timers:
+            del_btn = QPushButton("✕")
+            del_btn.setObjectName("secondaryButton")
+            del_btn.setFixedWidth(36)
+            del_btn.clicked.connect(lambda checked=False, cn=cat_name: self._remove_category(cn))
+            rl.addWidget(del_btn)
+        return row
+
+    def _add_category(self):
+        if len(self._timer_categories) >= 4:
             return
-        dlg = CustomTimerDialog(parent=self)
+        name, ok = QInputDialog.getText(self, "Kategorie hinzufügen", "Name:")
+        if ok and name.strip():
+            name = name.strip()[:20]
+            if name not in self._timer_categories:
+                self._timer_categories.append(name)
+                self._rebuild_category_rows()
+
+    def _remove_category(self, cat_name: str):
+        if cat_name in self._timer_categories and len(self._timer_categories) > 1:
+            self._timer_categories.remove(cat_name)
+            self._rebuild_category_rows()
+
+    def _rename_category(self, old_name: str):
+        new_name, ok = QInputDialog.getText(
+            self, "Kategorie umbenennen", "Neuer Name:", text=old_name
+        )
+        if ok and new_name.strip():
+            new_name = new_name.strip()[:20]
+            if new_name != old_name and new_name not in self._timer_categories:
+                idx = self._timer_categories.index(old_name)
+                self._timer_categories[idx] = new_name
+                for cfg in self._custom_timer_configs:
+                    if cfg.get("category", "") == old_name:
+                        cfg["category"] = new_name
+                self._rebuild_category_rows()
+                self._rebuild_custom_timer_rows()
+
+    def _add_custom_timer(self):
+        if len(self._custom_timer_configs) >= 8:
+            return
+        dlg = CustomTimerDialog(
+            categories=self._timer_categories,
+            category=self._timer_categories[0],
+            parent=self,
+        )
         if dlg.exec():
             values = dlg.get_values()
             self._custom_timer_configs.append({
@@ -1584,6 +1718,7 @@ class SettingsPage(QWidget):
                 **values,
             })
             self._rebuild_custom_timer_rows()
+            self._rebuild_category_rows()
 
     def _edit_custom_timer(self, idx: int):
         if idx >= len(self._custom_timer_configs):
@@ -1597,25 +1732,30 @@ class SettingsPage(QWidget):
             reset_day=cfg.get("reset_day", "Mo"),
             interval_minutes=cfg.get("interval_minutes", 60),
             interval_seconds=cfg.get("interval_seconds", 3600),
+            start_time=cfg.get("start_time", ""),
+            categories=self._timer_categories,
+            category=cfg.get("category", self._timer_categories[0]),
             parent=self,
         )
         if dlg.exec():
             values = dlg.get_values()
             for field in ("name", "color", "timer_mode", "reset_time",
-                          "reset_day", "interval_minutes", "interval_seconds"):
+                          "reset_day", "interval_minutes", "interval_seconds",
+                          "start_time", "category"):
                 if field in values:
                     cfg[field] = values[field]
                 else:
                     cfg.pop(field, None)
             self._rebuild_custom_timer_rows()
+            self._rebuild_category_rows()
 
     def _remove_custom_timer(self, idx: int):
         if idx < len(self._custom_timer_configs):
             del self._custom_timer_configs[idx]
             self._rebuild_custom_timer_rows()
+            self._rebuild_category_rows()
 
     def _rebuild_custom_timer_rows(self):
-        # Clear existing row widgets
         while self._custom_ct_layout.count():
             item = self._custom_ct_layout.takeAt(0)
             if item.widget():
@@ -1626,8 +1766,7 @@ class SettingsPage(QWidget):
             row = self._build_custom_timer_row(i, cfg)
             self._custom_ct_layout.addWidget(row)
 
-        # Show "+" only when fewer than 2 timers
-        self._add_ct_btn.setVisible(len(self._custom_timer_configs) < 2)
+        self._add_ct_btn.setVisible(len(self._custom_timer_configs) < 8)
         self._update_custom_notif_visibility()
 
     def _build_custom_timer_row(self, idx: int, cfg: dict) -> QFrame:
@@ -1646,6 +1785,10 @@ class SettingsPage(QWidget):
 
         interval_lbl = QLabel(self._format_timer_summary(cfg))
         interval_lbl.setObjectName("settingsDescription")
+
+        default_cat = self._timer_categories[0] if self._timer_categories else "Custom Timer"
+        cat_lbl = QLabel(f"[{cfg.get('category', default_cat)}]")
+        cat_lbl.setObjectName("settingsDescription")
 
         edit_btn = QPushButton("Bearbeiten")
         edit_btn.setObjectName("secondaryButton")
@@ -1670,6 +1813,7 @@ class SettingsPage(QWidget):
         row_layout.addWidget(color_dot)
         row_layout.addWidget(name_lbl)
         row_layout.addWidget(interval_lbl)
+        row_layout.addWidget(cat_lbl)
         row_layout.addStretch()
         row_layout.addWidget(edit_btn)
         row_layout.addWidget(remove_btn)
@@ -1689,12 +1833,11 @@ class SettingsPage(QWidget):
         has_any = count > 0
         if hasattr(self, "custom_notif_section_title"):
             self.custom_notif_section_title.setVisible(has_any)
-        for i in range(2):
-            if hasattr(self, "_custom_notif_rows") and i < len(self._custom_notif_rows):
-                self._custom_notif_rows[i].setVisible(i < count)
-                if i < count:
-                    cfg = self._custom_timer_configs[i]
-                    self._custom_notif_labels[i].setText(cfg["name"])
+        rows = getattr(self, "_custom_notif_rows", [])
+        for i in range(len(rows)):
+            rows[i].setVisible(i < count)
+            if i < count:
+                self._custom_notif_labels[i].setText(self._custom_timer_configs[i]["name"])
 
     @staticmethod
     def _format_timer_summary(cfg: dict) -> str:

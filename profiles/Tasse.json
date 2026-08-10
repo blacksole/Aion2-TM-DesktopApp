@@ -9,39 +9,240 @@
         "show_events": true,
         "shugo_enabled": true,
         "shugo_start_minute": 15,
-        "shugo_interval_text": "2 Stunden",
+        "shugo_interval_text": "2h",
         "riss_enabled": true,
         "riss_anchor_hour": 0,
-        "riss_interval_text": "3 Stunden"
+        "riss_interval_text": "3h",
+        "auto_save": true,
+        "notification_enabled": false,
+        "notification_warn_minutes": 1,
+        "notification_sync": true,
+        "notification_shugo_enabled": false,
+        "notification_shugo_warn_minutes": 1,
+        "notification_riss_enabled": false,
+        "notification_riss_warn_minutes": 1,
+        "notification_sound": "",
+        "timer_categories": [
+            "Boss",
+            "T2",
+            "t3",
+            "T4"
+        ],
+        "custom_timers": [
+            {
+                "category": "Boss",
+                "color": "#22d3ee",
+                "enabled": true,
+                "interval_minutes": 60,
+                "interval_seconds": 3600,
+                "name": "test1",
+                "notification_sound": "",
+                "reset_day": "Mo",
+                "reset_time": "09:00",
+                "start_time": "00:00",
+                "timer_mode": "hourly"
+            },
+            {
+                "category": "T2",
+                "color": "#22d3ee",
+                "enabled": true,
+                "interval_minutes": 60,
+                "interval_seconds": 3600,
+                "name": "t2",
+                "notification_sound": "",
+                "reset_day": "Mo",
+                "reset_time": "09:00",
+                "start_time": "00:00",
+                "timer_mode": "hourly"
+            },
+            {
+                "category": "t3",
+                "color": "#22d3ee",
+                "enabled": true,
+                "interval_minutes": 60,
+                "interval_seconds": 3600,
+                "name": "t3",
+                "notification_sound": "",
+                "reset_day": "Mo",
+                "reset_time": "09:00",
+                "start_time": "00:00",
+                "timer_mode": "hourly"
+            },
+            {
+                "category": "T4",
+                "color": "#22d3ee",
+                "enabled": true,
+                "interval_minutes": 60,
+                "interval_seconds": 3600,
+                "name": "t34",
+                "notification_sound": "",
+                "reset_day": "Mo",
+                "reset_time": "09:00",
+                "start_time": "00:00",
+                "timer_mode": "hourly"
+            },
+            {
+                "category": "Boss",
+                "color": "#22d3ee",
+                "enabled": true,
+                "interval_minutes": 60,
+                "interval_seconds": 3600,
+                "name": "t5",
+                "notification_sound": "",
+                "reset_day": "Mo",
+                "reset_time": "09:00",
+                "start_time": "00:00",
+                "timer_mode": "hourly"
+            }
+        ],
+        "last_daily_reset_date": "2026-08-10",
+        "last_weekly_reset_date": "2026-08-04"
     },
     "tasks": {
         "dailyTasks": [
             {
+                "type": "task",
+                "priority": "middle",
                 "title": "Task1",
                 "description": "",
+                "event": false,
                 "completed": true
             },
             {
+                "type": "task",
+                "priority": "middle",
                 "title": "Tägliche Quest",
                 "description": "",
+                "event": false,
                 "completed": true
             },
             {
+                "type": "task",
+                "priority": "middle",
                 "title": "Instanz laufen",
                 "description": "",
+                "event": false,
                 "completed": true
             }
         ],
         "weeklyTasks": [
             {
+                "type": "task",
+                "priority": "middle",
                 "title": "Wöchentliche Quest",
                 "description": "",
+                "event": false,
                 "completed": true
             }
         ],
-        "eventTasks": [],
         "dailyShopping": [],
-        "weeklyShopping": [],
-        "eventShopping": []
-    }
+        "weeklyShopping": []
+    },
+    "flow_maps": {
+        "Map 1": {
+            "nodes": {
+                "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c": {
+                    "id": "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c",
+                    "title": "New Node",
+                    "description": "",
+                    "icon": "character",
+                    "status": "completed",
+                    "completed": true,
+                    "x": 3780.0,
+                    "y": 4000.0,
+                    "children": [
+                        "4904cd39-293f-4054-9802-92662285b762",
+                        "cf181cc9-e0ec-48cf-9e2e-58c2bc8b2e76"
+                    ]
+                },
+                "4904cd39-293f-4054-9802-92662285b762": {
+                    "id": "4904cd39-293f-4054-9802-92662285b762",
+                    "title": "New Node",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "completed",
+                    "completed": true,
+                    "x": 3780.0,
+                    "y": 4206.0,
+                    "children": [
+                        "513362b7-d041-4c3b-95bb-6107896ec712",
+                        "4fa67484-2765-40aa-bb55-7879ab2963a9",
+                        "5d92d863-69e0-4df5-88b7-759f053dc55b"
+                    ]
+                },
+                "513362b7-d041-4c3b-95bb-6107896ec712": {
+                    "id": "513362b7-d041-4c3b-95bb-6107896ec712",
+                    "title": "New Node",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "completed",
+                    "completed": true,
+                    "x": 3780.0,
+                    "y": 4412.0,
+                    "children": [
+                        "77ef8dc8-7bdc-4086-b495-7c6e490bf1c1",
+                        "09318e4a-ef50-4bc7-af5d-a09e50a2a7ce"
+                    ]
+                },
+                "77ef8dc8-7bdc-4086-b495-7c6e490bf1c1": {
+                    "id": "77ef8dc8-7bdc-4086-b495-7c6e490bf1c1",
+                    "title": "New Node",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3780.0,
+                    "y": 4618.0,
+                    "children": []
+                },
+                "cf181cc9-e0ec-48cf-9e2e-58c2bc8b2e76": {
+                    "id": "cf181cc9-e0ec-48cf-9e2e-58c2bc8b2e76",
+                    "title": "New Branch",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3250.0,
+                    "y": 4206.0,
+                    "children": []
+                },
+                "4fa67484-2765-40aa-bb55-7879ab2963a9": {
+                    "id": "4fa67484-2765-40aa-bb55-7879ab2963a9",
+                    "title": "New Branch",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3250.0,
+                    "y": 4412.0,
+                    "children": []
+                },
+                "09318e4a-ef50-4bc7-af5d-a09e50a2a7ce": {
+                    "id": "09318e4a-ef50-4bc7-af5d-a09e50a2a7ce",
+                    "title": "New Branch",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3250.0,
+                    "y": 4618.0,
+                    "children": []
+                },
+                "5d92d863-69e0-4df5-88b7-759f053dc55b": {
+                    "id": "5d92d863-69e0-4df5-88b7-759f053dc55b",
+                    "title": "New Branch",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "active",
+                    "completed": false,
+                    "x": 4310.0,
+                    "y": 4412.0,
+                    "children": []
+                }
+            },
+            "root_node_id": "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c",
+            "show_in_overlay": false
+        }
+    },
+    "active_flow_map": "Map 1"
 }

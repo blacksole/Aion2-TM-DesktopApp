@@ -125,6 +125,7 @@ class TasksPage(QWidget):
     task_add_requested = Signal(dict)
     sort_requested = Signal(object)  # tab_key, sort_key
     filter_changed = Signal(str)
+    manual_reset_requested = Signal()
 
     def __init__(self, tabs: dict, language: str, tr_func):
         super().__init__()
@@ -346,6 +347,14 @@ class TasksPage(QWidget):
         self._reset_hint_label.setVisible(False)
         self.sort_row.addWidget(self._reset_hint_label)
 
+        self._manual_reset_btn = QPushButton("↺")
+        self._manual_reset_btn.setObjectName("ManualResetBtn")
+        self._manual_reset_btn.setFixedSize(26, 26)
+        self._manual_reset_btn.setToolTip("Manuell zurücksetzen")
+        self._manual_reset_btn.setVisible(False)
+        self._manual_reset_btn.clicked.connect(self.manual_reset_requested.emit)
+        self.sort_row.addWidget(self._manual_reset_btn)
+
         layout.addLayout(self.sort_row)
 
         scroll = QScrollArea()
@@ -408,6 +417,7 @@ class TasksPage(QWidget):
                 f' <span style="color:#22d3ee;font-weight:700;">{countdown}</span>'
             )
         self._reset_hint_label.setVisible(visible)
+        self._manual_reset_btn.setVisible(visible)
 
     def update_language(self, language: str):
         self.language = language

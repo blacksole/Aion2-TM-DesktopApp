@@ -58,24 +58,15 @@ class TimersPage(QWidget):
         main_row.addStretch()
         layout.addLayout(main_row)
 
-        # ── Custom Timer Abschnitt ────────────────────────────────────────
-        self.custom_section_label = QLabel("Custom Timers")
-        self.custom_section_label.setObjectName("subtitle")
-        self.custom_section_label.setVisible(False)
-        layout.addWidget(self.custom_section_label)
+        # ── Custom Timer Abschnitt (dynamisch nach Kategorie) ─────────────
+        self._custom_area = QWidget()
+        self._custom_area_layout = QVBoxLayout(self._custom_area)
+        self._custom_area_layout.setContentsMargins(0, 0, 0, 0)
+        self._custom_area_layout.setSpacing(12)
+        self._custom_area.setVisible(False)
+        layout.addWidget(self._custom_area)
 
-        custom_row = QHBoxLayout()
-        custom_row.setSpacing(12)
-
-        self.custom_timer_cards = []
-        for i in range(2):
-            card = TimerInfoCard(f"Timer {i + 1}", "--:--", "#22d3ee")
-            card.setVisible(False)
-            self.custom_timer_cards.append(card)
-            custom_row.addWidget(card)
-
-        custom_row.addStretch()
-        layout.addLayout(custom_row)
+        self._custom_timer_cards: dict[int, TimerInfoCard] = {}
 
         layout.addStretch()
 
@@ -99,29 +90,56 @@ class TimersPage(QWidget):
     def set_riss_visible(self, visible: bool):
         self.riss_timer_card.setVisible(visible)
 
-    # ── Setter Custom Timer ───────────────────────────────────────────────
+    # ── Custom Timer Abschnitte (dynamisch) ───────────────────────────────
 
-    def set_custom_timer_visible(self, idx: int, visible: bool):
-        if 0 <= idx < len(self.custom_timer_cards):
-            self.custom_timer_cards[idx].setVisible(visible)
-            self._update_custom_section()
+    def rebuild_custom_sections(self, categories: list, timers: list):
+        """Rebuild dynamic custom timer sections grouped by category."""
+        while self._custom_area_layout.count():
+            item = self._custom_area_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._custom_timer_cards.clear()
+
+        default_cat = categories[0] if categories else "Custom Timer"
+        any_visible = False
+
+        for cat_name in categories:
+            cat_timers = [
+                (i, t) for i, t in enumerate(timers)
+                if t.get("category", default_cat) == cat_name
+                and t.get("enabled") and t.get("name")
+            ]
+            if not cat_timers:
+                continue
+
+            any_visible = True
+
+            header = QLabel(cat_name)
+            header.setObjectName("subtitle")
+            self._custom_area_layout.addWidget(header)
+
+            cards_widget = QWidget()
+            cards_row = QHBoxLayout(cards_widget)
+            cards_row.setContentsMargins(0, 0, 0, 0)
+            cards_row.setSpacing(12)
+
+            for idx, timer_cfg in cat_timers:
+                card = TimerInfoCard(
+                    timer_cfg.get("name", f"Timer {idx + 1}"),
+                    "--:--",
+                    timer_cfg.get("color", "#22d3ee"),
+                )
+                cards_row.addWidget(card)
+                self._custom_timer_cards[idx] = card
+
+            cards_row.addStretch()
+            self._custom_area_layout.addWidget(cards_widget)
+
+        self._custom_area.setVisible(any_visible)
 
     def set_custom_timer_countdown(self, idx: int, text: str):
-        if 0 <= idx < len(self.custom_timer_cards):
-            self.custom_timer_cards[idx].value_label.setText(text)
-
-    def set_custom_timer_style(self, idx: int, name: str, color: str,
-                               display_format: str = "hh:mm:ss"):
-        if 0 <= idx < len(self.custom_timer_cards):
-            card = self.custom_timer_cards[idx]
-            card.title_label.setText(name.upper())
-            card.value_label.setStyleSheet(
-                f"color: {color}; font-size: 30px; font-weight: bold;"
-            )
-
-    def _update_custom_section(self):
-        any_visible = any(c.isVisible() for c in self.custom_timer_cards)
-        self.custom_section_label.setVisible(any_visible)
+        if idx in self._custom_timer_cards:
+            self._custom_timer_cards[idx].value_label.setText(text)
 
     # ── Sprache ───────────────────────────────────────────────────────────
 
@@ -132,5 +150,3 @@ class TimersPage(QWidget):
         self.weekly_reset_card.title_label.setText(tr_func(language, "weekly_reset").upper())
         self.shugo_timer_card.title_label.setText(tr_func(language, "shugo").upper())
         self.riss_timer_card.title_label.setText(tr_func(language, "riss").upper())
-        _ct = {"de": "Custom Timer", "ru": "Custom Timer", "en": "Custom Timers"}
-        self.custom_section_label.setText(_ct.get(language, "Custom Timers"))

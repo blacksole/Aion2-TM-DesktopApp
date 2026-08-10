@@ -231,8 +231,9 @@ class MainWindow(QMainWindow):
         self._shugo_notified = False
         self._riss_notified = False
 
-        self.custom_timers = []  # max 2, dynamisch
-        self._custom_notified = [False, False]
+        self.custom_timers = []
+        self.timer_categories = ["Custom Timer"]
+        self._custom_notified = [False] * 8
 
         self.weekly_reset_day = "Mo"
 
@@ -669,6 +670,7 @@ class MainWindow(QMainWindow):
 
         self.tasks_page.sort_requested.connect(self.sort_current_list)
         self.tasks_page.filter_changed.connect(self.set_task_filter)
+        self.tasks_page.manual_reset_requested.connect(self._on_manual_reset)
 
         if hasattr(self.header, "update_btn_clicked"):
             self.header.update_btn_clicked.connect(self._open_update_dialog)
@@ -942,7 +944,7 @@ class MainWindow(QMainWindow):
                 elif seconds > check_secs:
                     self._riss_notified = False
 
-        for i, ct in enumerate(self.custom_timers[:2]):
+        for i, ct in enumerate(self.custom_timers[:8]):
             if ct.get("enabled") and ct.get("name"):
                 mode = ct.get("timer_mode", "hourly")
                 if mode == "daily":
@@ -957,10 +959,11 @@ class MainWindow(QMainWindow):
                     ct_text = self.format_reset_countdown(seconds)
                 elif mode == "custom":
                     next_ct = self._get_next_custom_timer_time_seconds(
-                        max(60, ct.get("interval_seconds", 3600))
+                        max(60, ct.get("interval_seconds", 3600)),
+                        ct.get("start_time", "00:00"),
                     )
                     seconds = (next_ct - now).total_seconds()
-                    ct_text = self._format_custom_countdown(seconds, "hh:mm:ss")
+                    ct_text = self.format_reset_countdown(seconds)
                 else:  # hourly (default, backward compat)
                     next_ct = self._get_next_custom_timer_time(ct.get("interval_minutes", 60))
                     seconds = (next_ct - now).total_seconds()
@@ -1285,12 +1288,15 @@ class MainWindow(QMainWindow):
         intervals_passed = int(elapsed_secs / interval.total_seconds())
         return midnight + interval * (intervals_passed + 1)
 
-    def _get_next_custom_timer_time_seconds(self, interval_seconds: int) -> "datetime":
+    def _get_next_custom_timer_time_seconds(self, interval_seconds: int, start_time: str = "00:00") -> "datetime":
         now = datetime.now()
-        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        elapsed = (now - midnight).total_seconds()
+        h, m = map(int, start_time.split(":"))
+        anchor = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        if anchor > now:
+            anchor -= timedelta(days=1)
+        elapsed = (now - anchor).total_seconds()
         intervals_passed = int(elapsed / interval_seconds)
-        return midnight + timedelta(seconds=interval_seconds * (intervals_passed + 1))
+        return anchor + timedelta(seconds=interval_seconds * (intervals_passed + 1))
 
     @staticmethod
     def _get_next_daily_custom_time(reset_time_str: str) -> "datetime":
@@ -1323,6 +1329,13 @@ class MainWindow(QMainWindow):
         if fmt == "mm:ss":
             total_minutes, secs = divmod(s, 60)
             return f"{total_minutes:02}:{secs:02}"
+        if fmt == "dd:hh:mm":
+            days, remainder = divmod(s, 86400)
+            hours, remainder = divmod(remainder, 3600)
+            minutes, secs = divmod(remainder, 60)
+            if days > 0:
+                return f"{days}T {hours:02}:{minutes:02}:{secs:02}"
+            return f"{hours:02}:{minutes:02}:{secs:02}"
         # default: hh:mm:ss
         minutes, secs = divmod(s, 60)
         hours, minutes = divmod(minutes, 60)
@@ -1418,16 +1431,13 @@ class MainWindow(QMainWindow):
         self.timers_page.set_shugo_visible(self.shugo_enabled)
         self.timers_page.set_riss_visible(self.riss_enabled)
 
-        self.custom_timers = settings.get("custom_timers", [])[:2]
+        self.timer_categories = settings.get("timer_categories", ["Custom Timer"]) or ["Custom Timer"]
+        self.custom_timers = settings.get("custom_timers", [])[:8]
         for ct in self.custom_timers:
             if "timer_mode" not in ct:
                 ct["timer_mode"] = "hourly"
-        self._custom_notified = [False, False]
-        for i, ct in enumerate(self.custom_timers[:2]):
-            visible = ct.get("enabled", False) and bool(ct.get("name", ""))
-            self.timers_page.set_custom_timer_visible(i, visible)
-            if visible:
-                self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"))
+        self._custom_notified = [False] * 8
+        self.timers_page.rebuild_custom_sections(self.timer_categories, self.custom_timers)
 
         self.toggle_events()
         self.update_countdowns()
@@ -1595,6 +1605,7 @@ class MainWindow(QMainWindow):
                 "notification_riss_enabled": self.notification_riss_enabled,
                 "notification_riss_warn_minutes": self.notification_riss_warn_minutes,
                 "notification_sound": self.notification_sound,
+                "timer_categories": self.timer_categories,
                 "custom_timers": self.custom_timers,
                 "last_daily_reset_date": (
                     self.last_daily_reset_date.isoformat()
@@ -1822,6 +1833,18 @@ class MainWindow(QMainWindow):
                 card.set_completed(False)
 
         self.refresh()
+        self.save_profile(silent=True)
+
+    def _on_manual_reset(self):
+        tab = self.active_tab
+        if tab in ("dailyTasks", "dailyShopping"):
+            self.reset_tasks_for_tabs(["dailyTasks", "dailyShopping"])
+            from datetime import date
+            self.last_daily_reset_date = date.today()
+        elif tab in ("weeklyTasks", "weeklyShopping"):
+            self.reset_tasks_for_tabs(["weeklyTasks", "weeklyShopping"])
+            from datetime import date
+            self.last_weekly_reset_date = date.today()
         self.save_profile()
 
 
@@ -2055,7 +2078,6 @@ class MainWindow(QMainWindow):
         self.toggle_events()
 
         self.update_countdowns()
-        self.save_profile(silent=True)
 
         self.show_toast(
             tr(self.language, "settings_saved")
@@ -2110,17 +2132,15 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = data.get("notification_riss_enabled", self.notification_riss_enabled)
         self.notification_riss_warn_minutes = data.get("notification_riss_warn_minutes", self.notification_riss_warn_minutes)
         self.notification_sound = data.get("notification_sound", self.notification_sound)
+        if "timer_categories" in data:
+            self.timer_categories = data["timer_categories"] or ["Custom Timer"]
         if "custom_timers" in data:
-            self.custom_timers = data["custom_timers"][:2]
+            self.custom_timers = data["custom_timers"][:8]
             for ct in self.custom_timers:
                 if "timer_mode" not in ct:
                     ct["timer_mode"] = "hourly"
-            self._custom_notified = [False, False]
-            for i, ct in enumerate(self.custom_timers[:2]):
-                visible = ct.get("enabled", False) and bool(ct.get("name", ""))
-                self.timers_page.set_custom_timer_visible(i, visible)
-                if visible:
-                    self.timers_page.set_custom_timer_style(i, ct["name"], ct.get("color", "#22d3ee"))
+            self._custom_notified = [False] * 8
+            self.timers_page.rebuild_custom_sections(self.timer_categories, self.custom_timers)
 
         if "minimize_to_tray" in data:
             self.minimize_to_tray = data["minimize_to_tray"]
@@ -2131,6 +2151,8 @@ class MainWindow(QMainWindow):
         self._save_app_config()
         if self.dps_meter_autostart and self.dps_meter_path and self.dps_meter_path != old_path:
             self._start_dps_meter(self.dps_meter_path)
+
+        self.save_profile(silent=True)
 
     def change_theme_from_page(self, theme: str):
         self.apply_theme(theme)
@@ -2174,6 +2196,7 @@ class MainWindow(QMainWindow):
 
             "profile_dir": str(self.profile_dir),
 
+            "timer_categories": self.timer_categories,
             "custom_timers": self.custom_timers,
         })
 
