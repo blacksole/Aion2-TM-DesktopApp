@@ -28,11 +28,13 @@ class UpdateChecker(QThread):
 
             asset_url = ""
             for asset in data.get("assets", []):
-                if asset.get("name", "").endswith(".zip"):
+                name = asset.get("name", "")
+                if name.endswith(".zip") or name.endswith(".exe"):
                     asset_url = asset.get("browser_download_url", "")
                     break
 
-            if tag and self._is_newer(tag, APP_VERSION):
+            # Kein kompiliertes Asset → kein Update anbieten (Source-Archiv reicht nicht)
+            if tag and self._is_newer(tag, APP_VERSION) and asset_url:
                 self.update_available.emit(tag, body, asset_url)
             else:
                 self.up_to_date.emit()
