@@ -1078,14 +1078,15 @@ class MainWindow(QMainWindow):
             self.overlay.refresh()
 
     def load_styles(self):
-        style_path = (
-            Path(__file__).resolve().parent / "styles.qss"
-        )
+        if hasattr(sys, "_MEIPASS"):
+            base_path = Path(sys._MEIPASS)
+            style_path = base_path / "ui" / "styles.qss"
+        else:
+            style_path = Path(__file__).resolve().parent / "styles.qss"
+            base_path = Path(__file__).resolve().parent.parent
 
         with open(style_path, "r", encoding="utf-8") as f:
             styles = f.read()
-
-        base_path = Path(__file__).resolve().parent.parent
 
         styles = styles.replace(
             "ASSET_PATH",
@@ -1699,9 +1700,18 @@ class MainWindow(QMainWindow):
         if hasattr(self, "settings_page"):
             self.settings_page.update_profile_dir_label(str(self.profile_dir))
 
-        # Vorhandenes Profil aus dem neuen Ordner laden statt leeren Stand zu behalten
-        self.load_last_profile()
+        # Immer aus dem neuen Ordner laden – last_profile.txt könnte auf alten Ordner zeigen
+        self._load_best_profile_from_dir(new_dir)
         self.show_toast("Profilpfad gespeichert")
+
+    def _load_best_profile_from_dir(self, folder: Path):
+        """Lädt das beste verfügbare Profil aus einem Ordner: erstes Nicht-Default, sonst Default."""
+        profiles = sorted(folder.glob("*.json"))
+        if not profiles:
+            return
+        non_default = [p for p in profiles if p.stem.lower() != "default"]
+        to_load = non_default[0] if non_default else profiles[0]
+        self.load_profile(to_load)
 
     def save_last_profile(self, profile_path):
         with open(self.last_profile_file, "w", encoding="utf-8") as f:

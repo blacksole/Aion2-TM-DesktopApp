@@ -22,12 +22,6 @@
         "notification_riss_enabled": false,
         "notification_riss_warn_minutes": 1,
         "notification_sound": "",
-        "timer_categories": [
-            "Boss",
-            "T2",
-            "t3",
-            "T4"
-        ],
         "custom_timers": [
             {
                 "category": "Boss",
@@ -49,45 +43,6 @@
                 "interval_minutes": 60,
                 "interval_seconds": 3600,
                 "name": "t2",
-                "notification_sound": "",
-                "reset_day": "Mo",
-                "reset_time": "09:00",
-                "start_time": "00:00",
-                "timer_mode": "hourly"
-            },
-            {
-                "category": "t3",
-                "color": "#22d3ee",
-                "enabled": true,
-                "interval_minutes": 60,
-                "interval_seconds": 3600,
-                "name": "t3",
-                "notification_sound": "",
-                "reset_day": "Mo",
-                "reset_time": "09:00",
-                "start_time": "00:00",
-                "timer_mode": "hourly"
-            },
-            {
-                "category": "T4",
-                "color": "#22d3ee",
-                "enabled": true,
-                "interval_minutes": 60,
-                "interval_seconds": 3600,
-                "name": "t34",
-                "notification_sound": "",
-                "reset_day": "Mo",
-                "reset_time": "09:00",
-                "start_time": "00:00",
-                "timer_mode": "hourly"
-            },
-            {
-                "category": "Boss",
-                "color": "#22d3ee",
-                "enabled": true,
-                "interval_minutes": 60,
-                "interval_seconds": 3600,
-                "name": "t5",
                 "notification_sound": "",
                 "reset_day": "Mo",
                 "reset_time": "09:00",
