@@ -226,6 +226,7 @@ class MainWindow(QMainWindow):
         self.dps_meter_path = ""
         self.dps_meter_autostart = False
         self.minimize_to_tray = None  # None = not asked yet
+        self._avatar_b64 = ""
 
         self.profile_dir = self._resolve_profile_dir()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
@@ -600,6 +601,8 @@ class MainWindow(QMainWindow):
 
     def _setup_header(self):
         self.header = HeaderWidget()
+        if self._avatar_b64:
+            self.header.set_avatar(self._avatar_b64)
 
 
     def _setup_central_widget(self):
@@ -750,6 +753,9 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.header, "update_btn_clicked"):
             self.header.update_btn_clicked.connect(self._open_update_dialog)
+
+        if hasattr(self.header, "avatar_changed"):
+            self.header.avatar_changed.connect(self._on_avatar_changed)
 
         if hasattr(self.settings_page, "check_update_requested"):
             self.settings_page.check_update_requested.connect(self._on_manual_update_check)
@@ -1781,6 +1787,7 @@ class MainWindow(QMainWindow):
                 self.dps_meter_autostart = cfg.get("dps_meter_autostart", False)
                 raw_mtt = cfg.get("minimize_to_tray", None)
                 self.minimize_to_tray = bool(raw_mtt) if raw_mtt is not None else None
+                self._avatar_b64 = cfg.get("avatar", "")
                 custom = cfg.get("profile_dir", "")
                 if custom:
                     p = Path(custom)
@@ -1803,6 +1810,7 @@ class MainWindow(QMainWindow):
             "dps_meter_path": self.dps_meter_path,
             "dps_meter_autostart": self.dps_meter_autostart,
             "minimize_to_tray": self.minimize_to_tray,
+            "avatar": self._avatar_b64,
         }
         self.app_config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
@@ -2644,6 +2652,10 @@ class MainWindow(QMainWindow):
         app_root = self.project_root
         dlg = UpdateDialog(version, body, asset_url, app_root, parent=self)
         dlg.exec()
+
+    def _on_avatar_changed(self, b64: str):
+        self._avatar_b64 = b64
+        self._save_app_config()
 
     def _on_manual_update_check(self):
         self._checker = UpdateChecker()
