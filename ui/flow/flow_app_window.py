@@ -28,7 +28,7 @@ from ui.flow.widgets.flow_node_card import FlowNodeCard
 from ui.flow.widgets.flow_map_area import FlowMapArea
 from ui.flow.widgets.node_editor_panel import NodeEditorPanel
 from ui.flow.widgets.flow_guide_view import FlowGuideView
-from ui.flow.flow_layout import NODE_WIDTH, NODE_HEIGHT
+from ui.flow.flow_layout import NODE_WIDTH, NODE_HEIGHT, ICON_SIZE
 from ui.flow.flow_renderer import FlowRenderer
 from ui.flow.flow_controller import FlowController
 
@@ -559,6 +559,38 @@ class FlowMapWindow(QMainWindow):
         self.node_cards = {}
         self.selected_node_ids.clear()
 
+    def update_node_card(self, node_id: str):
+        """Update a single card in-place — title, icon, status — without render_flow()."""
+        from PySide6.QtGui import QPixmap
+        from PySide6.QtCore import Qt
+
+        node = self.nodes.get(node_id)
+        if not node:
+            return
+
+        card = self.node_cards.get(node_id)
+        if card:
+            card.title_label.setText(node.title)
+            icon_key = "root" if node_id == self.root_node_id else node.icon
+            pixmap = QPixmap(self.get_icon_symbol(icon_key))
+            if not pixmap.isNull():
+                sz = int(ICON_SIZE * self.zoom_factor)
+                card.icon_box.setPixmap(
+                    pixmap.scaled(sz, sz, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                )
+                card._original_pixmap = pixmap
+            card.setProperty("status", node.status)
+            card.style().unpolish(card)
+            card.style().polish(card)
+
+        for child_id in node.children:
+            child_node = self.nodes.get(child_id)
+            child_card = self.node_cards.get(child_id)
+            if child_node and child_card:
+                child_card.setProperty("status", child_node.status)
+                child_card.style().unpolish(child_card)
+                child_card.style().polish(child_card)
+
     def _apply_zoom_to_cards(self):
         zoom = self.zoom_factor
         for node_id, card in self.node_cards.items():
@@ -725,7 +757,7 @@ class FlowMapWindow(QMainWindow):
 
     def eventFilter(self, obj, event):
         if obj == self.content and event.type() == event.Type.Resize:
-            QTimer.singleShot(0, self.position_flow_overlays)
+            self.position_flow_overlays()
 
         return super().eventFilter(obj, event)
 

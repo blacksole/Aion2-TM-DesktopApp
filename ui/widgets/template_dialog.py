@@ -21,6 +21,9 @@ from PySide6.QtWidgets import (
 
 _SCHEDULE_NAMES = {"daily": "scheduleDaily", "weekly": "scheduleWeekly", "season": "scheduleSeason"}
 _SCHEDULE_TEXTS = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
+_PRIO_NAMES = {"low": "priorityLow", "middle": "priorityMiddle", "high": "priorityHigh"}
+_PRIO_TEXTS = {"low": "LOW", "middle": "MID", "high": "HIGH"}
+_SORT_LABELS = {"name": "Name", "priority": "Prio", "schedule": "Schedule"}
 
 
 def _h_separator() -> QFrame:
@@ -46,7 +49,11 @@ class TemplateDialog(QDialog):
         self._selected_shop_index: int | None = None
         self._selected_task_index: int | None = None
         self._shop_sort_key: str = "none"
+        self._shop_sort_dir: str = "asc"
+        self._shop_sort_btns: dict = {}
         self._task_sort_key: str = "none"
+        self._task_sort_dir: str = "asc"
+        self._task_sort_btns: dict = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 12)
@@ -89,11 +96,12 @@ class TemplateDialog(QDialog):
         sort_lbl = QLabel("Sortieren:")
         sort_lbl.setObjectName("subtitle")
         sort_row.addWidget(sort_lbl)
-        for label, key in (("Name", "name"), ("Preis", "price"), ("Schedule", "schedule")):
+        for label, key in (("Name", "name"), ("Prio", "priority"), ("Schedule", "schedule")):
             btn = QPushButton(label)
             btn.setObjectName("filterButton")
             btn.clicked.connect(lambda _c=False, k=key: self._sort_shop_by(k))
             sort_row.addWidget(btn)
+            self._shop_sort_btns[key] = btn
         sort_row.addStretch()
         vl.addLayout(sort_row)
 
@@ -136,11 +144,12 @@ class TemplateDialog(QDialog):
         sort_lbl = QLabel("Sortieren:")
         sort_lbl.setObjectName("subtitle")
         sort_row.addWidget(sort_lbl)
-        for label, key in (("Name", "name"), ("Schedule", "schedule")):
+        for label, key in (("Name", "name"), ("Prio", "priority"), ("Schedule", "schedule")):
             btn = QPushButton(label)
             btn.setObjectName("filterButton")
             btn.clicked.connect(lambda _c=False, k=key: self._sort_tasks_by(k))
             sort_row.addWidget(btn)
+            self._task_sort_btns[key] = btn
         sort_row.addStretch()
         vl.addLayout(sort_row)
 
@@ -234,19 +243,21 @@ class TemplateDialog(QDialog):
 
         badge_row = QHBoxLayout()
         badge_row.setSpacing(6)
-        if tmpl.get("is_general"):
-            sched = tmpl.get("schedule", "daily")
-            sched_badge = QLabel(_SCHEDULE_TEXTS.get(sched, sched.upper()))
-            sched_badge.setObjectName(_SCHEDULE_NAMES.get(sched, "scheduleDaily"))
-            badge_row.addWidget(sched_badge)
+        sched = tmpl.get("schedule", "daily")
+        sched_badge = QLabel(_SCHEDULE_TEXTS.get(sched, sched.upper()))
+        sched_badge.setObjectName(_SCHEDULE_NAMES.get(sched, "scheduleDaily"))
+        badge_row.addWidget(sched_badge)
+        prio = tmpl.get("priority", "middle")
+        prio_badge = QLabel(_PRIO_TEXTS.get(prio, prio.upper()))
+        prio_badge.setObjectName(_PRIO_NAMES.get(prio, "priorityMiddle"))
+        badge_row.addWidget(prio_badge)
         chars = self._get_char_assignments(tmpl.get("title", ""))
         for char_name in chars:
             char_badge = QLabel(char_name)
             char_badge.setObjectName("scheduleWeekly")
             badge_row.addWidget(char_badge)
         badge_row.addStretch()
-        if tmpl.get("is_general") or chars:
-            text_col.addLayout(badge_row)
+        text_col.addLayout(badge_row)
 
         edit_btn = QPushButton("Edit")
         edit_btn.setObjectName("secondaryButton")
@@ -313,6 +324,10 @@ class TemplateDialog(QDialog):
         sched_badge = QLabel(_SCHEDULE_TEXTS.get(sched, sched.upper()))
         sched_badge.setObjectName(_SCHEDULE_NAMES.get(sched, "scheduleDaily"))
         badge_row.addWidget(sched_badge)
+        prio = tmpl.get("priority", "middle")
+        prio_badge = QLabel(_PRIO_TEXTS.get(prio, prio.upper()))
+        prio_badge.setObjectName(_PRIO_NAMES.get(prio, "priorityMiddle"))
+        badge_row.addWidget(prio_badge)
         badge_row.addStretch()
         text_col.addLayout(badge_row)
 
@@ -354,22 +369,33 @@ class TemplateDialog(QDialog):
             self._add_shop_template()
 
     def _sort_shop_by(self, key: str):
-        self._shop_sort_key = key
-        if key == "name":
-            self.templates.sort(key=lambda t: t.get("title", "").lower())
-        elif key == "price":
-            def _pval(t):
-                try:
-                    return float(str(t.get("price", "0")).replace(",", "."))
-                except ValueError:
-                    return 0
-            self.templates.sort(key=_pval)
-        elif key == "schedule":
+        if self._shop_sort_key == key:
+            self._shop_sort_dir = "desc" if self._shop_sort_dir == "asc" else "asc"
+        else:
+            self._shop_sort_key = key
+            self._shop_sort_dir = "asc"
+        self._update_shop_sort_buttons()
+        reverse = self._shop_sort_dir == "desc"
+        if self._shop_sort_key == "name":
+            self.templates.sort(key=lambda t: t.get("title", "").lower(), reverse=reverse)
+        elif self._shop_sort_key == "priority":
+            _order = {"high": 0, "middle": 1, "low": 2}
+            self.templates.sort(key=lambda t: _order.get(t.get("priority", "middle"), 1), reverse=reverse)
+        elif self._shop_sort_key == "schedule":
             _order = {"daily": 0, "weekly": 1, "season": 2}
-            self.templates.sort(key=lambda t: _order.get(t.get("schedule", "daily"), 3))
+            self.templates.sort(key=lambda t: _order.get(t.get("schedule", "daily"), 3), reverse=reverse)
         self._selected_shop_index = None
         self._update_shop_add_btn()
         self._rebuild_shop_list()
+
+    def _update_shop_sort_buttons(self):
+        arrow = " ↑" if self._shop_sort_dir == "asc" else " ↓"
+        for k, btn in self._shop_sort_btns.items():
+            is_active = k == self._shop_sort_key
+            btn.setText(_SORT_LABELS[k] + (arrow if is_active else ""))
+            btn.setProperty("active", is_active)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
 
     def _set_shop_general(self, index: int, value: bool):
         if not (0 <= index < len(self.templates)):
@@ -450,15 +476,33 @@ class TemplateDialog(QDialog):
             self._add_task_template()
 
     def _sort_tasks_by(self, key: str):
-        self._task_sort_key = key
-        if key == "name":
-            self.task_templates.sort(key=lambda t: t.get("title", "").lower())
-        elif key == "schedule":
+        if self._task_sort_key == key:
+            self._task_sort_dir = "desc" if self._task_sort_dir == "asc" else "asc"
+        else:
+            self._task_sort_key = key
+            self._task_sort_dir = "asc"
+        self._update_task_sort_buttons()
+        reverse = self._task_sort_dir == "desc"
+        if self._task_sort_key == "name":
+            self.task_templates.sort(key=lambda t: t.get("title", "").lower(), reverse=reverse)
+        elif self._task_sort_key == "priority":
+            _order = {"high": 0, "middle": 1, "low": 2}
+            self.task_templates.sort(key=lambda t: _order.get(t.get("priority", "middle"), 1), reverse=reverse)
+        elif self._task_sort_key == "schedule":
             _order = {"daily": 0, "weekly": 1, "season": 2}
-            self.task_templates.sort(key=lambda t: _order.get(t.get("schedule", "daily"), 3))
+            self.task_templates.sort(key=lambda t: _order.get(t.get("schedule", "daily"), 3), reverse=reverse)
         self._selected_task_index = None
         self._update_task_add_btn()
         self._rebuild_task_list()
+
+    def _update_task_sort_buttons(self):
+        arrow = " ↑" if self._task_sort_dir == "asc" else " ↓"
+        for k, btn in self._task_sort_btns.items():
+            is_active = k == self._task_sort_key
+            btn.setText(_SORT_LABELS[k] + (arrow if is_active else ""))
+            btn.setProperty("active", is_active)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
 
     def _set_task_general(self, index: int, value: bool):
         if not (0 <= index < len(self.task_templates)):
@@ -607,7 +651,7 @@ class _TemplateEditDialog(QDialog):
             (self._abyss_btn if data.get("currency") == "abyss" else self._kinah_btn).setChecked(True)
 
             self._price = QLineEdit(str(data.get("price", "")))
-            self._price.setPlaceholderText("Preis...")
+            self._price.setPlaceholderText("Preis (in K)")
             self._price.setValidator(
                 QRegularExpressionValidator(QRegularExpression(r"^\d{0,6}([.,]\d{0,3})?[kK]?$"))
             )

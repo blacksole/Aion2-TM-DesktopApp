@@ -197,7 +197,7 @@ class FlowController:
             self.window.root_renamed.emit(mw_name, node.title)
 
         panel.mark_clean()
-        self.window.render_flow()
+        self.window.update_node_card(self.window.selected_node_id)
         self.window.mark_unsaved()
         self.window.close_editor_panel()
 

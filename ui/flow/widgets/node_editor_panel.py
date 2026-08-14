@@ -34,6 +34,7 @@ class _NodeItemListDialog(QDialog):
         self.setModal(True)
         self.setFixedWidth(520)
         self.setMinimumHeight(540)
+        self.resize(520, 680)
 
         # Separate items by type; old items without a type are shopping
         self._shopping_items = [dict(i) for i in items if i.get("type", "shopping") != "task"]
@@ -146,12 +147,11 @@ class _NodeItemListDialog(QDialog):
 
         list_frame = QFrame()
         list_frame.setObjectName("settingsRow")
-        list_frame.setFixedHeight(160)
+        list_frame.setMinimumHeight(100)
         lf_layout = QVBoxLayout(list_frame)
         lf_layout.setContentsMargins(0, 0, 0, 0)
         lf_layout.addWidget(scroll)
-        vl.addWidget(list_frame)
-        vl.addStretch()
+        vl.addWidget(list_frame, 1)
 
         for item in self._shopping_items:
             self._add_shop_row(item)
@@ -240,12 +240,11 @@ class _NodeItemListDialog(QDialog):
 
         list_frame = QFrame()
         list_frame.setObjectName("settingsRow")
-        list_frame.setFixedHeight(160)
+        list_frame.setMinimumHeight(100)
         lf_layout = QVBoxLayout(list_frame)
         lf_layout.setContentsMargins(0, 0, 0, 0)
         lf_layout.addWidget(scroll)
-        vl.addWidget(list_frame)
-        vl.addStretch()
+        vl.addWidget(list_frame, 1)
 
         for item in self._task_items:
             self._add_task_row(item)
@@ -552,6 +551,21 @@ class NodeEditorPanel(QFrame):
         self._character_items = dialog.get_items()
         self._update_items_count()
         self._mark_dirty()
+        # Update node.character_items and sync lists immediately,
+        # without triggering render_flow or closing the editor panel.
+        w = self.parent()
+        while w is not None:
+            if hasattr(w, "nodes") and hasattr(w, "selected_node_id"):
+                node = w.nodes.get(w.selected_node_id)
+                if node and node.icon == "character":
+                    node.character_items = list(self._character_items)
+                    main = w.parent()
+                    if main and hasattr(main, "_sync_character_items_to_shopping"):
+                        main._sync_character_items_to_shopping(node.title, node.character_items)
+                    if hasattr(w, "mark_unsaved"):
+                        w.mark_unsaved()
+                break
+            w = w.parent()
 
     def _update_items_count(self):
         shop_n = sum(1 for i in self._character_items if i.get("type", "shopping") != "task")

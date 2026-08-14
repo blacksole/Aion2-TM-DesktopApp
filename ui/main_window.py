@@ -1647,6 +1647,7 @@ class MainWindow(QMainWindow):
             for node in self.flow_map_window.nodes.values():
                 if node.icon == "character" and node.character_items:
                     self._sync_character_items_to_shopping(node.title, node.character_items)
+        self._refresh_character_dropdown()
         if hasattr(self.header, "set_profile"):
             self.header.set_profile(self.profile_name)
         self.save_last_profile(profile_path)
@@ -2071,34 +2072,66 @@ class MainWindow(QMainWindow):
                 card.set_completed(False)
 
     def _sync_character_items_to_shopping(self, char_name: str, items: list):
-        """Replace shopping cards owned by char_name with the current character_items list."""
-        removed = [
+        """Sync shopping and task items from a character node into the respective lists."""
+        removed_shop = [
             c for c in self.task_lists.get("shopping", [])
             if isinstance(c, ShoppingCard) and c.character == char_name
         ]
         self.task_lists["shopping"] = [
             c for c in self.task_lists.get("shopping", [])
-            if c not in removed
+            if c not in removed_shop
         ]
-        for c in removed:
+        for c in removed_shop:
+            c.setParent(None)
+
+        removed_tasks = [
+            c for c in self.task_lists.get("tasks", [])
+            if isinstance(c, TaskCard) and c.character == char_name
+        ]
+        self.task_lists["tasks"] = [
+            c for c in self.task_lists.get("tasks", [])
+            if c not in removed_tasks
+        ]
+        for c in removed_tasks:
             c.setParent(None)
 
         for item in items:
-            card = ShoppingCard(
-                priority=item.get("priority", "middle"),
-                amount=str(item.get("amount", "1")),
-                title=item.get("title", ""),
-                location=item.get("location", ""),
-                price=item.get("price", "0"),
-                schedule=item.get("schedule", "daily"),
-                currency=item.get("currency", "kinah"),
-                character=char_name,
-            )
-            self._wire_card(card)
-            self.task_lists.setdefault("shopping", []).append(card)
+            if item.get("type") == "task":
+                card = TaskCard(
+                    item.get("title", ""),
+                    item.get("description", ""),
+                    item.get("priority", "middle"),
+                    False,
+                    schedule=item.get("schedule", "daily"),
+                    character=char_name,
+                )
+                self._wire_card(card)
+                self.task_lists.setdefault("tasks", []).append(card)
+            else:
+                card = ShoppingCard(
+                    priority=item.get("priority", "middle"),
+                    amount=str(item.get("amount", "1")),
+                    title=item.get("title", ""),
+                    location=item.get("location", ""),
+                    price=item.get("price", "0"),
+                    schedule=item.get("schedule", "daily"),
+                    currency=item.get("currency", "kinah"),
+                    character=char_name,
+                )
+                self._wire_card(card)
+                self.task_lists.setdefault("shopping", []).append(card)
 
-        if self.active_tab == "shopping":
+        self._refresh_character_dropdown()
+        if self.active_tab in ("shopping", "tasks"):
             self.refresh()
+
+    def _refresh_character_dropdown(self):
+        names = sorted({
+            c.character
+            for c in self.task_lists.get("shopping", [])
+            if isinstance(c, ShoppingCard) and c.character
+        })
+        self.tasks_page.update_characters(names)
 
     def _on_manual_reset(self):
         from datetime import date
