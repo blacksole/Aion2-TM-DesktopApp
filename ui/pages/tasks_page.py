@@ -126,6 +126,7 @@ class TasksPage(QWidget):
     sort_requested = Signal(object)  # tab_key, sort_key
     filter_changed = Signal(str)
     manual_reset_requested = Signal()
+    template_requested = Signal()
 
     def __init__(self, tabs: dict, language: str, tr_func):
         super().__init__()
@@ -133,10 +134,11 @@ class TasksPage(QWidget):
         self.tabs = tabs
         self.language = language
         self.tr = tr_func
-        self.active_tab = "dailyTasks"
+        self.active_tab = "tasks"
         self.active_filter = "all"
         self.active_sort = "priority"
         self.sort_direction = "desc"
+        self._show_events = True
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -167,6 +169,14 @@ class TasksPage(QWidget):
             self.tab_row.addWidget(btn)
 
         self.tab_row.addStretch()
+
+        self._template_btn = QPushButton("📋 Vorlagen")
+        self._template_btn.setObjectName("templateButton")
+        self._template_btn.setCursor(Qt.PointingHandCursor)
+        self._template_btn.setVisible(False)
+        self._template_btn.clicked.connect(self.template_requested.emit)
+        self.tab_row.addWidget(self._template_btn)
+
         layout.addLayout(self.tab_row)
 
         self.progress_bar = TaskProgressBar()
@@ -205,26 +215,68 @@ class TasksPage(QWidget):
         self.event_input.setObjectName("eventCheckBox")
         self.event_input.setText("Event")
 
-        self.location_input = QLineEdit()
-        self.location_input.setPlaceholderText(
-            self.tr(self.language, "location")
-        )
+        # Schedule selector — mutually exclusive, only visible in shopping mode
+        self.schedule_daily_btn = QPushButton("Daily")
+        self.schedule_daily_btn.setObjectName("scheduleToggleBtn")
+        self.schedule_daily_btn.setCheckable(True)
+        self.schedule_daily_btn.setChecked(True)
+
+        self.schedule_weekly_btn = QPushButton("Weekly")
+        self.schedule_weekly_btn.setObjectName("scheduleToggleBtn")
+        self.schedule_weekly_btn.setCheckable(True)
+
+        self.schedule_season_btn = QPushButton("Season")
+        self.schedule_season_btn.setObjectName("scheduleToggleBtn")
+        self.schedule_season_btn.setCheckable(True)
+
+        self._schedule_btn_group = QButtonGroup(self)
+        self._schedule_btn_group.setExclusive(True)
+        self._schedule_btn_group.addButton(self.schedule_daily_btn)
+        self._schedule_btn_group.addButton(self.schedule_weekly_btn)
+        self._schedule_btn_group.addButton(self.schedule_season_btn)
 
         self.amount_input = QLineEdit()
-        self.amount_input.setValidator(
-            QIntValidator(0, 999999)
-        )
-        self.amount_input.setPlaceholderText(
-            self.tr(self.language, "amount")
-        )
+        self.amount_input.setValidator(QIntValidator(0, 999999))
+        self.amount_input.setPlaceholderText(self.tr(self.language, "amount"))
+        self.amount_input.setMaximumWidth(80)
 
+        # Template selector — replaces free-text title in shopping / tasks mode
+        self._templates: list[dict] = []
+        self._task_templates: list[dict] = []
+        self.template_combo = QComboBox()
+        self.template_combo.setObjectName("priorityInput")
+        self.template_combo.setMinimumWidth(160)
+        self.template_combo.setPlaceholderText("Vorlage")
+        self.template_combo.setCurrentIndex(-1)
+
+        # Hint shown when template list is empty
+        self.no_templates_hint = QLabel("Keine Vorlagen — öffne 📋 und füge Einträge hinzu")
+        self.no_templates_hint.setObjectName("subtitle")
+
+        # Character selector — shopping only
+        self.char_input = QComboBox()
+        self.char_input.setObjectName("priorityInput")
+        self.char_input.setMinimumWidth(110)
+        self.char_input.setPlaceholderText("Char")
+        self.char_input.addItem("leer", "")
+        self.char_input.setItemData(0, QColor("#64748b"), Qt.ForegroundRole)
+        self.char_input.model().item(0).setEnabled(False)
+        self.char_input.setCurrentIndex(-1)
+
+        # Legacy fields kept for serialize/deserialize compatibility but hidden
+        self.location_input = QLineEdit()
         self.price_input = QLineEdit()
-        self.price_input.setValidator(
-            QRegularExpressionValidator(QRegularExpression(r"^\d{0,9}([.,]\d{0,3})?$"))
-        )
-        self.price_input.setPlaceholderText(
-            f"{self.tr(self.language, 'price')} (K)"
-        )
+        self.currency_kinah_btn = QPushButton("Kinah")
+        self.currency_kinah_btn.setObjectName("currencyToggleKinah")
+        self.currency_kinah_btn.setCheckable(True)
+        self.currency_kinah_btn.setChecked(True)
+        self.currency_abyss_btn = QPushButton("AP")
+        self.currency_abyss_btn.setObjectName("currencyToggleAbyss")
+        self.currency_abyss_btn.setCheckable(True)
+        self._currency_btn_group = QButtonGroup(self)
+        self._currency_btn_group.setExclusive(True)
+        self._currency_btn_group.addButton(self.currency_kinah_btn)
+        self._currency_btn_group.addButton(self.currency_abyss_btn)
 
         self.add_btn = QPushButton(self.tr(self.language, "add"))
         self.add_btn.setObjectName("primaryButton")
@@ -232,21 +284,31 @@ class TasksPage(QWidget):
         self.desc_input.returnPressed.connect(self.emit_add_task)
         self.add_btn.clicked.connect(self.emit_add_task)
 
-        # Standardmäßig nur die für Aufgaben relevanten Inputs anzeigen
+        # Layout order
         add_layout.addWidget(self.event_input)
+        add_layout.addWidget(self.schedule_daily_btn)
+        add_layout.addWidget(self.schedule_weekly_btn)
+        add_layout.addWidget(self.schedule_season_btn)
         add_layout.addWidget(self.priority_input, 2)
         add_layout.addWidget(self.title_input, 3)
-
         add_layout.addWidget(self.desc_input, 4)
+        add_layout.addWidget(self.template_combo, 3)
+        add_layout.addWidget(self.no_templates_hint)
+        add_layout.addWidget(self.char_input, 2)
+        add_layout.addWidget(self.amount_input)
 
-        # Shopping-spezifische Inputs
-        add_layout.addWidget(self.location_input, 3)
-        add_layout.addWidget(self.amount_input, 2)
-        add_layout.addWidget(self.price_input, 2)
-
+        # Hidden by default
         self.location_input.hide()
-        self.amount_input.hide()
         self.price_input.hide()
+        self.currency_kinah_btn.hide()
+        self.currency_abyss_btn.hide()
+        self.template_combo.hide()
+        self.no_templates_hint.hide()
+        self.amount_input.hide()
+        self.char_input.hide()
+        self.schedule_daily_btn.hide()
+        self.schedule_weekly_btn.hide()
+        self.schedule_season_btn.hide()
 
         add_layout.addWidget(self.add_btn)
         
@@ -317,6 +379,18 @@ class TasksPage(QWidget):
         self.filter_event_btn.setObjectName("filterButton")
         self.filter_event_btn.clicked.connect(lambda: self.set_filter("event"))
 
+        self.filter_daily_btn = QPushButton("Daily")
+        self.filter_daily_btn.setObjectName("filterButton")
+        self.filter_daily_btn.clicked.connect(lambda: self.set_filter("daily"))
+
+        self.filter_weekly_btn = QPushButton("Weekly")
+        self.filter_weekly_btn.setObjectName("filterButton")
+        self.filter_weekly_btn.clicked.connect(lambda: self.set_filter("weekly"))
+
+        self.filter_season_btn = QPushButton("Season")
+        self.filter_season_btn.setObjectName("filterButton")
+        self.filter_season_btn.clicked.connect(lambda: self.set_filter("season"))
+
         self.active_sort = "priority"
         self.update_sort_buttons()
 
@@ -339,6 +413,9 @@ class TasksPage(QWidget):
         self.sort_row.addWidget(self.filter_label)
         self.sort_row.addWidget(self.filter_all_btn)
         self.sort_row.addWidget(self.filter_event_btn)
+        self.sort_row.addWidget(self.filter_daily_btn)
+        self.sort_row.addWidget(self.filter_weekly_btn)
+        self.sort_row.addWidget(self.filter_season_btn)
 
         self.sort_row.addStretch()
 
@@ -393,22 +470,56 @@ class TasksPage(QWidget):
         if "eventShopping" in self.tab_buttons:
             self.tab_buttons["eventShopping"].setVisible(visible)
 
+    def _repopulate_combo(self, templates: list):
+        self.template_combo.blockSignals(True)
+        self.template_combo.clear()
+        for tmpl in templates:
+            self.template_combo.addItem(tmpl.get("title", "?"), tmpl)
+        self.template_combo.setCurrentIndex(-1)
+        self.template_combo.blockSignals(False)
+
     def update_input_mode(self):
-        shopping_tabs = [
-            "dailyShopping",
-            "weeklyShopping",
-            "eventShopping",
-        ]
+        is_shopping = self.active_tab == "shopping"
+        is_tasks = self.active_tab == "tasks"
+        is_template_mode = is_shopping or is_tasks
 
-        is_shopping = self.active_tab in shopping_tabs
+        # Repopulate combo for the active tab
+        if is_tasks:
+            self._repopulate_combo(self._task_templates)
+            has_templates = bool(self._task_templates)
+        elif is_shopping:
+            self._repopulate_combo(self._templates)
+            has_templates = bool(self._templates)
+        else:
+            has_templates = False
 
-        self.desc_input.setVisible(not is_shopping)
-
+        self.title_input.setVisible(not is_template_mode)
+        self.desc_input.setVisible(not is_template_mode)
         self.priority_input.setVisible(True)
-        self.amount_input.setVisible(is_shopping)
-        self.location_input.setVisible(is_shopping)
-        self.price_input.setVisible(is_shopping)
+        self.amount_input.setVisible(is_template_mode and has_templates)
+        self.char_input.setVisible(is_template_mode and has_templates)
+        self.template_combo.setVisible(is_template_mode and has_templates)
+        self.no_templates_hint.setVisible(is_template_mode and not has_templates)
+        self.add_btn.setEnabled(not is_template_mode or has_templates)
         self.sort_price_btn.setVisible(is_shopping)
+        self.sort_location_btn.setVisible(is_shopping)
+
+        # Schedule toggle buttons in all template modes
+        self.schedule_daily_btn.setVisible(is_template_mode)
+        self.schedule_weekly_btn.setVisible(is_template_mode)
+        self.schedule_season_btn.setVisible(is_template_mode)
+
+        # Event checkbox only for legacy non-template tabs
+        self.event_input.setVisible(not is_template_mode and self._show_events)
+
+        # Filter buttons: schedule for template modes, event for legacy tabs
+        self.filter_event_btn.setVisible(not is_template_mode and self._show_events)
+        self.filter_daily_btn.setVisible(is_template_mode)
+        self.filter_weekly_btn.setVisible(is_template_mode)
+        self.filter_season_btn.setVisible(is_template_mode)
+
+        # Template button for both shopping and tasks
+        self._template_btn.setVisible(is_template_mode)
 
     def set_reset_hint(self, prefix: str, countdown: str, visible: bool):
         if visible:
@@ -524,27 +635,36 @@ class TasksPage(QWidget):
         self.progress_bar.update_stats(total, done, open_count)
 
     def emit_add_task(self):
-        title = self.title_input.text().strip()
-
-        if not title:
-            return
-
-        shopping_tabs = [
-            "dailyShopping",
-            "weeklyShopping",
-            "eventShopping",
-        ]
-
-        if self.active_tab in shopping_tabs:
+        if self.active_tab == "shopping":
+            tmpl = self.template_combo.currentData()
+            if tmpl is None:
+                return
             data = {
-                "event": self.event_input.isChecked(),
+                "schedule": self.get_selected_schedule(),
                 "priority": self.priority_input.currentData(),
                 "amount": self.amount_input.text().strip() or "1",
-                "title": title,
-                "location": self.location_input.text().strip(),
-                "price": self.price_input.text().strip() or "0",
+                "title": tmpl.get("title", ""),
+                "location": tmpl.get("location", ""),
+                "price": tmpl.get("price", "0"),
+                "currency": tmpl.get("currency", "kinah"),
+                "character": self.char_input.currentData() or "",
+            }
+        elif self.active_tab == "tasks":
+            tmpl = self.template_combo.currentData()
+            if tmpl is None:
+                return
+            data = {
+                "schedule": self.get_selected_schedule(),
+                "priority": self.priority_input.currentData(),
+                "amount": self.amount_input.text().strip() or "1",
+                "title": tmpl.get("title", ""),
+                "location": tmpl.get("location", ""),
+                "character": self.char_input.currentData() or "",
             }
         else:
+            title = self.title_input.text().strip()
+            if not title:
+                return
             data = {
                 "event": self.event_input.isChecked(),
                 "priority": self.priority_input.currentData(),
@@ -558,9 +678,44 @@ class TasksPage(QWidget):
         self.desc_input.clear()
         self.location_input.clear()
         self.amount_input.clear()
-        self.price_input.clear()
+        self.template_combo.setCurrentIndex(-1)
+        self.amount_input.clear()
+        self.char_input.setCurrentIndex(-1)
         self.priority_input.setCurrentIndex(1)
         self.event_input.setChecked(False)
+
+    def get_selected_schedule(self) -> str:
+        if self.schedule_weekly_btn.isChecked():
+            return "weekly"
+        if self.schedule_season_btn.isChecked():
+            return "season"
+        return "daily"
+
+    def get_selected_currency(self) -> str:
+        return "abyss" if self.currency_abyss_btn.isChecked() else "kinah"
+
+    def update_templates(self, templates: list[dict]):
+        self._templates = list(templates)
+        if self.active_tab == "shopping":
+            self.update_input_mode()
+
+    def update_task_templates(self, templates: list[dict]):
+        self._task_templates = list(templates)
+        if self.active_tab == "tasks":
+            self.update_input_mode()
+
+    def update_characters(self, char_names: list[str]):
+        current = self.char_input.currentData()
+        self.char_input.blockSignals(True)
+        self.char_input.clear()
+        self.char_input.addItem("leer", "")
+        self.char_input.setItemData(0, QColor("#64748b"), Qt.ForegroundRole)
+        self.char_input.model().item(0).setEnabled(False)
+        for name in char_names:
+            self.char_input.addItem(name, name)
+        idx = self.char_input.findData(current)
+        self.char_input.setCurrentIndex(-1 if idx <= 0 else idx)
+        self.char_input.blockSignals(False)
 
 
     def set_title_placeholder(self, text: str):
@@ -570,23 +725,16 @@ class TasksPage(QWidget):
         while self.list_layout.count() > 1:
             item = self.list_layout.takeAt(0)
             widget = item.widget()
-
             if widget:
                 widget.setParent(None)
 
         for task in tasks:
-            self.list_layout.insertWidget(
-                self.list_layout.count() - 1,
-                task
-            )
+            self.list_layout.insertWidget(self.list_layout.count() - 1, task)
+            task.show()
 
     def set_event_features_visible(self, visible: bool):
-        self.event_input.setVisible(visible)
-
-        self.filter_label.setVisible(visible)
-        self.filter_all_btn.setVisible(visible)
-        self.filter_event_btn.setVisible(visible)
-
+        self._show_events = visible
+        self.update_input_mode()
         if not visible:
             self.set_filter("all")
 
@@ -602,20 +750,15 @@ class TasksPage(QWidget):
         self.update_filter_buttons()
 
     def update_filter_buttons(self):
-        self.filter_all_btn.setProperty(
-            "active",
-            self.active_filter == "all"
-        )
-
-        self.filter_event_btn.setProperty(
-            "active",
-            self.active_filter == "event"
-        )
-
-        for btn in [
-            self.filter_all_btn,
-            self.filter_event_btn,
-        ]:
+        filter_map = {
+            "all": self.filter_all_btn,
+            "event": self.filter_event_btn,
+            "daily": self.filter_daily_btn,
+            "weekly": self.filter_weekly_btn,
+            "season": self.filter_season_btn,
+        }
+        for key, btn in filter_map.items():
+            btn.setProperty("active", self.active_filter == key)
             btn.style().unpolish(btn)
             btn.style().polish(btn)
 

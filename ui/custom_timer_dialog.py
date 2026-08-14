@@ -180,9 +180,9 @@ class CustomTimerDialog(QDialog):
                 preset_match = True
             self._hourly_preset_group.addButton(btn)
             presets_row.addWidget(btn)
-        self._hourly_pencil_btn = QPushButton("✏")
+        self._hourly_pencil_btn = QPushButton("Custom")
         self._hourly_pencil_btn.setObjectName("secondaryButton")
-        self._hourly_pencil_btn.setFixedSize(36, 32)
+        self._hourly_pencil_btn.setFixedSize(64, 32)
         self._hourly_pencil_btn.setCheckable(True)
         self._hourly_pencil_btn.setChecked(not preset_match and timer_mode == "hourly")
         self._hourly_pencil_btn.clicked.connect(self._on_hourly_pencil_clicked)

@@ -45,6 +45,7 @@ TRANSLATIONS = {
         "daily_shopping": "🛒 Tägl. Einkauf",
         "weekly_shopping": "🛍️ Wöch. Einkauf",
         "event_shopping": "🎁 Event Einkauf",
+        "shopping": "🛒 Einkauf",
         "priority": "Priorität",
         "priority_low": "Niedrig",
         "priority_middle": "Mittel",
@@ -52,10 +53,14 @@ TRANSLATIONS = {
         "location": "Ort",
         "amount": "Anzahl",
         "price": "Preis",
+        "schedule_daily": "Daily",
+        "schedule_weekly": "Weekly",
+        "schedule_season": "Season",
 
         "daily_total_price": "Täglicher Gesamtpreis",
         "weekly_total_price": "Wöchentlicher Gesamtpreis",
         "event_total_price": "Event Gesamtpreis",
+        "total_price": "Gesamtpreis",
 
         # ================= CLEAR EVENTS =================
 
@@ -122,6 +127,7 @@ TRANSLATIONS = {
         "reset_timer": "Reset Timer",
         "weekly_reset_day": "Wöch. Reset Wochentag",
         "weekly_reset_time": "Wöch. Reset Uhrzeit",
+        "season_reset_label": "Season-Ende",
 
         # ================= ADVANCED TIMER =================
         "advanced_timer": "Erweiterte Timer",
@@ -143,7 +149,7 @@ TRANSLATIONS = {
         "custom_timer_edit":   "Bearbeiten",
         "reset_timer_help":    "Zeigt die verbleibende Zeit bis zum täglichen und wöchentlichen Server-Reset an.",
         "advanced_timer_help": "Konfigurierbare Timer für Shugo- und Riss-Spawn-Zeiten mit individuellem Intervall.",
-        "custom_timer_help":   "Erstelle eigene Timer mit individuellem Intervall, Farbe und Anzeigeformat (max. 2).",
+        "custom_timer_help":   "Erstelle eigene Timer mit individuellem Intervall, Farbe und Anzeigeformat (max. 8).",
         "shugo_help":          "Start gibt an, ab welcher Minute innerhalb einer Stunde der Timer beginnt.\nZ.B.: 0:15, 0:30, 0:45, 0:00",
         "riss_help":           "Anker ist der Startzeitpunkt des Timers.\nMitternacht, 01:00, 02:00 Uhr + Intervall",
         "reset_at":            "Reset in:",
@@ -190,9 +196,6 @@ TRANSLATIONS = {
         "flow_delete_node": "Knoten löschen",
         "flow_node_edit": "NODE BEARBEITEN",
 
-        "flow_edit_mode": "Plan bearbeiten",
-        "flow_guide_mode": "Guide-Modus",
-
         "flow_title_placeholder": "Titel",
         "flow_description_placeholder": "Beschreibung",
         "flow_symbol": "Symbol",
@@ -204,8 +207,6 @@ TRANSLATIONS = {
 
         "flow_save": "Speichern",
         "flow_load": "Laden",
-
-        "cancel": "Abbrechen",
 
         "flow_status_colors": "STATUS & FARBEN",
         "status_completed": "Grün  =  Abgeschlossen",
@@ -256,12 +257,14 @@ TRANSLATIONS = {
         "language_desc": "Wähle die Sprache der Anwendung.",
 
         # ================= PLACEHOLDERS =================
-        "placeholder_daily_tasks": "Titel der täglichen Aufgabe",
-        "placeholder_weekly_tasks": "Titel der wöchentlichen Aufgabe",
-        "placeholder_event_tasks": "Titel der Event-Aufgabe",
-        "placeholder_daily_shopping": "Titel des täglichen Einkaufs",
-        "placeholder_weekly_shopping": "Titel des wöchentlichen Einkaufs",
-        "placeholder_event_shopping": "Titel des Event-Einkaufs",
+        "placeholder_daily_tasks": "Aufgabe",
+        "placeholder_weekly_tasks": "Aufgabe",
+        "placeholder_event_tasks": "Aufgabe",
+        "placeholder_daily_shopping": "Itemname",
+        "placeholder_shopping": "Itemname",
+        "placeholder_weekly_shopping": "Itemname",
+        "placeholder_event_shopping": "Itemname",
+        "placeholder_tasks": "Quest",
 
         # ================= TOASTS =================
         "toast_tasks_opened": "Aufgaben geöffnet",
@@ -356,6 +359,7 @@ TRANSLATIONS = {
         "daily_shopping": "🛒 Ежедневные покупки",
         "weekly_shopping": "🛍️ Еженедельные покупки",
         "event_shopping": "🎁 Событийные покупки",
+        "shopping": "🛒 Покупки",
         "priority": "Приоритет",
         "priority_low": "Низкий",
         "priority_middle": "Средний",
@@ -363,10 +367,14 @@ TRANSLATIONS = {
         "location": "Место",
         "amount": "Количество",
         "price": "Цена",
+        "schedule_daily": "Daily",
+        "schedule_weekly": "Weekly",
+        "schedule_season": "Season",
 
         "daily_total_price": "Ежедневная общая стоимость",
         "weekly_total_price": "Еженедельная общая стоимость",
         "event_total_price": "Стоимость события",
+        "total_price": "Общая стоимость",
 
         # ================= CLEAR EVENTS =================
         "clear_events": "Удалить события",
@@ -432,6 +440,7 @@ TRANSLATIONS = {
         "reset_timer": "Таймер сброса",
         "weekly_reset_day": "День еженедельного сброса",
         "weekly_reset_time": "Время еженедельного сброса",
+        "season_reset_label": "Конец сезона",
 
         # ================= ADVANCED TIMER =================
         "advanced_timer": "Расширенные таймеры",
@@ -453,7 +462,7 @@ TRANSLATIONS = {
         "custom_timer_edit":   "Изменить",
         "reset_timer_help":    "Показывает оставшееся время до ежедневного и еженедельного сброса сервера.",
         "advanced_timer_help": "Настраиваемые таймеры для событий Shugo и Riss с индивидуальным интервалом.",
-        "custom_timer_help":   "Создавайте собственные таймеры с интервалом, цветом и форматом (макс. 2).",
+        "custom_timer_help":   "Создавайте собственные таймеры с интервалом, цветом и форматом (макс. 8).",
         "shugo_help":          "Начало — с какой минуты внутри часа срабатывает таймер.\nНапр.: 0:15, 0:30, 0:45, 0:00",
         "riss_help":           "Привязка — начальная точка отсчёта таймера.\nПолночь, 01:00, 02:00 ночи + интервал",
         "reset_at":            "Сброс через:",
@@ -559,12 +568,14 @@ TRANSLATIONS = {
         "language_desc": "Выберите язык интерфейса приложения.",
 
         # ================= PLACEHOLDERS =================
-        "placeholder_daily_tasks": "Название ежедневной задачи",
-        "placeholder_weekly_tasks": "Название еженедельной задачи",
-        "placeholder_event_tasks": "Название событийной задачи",
-        "placeholder_daily_shopping": "Название ежедневной покупки",
-        "placeholder_weekly_shopping": "Название еженедельной покупки",
-        "placeholder_event_shopping": "Название событийной покупки",
+        "placeholder_daily_tasks": "Задача",
+        "placeholder_weekly_tasks": "Задача",
+        "placeholder_event_tasks": "Задача",
+        "placeholder_daily_shopping": "Itemname",
+        "placeholder_shopping": "Itemname",
+        "placeholder_weekly_shopping": "Itemname",
+        "placeholder_event_shopping": "Itemname",
+        "placeholder_tasks": "Квест",
 
         # ================= TOASTS =================
         "toast_tasks_opened": "Задачи открыты",
@@ -659,6 +670,7 @@ TRANSLATIONS = {
         "daily_shopping": "🛒 Daily Shopping",
         "weekly_shopping": "🛍️ Weekly Shopping",
         "event_shopping": "🎁 Event Shopping",
+        "shopping": "🛒 Shopping",
         "priority": "Priority",
         "priority_low": "Low",
         "priority_middle": "Medium",
@@ -666,10 +678,14 @@ TRANSLATIONS = {
         "location": "Location",
         "amount": "Amount",
         "price": "Price",
+        "schedule_daily": "Daily",
+        "schedule_weekly": "Weekly",
+        "schedule_season": "Season",
 
         "daily_total_price": "Daily Total Price",
         "weekly_total_price": "Weekly Total Price",
         "event_total_price": "Event Total Price",
+        "total_price": "Total Price",
 
         # ================= CLEAR EVENTS =================
         "clear_events": "Clear Event Entries",
@@ -735,6 +751,7 @@ TRANSLATIONS = {
         "reset_timer": "Reset Timer",
         "weekly_reset_day": "Weekly Reset Day",
         "weekly_reset_time": "Weekly Reset Time",
+        "season_reset_label": "Season End",
 
         # ================= ADVANCED TIMER =================
         "advanced_timer": "Advanced Timer",
@@ -756,7 +773,7 @@ TRANSLATIONS = {
         "custom_timer_edit":   "Edit",
         "reset_timer_help":    "Shows the remaining time until the daily and weekly server reset.",
         "advanced_timer_help": "Configurable timers for Shugo and Rift spawn times with custom intervals.",
-        "custom_timer_help":   "Create custom timers with individual interval, color and display format (max. 2).",
+        "custom_timer_help":   "Create custom timers with individual interval, color and display format (max. 8).",
         "shugo_help":          "Start means when does it start within 1 Hour.\nF.e.: 0:15, 0:30, 0:45, 0:00",
         "riss_help":           "Anchor means what time your Timer starts at.\nMidnight, 01:00, 02:00 at Night + Interval",
         "reset_at":            "Reset in:",
@@ -814,9 +831,6 @@ TRANSLATIONS = {
         "flow_save": "Save",
         "flow_load": "Load",
 
-        "save": "Save",
-        "cancel": "Cancel",
-
         "flow_status_colors": "STATUS & COLORS",
         "status_completed": "Green  =  Completed",
         "status_active": "Blue   =  Active",
@@ -867,12 +881,14 @@ TRANSLATIONS = {
         "language_desc": "Choose the language used by the application.",
 
         # ================= PLACEHOLDERS =================
-        "placeholder_daily_tasks": "Title daily task",
-        "placeholder_weekly_tasks": "Title weekly task",
-        "placeholder_event_tasks": "Title event task",
-        "placeholder_daily_shopping": "Title daily shopping",
-        "placeholder_weekly_shopping": "Title weekly shopping",
-        "placeholder_event_shopping": "Title event shopping",
+        "placeholder_daily_tasks": "Task",
+        "placeholder_weekly_tasks": "Task",
+        "placeholder_event_tasks": "Task",
+        "placeholder_daily_shopping": "Itemname",
+        "placeholder_shopping": "Itemname",
+        "placeholder_weekly_shopping": "Itemname",
+        "placeholder_event_shopping": "Itemname",
+        "placeholder_tasks": "Quest",
 
         # ================= TOASTS =================
         "toast_tasks_opened": "Tasks opened",

@@ -19,10 +19,14 @@ STATUS_COLORS = {
 }
 
 TAB_BADGES = {
-    "dailyTasks":     ("D",  QColor(59,  130, 246)),
-    "weeklyTasks":    ("W",  QColor(139, 92,  246)),
-    "dailyShopping":  ("DS", QColor(16,  185, 129)),
-    "weeklyShopping": ("WS", QColor(6,   182, 212)),
+    "tasks":    ("T",  QColor(59,  130, 246)),
+    "shopping": ("S",  QColor(6,   182, 212)),
+}
+
+SCHEDULE_BADGES = {
+    "daily":  ("D", QColor(59,  130, 246)),
+    "weekly": ("W", QColor(139, 92,  246)),
+    "season": ("S", QColor(245, 158, 11)),
 }
 
 _BG       = QColor(10, 12, 18, 225)
@@ -51,7 +55,8 @@ class _ColoredRow(QWidget):
 
 
 class OverlayTaskRow(_ColoredRow):
-    def __init__(self, tab_key: str, card_index: int, title: str, priority: str):
+    def __init__(self, tab_key: str, card_index: int, title: str, priority: str,
+                 badge: tuple | None = None):
         color = PRIORITY_COLORS.get(priority, PRIORITY_COLORS["low"])
         super().__init__(color)
         self.tab_key = tab_key
@@ -66,21 +71,21 @@ class OverlayTaskRow(_ColoredRow):
         self.check_btn.setFixedSize(16, 16)
         self.check_btn.setCursor(Qt.PointingHandCursor)
 
-        title_lbl = QLabel(title if len(title) <= 38 else title[:37] + "…")
+        title_lbl = QLabel(title if len(title) <= 44 else title[:43] + "…")
         title_lbl.setObjectName("OverlayRowTitle")
 
-        badge_text, badge_color = TAB_BADGES.get(tab_key, ("?", QColor(100, 116, 139)))
-        badge = QLabel(badge_text)
-        badge.setStyleSheet(
+        badge_text, badge_color = badge if badge else TAB_BADGES.get(tab_key, ("?", QColor(100, 116, 139)))
+        badge_lbl = QLabel(badge_text)
+        badge_lbl.setStyleSheet(
             f"background: rgba({badge_color.red()},{badge_color.green()},{badge_color.blue()},170);"
             "color: #f8fafc; border-radius: 3px; padding: 0px 4px;"
             "font-size: 9px; font-weight: bold;"
         )
-        badge.setFixedHeight(14)
+        badge_lbl.setFixedHeight(14)
 
         layout.addWidget(self.check_btn)
         layout.addWidget(title_lbl, 1)
-        layout.addWidget(badge)
+        layout.addWidget(badge_lbl)
 
 
 class OverlayGuideRow(_ColoredRow):
@@ -260,7 +265,17 @@ class OverlayWindow(QWidget):
                 amount = getattr(card, "amount", None)
                 if amount and str(amount) not in ("0", "1", ""):
                     title = f"{amount}x {title}"
-                row = OverlayTaskRow(tab_key, i, title, priority)
+                character = getattr(card, "character", "")
+                if character:
+                    title = f"{title} · {character}"
+                schedule = getattr(card, "schedule", "daily")
+                if tab_key == "shopping":
+                    title = f"[Shop] {title}"
+                    badge = SCHEDULE_BADGES.get(schedule, SCHEDULE_BADGES["daily"])
+                else:
+                    title = f"[Task] {title}"
+                    badge = SCHEDULE_BADGES.get(schedule, SCHEDULE_BADGES["daily"])
+                row = OverlayTaskRow(tab_key, i, title, priority, badge=badge)
                 row.check_btn.clicked.connect(
                     lambda _, tk=tab_key, idx=i: self._toggle_task(tk, idx)
                 )

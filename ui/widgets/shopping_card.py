@@ -7,6 +7,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+_SCHEDULE_OBJECT_NAMES = {
+    "daily":   "scheduleDaily",
+    "weekly":  "scheduleWeekly",
+    "season":  "scheduleSeason",
+}
+
 
 class ShoppingCard(QFrame):
     def __init__(
@@ -16,22 +22,30 @@ class ShoppingCard(QFrame):
         title,
         location,
         price,
-        is_event=False
+        schedule="daily",
+        is_event=False,   # legacy — mapped to "season" on load
+        currency="kinah",
+        character="",
     ):
         super().__init__()
+
+        # legacy migration: is_event=True → schedule="season"
+        if is_event and schedule == "daily":
+            schedule = "season"
 
         self.priority = priority
         self.amount = amount
         self.title = title
         self.location = location
         self.price = price
-        self.is_event = is_event
+        self.schedule = schedule
+        self.currency = currency
+        self.character = character
         self.completed = False
 
-        self.price_display = self.format_kinah_price(price)
+        self.price_display = self.format_price(price, currency)
 
         self.setObjectName("taskCard")
-        self.setProperty("event", self.is_event)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
@@ -54,21 +68,12 @@ class ShoppingCard(QFrame):
         content_box.setSpacing(4)
 
         title_row = QHBoxLayout()
-
-        if self.is_event:
-            self.event_badge = QLabel("EVENT")
-            self.event_badge.setObjectName("eventBadge")
-            title_row.addWidget(self.event_badge)
-
         self.title_label = QLabel(title)
         self.title_label.setObjectName("taskTitle")
-
         title_row.addWidget(self.title_label)
         title_row.addStretch()
 
-        self.info_label = QLabel(
-            f"{location} • {self.price_display}"
-        )
+        self.info_label = QLabel(f"{location} • {self.price_display}")
         self.info_label.setObjectName("taskDescription")
 
         content_box.addLayout(title_row)
@@ -82,74 +87,65 @@ class ShoppingCard(QFrame):
         self.priority_label = QLabel(priority.upper())
         self.priority_label.setObjectName("priorityMedium")
 
-        self.delete_btn = QPushButton("🗑")
+        # Schedule badge — styled like priority
+        schedule_text = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}.get(schedule, schedule.upper())
+        self.schedule_label = QLabel(schedule_text)
+        self.schedule_label.setObjectName(_SCHEDULE_OBJECT_NAMES.get(schedule, "scheduleDaily"))
+
+        self.delete_btn = QPushButton("×")
         self.delete_btn.setObjectName("deleteButton")
-        self.delete_btn.setFixedWidth(36)
+        self.delete_btn.setFixedWidth(28)
         self.delete_btn.clicked.connect(self.deleteLater)
+
+        self.char_label = QLabel(character) if character else None
+        if self.char_label:
+            self.char_label.setObjectName("scheduleWeekly")
 
         layout.addWidget(self.check_btn)
         layout.addLayout(text_box, 1)
+        if self.char_label:
+            layout.addWidget(self.char_label)
+        layout.addWidget(self.schedule_label)
         layout.addWidget(self.priority_label)
         layout.addWidget(self.delete_btn)
 
     def toggle(self):
         self.completed = not self.completed
-
-        if self.completed:
-            self.check_btn.setText("●")
-            self.setProperty("completed", True)
-
-            self.title_label.setStyleSheet(
-                "color: #64748b; text-decoration: line-through;"
-            )
-        else:
-            self.check_btn.setText("○")
-            self.setProperty("completed", False)
-            self.title_label.setStyleSheet("")
-
-        self.style().unpolish(self)
-        self.style().polish(self)
+        self._apply_completed_style()
 
     def set_completed(self, value):
         self.completed = value
+        self._apply_completed_style()
 
+    def _apply_completed_style(self):
         if self.completed:
             self.check_btn.setText("●")
             self.setProperty("completed", True)
-
-            self.title_label.setStyleSheet(
-                "color: #64748b; text-decoration: line-through;"
-            )
+            self.title_label.setStyleSheet("color: #64748b; text-decoration: line-through;")
         else:
             self.check_btn.setText("○")
             self.setProperty("completed", False)
             self.title_label.setStyleSheet("")
-
         self.style().unpolish(self)
         self.style().polish(self)
 
-    def format_kinah_price(self, value):
+    def format_price(self, value, currency: str = "kinah") -> str:
         try:
-            k_value = float(str(value).replace(",", ".").strip())
+            raw = float(str(value).replace(",", ".").strip())
         except ValueError:
-            k_value = 0
+            raw = 0
 
-        kinah = k_value * 1000
+        if currency == "abyss":
+            return f"{int(raw) if raw == int(raw) else raw} AP"
 
+        kinah = raw * 1000
         if kinah >= 1_000_000:
-            millions = kinah / 1_000_000
-
-            if millions.is_integer():
-                return f"{int(millions)}m Kinah"
-
-            return f"{millions:.1f}m Kinah"
-
+            m = kinah / 1_000_000
+            return f"{int(m)}m Kinah" if m == int(m) else f"{m:.1f}m Kinah"
         if kinah >= 1_000:
-            thousands = kinah / 1_000
-
-            if thousands.is_integer():
-                return f"{int(thousands)}k Kinah"
-
-            return f"{thousands:.1f}k Kinah"
-
+            k = kinah / 1_000
+            return f"{int(k)}k Kinah" if k == int(k) else f"{k:.1f}k Kinah"
         return f"{int(kinah)} Kinah"
+
+    def format_kinah_price(self, value):
+        return self.format_price(value, "kinah")

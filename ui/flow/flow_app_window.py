@@ -657,16 +657,17 @@ class FlowMapWindow(QMainWindow):
 
     def get_icon_symbol(self, icon_key: str):
         icon_map = {
-            "character": "character.png",
-            "level": "level.png",
-            "expedition": "expedition.png",
+            "root":          "home_icon.png",
+            "character":     "character.png",
+            "level":         "level.png",
+            "expedition":    "expedition.png",
             "daily_dungeon": "daily_dungeon.png",
-            "sanctuary": "sanctuary.png",
-            "pets": "pets.png",
-            "closet": "closet.png",
-            "enhancement": "enhancement.png",
-            "crafting": "crafting.png",
-            "supply_request": "supply_request.png",
+            "sanctuary":     "sanctuary.png",
+            "pets":          "pets.png",
+            "closet":        "closet.png",
+            "enhancement":   "enhancement.png",
+            "crafting":      "crafting.png",
+            "supply_request":"supply_request.png",
         }
 
         filename = icon_map.get(icon_key, "level.png")
@@ -816,9 +817,10 @@ class FlowMapWindow(QMainWindow):
         )
 
         margin = 18
+        inner_height = max(1, content_size.height() - margin * 2)
 
         self.tool_bar.move(margin, margin)
-        self.tool_bar.setFixedHeight(content_size.height() - margin * 2)
+        self.tool_bar.setFixedHeight(inner_height)
 
         panel_width = 390
         self.side_panel_wrapper.setFixedWidth(panel_width)
@@ -828,9 +830,7 @@ class FlowMapWindow(QMainWindow):
             margin
         )
 
-        self.side_panel_wrapper.setFixedHeight(
-            content_size.height() - margin * 2
-        )
+        self.side_panel_wrapper.setFixedHeight(inner_height)
 
         if hasattr(self, "guide_view"):
             self.guide_view.setGeometry(
@@ -852,19 +852,16 @@ class FlowMapWindow(QMainWindow):
 
     
     def create_node_card(self, node):
+        icon_key = "root" if node.id == self.root_node_id else node.icon
         card = FlowNodeCard(
             node.id,
             node.title,
             node.description,
-            icon=self.get_icon_symbol(node.icon),
+            icon=self.get_icon_symbol(icon_key),
             status=node.status,
             zoom=self.zoom_factor,
             parent_window=self,
             parent=self.map_area,
-        )
-
-        card.add_node_hint_btn.clicked.connect(
-            lambda checked=False, parent_id=node.id: self.add_child_node(parent_id)
         )
 
         card.done_btn.clicked.connect(

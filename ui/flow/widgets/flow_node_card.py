@@ -42,13 +42,14 @@ class FlowNodeCard(QFrame):
         )
 
         pixmap = QPixmap(icon)
+        self._original_pixmap = pixmap if not pixmap.isNull() else None
 
-        if not pixmap.isNull():
+        if self._original_pixmap:
             self.icon_box.setPixmap(
-                pixmap.scaled(
+                self._original_pixmap.scaled(
                     int(ICON_SIZE * zoom),
                     int(ICON_SIZE * zoom),
-                    Qt.KeepAspectRatio,
+                    Qt.KeepAspectRatioByExpanding,
                     Qt.SmoothTransformation,
                 )
             )
@@ -133,6 +134,10 @@ class FlowNodeCard(QFrame):
 
         grid.setColumnStretch(1, 1)
 
+        # Let mouse events pass through to the card frame
+        for w in (self.icon_box, self.title_label, self.desc_label, self.add_node_hint_btn):
+            w.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
     def enterEvent(self, event):
         if self.parent_window:
             if self.parent_window.current_tool == "add_node":
@@ -153,7 +158,17 @@ class FlowNodeCard(QFrame):
 
     def apply_zoom(self, zoom: float, description: str = ""):
         self.setFixedSize(int(NODE_WIDTH * zoom), int(NODE_HEIGHT * zoom))
-        self.icon_box.setFixedSize(int(ICON_BOX_SIZE * zoom), int(ICON_BOX_SIZE * zoom))
+        box_px = int(ICON_BOX_SIZE * zoom)
+        self.icon_box.setFixedSize(box_px, box_px)
+        if self._original_pixmap:
+            icon_px = int(ICON_SIZE * zoom)
+            self.icon_box.setPixmap(
+                self._original_pixmap.scaled(
+                    icon_px, icon_px,
+                    Qt.KeepAspectRatioByExpanding,
+                    Qt.SmoothTransformation,
+                )
+            )
 
         title_size = TITLE_SIZE if zoom >= 1.0 else (16 if zoom >= 0.8 else 15)
         self.title_label.setStyleSheet(f"font-size: {title_size}px; font-weight: 700;")

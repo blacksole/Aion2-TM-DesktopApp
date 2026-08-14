@@ -8,7 +8,7 @@ from ui.main_window import MainWindow
 
 app = QApplication(sys.argv)
 if getattr(sys, "frozen", False):
-    _base = Path(sys.executable).parent
+    _base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
 else:
     _base = Path(__file__).resolve().parent
 app_icon = _base / "assets" / "icons" / "aion2_tm_icon.ico"

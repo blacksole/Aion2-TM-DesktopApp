@@ -17,9 +17,10 @@ class FlowNode:
 
     id: str = field(default_factory=lambda: str(uuid4()))
     children: list[str] = field(default_factory=list)
+    character_items: list = field(default_factory=list)
 
     def to_dict(self):
-        return {
+        d = {
             "id": self.id,
             "title": self.title,
             "description": self.description,
@@ -30,6 +31,9 @@ class FlowNode:
             "y": self.y,
             "children": self.children,
         }
+        if self.icon == "character":
+            d["character_items"] = self.character_items
+        return d
 
     @staticmethod
     def from_dict(data: dict):
@@ -43,4 +47,5 @@ class FlowNode:
             x=data.get("x", 0),
             y=data.get("y", 0),
             children=data.get("children", []),
+            character_items=data.get("character_items", []),
         )

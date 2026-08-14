@@ -73,13 +73,12 @@ class _InstallerThread(QThread):
 
                 self.status.emit("Updater vorbereiten...")
                 app_dir = Path(sys.executable).parent
-                exe_name = Path(sys.executable).name
                 bat_path = tmp_dir / "aion2_updater.bat"
                 bat_path.write_text(
                     f"@echo off\n"
                     f"timeout /t 2 /nobreak > nul\n"
                     f"robocopy \"{source_dir}\" \"{app_dir}\" /E /IS /IT /IM /XD __pycache__ /NFL /NDL /NJH /NJS\n"
-                    f"start \"\" \"{app_dir}\\{exe_name}\"\n"
+                    f"start \"\" \"{app_dir}\\Aion2 TM.exe\"\n"
                     f"rd /s /q \"{tmp_dir}\"\n",
                     encoding="utf-8",
                 )

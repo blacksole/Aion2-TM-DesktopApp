@@ -45,14 +45,17 @@ class TimersPage(QWidget):
 
         self.daily_reset_card = TimerInfoCard("Daily Reset", "--:--", "#22d3ee")
         self.weekly_reset_card = TimerInfoCard("Weekly Reset", "--:--", "#a855f7")
+        self.season_timer_card = TimerInfoCard("Season", "--:--", "#10b981")
         self.shugo_timer_card = TimerInfoCard("Shugo", "--:--", "#f59e0b")
         self.riss_timer_card = TimerInfoCard("Riss", "--:--", "#f59e0b")
 
+        self.season_timer_card.setVisible(False)
         self.shugo_timer_card.setVisible(False)
         self.riss_timer_card.setVisible(False)
 
         main_row.addWidget(self.daily_reset_card)
         main_row.addWidget(self.weekly_reset_card)
+        main_row.addWidget(self.season_timer_card)
         main_row.addWidget(self.shugo_timer_card)
         main_row.addWidget(self.riss_timer_card)
         main_row.addStretch()
@@ -77,6 +80,12 @@ class TimersPage(QWidget):
 
     def set_weekly_countdown(self, text: str):
         self.weekly_reset_card.value_label.setText(text)
+
+    def set_season_countdown(self, text: str):
+        self.season_timer_card.value_label.setText(text if text else "--:--")
+
+    def set_season_visible(self, visible: bool):
+        self.season_timer_card.setVisible(visible)
 
     def set_shugo_countdown(self, text: str):
         self.shugo_timer_card.value_label.setText(text)
@@ -148,5 +157,6 @@ class TimersPage(QWidget):
         self.subtitle_label.setText(tr_func(language, "timers_subtitle"))
         self.daily_reset_card.title_label.setText(tr_func(language, "daily_reset").upper())
         self.weekly_reset_card.title_label.setText(tr_func(language, "weekly_reset").upper())
+        self.season_timer_card.title_label.setText("SEASON")
         self.shugo_timer_card.title_label.setText(tr_func(language, "shugo").upper())
         self.riss_timer_card.title_label.setText(tr_func(language, "riss").upper())

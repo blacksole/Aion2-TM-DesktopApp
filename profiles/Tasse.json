@@ -6,6 +6,7 @@
         "daily_reset_time": "09:00",
         "weekly_reset_day": "Di",
         "weekly_reset_time": "09:00",
+        "season_reset_datetime": "2026-11-04 05:00",
         "show_events": true,
         "shugo_enabled": true,
         "shugo_start_minute": 15,
@@ -22,6 +23,9 @@
         "notification_riss_enabled": false,
         "notification_riss_warn_minutes": 1,
         "notification_sound": "",
+        "timer_categories": [
+            "Custom Timer"
+        ],
         "custom_timers": [
             {
                 "category": "Boss",
@@ -50,17 +54,29 @@
                 "timer_mode": "hourly"
             }
         ],
-        "last_daily_reset_date": "2026-08-10",
-        "last_weekly_reset_date": "2026-08-04"
+        "last_daily_reset_date": "2026-08-14",
+        "last_weekly_reset_date": "2026-08-11"
     },
     "tasks": {
-        "dailyTasks": [
+        "tasks": [
+            {
+                "type": "task",
+                "priority": "middle",
+                "title": "Instanz laufen",
+                "description": "",
+                "event": false,
+                "schedule": "daily",
+                "character": "",
+                "completed": true
+            },
             {
                 "type": "task",
                 "priority": "middle",
                 "title": "Task1",
                 "description": "",
                 "event": false,
+                "schedule": "daily",
+                "character": "",
                 "completed": true
             },
             {
@@ -69,46 +85,103 @@
                 "title": "Tägliche Quest",
                 "description": "",
                 "event": false,
+                "schedule": "daily",
+                "character": "",
                 "completed": true
             },
-            {
-                "type": "task",
-                "priority": "middle",
-                "title": "Instanz laufen",
-                "description": "",
-                "event": false,
-                "completed": true
-            }
-        ],
-        "weeklyTasks": [
             {
                 "type": "task",
                 "priority": "middle",
                 "title": "Wöchentliche Quest",
                 "description": "",
                 "event": false,
+                "schedule": "weekly",
+                "character": "",
                 "completed": true
             }
         ],
-        "dailyShopping": [],
-        "weeklyShopping": []
+        "shopping": [
+            {
+                "type": "shopping",
+                "priority": "middle",
+                "amount": "1",
+                "title": "Skinn 1",
+                "location": "Abyssstore",
+                "price": "42",
+                "schedule": "weekly",
+                "currency": "abyss",
+                "character": "",
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "middle",
+                "amount": "4",
+                "title": "Odyle",
+                "location": "Wind Breeze",
+                "price": "100",
+                "schedule": "weekly",
+                "currency": "kinah",
+                "character": "Charakter 1",
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "middle",
+                "amount": "7",
+                "title": "Ress Stone",
+                "location": "Wind Breeze",
+                "price": "100",
+                "schedule": "weekly",
+                "currency": "kinah",
+                "character": "Charakter 1",
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "low",
+                "amount": "1",
+                "title": "Odyle",
+                "location": "Wind Breeze",
+                "price": "100",
+                "schedule": "daily",
+                "currency": "kinah",
+                "character": "Charakter 1",
+                "completed": false
+            },
+            {
+                "type": "shopping",
+                "priority": "middle",
+                "amount": "4",
+                "title": "Odyle",
+                "location": "Wind Breeze",
+                "price": "100",
+                "schedule": "weekly",
+                "currency": "kinah",
+                "character": "Char 2",
+                "completed": false
+            }
+        ]
     },
     "flow_maps": {
-        "Map 1": {
+        "Testansicht": {
             "nodes": {
                 "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c": {
                     "id": "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c",
-                    "title": "New Node",
+                    "title": "Testansicht",
                     "description": "",
                     "icon": "character",
                     "status": "completed",
                     "completed": true,
-                    "x": 3780.0,
-                    "y": 4000.0,
+                    "x": 3692.0,
+                    "y": 3952.0,
                     "children": [
                         "4904cd39-293f-4054-9802-92662285b762",
-                        "cf181cc9-e0ec-48cf-9e2e-58c2bc8b2e76"
-                    ]
+                        "cf181cc9-e0ec-48cf-9e2e-58c2bc8b2e76",
+                        "5c175e36-7e69-44b6-8a92-cf6a336f777c",
+                        "a1909920-5d49-47b7-83f4-e144585783cb"
+                    ],
+                    "character_items": []
                 },
                 "4904cd39-293f-4054-9802-92662285b762": {
                     "id": "4904cd39-293f-4054-9802-92662285b762",
@@ -193,11 +266,126 @@
                     "x": 4310.0,
                     "y": 4412.0,
                     "children": []
+                },
+                "5c175e36-7e69-44b6-8a92-cf6a336f777c": {
+                    "id": "5c175e36-7e69-44b6-8a92-cf6a336f777c",
+                    "title": "Charakter 1",
+                    "description": "Beschreibung hinzufügen.",
+                    "icon": "character",
+                    "status": "locked",
+                    "completed": false,
+                    "x": 4310.0,
+                    "y": 4158.0,
+                    "children": [],
+                    "character_items": [
+                        {
+                            "title": "Odyle",
+                            "location": "Wind Breeze",
+                            "price": "100",
+                            "currency": "kinah",
+                            "amount": "4",
+                            "priority": "middle",
+                            "schedule": "weekly"
+                        },
+                        {
+                            "title": "Ress Stone",
+                            "location": "Wind Breeze",
+                            "price": "100",
+                            "currency": "kinah",
+                            "amount": "7",
+                            "priority": "middle",
+                            "schedule": "weekly"
+                        },
+                        {
+                            "title": "Odyle",
+                            "location": "Wind Breeze",
+                            "price": "100",
+                            "currency": "kinah",
+                            "amount": "1",
+                            "priority": "low",
+                            "schedule": "daily"
+                        }
+                    ]
+                },
+                "a1909920-5d49-47b7-83f4-e144585783cb": {
+                    "id": "a1909920-5d49-47b7-83f4-e144585783cb",
+                    "title": "Char 2",
+                    "description": "Beschreibung hinzufügen.",
+                    "icon": "character",
+                    "status": "locked",
+                    "completed": false,
+                    "x": 2720.0,
+                    "y": 4158.0,
+                    "children": [],
+                    "character_items": [
+                        {
+                            "title": "Odyle",
+                            "location": "Wind Breeze",
+                            "price": "100",
+                            "currency": "kinah",
+                            "amount": "4",
+                            "priority": "middle",
+                            "schedule": "weekly"
+                        }
+                    ]
                 }
             },
             "root_node_id": "9fbb8c5f-f7e7-4431-a24e-a6c4f360c85c",
             "show_in_overlay": false
         }
     },
-    "active_flow_map": "Map 1"
+    "active_flow_map": "Testansicht",
+    "item_templates": [
+        {
+            "title": "Odyle",
+            "location": "Wind Breeze",
+            "price": "100",
+            "schedule": "weekly",
+            "priority": "middle",
+            "currency": "kinah",
+            "is_general": false,
+            "id": "826507c2-82a3-4dfb-bdf8-046610f086cd",
+            "amount": "4"
+        },
+        {
+            "title": "Ress Stone",
+            "location": "Wind Breeze",
+            "price": "100",
+            "schedule": "weekly",
+            "priority": "middle",
+            "currency": "kinah",
+            "is_general": true,
+            "id": "31c1e2e0-d2c8-462e-972e-10b4ca4b3b3f",
+            "amount": "7"
+        },
+        {
+            "title": "Skinn 1",
+            "location": "Abyssstore",
+            "price": "42",
+            "schedule": "weekly",
+            "priority": "middle",
+            "currency": "abyss",
+            "is_general": true,
+            "id": "99cc38c4-5510-433e-a3b4-9a1703f19e5a",
+            "amount": "1"
+        }
+    ],
+    "task_templates": [
+        {
+            "title": "DailyTask1",
+            "location": "abyss",
+            "schedule": "daily",
+            "priority": "middle",
+            "is_general": false,
+            "id": "a8df478c-2b1a-4946-88c1-8cf9ecad17c1"
+        },
+        {
+            "title": "SeasonTask1",
+            "location": "",
+            "schedule": "season",
+            "priority": "middle",
+            "is_general": false,
+            "id": "97735790-7e0d-4281-b2ea-c05dcdbb44a4"
+        }
+    ]
 }

@@ -5,10 +5,10 @@ import webbrowser
 import winsound
 from pathlib import Path
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtCore import Signal, QTime, QSize, Qt
+from PySide6.QtCore import Signal, QTime, QDate, QDateTime, QSize, Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QButtonGroup, QGridLayout,
+    QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QDateEdit, QButtonGroup, QGridLayout,
     QDialog, QFileDialog, QLineEdit, QScrollArea, QInputDialog, QTabWidget,
 )
 from ui.custom_timer_dialog import CustomTimerDialog
@@ -23,6 +23,7 @@ class SettingsPage(QWidget):
     daily_reset_changed = Signal(str)
     weekly_reset_day_changed = Signal(str)
     weekly_reset_time_changed = Signal(str)
+    season_reset_changed = Signal(str)
     settings_save_requested = Signal(dict)
     check_update_requested = Signal()
     profile_dir_changed = Signal(str)
@@ -275,6 +276,9 @@ class SettingsPage(QWidget):
         self.weekly_reset_label.setText(
             tr_func(language, "weekly_reset")
         )
+
+        if hasattr(self, "season_reset_label"):
+            self.season_reset_label.setText(tr_func(language, "season_reset_label"))
 
         # ===== ADVANCED TIMER =====
 
@@ -567,7 +571,6 @@ class SettingsPage(QWidget):
             btn = QPushButton(theme_name)
             btn.setCheckable(True)
             btn.setObjectName("themeButton")
-            btn.setMinimumHeight(70)
 
             logo_path = (
                 self.project_root /
@@ -692,6 +695,33 @@ class SettingsPage(QWidget):
 
         layout.addWidget(daily_row)
         layout.addWidget(weekly_row)
+
+        # Season end
+        season_row = QFrame()
+        season_row.setObjectName("settingsRow")
+        season_layout = QHBoxLayout(season_row)
+        season_layout.setContentsMargins(14, 12, 14, 12)
+        season_layout.setSpacing(12)
+        self.season_reset_label = QLabel("Season-Ende")
+        self.season_reset_label.setObjectName("settingsLabel")
+        self.season_reset_date = QDateEdit()
+        self.season_reset_date.setObjectName("settingsTimeInput")
+        self.season_reset_date.setDisplayFormat("dd.MM.yyyy")
+        self.season_reset_date.setCalendarPopup(True)
+        self.season_reset_date.setDate(QDate.currentDate())
+        self.season_reset_date.setFixedWidth(130)
+        self.season_reset_time = QTimeEdit()
+        self.season_reset_time.setObjectName("settingsTimeInput")
+        self.season_reset_time.setDisplayFormat("HH:mm")
+        self.season_reset_time.setTime(QTime(9, 0))
+        self.season_reset_time.setFixedWidth(90)
+        self.season_reset_date.dateChanged.connect(self._on_season_reset_changed)
+        self.season_reset_time.timeChanged.connect(self._on_season_reset_changed)
+        season_layout.addWidget(self.season_reset_label)
+        season_layout.addStretch()
+        season_layout.addWidget(self.season_reset_date)
+        season_layout.addWidget(self.season_reset_time)
+        layout.addWidget(season_row)
 
         # ── Advanced Timer ───────────────────────────────────────────────
         self.advanced_timer_title = QLabel()
@@ -882,6 +912,15 @@ class SettingsPage(QWidget):
         value = self.weekly_reset_time.time().toString("HH:mm")
         self.weekly_reset_time_changed.emit(value)
 
+    def _on_season_reset_changed(self):
+        value = self._get_season_reset_str()
+        self.season_reset_changed.emit(value)
+
+    def _get_season_reset_str(self) -> str:
+        d = self.season_reset_date.date().toString("yyyy-MM-dd")
+        t = self.season_reset_time.time().toString("HH:mm")
+        return f"{d} {t}"
+
     def _emit_save_requested(self):
         data = {
             "language": self.language_combo.currentData(),
@@ -889,6 +928,7 @@ class SettingsPage(QWidget):
             "daily_reset_time": self.daily_reset_time.time().toString("HH:mm"),
             "weekly_reset_day": self.weekly_day_group.checkedButton().property("day_key"),
             "weekly_reset_time": self.weekly_reset_time.time().toString("HH:mm"),
+            "season_reset_datetime": self._get_season_reset_str(),
             "shugo_enabled": self.shugo_enabled_btn.isChecked(),
             "shugo_start_minute": int(self.shugo_minute_combo.currentText()),
             "shugo_interval_text": self.shugo_interval_combo.currentData(),
@@ -1407,6 +1447,7 @@ class SettingsPage(QWidget):
             if theme in self.theme_buttons:
                 self.theme_buttons[theme].setChecked(True)
 
+
         # Reset Timer
         if hasattr(self, "daily_reset_time"):
             h, m = map(int, data.get("daily_reset_time", "09:00").split(":"))
@@ -1420,6 +1461,25 @@ class SettingsPage(QWidget):
         if hasattr(self, "weekly_reset_time"):
             h, m = map(int, data.get("weekly_reset_time", "09:00").split(":"))
             self.weekly_reset_time.setTime(QTime(h, m))
+
+        if hasattr(self, "season_reset_date"):
+            raw = data.get("season_reset_datetime", "")
+            if raw and " " in raw:
+                date_part, time_part = raw.split(" ", 1)
+                try:
+                    y, mo, d = map(int, date_part.split("-"))
+                    self.season_reset_date.blockSignals(True)
+                    self.season_reset_date.setDate(QDate(y, mo, d))
+                    self.season_reset_date.blockSignals(False)
+                except ValueError:
+                    pass
+                try:
+                    th, tm = map(int, time_part.split(":"))
+                    self.season_reset_time.blockSignals(True)
+                    self.season_reset_time.setTime(QTime(th, tm))
+                    self.season_reset_time.blockSignals(False)
+                except ValueError:
+                    pass
 
         # Advanced Timer
         if hasattr(self, "shugo_enabled_btn"):

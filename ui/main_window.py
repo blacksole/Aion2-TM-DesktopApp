@@ -10,6 +10,7 @@ from .update_dialog import UpdateDialog
 from .widgets.header_widget import HeaderWidget
 from .widgets.sidebar_widget import SidebarWidget
 from .widgets.shopping_card import ShoppingCard
+from .widgets.template_dialog import TemplateDialog
 from .pages.tasks_page import TasksPage
 from .pages.timers_page import TimersPage
 from .pages.profile_page import ProfilePage
@@ -72,11 +73,14 @@ class GradientBackground(QWidget):
         painter.fillRect(self.rect(), gradient)
 
 class TaskCard(QFrame):
-    def __init__(self, title, description="", priority="low", is_event=False):
+    def __init__(self, title, description="", priority="low", is_event=False,
+                 schedule="daily", character=""):
         super().__init__()
 
         self.completed = False
         self.is_event = is_event
+        self.schedule = schedule
+        self.character = character
         self.setProperty("event", self.is_event)
         self.setObjectName("taskCard")
 
@@ -90,6 +94,7 @@ class TaskCard(QFrame):
         self.check_btn.clicked.connect(self.toggle)
 
         text_box = QVBoxLayout()
+        text_box.setSpacing(2)
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("taskTitle")
@@ -112,11 +117,26 @@ class TaskCard(QFrame):
         if not description:
             self.desc_label.hide()
 
+        # Schedule badge row
+        _sched_texts = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
+        _sched_names = {"daily": "scheduleDaily", "weekly": "scheduleWeekly", "season": "scheduleSeason"}
+        badge_row = QHBoxLayout()
+        badge_row.setSpacing(6)
+        self.schedule_label = QLabel(_sched_texts.get(schedule, schedule.upper()))
+        self.schedule_label.setObjectName(_sched_names.get(schedule, "scheduleDaily"))
+        badge_row.addWidget(self.schedule_label)
+        if character:
+            self.char_label = QLabel(character)
+            self.char_label.setObjectName("scheduleWeekly")
+            badge_row.addWidget(self.char_label)
+        badge_row.addStretch()
+        text_box.addLayout(badge_row)
+
         self.priority_value = priority
         self.priority = QLabel(priority.upper())
         self.priority.setObjectName("priorityMedium")
 
-        self.delete_btn = QPushButton("🗑")
+        self.delete_btn = QPushButton("×")
         self.delete_btn.setObjectName("deleteButton")
         self.delete_btn.setFixedWidth(36)
         self.delete_btn.clicked.connect(self.deleteLater)
@@ -173,21 +193,20 @@ class MainWindow(QMainWindow):
 
 
         self.tabs = {
-            "dailyTasks": "daily_tasks",
-            "weeklyTasks": "weekly_tasks",
-            "dailyShopping": "daily_shopping",
-            "weeklyShopping": "weekly_shopping",
+            "tasks": "tasks",
+            "shopping": "shopping",
         }
 
         self.language = "en"
         self.current_theme = "abyss"
 
-        self.active_tab = "dailyTasks"
+        self.active_tab = "tasks"
         self.active_filter = "all"
         self.show_events = True
         self.daily_reset_time = "09:00"
         self.weekly_reset_day = "Mo"
         self.weekly_reset_time = "09:00"
+        self.season_reset_datetime = ""
         self.last_daily_reset_date = None
         self.last_weekly_reset_date = None
         self._daily_countdown_text = "--:--:--"
@@ -197,7 +216,10 @@ class MainWindow(QMainWindow):
             self.project_root = Path(sys.executable).parent
         else:
             self.project_root = Path(__file__).resolve().parent.parent
-        self.app_config_dir = Path(os.environ["APPDATA"]) / "Aion2 TM"
+        if getattr(sys, "frozen", False):
+            self.app_config_dir = Path(os.environ["APPDATA"]) / "Aion2 TM"
+        else:
+            self.app_config_dir = self.project_root
         self.app_config_path = self.app_config_dir / "config.json"
         self.app_config_dir.mkdir(parents=True, exist_ok=True)
 
@@ -241,6 +263,9 @@ class MainWindow(QMainWindow):
             key: [] for key in self.tabs
         }
 
+        self.item_templates: list = []
+        self.task_templates: list = []
+
         self.flow_maps: dict = {}
         self.active_flow_map_name: str = "Map 1"
 
@@ -260,7 +285,7 @@ class MainWindow(QMainWindow):
         self.refresh()
         self.sort_current_list("priority")
 
-        if not self.app_config_path.exists():
+        if not self.app_config_path.exists() and getattr(sys, "frozen", False):
             self._show_first_run_dialog()
         else:
             self.load_last_profile()
@@ -309,6 +334,18 @@ class MainWindow(QMainWindow):
             if card in cards:
                 cards.remove(card)
                 break
+        if isinstance(card, ShoppingCard):
+            title_lower = card.title.lower()
+            for tmpl in self.item_templates:
+                if tmpl.get("title", "").lower() == title_lower:
+                    tmpl["is_general"] = False
+                    break
+        elif isinstance(card, TaskCard):
+            title_lower = card.title_label.text().lower()
+            for tmpl in self.task_templates:
+                if tmpl.get("title", "").lower() == title_lower:
+                    tmpl["is_general"] = False
+                    break
         card.deleteLater()
         self.refresh()
         if self.auto_save:
@@ -333,8 +370,22 @@ class MainWindow(QMainWindow):
             p.amount_input.setText(str(card.amount))
             p.location_input.setText(card.location)
             p.price_input.setText(str(card.price))
+            sched = getattr(card, "schedule", "daily")
+            p.schedule_daily_btn.setChecked(sched == "daily")
+            p.schedule_weekly_btn.setChecked(sched == "weekly")
+            p.schedule_season_btn.setChecked(sched == "season")
+            cur = getattr(card, "currency", "kinah")
+            p.currency_kinah_btn.setChecked(cur == "kinah")
+            p.currency_abyss_btn.setChecked(cur == "abyss")
         else:
             p.desc_input.setText(card.desc_label.text())
+            sched = getattr(card, "schedule", "daily")
+            p.schedule_daily_btn.setChecked(sched == "daily")
+            p.schedule_weekly_btn.setChecked(sched == "weekly")
+            p.schedule_season_btn.setChecked(sched == "season")
+            char = getattr(card, "character", "")
+            idx = p.char_input.findData(char)
+            p.char_input.setCurrentIndex(-1 if idx <= 0 else idx)
         p.add_btn.setText("Aktualisieren")
         try:
             p.add_btn.clicked.disconnect()
@@ -367,8 +418,18 @@ class MainWindow(QMainWindow):
             card.amount_label.setText(f"{card.amount}x")
             card.location = p.location_input.text().strip()
             card.price = p.price_input.text().strip() or "0"
-            card.price_display = card.format_kinah_price(card.price)
+            card.currency = p.get_selected_currency()
+            card.price_display = card.format_price(card.price, card.currency)
             card.info_label.setText(f"{card.location} • {card.price_display}")
+            new_schedule = p.get_selected_schedule()
+            if new_schedule != card.schedule:
+                card.schedule = new_schedule
+                _sched_names = {"daily": "scheduleDaily", "weekly": "scheduleWeekly", "season": "scheduleSeason"}
+                _sched_texts = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
+                card.schedule_label.setText(_sched_texts.get(new_schedule, new_schedule.upper()))
+                card.schedule_label.setObjectName(_sched_names.get(new_schedule, "scheduleDaily"))
+                card.schedule_label.style().unpolish(card.schedule_label)
+                card.schedule_label.style().polish(card.schedule_label)
         else:
             card.priority_value = priority
             card.priority.setText(prio_text)
@@ -376,6 +437,20 @@ class MainWindow(QMainWindow):
             desc = p.desc_input.text().strip()
             card.desc_label.setText(desc)
             card.desc_label.setVisible(bool(desc))
+            new_schedule = p.get_selected_schedule()
+            if new_schedule != card.schedule:
+                card.schedule = new_schedule
+                _sched_names = {"daily": "scheduleDaily", "weekly": "scheduleWeekly", "season": "scheduleSeason"}
+                _sched_texts = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
+                card.schedule_label.setText(_sched_texts.get(new_schedule, new_schedule.upper()))
+                card.schedule_label.setObjectName(_sched_names.get(new_schedule, "scheduleDaily"))
+                card.schedule_label.style().unpolish(card.schedule_label)
+                card.schedule_label.style().polish(card.schedule_label)
+            new_char = p.char_input.currentData() or ""
+            card.character = new_char
+            if hasattr(card, "char_label"):
+                card.char_label.setText(new_char)
+                card.char_label.setVisible(bool(new_char))
         self._cancel_edit()
         if self.auto_save:
             self.save_profile(silent=True)
@@ -671,6 +746,7 @@ class MainWindow(QMainWindow):
         self.tasks_page.sort_requested.connect(self.sort_current_list)
         self.tasks_page.filter_changed.connect(self.set_task_filter)
         self.tasks_page.manual_reset_requested.connect(self._on_manual_reset)
+        self.tasks_page.template_requested.connect(self._open_template_dialog)
 
         if hasattr(self.header, "update_btn_clicked"):
             self.header.update_btn_clicked.connect(self._open_update_dialog)
@@ -680,6 +756,9 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.settings_page, "profile_dir_changed"):
             self.settings_page.profile_dir_changed.connect(self.change_profile_dir)
+
+        if hasattr(self.settings_page, "season_reset_changed"):
+            self.settings_page.season_reset_changed.connect(self._on_season_reset_changed_from_page)
 
         if hasattr(self.settings_page, "dps_start_requested"):
             self.settings_page.dps_start_requested.connect(self._start_dps_meter)
@@ -900,6 +979,13 @@ class MainWindow(QMainWindow):
         self._weekly_countdown_text = weekly_text
         self.timers_page.set_weekly_countdown(weekly_text)
 
+        season_text = self._get_season_countdown_text()
+        if season_text:
+            self.timers_page.set_season_countdown(season_text)
+            self.timers_page.set_season_visible(True)
+        else:
+            self.timers_page.set_season_visible(False)
+
         self._update_task_reset_hint()
 
         if self.shugo_enabled:
@@ -982,13 +1068,41 @@ class MainWindow(QMainWindow):
         self._update_task_reset_hint()
         self.refresh()
 
+    def _get_season_countdown_text(self) -> str:
+        if not self.season_reset_datetime:
+            return ""
+        try:
+            from datetime import datetime as _dt
+            target = _dt.strptime(self.season_reset_datetime, "%Y-%m-%d %H:%M")
+            diff = (target - _dt.now()).total_seconds()
+            if diff <= 0:
+                return "Abgelaufen"
+            days = int(diff // 86400)
+            hours = int((diff % 86400) // 3600)
+            minutes = int((diff % 3600) // 60)
+            if days > 0:
+                return f"{days}T {hours:02d}:{minutes:02d}"
+            return f"{hours:02d}:{minutes:02d}"
+        except (ValueError, TypeError):
+            return ""
+
     def _update_task_reset_hint(self):
         tab = self.tasks_page.active_tab
         prefix = tr(self.language, "reset_at")
-        if tab in ("dailyTasks", "dailyShopping"):
-            self.tasks_page.set_reset_hint(prefix, self._daily_countdown_text, True)
-        elif tab in ("weeklyTasks", "weeklyShopping"):
-            self.tasks_page.set_reset_hint(prefix, self._weekly_countdown_text, True)
+        if tab in ("tasks", "shopping"):
+            f = self.active_filter
+            if f == "weekly":
+                self.tasks_page.set_reset_hint(prefix, self._weekly_countdown_text, True)
+            elif f == "season":
+                season_text = self._get_season_countdown_text()
+                if season_text:
+                    self.tasks_page.set_reset_hint("Season-Ende: ", season_text, True)
+                else:
+                    self.tasks_page.set_reset_hint("", "", False)
+            elif f == "daily":
+                self.tasks_page.set_reset_hint(prefix, self._daily_countdown_text, True)
+            else:
+                self.tasks_page.set_reset_hint("", "", False)
         else:
             self.tasks_page.set_reset_hint("", "", False)
 
@@ -1000,6 +1114,11 @@ class MainWindow(QMainWindow):
             tasks = [
                 task for task in tasks
                 if getattr(task, "is_event", False)
+            ]
+        elif self.active_filter in ("daily", "weekly", "season"):
+            tasks = [
+                task for task in tasks
+                if getattr(task, "schedule", None) == self.active_filter
             ]
 
         if not self.show_events:
@@ -1018,14 +1137,9 @@ class MainWindow(QMainWindow):
             (done / total) * 100
         ) if total else 0
 
-        shopping_tabs = [
-            "dailyShopping",
-            "weeklyShopping",
-        ]
-
         total_kinah_k = 0
 
-        if self.active_tab in shopping_tabs:
+        if self.active_tab == "shopping":
             for card in tasks:
                 if isinstance(card, ShoppingCard):
                     try:
@@ -1048,16 +1162,10 @@ class MainWindow(QMainWindow):
             f"● {tr(self.language, 'progress')}: {progress}%"
         )
 
-        shopping_total_labels = {
-            "dailyShopping": "daily_total_price",
-            "weeklyShopping": "weekly_total_price",
-            "eventShopping": "event_total_price",
-        }
-
-        if self.active_tab in shopping_total_labels:
+        if self.active_tab == "shopping":
             self.tasks_page.set_footer_text(
                 f"● {tr(self.language, 'progress')}: {progress}%   |   "
-                f"{tr(self.language, shopping_total_labels[self.active_tab])}: "
+                f"{tr(self.language, 'total_price')}: "
                 f"{self.format_kinah_price(total_kinah_k)}"
             )
         else:
@@ -1088,11 +1196,7 @@ class MainWindow(QMainWindow):
         with open(style_path, "r", encoding="utf-8") as f:
             styles = f.read()
 
-        styles = styles.replace(
-            "ASSET_PATH",
-            base_path.as_posix()
-        )
-
+        styles = styles.replace("ASSET_PATH", base_path.as_posix())
         self.setStyleSheet(styles)
 
     def toggle_events(self):
@@ -1398,6 +1502,7 @@ class MainWindow(QMainWindow):
         self.daily_reset_time = settings.get("daily_reset_time", "09:00")
         self.weekly_reset_day = settings.get("weekly_reset_day", "Mo")
         self.weekly_reset_time = settings.get("weekly_reset_time", "09:00")
+        self.season_reset_datetime = settings.get("season_reset_datetime", "")
 
         from datetime import date as _date
         _d = settings.get("last_daily_reset_date")
@@ -1452,55 +1557,61 @@ class MainWindow(QMainWindow):
         if isinstance(data, dict):
             saved_tasks = data.get("tasks", {})
 
-        # ===== MIGRATION OLD EVENT TABS =====
-
+        # ===== MIGRATION: old event tabs → tasks =====
         old_event_tasks = saved_tasks.get("eventTasks", [])
         old_event_shopping = saved_tasks.get("eventShopping", [])
 
         if old_event_tasks:
-            saved_tasks.setdefault("dailyTasks", [])
-
             for item in old_event_tasks:
                 item["event"] = True
-
-            saved_tasks["dailyTasks"].extend(
-                old_event_tasks
-            )
+                item.setdefault("schedule", "daily")
+            saved_tasks.setdefault("tasks", []).extend(old_event_tasks)
 
         if old_event_shopping:
-            saved_tasks.setdefault("dailyShopping", [])
-
             for item in old_event_shopping:
-                item["event"] = True
+                item.setdefault("schedule", "season")
+                item["type"] = "shopping"
+            saved_tasks.setdefault("shopping", []).extend(old_event_shopping)
 
-            saved_tasks["dailyShopping"].extend(
-                old_event_shopping
-            )
+        # ===== MIGRATION: dailyTasks / weeklyTasks → tasks =====
+        for old_tab, default_schedule in (("dailyTasks", "daily"), ("weeklyTasks", "weekly")):
+            for item in saved_tasks.get(old_tab, []):
+                if item.get("type") != "shopping":
+                    item.setdefault("schedule", default_schedule)
+                    saved_tasks.setdefault("tasks", []).append(item)
+
+        # ===== MIGRATION: dailyShopping + weeklyShopping → shopping =====
+        for old_tab, default_schedule in (("dailyShopping", "daily"), ("weeklyShopping", "weekly")):
+            for item in saved_tasks.get(old_tab, []):
+                item.setdefault("schedule", default_schedule)
+                item["type"] = "shopping"
+                saved_tasks.setdefault("shopping", []).append(item)
 
         for tab, items in saved_tasks.items():
-
             if tab not in self.task_lists:
                 continue
 
             for item in items:
-
                 if item.get("type") == "shopping":
-
                     card = ShoppingCard(
                         priority=item.get("priority", "middle"),
                         amount=str(item.get("amount", "1")),
                         title=item.get("title", ""),
                         location=item.get("location", ""),
                         price=item.get("price", "0"),
+                        schedule=item.get("schedule", "daily"),
                         is_event=item.get("event", False),
+                        currency=item.get("currency", "kinah"),
+                        character=item.get("character", ""),
                     )
-
                 else:
                     card = TaskCard(
                         item.get("title", ""),
                         item.get("description", ""),
                         item.get("priority", "middle"),
                         item.get("event", False),
+                        schedule=item.get("schedule", "daily"),
+                        character=item.get("character", ""),
                     )
 
                 if item.get("completed", False):
@@ -1508,6 +1619,15 @@ class MainWindow(QMainWindow):
 
                 self._wire_card(card)
                 self.task_lists[tab].append(card)
+
+        self.item_templates = data.get("item_templates", [])
+        self.task_templates = data.get("task_templates", [])
+        self.tasks_page.update_templates(self.item_templates)
+        self.tasks_page.update_task_templates(self.task_templates)
+
+        # Reconcile: add missing cards for templates that are still is_general=True
+        self._sync_shopping_from_templates({})
+        self._sync_tasks_from_templates({})
 
         self.refresh()
         raw_maps = data.get("flow_maps")
@@ -1524,6 +1644,9 @@ class MainWindow(QMainWindow):
         if self.flow_map_window:
             self.flow_map_window.load_flow_data(self.flow_maps.get(self.active_flow_map_name, {}))
             self.flow_map_window.set_map_list(list(self.flow_maps.keys()) or ["Map 1"], self.active_flow_map_name)
+            for node in self.flow_map_window.nodes.values():
+                if node.icon == "character" and node.character_items:
+                    self._sync_character_items_to_shopping(node.title, node.character_items)
         if hasattr(self.header, "set_profile"):
             self.header.set_profile(self.profile_name)
         self.save_last_profile(profile_path)
@@ -1538,7 +1661,9 @@ class MainWindow(QMainWindow):
                 "title": card.title,
                 "location": card.location,
                 "price": card.price,
-                "event": getattr(card, "is_event", False),
+                "schedule": card.schedule,
+                "currency": card.currency,
+                "character": card.character,
                 "completed": card.completed,
             }
 
@@ -1548,6 +1673,8 @@ class MainWindow(QMainWindow):
             "title": card.title_label.text(),
             "description": card.desc_label.text(),
             "event": getattr(card, "is_event", False),
+            "schedule": getattr(card, "schedule", "daily"),
+            "character": getattr(card, "character", ""),
             "completed": card.completed,
         }
     
@@ -1585,6 +1712,7 @@ class MainWindow(QMainWindow):
                 "daily_reset_time": self.daily_reset_time,
                 "weekly_reset_day": self.weekly_reset_day,
                 "weekly_reset_time": self.weekly_reset_time,
+                "season_reset_datetime": self.season_reset_datetime,
 
                 "show_events": self.show_events,
 
@@ -1628,6 +1756,8 @@ class MainWindow(QMainWindow):
 
             "flow_maps": self._get_all_flow_maps(),
             "active_flow_map": self.active_flow_map_name,
+            "item_templates": self.item_templates,
+            "task_templates": self.task_templates,
         }
 
         profile_path = self.profile_dir / f"{self.profile_name}.json"
@@ -1796,8 +1926,8 @@ class MainWindow(QMainWindow):
                 else:
                     raw = card.priority_value
                     card.priority.setText(prio_display.get(raw, raw))
-                if card.is_event and hasattr(card, "event_badge"):
-                    card.event_badge.setText(event_text)
+                    if getattr(card, "is_event", False) and hasattr(card, "event_badge"):
+                        card.event_badge.setText(event_text)
 
         self.sidebar.update_language(self.language, tr)
         self.header.update_language(self.language, tr)
@@ -1837,24 +1967,156 @@ class MainWindow(QMainWindow):
             self.toast_label.hide
         )
 
-    def reset_tasks_for_tabs(self, tabs):
+    def reset_tasks_for_tabs(self, tabs, do_refresh=True):
         for tab in tabs:
             for card in self.task_lists.get(tab, []):
                 card.set_completed(False)
 
-        self.refresh()
-        self.save_profile(silent=True)
+        if do_refresh:
+            self.refresh()
+            self.save_profile(silent=True)
+
+    def _reset_shopping_by_schedule(self, schedules: list):
+        """Reset completed state for shopping items matching the given schedule types (data only)."""
+        for card in self.task_lists.get("shopping", []):
+            if isinstance(card, ShoppingCard) and card.schedule in schedules:
+                card.set_completed(False)
+
+    def _open_template_dialog(self):
+        flow_maps = self._get_all_flow_maps()
+        dlg = TemplateDialog(self.item_templates, flow_maps,
+                             task_templates=self.task_templates,
+                             initial_tab=self.active_tab,
+                             parent=self)
+        if dlg.exec():
+            old_shopping = {t.get("id"): t for t in self.item_templates}
+            old_tasks = {t.get("id"): t for t in self.task_templates}
+            self.item_templates = dlg.get_templates()
+            self.task_templates = dlg.get_task_templates()
+            self.tasks_page.update_templates(self.item_templates)
+            self.tasks_page.update_task_templates(self.task_templates)
+            self._sync_shopping_from_templates(old_shopping)
+            self._sync_tasks_from_templates(old_tasks)
+            self.refresh()
+            if self.auto_save:
+                self.save_profile(silent=True)
+
+    def _sync_shopping_from_templates(self, old_templates: dict):
+        """Add / remove general ShoppingCards based on template is_general changes."""
+        existing_titles = {
+            card.title.lower()
+            for card in self.task_lists.get("shopping", [])
+            if isinstance(card, ShoppingCard)
+        }
+
+        for tmpl in self.item_templates:
+            title = tmpl.get("title", "").strip()
+            tid = tmpl.get("id")
+            was_general = old_templates.get(tid, {}).get("is_general", False) if tid else False
+            is_general = tmpl.get("is_general", False)
+
+            if is_general and title.lower() not in existing_titles:
+                # Add a new ShoppingCard to the shopping tab
+                card = ShoppingCard(
+                    priority=tmpl.get("priority", "middle"),
+                    amount=str(tmpl.get("amount", "1")),
+                    title=title,
+                    location=tmpl.get("location", ""),
+                    price=tmpl.get("price", "0"),
+                    schedule=tmpl.get("schedule", "daily"),
+                    currency=tmpl.get("currency", "kinah"),
+                )
+                self._wire_card(card)
+                self.task_lists.setdefault("shopping", []).append(card)
+                existing_titles.add(title.lower())
+            elif was_general and not is_general:
+                # Remove matching ShoppingCard (by title)
+                self.task_lists["shopping"] = [
+                    c for c in self.task_lists.get("shopping", [])
+                    if not (isinstance(c, ShoppingCard) and c.title.lower() == title.lower())
+                ]
+
+    def _sync_tasks_from_templates(self, old_templates: dict):
+        """Add / remove general TaskCards based on task_template is_general changes."""
+        existing_titles = {
+            card.title_label.text().lower()
+            for card in self.task_lists.get("tasks", [])
+            if isinstance(card, TaskCard)
+        }
+        for tmpl in self.task_templates:
+            title = tmpl.get("title", "").strip()
+            tid = tmpl.get("id")
+            was_general = old_templates.get(tid, {}).get("is_general", False) if tid else False
+            is_general = tmpl.get("is_general", False)
+            if is_general and title.lower() not in existing_titles:
+                card = TaskCard(
+                    title,
+                    "",
+                    tmpl.get("priority", "middle"),
+                    schedule=tmpl.get("schedule", "daily"),
+                )
+                self._wire_card(card)
+                self.task_lists.setdefault("tasks", []).append(card)
+                existing_titles.add(title.lower())
+            elif was_general and not is_general:
+                self.task_lists["tasks"] = [
+                    c for c in self.task_lists.get("tasks", [])
+                    if not (isinstance(c, TaskCard) and c.title_label.text().lower() == title.lower())
+                ]
+
+    def _reset_tasks_by_schedule(self, schedules: list):
+        """Reset completed state for task cards matching the given schedule types."""
+        for card in self.task_lists.get("tasks", []):
+            if isinstance(card, TaskCard) and card.schedule in schedules:
+                card.set_completed(False)
+
+    def _sync_character_items_to_shopping(self, char_name: str, items: list):
+        """Replace shopping cards owned by char_name with the current character_items list."""
+        removed = [
+            c for c in self.task_lists.get("shopping", [])
+            if isinstance(c, ShoppingCard) and c.character == char_name
+        ]
+        self.task_lists["shopping"] = [
+            c for c in self.task_lists.get("shopping", [])
+            if c not in removed
+        ]
+        for c in removed:
+            c.setParent(None)
+
+        for item in items:
+            card = ShoppingCard(
+                priority=item.get("priority", "middle"),
+                amount=str(item.get("amount", "1")),
+                title=item.get("title", ""),
+                location=item.get("location", ""),
+                price=item.get("price", "0"),
+                schedule=item.get("schedule", "daily"),
+                currency=item.get("currency", "kinah"),
+                character=char_name,
+            )
+            self._wire_card(card)
+            self.task_lists.setdefault("shopping", []).append(card)
+
+        if self.active_tab == "shopping":
+            self.refresh()
 
     def _on_manual_reset(self):
+        from datetime import date
         tab = self.active_tab
-        if tab in ("dailyTasks", "dailyShopping"):
-            self.reset_tasks_for_tabs(["dailyTasks", "dailyShopping"])
-            from datetime import date
-            self.last_daily_reset_date = date.today()
-        elif tab in ("weeklyTasks", "weeklyShopping"):
-            self.reset_tasks_for_tabs(["weeklyTasks", "weeklyShopping"])
-            from datetime import date
-            self.last_weekly_reset_date = date.today()
+        filter_key = self.active_filter
+        if tab == "tasks":
+            schedules = [filter_key] if filter_key in ("daily", "weekly", "season") else ["daily", "weekly", "season"]
+            self._reset_tasks_by_schedule(schedules)
+            if filter_key == "daily":
+                self.last_daily_reset_date = date.today()
+            elif filter_key == "weekly":
+                self.last_weekly_reset_date = date.today()
+        elif tab == "shopping":
+            if filter_key in ("daily", "weekly", "season"):
+                self._reset_shopping_by_schedule([filter_key])
+            else:
+                self._reset_shopping_by_schedule(["daily", "weekly", "season"])
+        self.refresh()
         self.save_profile()
 
 
@@ -1873,11 +2135,10 @@ class MainWindow(QMainWindow):
 
         if now >= daily_reset_time_today:
             if self.last_daily_reset_date != now.date():
-                self.reset_tasks_for_tabs([
-                    "dailyTasks",
-                    "dailyShopping"
-                ])
-
+                self._reset_tasks_by_schedule(["daily"])
+                self._reset_shopping_by_schedule(["daily"])
+                self.refresh()
+                self.save_profile(silent=True)
                 self.last_daily_reset_date = now.date()
 
         # ===== WEEKLY RESET =====
@@ -1912,10 +2173,10 @@ class MainWindow(QMainWindow):
         last_weekly_reset_date = last_weekly_reset_dt.date()
 
         if self.last_weekly_reset_date is None or self.last_weekly_reset_date < last_weekly_reset_date:
-            self.reset_tasks_for_tabs([
-                "weeklyTasks",
-                "weeklyShopping"
-            ])
+            self._reset_tasks_by_schedule(["weekly"])
+            self._reset_shopping_by_schedule(["weekly"])
+            self.refresh()
+            self.save_profile(silent=True)
             self.last_weekly_reset_date = last_weekly_reset_date
 
     def handle_sidebar_page_changed(self, page_key: str):
@@ -1947,19 +2208,25 @@ class MainWindow(QMainWindow):
             self.about_page.update_language(self.language, tr)
 
     def add_task_from_page(self, data):
-        shopping_tabs = [
-            "dailyShopping",
-            "weeklyShopping",
-        ]
-
-        if self.active_tab in shopping_tabs:
+        if self.active_tab == "shopping":
             card = ShoppingCard(
                 priority=data.get("priority", "middle"),
                 amount=str(data.get("amount", "1")),
                 title=data.get("title", ""),
                 location=data.get("location", ""),
                 price=data.get("price", "0"),
-                is_event=data.get("event", False),
+                schedule=data.get("schedule", "daily"),
+                currency=data.get("currency", "kinah"),
+                character=data.get("character", ""),
+            )
+        elif self.active_tab == "tasks":
+            card = TaskCard(
+                data.get("title", ""),
+                data.get("description", ""),
+                data.get("priority", "middle"),
+                data.get("event", False),
+                schedule=data.get("schedule", "daily"),
+                character=data.get("character", ""),
             )
         else:
             card = TaskCard(
@@ -1995,11 +2262,25 @@ class MainWindow(QMainWindow):
         default_path = self.profile_dir / "Default.json"
         if not default_path.exists():
             import json as _json
+            import uuid as _uuid
             _json.dump(
                 {"profile_name": "Default", "theme": self.current_theme,
                  "language": self.language, "tasks": {
-                     "dailyTasks": [], "weeklyTasks": [],
-                     "dailyShopping": [], "weeklyShopping": []},
+                     "tasks": [], "shopping": []},
+                 "item_templates": [
+                     {
+                         "id": str(_uuid.uuid4()),
+                         "title": "Odyle-Extrakt",
+                         "location": "Neuer Branch",
+                         "price": "100",
+                         "currency": "kinah",
+                         "schedule": "weekly",
+                         "priority": "middle",
+                         "amount": "1",
+                         "is_general": False,
+                     }
+                 ],
+                 "task_templates": [],
                  "flow_map": {}},
                 open(default_path, "w", encoding="utf-8"),
                 indent=4, ensure_ascii=False,
@@ -2056,6 +2337,11 @@ class MainWindow(QMainWindow):
         self.update_countdowns()
         self.save_profile()
 
+    def _on_season_reset_changed_from_page(self, value: str):
+        self.season_reset_datetime = value
+        self._update_task_reset_hint()
+        self.save_profile(silent=True)
+
     def apply_settings_from_page(self, data: dict):
         self.language = data.get("language", self.language)
         self.apply_language()
@@ -2078,6 +2364,11 @@ class MainWindow(QMainWindow):
         self.weekly_reset_time = data.get(
             "weekly_reset_time",
             self.weekly_reset_time
+        )
+
+        self.season_reset_datetime = data.get(
+            "season_reset_datetime",
+            self.season_reset_datetime
         )
 
         self.show_events = data.get(
@@ -2181,6 +2472,7 @@ class MainWindow(QMainWindow):
             "daily_reset_time": self.daily_reset_time,
             "weekly_reset_day": self.weekly_reset_day,
             "weekly_reset_time": self.weekly_reset_time,
+            "season_reset_datetime": self.season_reset_datetime,
 
             "shugo_enabled": self.shugo_enabled,
             "shugo_start_minute": self.shugo_start_minute,
@@ -2299,6 +2591,7 @@ class MainWindow(QMainWindow):
     def set_task_filter(self, filter_key):
         self.active_filter = filter_key
         self.refresh()
+        self._update_task_reset_hint()
 
     def run_update_check(self):
         self._checker = UpdateChecker()
