@@ -708,13 +708,16 @@ class TasksPage(QWidget):
         current = self.char_input.currentData()
         self.char_input.blockSignals(True)
         self.char_input.clear()
-        self.char_input.addItem("leer", "")
-        self.char_input.setItemData(0, QColor("#64748b"), Qt.ForegroundRole)
-        self.char_input.model().item(0).setEnabled(False)
-        for name in char_names:
-            self.char_input.addItem(name, name)
-        idx = self.char_input.findData(current)
-        self.char_input.setCurrentIndex(-1 if idx <= 0 else idx)
+        if not char_names:
+            self.char_input.addItem("leer", "")
+            self.char_input.setItemData(0, QColor("#64748b"), Qt.ForegroundRole)
+            self.char_input.model().item(0).setEnabled(False)
+            self.char_input.setCurrentIndex(-1)
+        else:
+            for name in char_names:
+                self.char_input.addItem(name, name)
+            idx = self.char_input.findData(current)
+            self.char_input.setCurrentIndex(-1 if idx < 0 else idx)
         self.char_input.blockSignals(False)
 
 

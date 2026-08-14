@@ -1,13 +1,9 @@
 import sys
-import ctypes
 from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from ui.main_window import MainWindow
-
-if sys.platform == "win32":
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Aion2TM.App")
 
 app = QApplication(sys.argv)
 if getattr(sys, "frozen", False):

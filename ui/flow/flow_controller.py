@@ -200,6 +200,9 @@ class FlowController:
         self.window.update_node_card(self.window.selected_node_id)
         self.window.mark_unsaved()
         self.window.close_editor_panel()
+        main = self.window.parent()
+        if main and hasattr(main, "_rebuild_characters"):
+            main._rebuild_characters()
 
     def cancel_selected_node(self):
         if self._editor_is_dirty():
@@ -263,6 +266,9 @@ class FlowController:
 
         self.window.render_flow()
         self.window.mark_unsaved()
+        main = self.window.parent()
+        if main and hasattr(main, "_rebuild_characters"):
+            main._rebuild_characters()
 
     @staticmethod
     def _parse_int(val) -> int:
@@ -365,11 +371,14 @@ class FlowController:
         panel.symbol_combo.blockSignals(False)
         panel.optional_check.blockSignals(False)
 
-        # Disable "character" option for root node — it would break shopping sync
+        # "character" icon only allowed for direct children of the root node
         is_root = (node_id == self.window.root_node_id)
+        root_node = self.window.nodes.get(self.window.root_node_id)
+        is_root_child = (root_node is not None) and (node_id in root_node.children)
+        char_allowed = not is_root and is_root_child
         char_idx = panel.symbol_combo.findData("character")
         if char_idx >= 0:
-            panel.symbol_combo.model().item(char_idx).setEnabled(not is_root)
+            panel.symbol_combo.model().item(char_idx).setEnabled(char_allowed)
 
         # Character section
         is_char = node.icon == "character"

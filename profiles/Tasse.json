@@ -285,7 +285,8 @@
                             "currency": "kinah",
                             "amount": "4",
                             "priority": "middle",
-                            "schedule": "weekly"
+                            "schedule": "weekly",
+                            "type": "shopping"
                         },
                         {
                             "title": "Ress Stone",
@@ -294,7 +295,8 @@
                             "currency": "kinah",
                             "amount": "7",
                             "priority": "middle",
-                            "schedule": "weekly"
+                            "schedule": "weekly",
+                            "type": "shopping"
                         },
                         {
                             "title": "Odyle",
@@ -303,7 +305,8 @@
                             "currency": "kinah",
                             "amount": "1",
                             "priority": "low",
-                            "schedule": "daily"
+                            "schedule": "daily",
+                            "type": "shopping"
                         }
                     ]
                 },

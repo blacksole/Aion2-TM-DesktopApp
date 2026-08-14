@@ -227,6 +227,7 @@ class MainWindow(QMainWindow):
         self.dps_meter_autostart = False
         self.minimize_to_tray = None  # None = not asked yet
         self._avatar_b64 = ""
+        self.characters: list = []
 
         self.profile_dir = self._resolve_profile_dir()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
@@ -1653,7 +1654,9 @@ class MainWindow(QMainWindow):
             for node in self.flow_map_window.nodes.values():
                 if node.icon == "character" and node.character_items:
                     self._sync_character_items_to_shopping(node.title, node.character_items)
-        self._refresh_character_dropdown()
+        self._rebuild_characters()
+        if self.characters:
+            self.save_profile(silent=True)
         if hasattr(self.header, "set_profile"):
             self.header.set_profile(self.profile_name)
         self.save_last_profile(profile_path)
@@ -2129,17 +2132,25 @@ class MainWindow(QMainWindow):
                 self._wire_card(card)
                 self.task_lists.setdefault("shopping", []).append(card)
 
-        self._refresh_character_dropdown()
         if self.active_tab in ("shopping", "tasks"):
             self.refresh()
 
-    def _refresh_character_dropdown(self):
-        names = sorted({
-            c.character
-            for c in self.task_lists.get("shopping", [])
-            if isinstance(c, ShoppingCard) and c.character
-        })
-        self.tasks_page.update_characters(names)
+    def _rebuild_characters(self):
+        """Collect all character node titles from every flow map and update the dropdown."""
+        chars: set[str] = set()
+        active = self.active_flow_map_name
+        if self.flow_map_window:
+            for node in self.flow_map_window.nodes.values():
+                if node.icon == "character" and node.title:
+                    chars.add(node.title)
+        for map_name, map_data in self.flow_maps.items():
+            if map_name == active:
+                continue
+            for nd in map_data.get("nodes", {}).values():
+                if nd.get("icon") == "character" and nd.get("title"):
+                    chars.add(nd["title"])
+        self.characters = sorted(chars)
+        self.tasks_page.update_characters(self.characters)
 
     def _on_manual_reset(self):
         from datetime import date
