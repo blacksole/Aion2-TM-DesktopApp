@@ -37,9 +37,13 @@ class TemplateDialog(QDialog):
     """Popup for managing item and task template catalogs."""
 
     def __init__(self, templates: list, flow_maps: dict, task_templates: list = None,
-                 initial_tab: str = "shopping", parent=None):
+                 initial_tab: str = "shopping", parent=None,
+                 language: str = "en", tr_func=None):
         super().__init__(parent)
-        self.setWindowTitle("Vorlagen")
+        self._language = language
+        self._tr = tr_func or (lambda _l, k, **kw: k)
+
+        self.setWindowTitle(self._t("templates_title"))
         self.setMinimumSize(660, 540)
         self.resize(720, 580)
 
@@ -61,17 +65,20 @@ class TemplateDialog(QDialog):
 
         # ── Tab widget ────────────────────────────────────────────────────────
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._make_shop_tab(), "🛒 Einkauf")
-        self._tabs.addTab(self._make_tasks_tab(), "📋 Aufgaben")
+        self._tabs.addTab(self._make_shop_tab(), self._t("tab_shopping"))
+        self._tabs.addTab(self._make_tasks_tab(), self._t("tab_tasks"))
         if initial_tab == "tasks":
             self._tabs.setCurrentIndex(1)
         layout.addWidget(self._tabs, 1)
 
         # ── Footer ────────────────────────────────────────────────────────────
-        close_btn = QPushButton("Schließen")
+        close_btn = QPushButton(self._t("close"))
         close_btn.setObjectName("primaryButton")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, 0, Qt.AlignRight)
+
+    def _t(self, key: str, **kwargs) -> str:
+        return self._tr(self._language, key, **kwargs)
 
     # ── Shopping tab ──────────────────────────────────────────────────────────
 
@@ -82,9 +89,9 @@ class TemplateDialog(QDialog):
         vl.setSpacing(8)
 
         header = QHBoxLayout()
-        info = QLabel("☑ = als allgemeiner Einkauf aktiv")
+        info = QLabel(self._t("shop_tab_info"))
         info.setObjectName("subtitle")
-        self._shop_add_btn = QPushButton("+ Vorlage hinzufügen")
+        self._shop_add_btn = QPushButton(self._t("template_add_btn"))
         self._shop_add_btn.setObjectName("primaryButton")
         self._shop_add_btn.clicked.connect(self._handle_shop_add_btn)
         header.addWidget(info)
@@ -93,7 +100,7 @@ class TemplateDialog(QDialog):
         vl.addLayout(header)
 
         sort_row = QHBoxLayout()
-        sort_lbl = QLabel("Sortieren:")
+        sort_lbl = QLabel(self._t("sort_label"))
         sort_lbl.setObjectName("subtitle")
         sort_row.addWidget(sort_lbl)
         for label, key in (("Name", "name"), ("Prio", "priority"), ("Schedule", "schedule")):
@@ -130,9 +137,9 @@ class TemplateDialog(QDialog):
         vl.setSpacing(8)
 
         header = QHBoxLayout()
-        info = QLabel("☑ = Quest erscheint automatisch in der Aufgabenliste")
+        info = QLabel(self._t("task_tab_info"))
         info.setObjectName("subtitle")
-        self._task_add_btn = QPushButton("+ Aufgabe hinzufügen")
+        self._task_add_btn = QPushButton(self._t("task_add_btn"))
         self._task_add_btn.setObjectName("primaryButton")
         self._task_add_btn.clicked.connect(self._handle_task_add_btn)
         header.addWidget(info)
@@ -141,7 +148,7 @@ class TemplateDialog(QDialog):
         vl.addLayout(header)
 
         sort_row = QHBoxLayout()
-        sort_lbl = QLabel("Sortieren:")
+        sort_lbl = QLabel(self._t("sort_label"))
         sort_lbl.setObjectName("subtitle")
         sort_row.addWidget(sort_lbl)
         for label, key in (("Name", "name"), ("Prio", "priority"), ("Schedule", "schedule")):
@@ -214,7 +221,7 @@ class TemplateDialog(QDialog):
 
         check = QCheckBox()
         check.setChecked(bool(tmpl.get("is_general", False)))
-        check.setToolTip("Als allgemeiner Einkauf anzeigen")
+        check.setToolTip(self._t("shop_check_tooltip"))
         check.setCursor(Qt.PointingHandCursor)
         check.stateChanged.connect(lambda state, i=index: self._set_shop_general(i, bool(state)))
 
@@ -301,7 +308,7 @@ class TemplateDialog(QDialog):
 
         check = QCheckBox()
         check.setChecked(bool(tmpl.get("is_general", False)))
-        check.setToolTip("Quest automatisch in Aufgabenliste anzeigen")
+        check.setToolTip(self._t("task_check_tooltip"))
         check.setCursor(Qt.PointingHandCursor)
         check.stateChanged.connect(lambda state, i=index: self._set_task_general(i, bool(state)))
 
@@ -358,9 +365,9 @@ class TemplateDialog(QDialog):
 
     def _update_shop_add_btn(self):
         if self._selected_shop_index is not None:
-            self._shop_add_btn.setText("✏ Aktualisieren")
+            self._shop_add_btn.setText(self._t("template_update_btn"))
         else:
-            self._shop_add_btn.setText("+ Vorlage hinzufügen")
+            self._shop_add_btn.setText(self._t("template_add_btn"))
 
     def _handle_shop_add_btn(self):
         if self._selected_shop_index is not None:
@@ -401,7 +408,8 @@ class TemplateDialog(QDialog):
         if not (0 <= index < len(self.templates)):
             return
         if value:
-            dlg = _AmountDialog(self.templates[index], parent=self)
+            dlg = _AmountDialog(self.templates[index], parent=self,
+                                language=self._language, tr_func=self._tr)
             if not dlg.exec():
                 self._rebuild_shop_list()
                 return
@@ -422,7 +430,8 @@ class TemplateDialog(QDialog):
         return result
 
     def _add_shop_template(self):
-        dlg = _TemplateEditDialog(known_locations=self._known_shop_locations(), parent=self)
+        dlg = _TemplateEditDialog(known_locations=self._known_shop_locations(), parent=self,
+                                  language=self._language, tr_func=self._tr)
         if dlg.exec():
             item = dlg.get_data()
             item["id"] = str(uuid4())
@@ -435,6 +444,8 @@ class TemplateDialog(QDialog):
                 self.templates[index],
                 known_locations=self._known_shop_locations(),
                 parent=self,
+                language=self._language,
+                tr_func=self._tr,
             )
             if dlg.exec():
                 data = dlg.get_data()
@@ -465,9 +476,9 @@ class TemplateDialog(QDialog):
 
     def _update_task_add_btn(self):
         if self._selected_task_index is not None:
-            self._task_add_btn.setText("✏ Aktualisieren")
+            self._task_add_btn.setText(self._t("template_update_btn"))
         else:
-            self._task_add_btn.setText("+ Aufgabe hinzufügen")
+            self._task_add_btn.setText(self._t("task_add_btn"))
 
     def _handle_task_add_btn(self):
         if self._selected_task_index is not None:
@@ -525,6 +536,8 @@ class TemplateDialog(QDialog):
             known_locations=self._known_task_locations(),
             parent=self,
             task_mode=True,
+            language=self._language,
+            tr_func=self._tr,
         )
         if dlg.exec():
             item = dlg.get_data()
@@ -539,6 +552,8 @@ class TemplateDialog(QDialog):
                 known_locations=self._known_task_locations(),
                 parent=self,
                 task_mode=True,
+                language=self._language,
+                tr_func=self._tr,
             )
             if dlg.exec():
                 data = dlg.get_data()
@@ -572,16 +587,19 @@ class _TemplateEditDialog(QDialog):
     """Edit form for shopping and task templates. Pass task_mode=True to hide currency/price."""
 
     def __init__(self, data: dict = None, known_locations: list[str] = None, parent=None,
-                 task_mode: bool = False):
+                 task_mode: bool = False, language: str = "en", tr_func=None):
         super().__init__(parent)
         data = data or {}
         known_locations = known_locations or []
         self._task_mode = task_mode
+        self._tr = tr_func or (lambda _l, k, **kw: k)
+        self._language = language
 
         if task_mode:
-            self.setWindowTitle("Aufgabe bearbeiten" if data.get("title") else "Aufgabe hinzufügen")
+            title_key = "task_edit_title" if data.get("title") else "task_add_title"
         else:
-            self.setWindowTitle("Vorlage bearbeiten" if data.get("title") else "Vorlage hinzufügen")
+            title_key = "template_edit_title" if data.get("title") else "template_add_title"
+        self.setWindowTitle(self._t(title_key))
         self.setFixedWidth(500)
 
         layout = QVBoxLayout(self)
@@ -624,10 +642,11 @@ class _TemplateEditDialog(QDialog):
 
         # ── Row 2: Title + Location ────────────────────────────────────────────
         self._title = QLineEdit(data.get("title", ""))
-        self._title.setPlaceholderText("Aufgabenname" if task_mode else "Itemname")
+        placeholder_key = "placeholder_taskname" if task_mode else "placeholder_itemname"
+        self._title.setPlaceholderText(self._t(placeholder_key))
 
         self._location = QLineEdit(data.get("location", ""))
-        self._location.setPlaceholderText("Ort")
+        self._location.setPlaceholderText(self._t("placeholder_location_short"))
         if known_locations:
             cpl = QCompleter(known_locations, self._location)
             cpl.setCaseSensitivity(Qt.CaseInsensitive)
@@ -644,23 +663,27 @@ class _TemplateEditDialog(QDialog):
         if not task_mode:
             self._kinah_btn = self._toggle("Kinah", "currencyToggleKinah")
             self._abyss_btn = self._toggle("AP",    "currencyToggleAbyss")
+            self._np_btn    = self._toggle("NP",    "currencyToggleAbyss")
+            self._sc_btn    = self._toggle("SC",    "currencyToggleAbyss")
             cur_grp = QButtonGroup(self)
             cur_grp.setExclusive(True)
-            cur_grp.addButton(self._kinah_btn)
-            cur_grp.addButton(self._abyss_btn)
-            (self._abyss_btn if data.get("currency") == "abyss" else self._kinah_btn).setChecked(True)
+            for b in (self._kinah_btn, self._abyss_btn, self._np_btn, self._sc_btn):
+                cur_grp.addButton(b)
+            cur = data.get("currency", "kinah")
+            {"abyss": self._abyss_btn, "nightmare": self._np_btn,
+             "shugo": self._sc_btn}.get(cur, self._kinah_btn).setChecked(True)
 
             self._price = QLineEdit(str(data.get("price", "")))
-            self._price.setPlaceholderText("Preis (in K)")
+            self._price.setPlaceholderText(self._t("placeholder_price_k"))
             self._price.setValidator(
-                QRegularExpressionValidator(QRegularExpression(r"^\d{0,6}([.,]\d{0,3})?[kK]?$"))
+                QRegularExpressionValidator(QRegularExpression(r"^\d{0,9}([.,]\d{0,3})?[kK]?$"))
             )
             self._price.setMaximumWidth(120)
 
             price_row = QHBoxLayout()
             price_row.setSpacing(8)
-            price_row.addWidget(self._kinah_btn)
-            price_row.addWidget(self._abyss_btn)
+            for b in (self._kinah_btn, self._abyss_btn, self._np_btn, self._sc_btn):
+                price_row.addWidget(b)
             price_row.addSpacing(8)
             price_row.addWidget(self._price, 1)
             layout.addLayout(price_row)
@@ -668,15 +691,18 @@ class _TemplateEditDialog(QDialog):
         # ── Buttons ───────────────────────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        cancel_btn = QPushButton("Abbrechen")
+        cancel_btn = QPushButton(self._t("cancel"))
         cancel_btn.setObjectName("FlowCancelButton")
         cancel_btn.clicked.connect(self.reject)
-        save_btn = QPushButton("Speichern")
+        save_btn = QPushButton(self._t("save"))
         save_btn.setObjectName("primaryButton")
         save_btn.clicked.connect(self._save)
         btn_row.addWidget(cancel_btn)
         btn_row.addWidget(save_btn)
         layout.addLayout(btn_row)
+
+    def _t(self, key: str, **kwargs) -> str:
+        return self._tr(self._language, key, **kwargs)
 
     @staticmethod
     def _toggle(text: str, obj_name: str) -> QPushButton:
@@ -704,7 +730,13 @@ class _TemplateEditDialog(QDialog):
             self.accept()
 
     def _get_currency(self) -> str:
-        return "abyss" if self._abyss_btn.isChecked() else "kinah"
+        if self._abyss_btn.isChecked():
+            return "abyss"
+        if self._np_btn.isChecked():
+            return "nightmare"
+        if self._sc_btn.isChecked():
+            return "shugo"
+        return "kinah"
 
     def get_data(self) -> dict:
         d = {
@@ -730,18 +762,19 @@ class _AmountDialog(QDialog):
         btn.setCheckable(True)
         return btn
 
-    def __init__(self, tmpl: dict, parent=None):
+    def __init__(self, tmpl: dict, parent=None, language: str = "en", tr_func=None):
         super().__init__(parent)
-        self.setWindowTitle("Zur Einkaufsliste hinzufügen")
+        self._tr = tr_func or (lambda _l, k, **kw: k)
+        self._language = language
+
+        self.setWindowTitle(self._t("add_to_shop_title"))
         self.setFixedWidth(400)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
 
-        info = QLabel(
-            f"Sie möchten <b>{tmpl.get('title', '')}</b> in die Einkaufsliste hinzufügen."
-        )
+        info = QLabel(self._t("add_to_shop_info", title=tmpl.get("title", "")))
         info.setObjectName("taskDescription")
         info.setWordWrap(True)
         layout.addWidget(info)
@@ -752,7 +785,7 @@ class _AmountDialog(QDialog):
         layout.addWidget(sep)
 
         amount_row = QHBoxLayout()
-        amount_lbl = QLabel("Anzahl:")
+        amount_lbl = QLabel(self._t("amount_label"))
         amount_lbl.setObjectName("settingsLabel")
         self._amount = QLineEdit(str(tmpl.get("amount", "1")))
         self._amount.setObjectName("FlowInput")
@@ -765,7 +798,7 @@ class _AmountDialog(QDialog):
         layout.addLayout(amount_row)
 
         prio_row = QHBoxLayout()
-        prio_lbl = QLabel("Priorität:")
+        prio_lbl = QLabel(self._t("priority_label"))
         prio_lbl.setObjectName("settingsLabel")
         self._prio_group = QButtonGroup(self)
         self._prio_group.setExclusive(True)
@@ -809,15 +842,18 @@ class _AmountDialog(QDialog):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        cancel_btn = QPushButton("Abbrechen")
+        cancel_btn = QPushButton(self._t("cancel"))
         cancel_btn.setObjectName("FlowCancelButton")
         cancel_btn.clicked.connect(self.reject)
-        confirm_btn = QPushButton("Hinzufügen")
+        confirm_btn = QPushButton(self._t("add_btn_short"))
         confirm_btn.setObjectName("primaryButton")
         confirm_btn.clicked.connect(self.accept)
         btn_row.addWidget(cancel_btn)
         btn_row.addWidget(confirm_btn)
         layout.addLayout(btn_row)
+
+    def _t(self, key: str, **kwargs) -> str:
+        return self._tr(self._language, key, **kwargs)
 
     def get_amount(self) -> str:
         return self._amount.text().strip() or "1"

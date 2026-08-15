@@ -1,0 +1,511 @@
+{
+    "profile_name": "Default_ru",
+    "theme": "frostbite",
+    "language": "ru",
+    "settings": {
+        "daily_reset_time": "09:00",
+        "weekly_reset_day": "Mi",
+        "weekly_reset_time": "05:00",
+        "season_reset_datetime": "",
+        "show_events": true,
+        "shugo_enabled": false,
+        "shugo_start_minute": 0,
+        "shugo_interval_text": "1h",
+        "riss_enabled": false,
+        "riss_anchor_hour": 0,
+        "riss_interval_text": "3h",
+        "auto_save": true,
+        "notification_enabled": false,
+        "notification_warn_minutes": 1,
+        "notification_sync": false,
+        "notification_shugo_enabled": false,
+        "notification_shugo_warn_minutes": 0,
+        "notification_riss_enabled": false,
+        "notification_riss_warn_minutes": 10,
+        "notification_sound": "",
+        "timer_categories": ["Custom Timer"],
+        "custom_timers": []
+    },
+    "tasks": {
+        "tasks": [],
+        "shopping": []
+    },
+    "flow_maps": {
+        "Map 1": {
+            "nodes": {
+                "ru000001-0000-0000-0000-000000000001": {
+                    "id": "ru000001-0000-0000-0000-000000000001",
+                    "title": "Создать персонажа",
+                    "description": "Создайте нового персонажа.",
+                    "icon": "character",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3780.0,
+                    "y": 4000.0,
+                    "children": []
+                }
+            },
+            "root_node_id": "ru000001-0000-0000-0000-000000000001"
+        }
+    },
+    "active_flow_map": "Map 1",
+    "item_templates": [
+        {
+            "title": "Commands (Зелёные)",
+            "location": "Бездна",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000001"
+        },
+        {
+            "title": "Commands (Золотые)",
+            "location": "Бездна",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000002"
+        },
+        {
+            "title": "Commands (Синие)",
+            "location": "Бездна",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000003",
+            "amount": "1"
+        },
+        {
+            "title": "Commands",
+            "location": "Альтгард",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "15",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000004"
+        },
+        {
+            "title": "Одайль",
+            "location": "Магазин Windbreeze",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "100",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000005",
+            "amount": "1"
+        },
+        {
+            "title": "Камень воскрешения",
+            "location": "Магазин Windbreeze",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000006",
+            "amount": "1"
+        },
+        {
+            "title": "Тикеты суточного подземелья",
+            "location": "Магазин Windbreeze",
+            "schedule": "daily",
+            "priority": "middle",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000007"
+        },
+        {
+            "title": "Билет мгновенного прохождения: Суточное подземелье",
+            "location": "Еженед. магазин Windbreeze",
+            "schedule": "weekly",
+            "priority": "middle",
+            "is_general": false,
+            "price": "30",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000008"
+        },
+        {
+            "title": "Билет мгновенного прохождения: Nightmare",
+            "location": "Еженед. магазин Windbreeze",
+            "schedule": "weekly",
+            "priority": "middle",
+            "is_general": false,
+            "price": "30",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000009"
+        },
+        {
+            "title": "Кристалл души",
+            "location": "Еженед. магазин Windbreeze",
+            "schedule": "weekly",
+            "priority": "low",
+            "is_general": false,
+            "price": "1",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000010"
+        },
+        {
+            "title": "Питомец: Ваучер авто-сбора",
+            "location": "Еженед. магазин Windbreeze",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "3000",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000011"
+        },
+        {
+            "title": "Мастерской камень высш. огранки (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "middle",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000012"
+        },
+        {
+            "title": "Гневный разум (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000013"
+        },
+        {
+            "title": "Гневная воля (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000014"
+        },
+        {
+            "title": "Гневное эго (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000015"
+        },
+        {
+            "title": "Гневное желание (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000016"
+        },
+        {
+            "title": "Гневное сублимирование (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000017"
+        },
+        {
+            "title": "Гневная вера (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000018"
+        },
+        {
+            "title": "Гневное пламя (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000019"
+        },
+        {
+            "title": "Сияющая Одайль (Привязан)",
+            "location": "Сезонный магазин",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "ru000002-0000-0000-0000-000000000020"
+        },
+        {
+            "title": "Крылья Nightmare",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "middle",
+            "is_general": false,
+            "price": "160000",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000021"
+        },
+        {
+            "title": "Кристалл Деванион: Ариэль",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "6400",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000022"
+        },
+        {
+            "title": "Камень мудрости",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "5600",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000023"
+        },
+        {
+            "title": "Пробуждённый скин: нагрудник",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "10800",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000024"
+        },
+        {
+            "title": "Пробуждённый скин: поножи",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "8000",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000025"
+        },
+        {
+            "title": "Пробуждённый скин: шлем",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "6750",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000026"
+        },
+        {
+            "title": "Пробуждённый скин: наплечники",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "6750",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000027"
+        },
+        {
+            "title": "Пробуждённый скин: перчатки",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "5300",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000028"
+        },
+        {
+            "title": "Пробуждённый скин: сапоги",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "6750",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000029"
+        },
+        {
+            "title": "Пробуждённый скин: плащ",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "5300",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000030"
+        },
+        {
+            "title": "Колосс: Призрак Зикеля",
+            "location": "Магазин Nightmare",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "14000",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000031"
+        },
+        {
+            "title": "Кристалл души (Привязан)",
+            "location": "Еженед. магазин Nightmare",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "50",
+            "currency": "nightmare",
+            "id": "ru000002-0000-0000-0000-000000000032"
+        },
+        {
+            "title": "Камень мудрости",
+            "location": "Магазин Шуго",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "2800",
+            "currency": "shugo",
+            "id": "ru000002-0000-0000-0000-000000000033"
+        },
+        {
+            "title": "Кристалл Деванион",
+            "location": "Магазин Шуго",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "400",
+            "currency": "shugo",
+            "id": "ru000002-0000-0000-0000-000000000034"
+        },
+        {
+            "title": "Фиолетовые крылья бабочки",
+            "location": "Магазин Шуго",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "2100",
+            "currency": "shugo",
+            "id": "ru000002-0000-0000-0000-000000000035"
+        },
+        {
+            "title": "Крылья духа",
+            "location": "Магазин Шуго",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "4200",
+            "currency": "shugo",
+            "id": "ru000002-0000-0000-0000-000000000036"
+        },
+        {
+            "title": "Крылья бабочки весенних цветов",
+            "location": "Магазин Шуго",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "8350",
+            "currency": "shugo",
+            "id": "ru000002-0000-0000-0000-000000000037"
+        },
+        {
+            "title": "Кристалл души (Привязан)",
+            "location": "Магазин Шуго",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "20",
+            "currency": "shugo",
+            "id": "ru000002-0000-0000-0000-000000000038"
+        },
+        {
+            "title": "Команда Бездны (Привязан)",
+            "location": "Магазин команд Бездны",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "15000",
+            "currency": "abyss",
+            "id": "ru000002-0000-0000-0000-000000000039"
+        },
+        {
+            "title": "Команда Бездны: Мастерство (Привязан)",
+            "location": "Магазин команд Бездны",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "37500",
+            "currency": "abyss",
+            "id": "ru000002-0000-0000-0000-000000000040"
+        },
+        {
+            "title": "Команда Бездны: Элита (Привязан)",
+            "location": "Магазин команд Бездны",
+            "schedule": "weekly",
+            "priority": "middle",
+            "is_general": false,
+            "price": "75000",
+            "currency": "abyss",
+            "id": "ru000002-0000-0000-0000-000000000041"
+        },
+        {
+            "title": "Команда Бездны: Особая миссия (Привязан)",
+            "location": "Магазин команд Бездны",
+            "schedule": "weekly",
+            "priority": "middle",
+            "is_general": false,
+            "price": "150000",
+            "currency": "abyss",
+            "id": "ru000002-0000-0000-0000-000000000042"
+        }
+    ],
+    "task_templates": [
+        {
+            "title": "Sanctum (2700gs+)",
+            "location": "Рейд",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "id": "ru000003-0000-0000-0000-000000000001"
+        },
+        {
+            "title": "Ежедневные задания",
+            "location": "Журнал",
+            "schedule": "daily",
+            "priority": "high",
+            "is_general": false,
+            "id": "ru000003-0000-0000-0000-000000000002"
+        },
+        {
+            "title": "Испытание вознесения",
+            "location": "Прямой вход",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "id": "ru000003-0000-0000-0000-000000000003"
+        },
+        {
+            "title": "Nightmare",
+            "location": "Прямой вход",
+            "schedule": "daily",
+            "priority": "high",
+            "is_general": false,
+            "id": "ru000003-0000-0000-0000-000000000004"
+        }
+    ]
+}

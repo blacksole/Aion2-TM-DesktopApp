@@ -1145,35 +1145,47 @@ class MainWindow(QMainWindow):
         ) if total else 0
 
         total_kinah_k = 0
+        total_ap = 0
+        total_np = 0
+        total_sc = 0
 
         if self.active_tab == "shopping":
             for card in tasks:
                 if isinstance(card, ShoppingCard):
                     try:
-                        amount = int(
-                            str(card.amount).strip() or 1
-                        )
-
-                        price_k = float(
-                            str(card.price).replace(",", ".").strip() or 0
-                        )
-
-                        total_kinah_k += amount * price_k
-
+                        amount = int(str(card.amount).strip() or 1)
+                        price = float(str(card.price).replace(",", ".").strip() or 0)
+                        currency = getattr(card, "currency", "kinah")
+                        if currency == "abyss":
+                            total_ap += amount * price
+                        elif currency == "nightmare":
+                            total_np += amount * price
+                        elif currency == "shugo":
+                            total_sc += amount * price
+                        else:
+                            total_kinah_k += amount * price
                     except ValueError:
                         pass
 
         self.tasks_page.update_stats(total, done, open_count)
 
-        self.tasks_page.set_footer_text(
-            f"● {tr(self.language, 'progress')}: {progress}%"
-        )
-
         if self.active_tab == "shopping":
+            parts = []
+            if total_kinah_k > 0:
+                parts.append(self.format_kinah_price(total_kinah_k))
+            if total_ap > 0:
+                ap_int = int(total_ap) if total_ap == int(total_ap) else total_ap
+                parts.append(f"{ap_int} AP")
+            if total_np > 0:
+                np_int = int(total_np) if total_np == int(total_np) else total_np
+                parts.append(f"{np_int} NP")
+            if total_sc > 0:
+                sc_int = int(total_sc) if total_sc == int(total_sc) else total_sc
+                parts.append(f"{sc_int} SC")
+            price_str = " + ".join(parts) if parts else "—"
             self.tasks_page.set_footer_text(
                 f"● {tr(self.language, 'progress')}: {progress}%   |   "
-                f"{tr(self.language, 'total_price')}: "
-                f"{self.format_kinah_price(total_kinah_k)}"
+                f"{tr(self.language, 'total_price')}: {price_str}"
             )
         else:
             self.tasks_page.set_footer_text(
@@ -1469,10 +1481,21 @@ class MainWindow(QMainWindow):
         profiles = sorted(self.profile_dir.glob("*.json"))
 
         if profiles:
-            for profile_path in profiles:
-                profile_name = profile_path.stem
+            user_profiles = [p for p in profiles if not self._is_lang_default(p)]
+            default_profiles = [p for p in profiles if self._is_lang_default(p)]
 
-                action = menu.addAction(profile_name)
+            for profile_path in user_profiles:
+                action = menu.addAction(profile_path.stem)
+                action.triggered.connect(
+                    lambda checked=False, path=profile_path: self.load_profile(path)
+                )
+
+            if user_profiles and default_profiles:
+                menu.addSeparator()
+
+            for profile_path in default_profiles:
+                label = self._DEFAULT_LANG_LABELS.get(profile_path.stem.lower(), profile_path.stem)
+                action = menu.addAction(label)
                 action.triggered.connect(
                     lambda checked=False, path=profile_path: self.load_profile(path)
                 )
@@ -1655,8 +1678,6 @@ class MainWindow(QMainWindow):
                 if node.icon == "character" and node.character_items:
                     self._sync_character_items_to_shopping(node.title, node.character_items)
         self._rebuild_characters()
-        if self.characters:
-            self.save_profile(silent=True)
         if hasattr(self.header, "set_profile"):
             self.header.set_profile(self.profile_name)
         self.save_last_profile(profile_path)
@@ -1846,19 +1867,45 @@ class MainWindow(QMainWindow):
         self._load_best_profile_from_dir(new_dir)
         self.show_toast("Profilpfad gespeichert")
 
+    # ── Language-default helpers ──────────────────────────────────────────────
+    _LANG_DEFAULT_STEMS = {"en": "Default", "de": "Default_de", "ru": "Default_ru"}
+    _DEFAULT_LANG_LABELS = {
+        "default":    "Default [EN]",
+        "default_de": "Default [DE]",
+        "default_ru": "Default [RU]",
+    }
+
+    def _is_lang_default(self, path: Path) -> bool:
+        return path.stem.lower() in self._DEFAULT_LANG_LABELS
+
+    def _preferred_default(self) -> "Path | None":
+        stem = self._LANG_DEFAULT_STEMS.get(self.language, "Default")
+        p = self.profile_dir / f"{stem}.json"
+        if p.exists():
+            return p
+        for s in ("Default", "Default_de", "Default_ru"):
+            p = self.profile_dir / f"{s}.json"
+            if p.exists():
+                return p
+        return None
+
+    # ─────────────────────────────────────────────────────────────────────────
+
     def _load_best_profile_from_dir(self, folder: Path):
-        """Lädt das beste verfügbare Profil aus einem Ordner: erstes Nicht-Default, sonst Default."""
+        """Lädt das beste verfügbare Profil: erstes Nicht-Default, sonst sprachpassendes Default."""
         profiles = sorted(folder.glob("*.json"))
         if not profiles:
             return
-        non_default = [p for p in profiles if p.stem.lower() != "default"]
-        to_load = non_default[0] if non_default else profiles[0]
-        self.load_profile(to_load)
+        non_default = [p for p in profiles if not self._is_lang_default(p)]
+        if non_default:
+            self.load_profile(non_default[0])
+        else:
+            preferred = self._preferred_default()
+            self.load_profile(preferred or profiles[0])
 
     def save_last_profile(self, profile_path):
         with open(self.last_profile_file, "w", encoding="utf-8") as f:
             f.write(str(profile_path))
-
 
     def load_last_profile(self):
         if self.last_profile_file.exists():
@@ -1870,7 +1917,11 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        # Fallback: erstes verfügbares Profil laden
+        # Fallback: sprachpassendes Default, dann erstes Profil
+        preferred = self._preferred_default()
+        if preferred:
+            self.load_profile(preferred)
+            return
         profiles = sorted(self.profile_dir.glob("*.json"))
         if profiles:
             self.load_profile(profiles[0])
@@ -1953,6 +2004,13 @@ class MainWindow(QMainWindow):
     def change_language_from_page(self, language: str):
         self.language = language
         self.apply_language()
+        # Falls aktuell ein Default-Profil aktiv ist → zu sprachpassendem Default wechseln
+        current_path = self.profile_dir / f"{self.profile_name}.json"
+        if self._is_lang_default(current_path):
+            preferred = self._preferred_default()
+            if preferred and preferred != current_path:
+                self.load_profile(preferred)
+                return
         self.save_profile()
 
     def apply_theme(self, theme):
@@ -1999,7 +2057,9 @@ class MainWindow(QMainWindow):
         dlg = TemplateDialog(self.item_templates, flow_maps,
                              task_templates=self.task_templates,
                              initial_tab=self.active_tab,
-                             parent=self)
+                             parent=self,
+                             language=self.language,
+                             tr_func=tr)
         if dlg.exec():
             old_shopping = {t.get("id"): t for t in self.item_templates}
             old_tasks = {t.get("id"): t for t in self.task_templates}

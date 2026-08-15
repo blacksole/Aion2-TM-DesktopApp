@@ -30,14 +30,14 @@ class TaskProgressBar(QFrame):
 
         self._sub_labels = []
         for val, icon, label, val_obj, icon_obj, sub_obj in [
-            (self._done_val,  "✓", "Erledigt", "ProgressDoneVal",  "ProgressDoneIcon",  "ProgressDoneSub"),
-            (self._open_val,  "○", "Offen",    "ProgressOpenVal",  "ProgressOpenIcon",  "ProgressOpenSub"),
-            (self._total_val, "Σ", "Gesamt",   "ProgressTotalVal", "ProgressTotalIcon", "ProgressTotalSub"),
+            (self._done_val,  "✓", "done",      "ProgressDoneVal",  "ProgressDoneIcon",  "ProgressDoneSub"),
+            (self._open_val,  "○", "remaining", "ProgressOpenVal",  "ProgressOpenIcon",  "ProgressOpenSub"),
+            (self._total_val, "Σ", "total",     "ProgressTotalVal", "ProgressTotalIcon", "ProgressTotalSub"),
         ]:
             icon_lbl = QLabel(icon)
             icon_lbl.setObjectName(icon_obj)
             val.setObjectName(val_obj)
-            sub = QLabel(label)
+            sub = QLabel("")
             sub.setObjectName(sub_obj)
             self._sub_labels.append(sub)
 
@@ -61,7 +61,7 @@ class TaskProgressBar(QFrame):
         stats_row.addWidget(self._extra_lbl, 1)
 
         self._pct_val.setObjectName("ProgressPct")
-        self._pct_sub = QLabel("Fortschritt")
+        self._pct_sub = QLabel("")
         self._pct_sub.setObjectName("ProgressPctSub")
         pct_sub = self._pct_sub
         pct_sub.setAlignment(Qt.AlignRight)
@@ -170,7 +170,7 @@ class TasksPage(QWidget):
 
         self.tab_row.addStretch()
 
-        self._template_btn = QPushButton("📋 Vorlagen")
+        self._template_btn = QPushButton(self.tr(self.language, "templates_btn"))
         self._template_btn.setObjectName("templateButton")
         self._template_btn.setCursor(Qt.PointingHandCursor)
         self._template_btn.setVisible(False)
@@ -189,7 +189,7 @@ class TasksPage(QWidget):
         add_layout.setSpacing(12)
 
         self.title_input = QLineEdit()
-        self.title_input.setPlaceholderText("Titel")
+        self.title_input.setPlaceholderText(self.tr(self.language, "title"))
 
         self.desc_input = QLineEdit()
         self.desc_input.setPlaceholderText(
@@ -246,11 +246,11 @@ class TasksPage(QWidget):
         self.template_combo = QComboBox()
         self.template_combo.setObjectName("priorityInput")
         self.template_combo.setMinimumWidth(160)
-        self.template_combo.setPlaceholderText("Vorlage")
+        self.template_combo.setPlaceholderText(self.tr(self.language, "template_placeholder"))
         self.template_combo.setCurrentIndex(-1)
 
         # Hint shown when template list is empty
-        self.no_templates_hint = QLabel("Keine Vorlagen — öffne 📋 und füge Einträge hinzu")
+        self.no_templates_hint = QLabel(self.tr(self.language, "no_templates_hint"))
         self.no_templates_hint.setObjectName("subtitle")
 
         # Character selector — shopping only
@@ -273,10 +273,18 @@ class TasksPage(QWidget):
         self.currency_abyss_btn = QPushButton("AP")
         self.currency_abyss_btn.setObjectName("currencyToggleAbyss")
         self.currency_abyss_btn.setCheckable(True)
+        self.currency_nightmare_btn = QPushButton("NP")
+        self.currency_nightmare_btn.setObjectName("currencyToggleAbyss")
+        self.currency_nightmare_btn.setCheckable(True)
+        self.currency_shugo_btn = QPushButton("SC")
+        self.currency_shugo_btn.setObjectName("currencyToggleAbyss")
+        self.currency_shugo_btn.setCheckable(True)
         self._currency_btn_group = QButtonGroup(self)
         self._currency_btn_group.setExclusive(True)
         self._currency_btn_group.addButton(self.currency_kinah_btn)
         self._currency_btn_group.addButton(self.currency_abyss_btn)
+        self._currency_btn_group.addButton(self.currency_nightmare_btn)
+        self._currency_btn_group.addButton(self.currency_shugo_btn)
 
         self.add_btn = QPushButton(self.tr(self.language, "add"))
         self.add_btn.setObjectName("primaryButton")
@@ -302,6 +310,8 @@ class TasksPage(QWidget):
         self.price_input.hide()
         self.currency_kinah_btn.hide()
         self.currency_abyss_btn.hide()
+        self.currency_nightmare_btn.hide()
+        self.currency_shugo_btn.hide()
         self.template_combo.hide()
         self.no_templates_hint.hide()
         self.amount_input.hide()
@@ -370,12 +380,12 @@ class TasksPage(QWidget):
         )
         self.filter_label.setObjectName("sortLabel")
 
-        self.filter_all_btn = QPushButton("Alle")
+        self.filter_all_btn = QPushButton(self.tr(self.language, "filter_by_all"))
         self.filter_all_btn.setObjectName("filterButton")
         self.filter_all_btn.clicked.connect(lambda: self.set_filter("all"))
         self.filter_all_btn.setProperty("active", True)
 
-        self.filter_event_btn = QPushButton("Events")
+        self.filter_event_btn = QPushButton(self.tr(self.language, "filter_by_events"))
         self.filter_event_btn.setObjectName("filterButton")
         self.filter_event_btn.clicked.connect(lambda: self.set_filter("event"))
 
@@ -427,7 +437,7 @@ class TasksPage(QWidget):
         self._manual_reset_btn = QPushButton("↺")
         self._manual_reset_btn.setObjectName("ManualResetBtn")
         self._manual_reset_btn.setFixedSize(26, 26)
-        self._manual_reset_btn.setToolTip("Manuell zurücksetzen")
+        self._manual_reset_btn.setToolTip(self.tr(self.language, "manual_reset_tooltip"))
         self._manual_reset_btn.setVisible(False)
         self._manual_reset_btn.clicked.connect(self.manual_reset_requested.emit)
         self.sort_row.addWidget(self._manual_reset_btn)
@@ -629,6 +639,11 @@ class TasksPage(QWidget):
             self.tr(self.language, "filter_by_events")
         )
 
+        self._template_btn.setText(self.tr(self.language, "templates_btn"))
+        self.template_combo.setPlaceholderText(self.tr(self.language, "template_placeholder"))
+        self.no_templates_hint.setText(self.tr(self.language, "no_templates_hint"))
+        self._manual_reset_btn.setToolTip(self.tr(self.language, "manual_reset_tooltip"))
+
         self.progress_bar.update_language(language, self.tr)
 
     def update_stats(self, total: int, done: int, open_count: int):
@@ -692,7 +707,13 @@ class TasksPage(QWidget):
         return "daily"
 
     def get_selected_currency(self) -> str:
-        return "abyss" if self.currency_abyss_btn.isChecked() else "kinah"
+        if self.currency_abyss_btn.isChecked():
+            return "abyss"
+        if self.currency_nightmare_btn.isChecked():
+            return "nightmare"
+        if self.currency_shugo_btn.isChecked():
+            return "shugo"
+        return "kinah"
 
     def update_templates(self, templates: list[dict]):
         self._templates = list(templates)

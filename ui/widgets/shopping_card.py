@@ -138,6 +138,12 @@ class ShoppingCard(QFrame):
         if currency == "abyss":
             return f"{int(raw) if raw == int(raw) else raw} AP"
 
+        if currency == "nightmare":
+            return f"{int(raw) if raw == int(raw) else raw} NP"
+
+        if currency == "shugo":
+            return f"{int(raw) if raw == int(raw) else raw} SC"
+
         kinah = raw * 1000
         if kinah >= 1_000_000:
             m = kinah / 1_000_000

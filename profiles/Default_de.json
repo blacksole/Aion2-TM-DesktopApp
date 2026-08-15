@@ -1,0 +1,511 @@
+{
+    "profile_name": "Default_de",
+    "theme": "frostbite",
+    "language": "de",
+    "settings": {
+        "daily_reset_time": "09:00",
+        "weekly_reset_day": "Mi",
+        "weekly_reset_time": "05:00",
+        "season_reset_datetime": "",
+        "show_events": true,
+        "shugo_enabled": false,
+        "shugo_start_minute": 0,
+        "shugo_interval_text": "1h",
+        "riss_enabled": false,
+        "riss_anchor_hour": 0,
+        "riss_interval_text": "3h",
+        "auto_save": true,
+        "notification_enabled": false,
+        "notification_warn_minutes": 1,
+        "notification_sync": false,
+        "notification_shugo_enabled": false,
+        "notification_shugo_warn_minutes": 0,
+        "notification_riss_enabled": false,
+        "notification_riss_warn_minutes": 10,
+        "notification_sound": "",
+        "timer_categories": ["Custom Timer"],
+        "custom_timers": []
+    },
+    "tasks": {
+        "tasks": [],
+        "shopping": []
+    },
+    "flow_maps": {
+        "Map 1": {
+            "nodes": {
+                "de000001-0000-0000-0000-000000000001": {
+                    "id": "de000001-0000-0000-0000-000000000001",
+                    "title": "Charakter erstellen",
+                    "description": "Erstelle einen neuen Charakter.",
+                    "icon": "character",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3780.0,
+                    "y": 4000.0,
+                    "children": []
+                }
+            },
+            "root_node_id": "de000001-0000-0000-0000-000000000001"
+        }
+    },
+    "active_flow_map": "Map 1",
+    "item_templates": [
+        {
+            "title": "Commands (Grün)",
+            "location": "Abyss",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000001"
+        },
+        {
+            "title": "Commands (Gold)",
+            "location": "Abyss",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000002"
+        },
+        {
+            "title": "Commands (Blau)",
+            "location": "Abyss",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000003",
+            "amount": "1"
+        },
+        {
+            "title": "Commands",
+            "location": "Altgard",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "15",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000004"
+        },
+        {
+            "title": "Odyle",
+            "location": "Windbreeze Store",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "100",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000005",
+            "amount": "1"
+        },
+        {
+            "title": "Auferstehungsstein",
+            "location": "Windbreeze Store",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000006",
+            "amount": "1"
+        },
+        {
+            "title": "Tages-Dungeon Tickets",
+            "location": "Windbreeze Store",
+            "schedule": "daily",
+            "priority": "middle",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000007"
+        },
+        {
+            "title": "Sofort-Freischaltungsticket: Tages-Dungeon",
+            "location": "Windbreeze Wochenladen",
+            "schedule": "weekly",
+            "priority": "middle",
+            "is_general": false,
+            "price": "30",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000008"
+        },
+        {
+            "title": "Sofort-Freischaltungsticket: Nightmare",
+            "location": "Windbreeze Wochenladen",
+            "schedule": "weekly",
+            "priority": "middle",
+            "is_general": false,
+            "price": "30",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000009"
+        },
+        {
+            "title": "Seelenkristall",
+            "location": "Windbreeze Wochenladen",
+            "schedule": "weekly",
+            "priority": "low",
+            "is_general": false,
+            "price": "1",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000010"
+        },
+        {
+            "title": "Haustier: Auto-Beute Gutschein",
+            "location": "Windbreeze Wochenladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "3000",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000011"
+        },
+        {
+            "title": "Ultimativer Veredelungsstein des Handwerkers (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "middle",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000012"
+        },
+        {
+            "title": "Zorniger Geist (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000013"
+        },
+        {
+            "title": "Zorniger Wille (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000014"
+        },
+        {
+            "title": "Zorniges Ego (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000015"
+        },
+        {
+            "title": "Zorniger Wunsch (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000016"
+        },
+        {
+            "title": "Zornige Sublimation (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000017"
+        },
+        {
+            "title": "Zorniger Glaube (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000018"
+        },
+        {
+            "title": "Zornige Flamme (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000019"
+        },
+        {
+            "title": "Strahlende Odyle (Gebunden)",
+            "location": "Saisonladen",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "0",
+            "currency": "kinah",
+            "id": "de000002-0000-0000-0000-000000000020"
+        },
+        {
+            "title": "Nightmare-Flügel",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "middle",
+            "is_general": false,
+            "price": "160000",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000021"
+        },
+        {
+            "title": "Daevanion-Kristall: Ariel",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "6400",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000022"
+        },
+        {
+            "title": "Weisheitsstein",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "5600",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000023"
+        },
+        {
+            "title": "Erwachter Skin: Brustpanzer",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "10800",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000024"
+        },
+        {
+            "title": "Erwachter Skin: Beinschutz",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "8000",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000025"
+        },
+        {
+            "title": "Erwachter Skin: Helm",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "6750",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000026"
+        },
+        {
+            "title": "Erwachter Skin: Schulterplatten",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "6750",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000027"
+        },
+        {
+            "title": "Erwachter Skin: Handschuhe",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "5300",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000028"
+        },
+        {
+            "title": "Erwachter Skin: Stiefel",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "6750",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000029"
+        },
+        {
+            "title": "Erwachter Skin: Umhang",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "5300",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000030"
+        },
+        {
+            "title": "Koloss: Zikels Erscheinung",
+            "location": "Nightmare-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "14000",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000031"
+        },
+        {
+            "title": "Seelenkristall (Gebunden)",
+            "location": "Nightmare-Wochenladen",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "50",
+            "currency": "nightmare",
+            "id": "de000002-0000-0000-0000-000000000032"
+        },
+        {
+            "title": "Weisheitsstein",
+            "location": "Shugo-Laden",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "2800",
+            "currency": "shugo",
+            "id": "de000002-0000-0000-0000-000000000033"
+        },
+        {
+            "title": "Daevanion-Kristall",
+            "location": "Shugo-Laden",
+            "schedule": "season",
+            "priority": "high",
+            "is_general": false,
+            "price": "400",
+            "currency": "shugo",
+            "id": "de000002-0000-0000-0000-000000000034"
+        },
+        {
+            "title": "Violette Schmetterlingsflügel",
+            "location": "Shugo-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "2100",
+            "currency": "shugo",
+            "id": "de000002-0000-0000-0000-000000000035"
+        },
+        {
+            "title": "Geisterflügel",
+            "location": "Shugo-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "4200",
+            "currency": "shugo",
+            "id": "de000002-0000-0000-0000-000000000036"
+        },
+        {
+            "title": "Frühlingsblumen-Schmetterlingsflügel",
+            "location": "Shugo-Laden",
+            "schedule": "season",
+            "priority": "low",
+            "is_general": false,
+            "price": "8350",
+            "currency": "shugo",
+            "id": "de000002-0000-0000-0000-000000000037"
+        },
+        {
+            "title": "Seelenkristall (Gebunden)",
+            "location": "Shugo-Laden",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "20",
+            "currency": "shugo",
+            "id": "de000002-0000-0000-0000-000000000038"
+        },
+        {
+            "title": "Abyss-Befehl (Gebunden)",
+            "location": "Abyss-Befehlsladen",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "15000",
+            "currency": "abyss",
+            "id": "de000002-0000-0000-0000-000000000039"
+        },
+        {
+            "title": "Abyss-Befehl: Kompetenz (Gebunden)",
+            "location": "Abyss-Befehlsladen",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "price": "37500",
+            "currency": "abyss",
+            "id": "de000002-0000-0000-0000-000000000040"
+        },
+        {
+            "title": "Abyss-Befehl: Elite (Gebunden)",
+            "location": "Abyss-Befehlsladen",
+            "schedule": "weekly",
+            "priority": "middle",
+            "is_general": false,
+            "price": "75000",
+            "currency": "abyss",
+            "id": "de000002-0000-0000-0000-000000000041"
+        },
+        {
+            "title": "Abyss-Befehl: Sondermission (Gebunden)",
+            "location": "Abyss-Befehlsladen",
+            "schedule": "weekly",
+            "priority": "middle",
+            "is_general": false,
+            "price": "150000",
+            "currency": "abyss",
+            "id": "de000002-0000-0000-0000-000000000042"
+        }
+    ],
+    "task_templates": [
+        {
+            "title": "Sanctum (2700gs+)",
+            "location": "Raid",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "id": "de000003-0000-0000-0000-000000000001"
+        },
+        {
+            "title": "Tägliche Aufträge",
+            "location": "Journal",
+            "schedule": "daily",
+            "priority": "high",
+            "is_general": false,
+            "id": "de000003-0000-0000-0000-000000000002"
+        },
+        {
+            "title": "Aufstiegsprüfung",
+            "location": "Direktzugang",
+            "schedule": "weekly",
+            "priority": "high",
+            "is_general": false,
+            "id": "de000003-0000-0000-0000-000000000003"
+        },
+        {
+            "title": "Nightmare",
+            "location": "Direktzugang",
+            "schedule": "daily",
+            "priority": "high",
+            "is_general": false,
+            "id": "de000003-0000-0000-0000-000000000004"
+        }
+    ]
+}
