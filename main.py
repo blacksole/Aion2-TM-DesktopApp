@@ -1,10 +1,5 @@
 import sys
 from pathlib import Path
-
-if sys.platform == "win32":
-    import ctypes
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Aion2TM.TaskManager")
-
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
