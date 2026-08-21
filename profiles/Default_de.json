@@ -440,7 +440,7 @@
             "priority": "high",
             "is_general": false,
             "price": "15000",
-            "currency": "abyss",
+            "currency": "kinah",
             "id": "de000002-0000-0000-0000-000000000039"
         },
         {
@@ -450,7 +450,7 @@
             "priority": "high",
             "is_general": false,
             "price": "37500",
-            "currency": "abyss",
+            "currency": "kinah",
             "id": "de000002-0000-0000-0000-000000000040"
         },
         {
@@ -460,7 +460,7 @@
             "priority": "middle",
             "is_general": false,
             "price": "75000",
-            "currency": "abyss",
+            "currency": "kinah",
             "id": "de000002-0000-0000-0000-000000000041"
         },
         {
@@ -470,7 +470,7 @@
             "priority": "middle",
             "is_general": false,
             "price": "150000",
-            "currency": "abyss",
+            "currency": "kinah",
             "id": "de000002-0000-0000-0000-000000000042"
         }
     ],

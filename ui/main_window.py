@@ -7,13 +7,14 @@ import winsound
 from pathlib import Path
 from .settings_dialog import SettingsDialog
 from .update_dialog import UpdateDialog
+from .custom_timer_manager_dialog import CustomTimerManagerDialog
 from .widgets.header_widget import HeaderWidget
 from .widgets.sidebar_widget import SidebarWidget
 from .widgets.shopping_card import ShoppingCard
 from .widgets.template_dialog import TemplateDialog
 from .pages.tasks_page import TasksPage
 from .pages.timers_page import TimersPage
-from .pages.profile_page import ProfilePage
+from .pages.todo_tabs_page import TodoTabsPage
 from .pages.settings_page import SettingsPage
 from .pages.dashboard_page import DashboardPage
 from .pages.about_page import AboutPage
@@ -74,13 +75,15 @@ class GradientBackground(QWidget):
 
 class TaskCard(QFrame):
     def __init__(self, title, description="", priority="low", is_event=False,
-                 schedule="daily", character=""):
+                 schedule="daily", character="", template_id="", location=""):
         super().__init__()
 
         self.completed = False
         self.is_event = is_event
         self.schedule = schedule
         self.character = character
+        self.template_id = template_id
+        self.location = location
         self.setProperty("event", self.is_event)
         self.setObjectName("taskCard")
 
@@ -102,6 +105,9 @@ class TaskCard(QFrame):
         self.desc_label = QLabel(description)
         self.desc_label.setObjectName("taskDescription")
 
+        self.location_label = QLabel(location)
+        self.location_label.setObjectName("taskDescription")
+
         title_row = QHBoxLayout()
 
         if self.is_event:
@@ -116,6 +122,9 @@ class TaskCard(QFrame):
         text_box.addWidget(self.desc_label)
         if not description:
             self.desc_label.hide()
+        text_box.addWidget(self.location_label)
+        if not location:
+            self.location_label.hide()
 
         # Schedule badge row
         _sched_texts = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
@@ -125,10 +134,11 @@ class TaskCard(QFrame):
         self.schedule_label = QLabel(_sched_texts.get(schedule, schedule.upper()))
         self.schedule_label.setObjectName(_sched_names.get(schedule, "scheduleDaily"))
         badge_row.addWidget(self.schedule_label)
-        if character:
-            self.char_label = QLabel(character)
-            self.char_label.setObjectName("scheduleWeekly")
-            badge_row.addWidget(self.char_label)
+        self.char_label = QLabel(character)
+        self.char_label.setObjectName("scheduleWeekly")
+        badge_row.addWidget(self.char_label)
+        if not character:
+            self.char_label.hide()
         badge_row.addStretch()
         text_box.addLayout(badge_row)
 
@@ -181,6 +191,23 @@ class TaskCard(QFrame):
 
         self.style().unpolish(self)
         self.style().polish(self)
+
+    def update_from_template(self, tmpl: dict):
+        """Refresh title/location/priority/schedule from an edited task template."""
+        self.priority_value = tmpl.get("priority", self.priority_value)
+        self.schedule = tmpl.get("schedule", self.schedule)
+        self.location = tmpl.get("location", self.location)
+        self.title_label.setText(tmpl.get("title", self.title_label.text()))
+        self.location_label.setText(self.location)
+        self.location_label.setVisible(bool(self.location))
+        self.priority.setText(self.priority_value.upper())
+
+        _sched_texts = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
+        _sched_names = {"daily": "scheduleDaily", "weekly": "scheduleWeekly", "season": "scheduleSeason"}
+        self.schedule_label.setText(_sched_texts.get(self.schedule, self.schedule.upper()))
+        self.schedule_label.setObjectName(_sched_names.get(self.schedule, "scheduleDaily"))
+        self.style().unpolish(self.schedule_label)
+        self.style().polish(self.schedule_label)
 
 
 class MainWindow(QMainWindow):
@@ -648,27 +675,23 @@ class MainWindow(QMainWindow):
         )
 
         self.timers_page = TimersPage()
-        self.profile_page = ProfilePage()
+        self.todo_page = TodoTabsPage(self.tasks_page, self.timers_page)
         self.settings_page = SettingsPage()
         self.about_page = AboutPage()
 
         self.page_indexes = {
             "dashboard": 0,
             "tasks": 1,
-            "timers": 2,
-            "profile": 3,
-            "settings": 4,
-            "about": 5,
+            "settings": 2,
+            "about": 3,
         }
 
         self.page_stack.addWidget(self.dashboard_page)
-        self.page_stack.addWidget(self.tasks_page)
-        self.page_stack.addWidget(self.timers_page)
-        self.page_stack.addWidget(self.profile_page)
+        self.page_stack.addWidget(self.todo_page)
         self.page_stack.addWidget(self.settings_page)
         self.page_stack.addWidget(self.about_page)
 
-        self.page_stack.setCurrentWidget(self.tasks_page)
+        self.page_stack.setCurrentWidget(self.todo_page)
 
 
     def _setup_layout(self):
@@ -697,13 +720,16 @@ class MainWindow(QMainWindow):
         self.tasks_page.task_add_requested.connect(self.add_task_from_page)
         self.tasks_page.tab_changed.connect(self.select_tab)
 
+        self.timers_page.manage_timers_requested.connect(self.open_custom_timer_manager)
+        self.timers_page.timer_settings_requested.connect(self.open_timer_settings)
+
         if hasattr(self.settings_page, "theme_changed"):
             self.settings_page.theme_changed.connect(
                 self.change_theme_from_page
             )
 
-        if hasattr(self.profile_page, "profile_name_changed"):
-            self.profile_page.profile_name_changed.connect(
+        if hasattr(self.settings_page, "profile_name_changed"):
+            self.settings_page.profile_name_changed.connect(
                 self.set_profile_name
             )
 
@@ -718,34 +744,34 @@ class MainWindow(QMainWindow):
                 self.apply_settings_from_page
             )
 
-        if hasattr(self.profile_page, "save_profile_btn"):
-            self.profile_page.save_profile_btn.clicked.connect(
+        if hasattr(self.settings_page, "save_profile_btn"):
+            self.settings_page.save_profile_btn.clicked.connect(
                 self.save_profile_from_profile_page
             )
 
-        if hasattr(self.profile_page, "reset_profile_btn"):
-            self.profile_page.reset_profile_btn.clicked.connect(
+        if hasattr(self.settings_page, "reset_profile_btn"):
+            self.settings_page.reset_profile_btn.clicked.connect(
                 self.reset_profile
             )
 
-        if hasattr(self.profile_page, "load_profile_btn"):
-            self.profile_page.load_profile_btn.clicked.connect(
+        if hasattr(self.settings_page, "load_profile_btn"):
+            self.settings_page.load_profile_btn.clicked.connect(
                 self.open_profile_menu
             )
 
-        if hasattr(self.profile_page, "clear_events_btn"):
-            self.profile_page.clear_events_btn.clicked.connect(
+        if hasattr(self.settings_page, "clear_events_btn"):
+            self.settings_page.clear_events_btn.clicked.connect(
                 self.clear_event_entries
             )
 
-        if hasattr(self.profile_page, "export_requested"):
-            self.profile_page.export_requested.connect(self.export_profile)
+        if hasattr(self.settings_page, "export_requested"):
+            self.settings_page.export_requested.connect(self.export_profile)
 
-        if hasattr(self.profile_page, "import_requested"):
-            self.profile_page.import_requested.connect(self.import_profile)
+        if hasattr(self.settings_page, "import_requested"):
+            self.settings_page.import_requested.connect(self.import_profile)
 
-        if hasattr(self.profile_page, "duplicate_requested"):
-            self.profile_page.duplicate_requested.connect(self.duplicate_profile)
+        if hasattr(self.settings_page, "duplicate_requested"):
+            self.settings_page.duplicate_requested.connect(self.duplicate_profile)
 
         self.tasks_page.sort_requested.connect(self.sort_current_list)
         self.tasks_page.filter_changed.connect(self.set_task_filter)
@@ -757,6 +783,11 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.header, "avatar_changed"):
             self.header.avatar_changed.connect(self._on_avatar_changed)
+
+        if hasattr(self.header, "profile_menu_requested"):
+            self.header.profile_menu_requested.connect(
+                lambda: self.open_profile_menu(anchor=self.header.profile_switch_btn)
+            )
 
         if hasattr(self.settings_page, "check_update_requested"):
             self.settings_page.check_update_requested.connect(self._on_manual_update_check)
@@ -1062,10 +1093,13 @@ class MainWindow(QMainWindow):
                     seconds = (next_ct - now).total_seconds()
                     ct_text = self._format_custom_countdown(seconds, "hh:mm:ss")
                 self.timers_page.set_custom_timer_countdown(i, ct_text)
-                if not self._custom_notified[i] and 0 <= seconds <= 10:
+                warn_minutes = ct.get("notification_warn_minutes", 1)
+                warn_secs = warn_minutes * 60
+                check_secs = warn_secs if warn_secs > 0 else 10
+                if not self._custom_notified[i] and 0 <= seconds <= check_secs:
                     self._custom_notified[i] = True
-                    self._fire_custom_notification(ct["name"], ct.get("notification_sound", ""))
-                elif seconds > 10:
+                    self._fire_custom_notification(ct["name"], ct.get("notification_sound", ""), warn_minutes)
+                elif seconds > check_secs:
                     self._custom_notified[i] = False
 
         self.check_auto_resets()
@@ -1465,17 +1499,18 @@ class MainWindow(QMainWindow):
         hours, minutes = divmod(minutes, 60)
         return f"{hours:02}:{minutes:02}:{secs:02}"
 
-    def _fire_custom_notification(self, name: str, sound_path: str):
+    def _fire_custom_notification(self, name: str, sound_path: str, warn_minutes: int = 0):
+        msg = f"{name} läuft jetzt ab!" if warn_minutes <= 0 else f"{name} läuft in {warn_minutes} Min ab!"
         if hasattr(self, "tray_icon"):
             self.tray_icon.showMessage(
-                name, f"{name} Timer abgelaufen!",
+                name, msg,
                 QSystemTrayIcon.MessageIcon.Information,
                 5000,
             )
         if sound_path and os.path.isfile(sound_path):
             winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
 
-    def open_profile_menu(self):
+    def open_profile_menu(self, checked=False, anchor=None):
         menu = QMenu(self)
 
         profiles = sorted(self.profile_dir.glob("*.json"))
@@ -1502,11 +1537,23 @@ class MainWindow(QMainWindow):
         else:
             menu.addAction("No profiles").setEnabled(False)
 
-        menu.exec(
-            self.profile_page.load_profile_btn.mapToGlobal(
-                self.profile_page.load_profile_btn.rect().bottomLeft()
-            )
-        )
+        anchor = anchor or self.settings_page.load_profile_btn
+        menu.setMinimumWidth(anchor.width())
+        menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
+    def open_timer_settings(self):
+        self.sidebar.set_active_page("settings")
+        self.settings_page.show_timer_section()
+
+    def open_custom_timer_manager(self):
+        dlg = CustomTimerManagerDialog(self.timer_categories, self.custom_timers, parent=self)
+        if dlg.exec():
+            self.timer_categories = dlg.get_categories()
+            self.custom_timers = dlg.get_custom_timers()
+            self._custom_notified = [False] * 8
+            self.timers_page.rebuild_custom_sections(self.timer_categories, self.custom_timers)
+            if self.auto_save:
+                self.save_profile(silent=True)
 
     def load_profile(self, profile_path):
         try:
@@ -1578,7 +1625,7 @@ class MainWindow(QMainWindow):
         self.toggle_events()
         self.update_countdowns()
 
-        self.profile_page.set_profile_name(self.profile_name)
+        self.settings_page.set_profile_name(self.profile_name)
         self.sync_settings_page()
 
         # Aktuelle Listen immer leeren
@@ -1633,6 +1680,7 @@ class MainWindow(QMainWindow):
                         is_event=item.get("event", False),
                         currency=item.get("currency", "kinah"),
                         character=item.get("character", ""),
+                        template_id=item.get("template_id", ""),
                     )
                 else:
                     card = TaskCard(
@@ -1642,6 +1690,8 @@ class MainWindow(QMainWindow):
                         item.get("event", False),
                         schedule=item.get("schedule", "daily"),
                         character=item.get("character", ""),
+                        template_id=item.get("template_id", ""),
+                        location=item.get("location", ""),
                     )
 
                 if item.get("completed", False):
@@ -1695,6 +1745,7 @@ class MainWindow(QMainWindow):
                 "schedule": card.schedule,
                 "currency": card.currency,
                 "character": card.character,
+                "template_id": getattr(card, "template_id", ""),
                 "completed": card.completed,
             }
 
@@ -1706,9 +1757,11 @@ class MainWindow(QMainWindow):
             "event": getattr(card, "is_event", False),
             "schedule": getattr(card, "schedule", "daily"),
             "character": getattr(card, "character", ""),
+            "template_id": getattr(card, "template_id", ""),
+            "location": getattr(card, "location", ""),
             "completed": card.completed,
         }
-    
+
     def _get_all_flow_maps(self) -> dict:
         if self.flow_map_window:
             self.flow_maps[self.active_flow_map_name] = self.flow_map_window.get_flow_data()
@@ -1968,8 +2021,8 @@ class MainWindow(QMainWindow):
 
         self.timers_page.update_language(self.language, tr)
         self.settings_page.update_language(self.language, tr)
-        self.profile_page.update_language(self.language, tr)
         self.tasks_page.update_language(self.language)
+        self.todo_page.update_language(self.language, tr)
 
         if self.flow_map_window:
             self.flow_map_window.update_language(self.language, tr)
@@ -2074,12 +2127,13 @@ class MainWindow(QMainWindow):
                 self.save_profile(silent=True)
 
     def _sync_shopping_from_templates(self, old_templates: dict):
-        """Add / remove general ShoppingCards based on template is_general changes."""
-        existing_titles = {
-            card.title.lower()
-            for card in self.task_lists.get("shopping", [])
+        """Add / remove general ShoppingCards based on template is_general changes,
+        and refresh already-added cards whose source template was edited."""
+        shopping_cards = [
+            card for card in self.task_lists.get("shopping", [])
             if isinstance(card, ShoppingCard)
-        }
+        ]
+        existing_titles = {card.title.lower() for card in shopping_cards}
 
         for tmpl in self.item_templates:
             title = tmpl.get("title", "").strip()
@@ -2097,6 +2151,7 @@ class MainWindow(QMainWindow):
                     price=tmpl.get("price", "0"),
                     schedule=tmpl.get("schedule", "daily"),
                     currency=tmpl.get("currency", "kinah"),
+                    template_id=tid,
                 )
                 self._wire_card(card)
                 self.task_lists.setdefault("shopping", []).append(card)
@@ -2108,13 +2163,19 @@ class MainWindow(QMainWindow):
                     if not (isinstance(c, ShoppingCard) and c.title.lower() == title.lower())
                 ]
 
+            if tid:
+                for card in shopping_cards:
+                    if card.template_id == tid:
+                        card.update_from_template(tmpl)
+
     def _sync_tasks_from_templates(self, old_templates: dict):
-        """Add / remove general TaskCards based on task_template is_general changes."""
-        existing_titles = {
-            card.title_label.text().lower()
-            for card in self.task_lists.get("tasks", [])
+        """Add / remove general TaskCards based on task_template is_general changes,
+        and refresh already-added cards whose source template was edited."""
+        task_cards = [
+            card for card in self.task_lists.get("tasks", [])
             if isinstance(card, TaskCard)
-        }
+        ]
+        existing_titles = {card.title_label.text().lower() for card in task_cards}
         for tmpl in self.task_templates:
             title = tmpl.get("title", "").strip()
             tid = tmpl.get("id")
@@ -2126,6 +2187,8 @@ class MainWindow(QMainWindow):
                     "",
                     tmpl.get("priority", "middle"),
                     schedule=tmpl.get("schedule", "daily"),
+                    template_id=tid,
+                    location=tmpl.get("location", ""),
                 )
                 self._wire_card(card)
                 self.task_lists.setdefault("tasks", []).append(card)
@@ -2135,6 +2198,11 @@ class MainWindow(QMainWindow):
                     c for c in self.task_lists.get("tasks", [])
                     if not (isinstance(c, TaskCard) and c.title_label.text().lower() == title.lower())
                 ]
+
+            if tid:
+                for card in task_cards:
+                    if card.template_id == tid:
+                        card.update_from_template(tmpl)
 
     def _reset_tasks_by_schedule(self, schedules: list):
         """Reset completed state for task cards matching the given schedule types."""
@@ -2175,6 +2243,7 @@ class MainWindow(QMainWindow):
                     False,
                     schedule=item.get("schedule", "daily"),
                     character=char_name,
+                    location=item.get("location", ""),
                 )
                 self._wire_card(card)
                 self.task_lists.setdefault("tasks", []).append(card)
@@ -2300,21 +2369,12 @@ class MainWindow(QMainWindow):
         if page_key == "tasks":
             self.show_toast(tr(self.language, "toast_tasks_opened"))
 
-        elif page_key == "timers":
-            self.show_toast(tr(self.language, "toast_timers_opened"))
-
         elif page_key == "plan":
             self.open_flow_map_window()
             self.show_toast(tr(self.language, "toast_plan_opened"))
 
         elif page_key == "settings":
             self.show_toast(tr(self.language, "toast_settings_opened"))
-
-        elif page_key == "profile":
-            self.profile_page.set_profile_name(self.profile_name)
-            self.show_toast(
-                tr(self.language, "toast_profile_opened", name=self.profile_name)
-            )
 
         elif page_key == "about":
             self.about_page.update_language(self.language, tr)
@@ -2330,6 +2390,7 @@ class MainWindow(QMainWindow):
                 schedule=data.get("schedule", "daily"),
                 currency=data.get("currency", "kinah"),
                 character=data.get("character", ""),
+                template_id=data.get("template_id", ""),
             )
         elif self.active_tab == "tasks":
             card = TaskCard(
@@ -2339,6 +2400,8 @@ class MainWindow(QMainWindow):
                 data.get("event", False),
                 schedule=data.get("schedule", "daily"),
                 character=data.get("character", ""),
+                template_id=data.get("template_id", ""),
+                location=data.get("location", ""),
             )
         else:
             card = TaskCard(
@@ -2361,7 +2424,7 @@ class MainWindow(QMainWindow):
         old_name = self.profile_name
         old_path = self.profile_dir / f"{old_name}.json"
         self.profile_name = profile_name
-        self.profile_page.set_profile_name(profile_name)
+        self.settings_page.set_profile_name(profile_name)
         if hasattr(self.header, "set_profile"):
             self.header.set_profile(profile_name)
         self.save_profile(silent=True)
@@ -2545,15 +2608,6 @@ class MainWindow(QMainWindow):
         self.notification_riss_enabled = data.get("notification_riss_enabled", self.notification_riss_enabled)
         self.notification_riss_warn_minutes = data.get("notification_riss_warn_minutes", self.notification_riss_warn_minutes)
         self.notification_sound = data.get("notification_sound", self.notification_sound)
-        if "timer_categories" in data:
-            self.timer_categories = data["timer_categories"] or ["Custom Timer"]
-        if "custom_timers" in data:
-            self.custom_timers = data["custom_timers"][:8]
-            for ct in self.custom_timers:
-                if "timer_mode" not in ct:
-                    ct["timer_mode"] = "hourly"
-            self._custom_notified = [False] * 8
-            self.timers_page.rebuild_custom_sections(self.timer_categories, self.custom_timers)
 
         if "minimize_to_tray" in data:
             self.minimize_to_tray = data["minimize_to_tray"]
@@ -2609,9 +2663,6 @@ class MainWindow(QMainWindow):
             "minimize_to_tray": bool(self.minimize_to_tray),
 
             "profile_dir": str(self.profile_dir),
-
-            "timer_categories": self.timer_categories,
-            "custom_timers": self.custom_timers,
         })
 
 
@@ -2676,8 +2727,8 @@ class MainWindow(QMainWindow):
         self.refresh()
 
     def save_profile_from_profile_page(self):
-        if hasattr(self.profile_page, "get_profile_name"):
-            profile_name = self.profile_page.get_profile_name()
+        if hasattr(self.settings_page, "get_profile_name"):
+            profile_name = self.settings_page.get_profile_name()
 
             if profile_name:
                 self.set_profile_name(profile_name)

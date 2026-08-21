@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QDialog, QApplication,
 )
-from PySide6.QtGui import QPixmap, QFont
+from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 from core.version import APP_VERSION
 
@@ -12,6 +12,12 @@ _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
 _GITHUB_URL = "https://github.com/blacksole87/Aion2-TM-DesktopApp"
 _DISCORD_PROFILE_URL = "https://discord.com/users/294899670017114122"
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Add more entries here to list additional tools on the About page.
+# Each entry: (name, url, description)
+_USEFUL_LINKS = [
+    ("Guildnest", "https://guildnest.app", "Kostenloses Gilden-Management-Tool, direkt nutzbar im Discord. Für Aion2 besonders interessant: Build-Editor für Charakter-Builds und Item-Datenbank. Dazu Loot-Verwaltung, Event-Planung und Anwesenheits-Tracking für die Gilde."),
+]
 
 
 class AboutPage(QWidget):
@@ -25,7 +31,7 @@ class AboutPage(QWidget):
         layout.setSpacing(20)
 
         self.page_title = QLabel()
-        self.page_title.setObjectName("settingsSectionTitle")
+        self.page_title.setObjectName("aboutH1")
         layout.addWidget(self.page_title)
 
         # ===== ABOUT ROW =====
@@ -49,11 +55,7 @@ class AboutPage(QWidget):
         about_text.setSpacing(2)
 
         self.about_title_lbl = QLabel()
-        self.about_title_lbl.setObjectName("settingsLabel")
-        bold_font = QFont()
-        bold_font.setPointSize(13)
-        bold_font.setBold(True)
-        self.about_title_lbl.setFont(bold_font)
+        self.about_title_lbl.setObjectName("aboutH2")
 
         self.about_version_lbl = QLabel()
         self.about_version_lbl.setObjectName("settingsDescription")
@@ -119,7 +121,7 @@ class AboutPage(QWidget):
         donate_text = QVBoxLayout()
         donate_text.setSpacing(4)
         self.donate_title_lbl = QLabel()
-        self.donate_title_lbl.setObjectName("settingsLabel")
+        self.donate_title_lbl.setObjectName("aboutH2")
         self.donate_desc_lbl = QLabel()
         self.donate_desc_lbl.setObjectName("settingsDescription")
         donate_text.addWidget(self.donate_title_lbl)
@@ -139,8 +141,51 @@ class AboutPage(QWidget):
         donate_layout.addWidget(self.donate_qr_btn)
         donate_layout.addWidget(self.donate_btn)
 
+        # ===== USEFUL LINKS ROW =====
+        links_row = QFrame()
+        links_row.setObjectName("settingsRow")
+        links_layout = QVBoxLayout(links_row)
+        links_layout.setContentsMargins(24, 16, 24, 16)
+        links_layout.setSpacing(10)
+
+        links_header = QVBoxLayout()
+        links_header.setSpacing(4)
+        self.links_title_lbl = QLabel()
+        self.links_title_lbl.setObjectName("aboutH2")
+        self.links_desc_lbl = QLabel()
+        self.links_desc_lbl.setObjectName("settingsDescription")
+        links_header.addWidget(self.links_title_lbl)
+        links_header.addWidget(self.links_desc_lbl)
+        links_layout.addLayout(links_header)
+
+        self._link_open_btns = []
+        for name, url, description in _USEFUL_LINKS:
+            entry_row = QHBoxLayout()
+            entry_row.setSpacing(12)
+
+            entry_text = QVBoxLayout()
+            entry_text.setSpacing(2)
+            name_lbl = QLabel(name)
+            name_lbl.setObjectName("aboutH3")
+            desc_lbl = QLabel(description)
+            desc_lbl.setObjectName("taskDescription")
+            desc_lbl.setWordWrap(True)
+            entry_text.addWidget(name_lbl)
+            entry_text.addWidget(desc_lbl)
+
+            open_btn = QPushButton()
+            open_btn.setObjectName("secondaryButton")
+            open_btn.setFixedWidth(140)
+            open_btn.clicked.connect(lambda _c=False, u=url: webbrowser.open(u))
+            self._link_open_btns.append(open_btn)
+
+            entry_row.addLayout(entry_text, 1)
+            entry_row.addWidget(open_btn, 0, Qt.AlignVCenter)
+            links_layout.addLayout(entry_row)
+
         layout.addWidget(about_row)
         layout.addWidget(donate_row)
+        layout.addWidget(links_row)
         layout.addStretch()
 
     def update_language(self, language: str, tr_func):
@@ -155,6 +200,10 @@ class AboutPage(QWidget):
         self.donate_title_lbl.setText(tr_func(language, "donate"))
         self.donate_desc_lbl.setText(tr_func(language, "donate_desc"))
         self.donate_btn.setText(tr_func(language, "donate_btn"))
+        self.links_title_lbl.setText(tr_func(language, "useful_links_title"))
+        self.links_desc_lbl.setText(tr_func(language, "useful_links_desc"))
+        for btn in self._link_open_btns:
+            btn.setText(tr_func(language, "useful_links_open"))
 
     def _copy_version(self):
         QApplication.clipboard().setText(f"Aion2 TM v{APP_VERSION}")

@@ -40,6 +40,7 @@ TRANSLATIONS = {
         "event_tasks": "🎉 Event Aufgaben",
         "tasks": "Aufgaben",
         "tasks_subtitle": "Daily, Weekly und Event Aufgaben",
+        "todo": "ToDo",
 
         # ================= SHOPPING =================
         "daily_shopping": "🛒 Tägl. Einkauf",
@@ -181,7 +182,7 @@ TRANSLATIONS = {
         "notif_warn_label": "Vorwarnung",
 
         # ================= PLAN / FLOW MAP =================
-        "plan": "Plan",
+        "plan": "Flow Map",
 
         "toast_plan_opened": "Ablaufplan geöffnet",
 
@@ -295,6 +296,11 @@ TRANSLATIONS = {
         "donate_desc": "Die App gefällt dir? Eine kleine Spende hilft bei der Weiterentwicklung.",
         "donate_btn": "Spenden ☕",
 
+        # ================= USEFUL LINKS =================
+        "useful_links_title": "Nützliche Links",
+        "useful_links_desc": "Praktische Tools für Aion2.",
+        "useful_links_open": "Öffnen ↗",
+
         # ================= CONFIRM DIALOGS =================
         "confirm_reset_title": "Profil zurücksetzen?",
         "confirm_reset_text": "Möchtest du dein Profil wirklich zurücksetzen?\n\nAlle Tasks und Shopping-Einträge werden gelöscht.\nEinstellungen und Layout bleiben erhalten.",
@@ -330,6 +336,7 @@ TRANSLATIONS = {
         "task_tab_info": "☑ = Quest erscheint automatisch in der Aufgabenliste",
         "task_add_btn": "+ Aufgabe hinzufügen",
         "sort_label": "Sortieren:",
+        "template_search_placeholder": "Suchen…",
         "shop_check_tooltip": "Als allgemeiner Einkauf anzeigen",
         "task_check_tooltip": "Quest automatisch in Aufgabenliste anzeigen",
         "template_edit_title": "Vorlage bearbeiten",
@@ -386,6 +393,7 @@ TRANSLATIONS = {
         "event_tasks": "🎉 Событийные задачи",
         "tasks": "Задачи",
         "tasks_subtitle": "Ежедневные, еженедельные и событийные задачи",
+        "todo": "ToDo",
 
         # ================= SHOPPING =================
         "daily_shopping": "🛒 Ежедневные покупки",
@@ -526,7 +534,7 @@ TRANSLATIONS = {
         "notif_warn_label": "Предупреждение",
 
         # ================= PLAN / FLOW MAP =================
-        "plan": "План",
+        "plan": "Flow Map",
         "toast_plan_opened": "План открыт",
         "flow_title": "Блок-схема",
         "flow_window_title": "Карта блок-схемы",
@@ -638,6 +646,11 @@ TRANSLATIONS = {
         "donate_desc": "Нравится приложение? Небольшое пожертвование помогает развитию.",
         "donate_btn": "Пожертвовать ☕",
 
+        # ================= USEFUL LINKS =================
+        "useful_links_title": "Полезные ссылки",
+        "useful_links_desc": "Полезные инструменты для Aion2.",
+        "useful_links_open": "Открыть ↗",
+
         # ================= CONFIRM DIALOGS =================
         "confirm_reset_title": "Сбросить профиль?",
         "confirm_reset_text": "Вы действительно хотите сбросить профиль?\n\nВсе задачи и записи покупок будут удалены.\nНастройки и макет останутся без изменений.",
@@ -673,6 +686,7 @@ TRANSLATIONS = {
         "task_tab_info": "☑ = квест появляется автоматически в списке задач",
         "task_add_btn": "+ Добавить задачу",
         "sort_label": "Сортировать:",
+        "template_search_placeholder": "Поиск…",
         "shop_check_tooltip": "Показывать как общий шопинг",
         "task_check_tooltip": "Автодобавление в список задач",
         "template_edit_title": "Редактировать шаблон",
@@ -729,6 +743,7 @@ TRANSLATIONS = {
         "event_tasks": "🎉 Event Tasks",
         "tasks": "Tasks",
         "tasks_subtitle": "Daily, weekly and event tasks",
+        "todo": "ToDo",
 
         # ================= SHOPPING =================
         "daily_shopping": "🛒 Daily Shopping",
@@ -870,7 +885,7 @@ TRANSLATIONS = {
 
         # ================= TOAST PLANS =================
         "toast_plan_opened": "Plan opened",
-        "plan": "Plan",
+        "plan": "Flow Map",
 
         "flow_title": "Flow",
         "flow_window_title": "Flow Map",
@@ -983,6 +998,11 @@ TRANSLATIONS = {
         "donate_desc": "Enjoying the app? A small donation helps keep it going.",
         "donate_btn": "Donate ☕",
 
+        # ================= USEFUL LINKS =================
+        "useful_links_title": "Useful Links",
+        "useful_links_desc": "Handy tools for Aion2.",
+        "useful_links_open": "Open ↗",
+
         # ================= CONFIRM DIALOGS =================
         "confirm_reset_title": "Reset Profile?",
         "confirm_reset_text": "Do you really want to reset your profile?\n\nAll tasks and shopping entries will be deleted.\nSettings and layout will remain unchanged.",
@@ -1018,6 +1038,7 @@ TRANSLATIONS = {
         "task_tab_info": "☑ = quest appears automatically in the task list",
         "task_add_btn": "+ Add Task",
         "sort_label": "Sort:",
+        "template_search_placeholder": "Search…",
         "shop_check_tooltip": "Show as general shopping entry",
         "task_check_tooltip": "Auto-add to task list",
         "template_edit_title": "Edit Template",

@@ -1,3 +1,6 @@
+import glob
+import os
+import winsound
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFrame, QButtonGroup, QGridLayout, QTimeEdit, QWidget, QSpinBox, QComboBox,
@@ -28,6 +31,8 @@ class CustomTimerDialog(QDialog):
                  interval_minutes: int = 60, interval_seconds: int = 3600,
                  start_time: str = "",
                  categories: list = None, category: str = "",
+                 notification_sound: str = "",
+                 notification_warn_minutes: int = 1,
                  parent=None):
         super().__init__(parent)
         self.setWindowTitle("Custom Timer")
@@ -294,6 +299,48 @@ class CustomTimerDialog(QDialog):
             color_panel_layout.addWidget(btn, i // 4, i % 4)
         layout.addWidget(color_panel)
 
+        # ── 4. Benachrichtigungston ───────────────────────────────────────
+        sound_lbl = QLabel("Benachrichtigungston")
+        sound_lbl.setObjectName("settingsLabel")
+        layout.addWidget(sound_lbl)
+
+        sound_row = QFrame()
+        sound_row.setObjectName("settingsRow")
+        sound_row_layout = QHBoxLayout(sound_row)
+        sound_row_layout.setContentsMargins(14, 12, 14, 12)
+        sound_row_layout.setSpacing(12)
+
+        self.sound_combo = QComboBox()
+        self.sound_combo.setObjectName("settingsCombo")
+        self.sound_combo.addItem("-- Kein Sound --", "")
+        for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
+            sound_name = os.path.splitext(os.path.basename(path))[0]
+            self.sound_combo.addItem(sound_name, path)
+        idx = self.sound_combo.findData(notification_sound)
+        self.sound_combo.setCurrentIndex(max(0, idx))
+
+        self.sound_test_btn = QPushButton("▶ Test")
+        self.sound_test_btn.setObjectName("secondaryButton")
+        self.sound_test_btn.setFixedWidth(70)
+        self.sound_test_btn.clicked.connect(self._preview_sound)
+
+        warn_lbl = QLabel("Vorwarnung")
+        warn_lbl.setObjectName("settingsInlineLabel")
+
+        self.warn_combo = QComboBox()
+        self.warn_combo.setObjectName("settingsCombo")
+        self.warn_combo.setFixedWidth(90)
+        for v in (0, 1, 3, 5, 10):
+            self.warn_combo.addItem(f"{v} min", v)
+        warn_idx = self.warn_combo.findData(notification_warn_minutes)
+        self.warn_combo.setCurrentIndex(max(0, warn_idx))
+
+        sound_row_layout.addWidget(self.sound_combo, 1)
+        sound_row_layout.addWidget(warn_lbl)
+        sound_row_layout.addWidget(self.warn_combo)
+        sound_row_layout.addWidget(self.sound_test_btn)
+        layout.addWidget(sound_row)
+
         # ── Buttons ───────────────────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_row.addStretch()
@@ -325,6 +372,11 @@ class CustomTimerDialog(QDialog):
     def _on_hourly_pencil_clicked(self):
         self._hourly_manual_widget.setVisible(self._hourly_pencil_btn.isChecked())
 
+    def _preview_sound(self):
+        path = self.sound_combo.currentData() or ""
+        if path and os.path.isfile(path):
+            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+
     # ── Helpers ───────────────────────────────────────────────────────────
 
     @staticmethod
@@ -345,6 +397,8 @@ class CustomTimerDialog(QDialog):
             "color":    self._selected_color,
             "timer_mode": mode,
             "category": self.category_combo.currentText(),
+            "notification_sound": self.sound_combo.currentData() or "",
+            "notification_warn_minutes": self.warn_combo.currentData(),
         }
         if mode == "daily":
             result["reset_time"] = self.daily_time.time().toString("HH:mm")

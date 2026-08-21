@@ -23,7 +23,7 @@ _SCHEDULE_NAMES = {"daily": "scheduleDaily", "weekly": "scheduleWeekly", "season
 _SCHEDULE_TEXTS = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
 _PRIO_NAMES = {"low": "priorityLow", "middle": "priorityMiddle", "high": "priorityHigh"}
 _PRIO_TEXTS = {"low": "LOW", "middle": "MID", "high": "HIGH"}
-_SORT_LABELS = {"name": "Name", "priority": "Prio", "schedule": "Schedule"}
+_SORT_LABELS = {"name": "Name", "priority": "Prio", "schedule": "Schedule", "location": "Location"}
 
 
 def _h_separator() -> QFrame:
@@ -55,9 +55,11 @@ class TemplateDialog(QDialog):
         self._shop_sort_key: str = "none"
         self._shop_sort_dir: str = "asc"
         self._shop_sort_btns: dict = {}
+        self._shop_search: str = ""
         self._task_sort_key: str = "none"
         self._task_sort_dir: str = "asc"
         self._task_sort_btns: dict = {}
+        self._task_search: str = ""
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 12)
@@ -99,11 +101,17 @@ class TemplateDialog(QDialog):
         header.addWidget(self._shop_add_btn)
         vl.addLayout(header)
 
+        self._shop_search_input = QLineEdit()
+        self._shop_search_input.setObjectName("FlowInput")
+        self._shop_search_input.setPlaceholderText(self._t("template_search_placeholder"))
+        self._shop_search_input.textChanged.connect(self._on_shop_search_changed)
+        vl.addWidget(self._shop_search_input)
+
         sort_row = QHBoxLayout()
         sort_lbl = QLabel(self._t("sort_label"))
         sort_lbl.setObjectName("subtitle")
         sort_row.addWidget(sort_lbl)
-        for label, key in (("Name", "name"), ("Prio", "priority"), ("Schedule", "schedule")):
+        for label, key in (("Name", "name"), ("Prio", "priority"), ("Schedule", "schedule"), ("Location", "location")):
             btn = QPushButton(label)
             btn.setObjectName("filterButton")
             btn.clicked.connect(lambda _c=False, k=key: self._sort_shop_by(k))
@@ -147,11 +155,17 @@ class TemplateDialog(QDialog):
         header.addWidget(self._task_add_btn)
         vl.addLayout(header)
 
+        self._task_search_input = QLineEdit()
+        self._task_search_input.setObjectName("FlowInput")
+        self._task_search_input.setPlaceholderText(self._t("template_search_placeholder"))
+        self._task_search_input.textChanged.connect(self._on_task_search_changed)
+        vl.addWidget(self._task_search_input)
+
         sort_row = QHBoxLayout()
         sort_lbl = QLabel(self._t("sort_label"))
         sort_lbl.setObjectName("subtitle")
         sort_row.addWidget(sort_lbl)
-        for label, key in (("Name", "name"), ("Prio", "priority"), ("Schedule", "schedule")):
+        for label, key in (("Name", "name"), ("Prio", "priority"), ("Schedule", "schedule"), ("Location", "location")):
             btn = QPushButton(label)
             btn.setObjectName("filterButton")
             btn.clicked.connect(lambda _c=False, k=key: self._sort_tasks_by(k))
@@ -204,9 +218,16 @@ class TemplateDialog(QDialog):
             item = self._shop_list_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+        query = self._shop_search.strip().lower()
         for i, tmpl in enumerate(self.templates):
+            if query and query not in tmpl.get("title", "").lower() and query not in tmpl.get("location", "").lower():
+                continue
             row = self._make_shop_row(i, tmpl)
             self._shop_list_layout.insertWidget(self._shop_list_layout.count() - 1, row)
+
+    def _on_shop_search_changed(self, text: str):
+        self._shop_search = text
+        self._rebuild_shop_list()
 
     def _make_shop_row(self, index: int, tmpl: dict) -> QWidget:
         row = QFrame()
@@ -291,9 +312,16 @@ class TemplateDialog(QDialog):
             item = self._task_list_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+        query = self._task_search.strip().lower()
         for i, tmpl in enumerate(self.task_templates):
+            if query and query not in tmpl.get("title", "").lower() and query not in tmpl.get("location", "").lower():
+                continue
             row = self._make_task_row(i, tmpl)
             self._task_list_layout.insertWidget(self._task_list_layout.count() - 1, row)
+
+    def _on_task_search_changed(self, text: str):
+        self._task_search = text
+        self._rebuild_task_list()
 
     def _make_task_row(self, index: int, tmpl: dict) -> QWidget:
         row = QFrame()
@@ -391,6 +419,8 @@ class TemplateDialog(QDialog):
         elif self._shop_sort_key == "schedule":
             _order = {"daily": 0, "weekly": 1, "season": 2}
             self.templates.sort(key=lambda t: _order.get(t.get("schedule", "daily"), 3), reverse=reverse)
+        elif self._shop_sort_key == "location":
+            self.templates.sort(key=lambda t: t.get("location", "").lower(), reverse=reverse)
         self._selected_shop_index = None
         self._update_shop_add_btn()
         self._rebuild_shop_list()
@@ -502,6 +532,8 @@ class TemplateDialog(QDialog):
         elif self._task_sort_key == "schedule":
             _order = {"daily": 0, "weekly": 1, "season": 2}
             self.task_templates.sort(key=lambda t: _order.get(t.get("schedule", "daily"), 3), reverse=reverse)
+        elif self._task_sort_key == "location":
+            self.task_templates.sort(key=lambda t: t.get("location", "").lower(), reverse=reverse)
         self._selected_task_index = None
         self._update_task_add_btn()
         self._rebuild_task_list()

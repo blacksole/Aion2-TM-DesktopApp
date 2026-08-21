@@ -1,83 +1,54 @@
 {
-    "profile_name": "TasseEU",
-    "theme": "frostbite",
+    "profile_name": "Tutorial",
+    "theme": "inferno",
     "language": "en",
     "settings": {
-        "daily_reset_time": "17:00",
-        "weekly_reset_day": "Mi",
-        "weekly_reset_time": "05:00",
-        "season_reset_datetime": "",
+        "daily_reset_time": "09:00",
+        "weekly_reset_day": "Mo",
+        "weekly_reset_time": "09:00",
+        "season_reset_datetime": "2026-11-04 09:00",
         "show_events": true,
         "shugo_enabled": true,
-        "shugo_start_minute": 0,
-        "shugo_interval_text": "1h",
+        "shugo_start_minute": 15,
+        "shugo_interval_text": "30min",
         "riss_enabled": true,
-        "riss_anchor_hour": 2,
-        "riss_interval_text": "3h",
+        "riss_anchor_hour": 0,
+        "riss_interval_text": "1h",
         "auto_save": true,
-        "notification_enabled": true,
+        "notification_enabled": false,
         "notification_warn_minutes": 1,
-        "notification_sync": false,
-        "notification_shugo_enabled": true,
-        "notification_shugo_warn_minutes": 0,
-        "notification_riss_enabled": true,
-        "notification_riss_warn_minutes": 10,
-        "notification_sound": "C:\\Windows\\Media\\Alarm05.wav",
+        "notification_sync": true,
+        "notification_shugo_enabled": false,
+        "notification_shugo_warn_minutes": 1,
+        "notification_riss_enabled": false,
+        "notification_riss_warn_minutes": 1,
+        "notification_sound": "",
         "timer_categories": [
             "Custom Timer"
         ],
         "custom_timers": [],
-        "last_daily_reset_date": "2026-08-14",
-        "last_weekly_reset_date": "2026-08-12"
+        "last_daily_reset_date": "2026-08-15",
+        "last_weekly_reset_date": "2026-08-10"
     },
     "tasks": {
         "tasks": [],
-        "shopping": []
+        "shopping": [
+            {
+                "type": "shopping",
+                "priority": "high",
+                "amount": "5",
+                "title": "Commands (Green)",
+                "location": "Abyss",
+                "price": "0",
+                "schedule": "weekly",
+                "currency": "kinah",
+                "character": "",
+                "completed": false
+            }
+        ]
     },
     "flow_maps": {
-        "How to get Money": {
-            "nodes": {
-                "30fb4671-367a-4a53-b579-8f483b921361": {
-                    "id": "30fb4671-367a-4a53-b579-8f483b921361",
-                    "title": "How to get Money",
-                    "description": "",
-                    "icon": "character",
-                    "status": "active",
-                    "completed": false,
-                    "x": 3841.6666666666665,
-                    "y": 3530.0,
-                    "children": [
-                        "aaac74eb-a62b-43ac-8224-706ce2db6d9f",
-                        "91fb6848-9cf4-4aa5-8b36-4260e0235efa"
-                    ]
-                },
-                "aaac74eb-a62b-43ac-8224-706ce2db6d9f": {
-                    "id": "aaac74eb-a62b-43ac-8224-706ce2db6d9f",
-                    "title": "Kinah -> Quna",
-                    "description": "Sell 20 Mil every Week",
-                    "icon": "supply_request",
-                    "status": "locked",
-                    "completed": false,
-                    "x": 3528.333333333333,
-                    "y": 3796.0,
-                    "children": []
-                },
-                "91fb6848-9cf4-4aa5-8b36-4260e0235efa": {
-                    "id": "91fb6848-9cf4-4aa5-8b36-4260e0235efa",
-                    "title": "Gold Items",
-                    "description": "and Safe",
-                    "icon": "supply_request",
-                    "status": "locked",
-                    "completed": false,
-                    "x": 4198.333333333333,
-                    "y": 3796.0,
-                    "children": []
-                }
-            },
-            "root_node_id": "30fb4671-367a-4a53-b579-8f483b921361",
-            "show_in_overlay": false
-        },
-        "Global Progress": {
+        "Map 1": {
             "nodes": {
                 "fca23528-727a-4334-90ab-abba3e345056": {
                     "id": "fca23528-727a-4334-90ab-abba3e345056",
@@ -386,17 +357,18 @@
             "show_in_overlay": true
         }
     },
-    "active_flow_map": "Global Progress",
+    "active_flow_map": "Map 1",
     "item_templates": [
         {
             "title": "Commands (Green)",
             "location": "Abyss",
             "schedule": "weekly",
             "priority": "high",
-            "is_general": false,
+            "is_general": true,
             "price": "0",
             "currency": "kinah",
-            "id": "c5bb729a-6ce6-4bc2-bf1e-bfbf6fdbd4a8"
+            "id": "d0000001-e5f6-7890-abcd-ef1234567800",
+            "amount": "5"
         },
         {
             "title": "Commands (Gold)",
@@ -406,7 +378,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "b0bbd143-f111-4bde-b15f-560ef4e641d2"
+            "id": "d0000002-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Commands (Blue)",
@@ -416,7 +388,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "daf8fb78-2815-45df-aa1e-bb0d13391d8e",
+            "id": "d0000003-e5f6-7890-abcd-ef1234567800",
             "amount": "1"
         },
         {
@@ -427,7 +399,7 @@
             "is_general": false,
             "price": "15",
             "currency": "kinah",
-            "id": "3ffa5507-f54b-4c0d-b82e-ea638b81b95b"
+            "id": "d0000004-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Odyle",
@@ -437,7 +409,7 @@
             "is_general": false,
             "price": "100",
             "currency": "kinah",
-            "id": "6dfa5626-df02-4dc2-939e-7f0be3f04a29",
+            "id": "d0000005-e5f6-7890-abcd-ef1234567800",
             "amount": "1"
         },
         {
@@ -448,7 +420,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "bf174d77-5364-46b6-a13f-2b5ec50db450",
+            "id": "d0000006-e5f6-7890-abcd-ef1234567800",
             "amount": "1"
         },
         {
@@ -459,7 +431,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "1224a450-d938-4958-bc3e-4a8dfd6435c0"
+            "id": "d0000007-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Instant Clear Ticket: Daily Dungeon",
@@ -469,7 +441,7 @@
             "is_general": false,
             "price": "30",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567801"
+            "id": "d0000008-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Instant Clear Ticket: Nightmare",
@@ -479,7 +451,7 @@
             "is_general": false,
             "price": "30",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567802"
+            "id": "d0000009-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Soul Crystal",
@@ -489,7 +461,7 @@
             "is_general": false,
             "price": "1",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567803"
+            "id": "d0000010-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Pet: Auto-Loot Voucher",
@@ -499,7 +471,7 @@
             "is_general": false,
             "price": "3000",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567804"
+            "id": "d0000011-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Artisan's Ultimate Refining Stone (Bound)",
@@ -509,7 +481,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567810"
+            "id": "d0000012-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wrathful Mind (Bound)",
@@ -519,7 +491,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567811"
+            "id": "d0000013-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wrathful Will (Bound)",
@@ -529,7 +501,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567812"
+            "id": "d0000014-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wrathful Ego (Bound)",
@@ -539,7 +511,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567813"
+            "id": "d0000015-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wrathful Wish (Bound)",
@@ -549,7 +521,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567814"
+            "id": "d0000016-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wrathful Sublimation (Bound)",
@@ -559,7 +531,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567815"
+            "id": "d0000017-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wrathful Belief (Bound)",
@@ -569,7 +541,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567816"
+            "id": "d0000018-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wrathful Flame (Bound)",
@@ -579,7 +551,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567817"
+            "id": "d0000019-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Radiant Odyle (Bound)",
@@ -589,7 +561,7 @@
             "is_general": false,
             "price": "0",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567818"
+            "id": "d0000020-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Nightmare Wings",
@@ -599,7 +571,7 @@
             "is_general": false,
             "price": "160000",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567820"
+            "id": "d0000021-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Daevanion Crystal: Ariel",
@@ -609,7 +581,7 @@
             "is_general": false,
             "price": "6400",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567821"
+            "id": "d0000022-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wisdom Stone",
@@ -619,7 +591,7 @@
             "is_general": false,
             "price": "5600",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567822"
+            "id": "d0000023-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Awakened Skin Breastplate",
@@ -629,7 +601,7 @@
             "is_general": false,
             "price": "10800",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567823"
+            "id": "d0000024-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Awakened Skin Greaves",
@@ -639,7 +611,7 @@
             "is_general": false,
             "price": "8000",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567824"
+            "id": "d0000025-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Awakened Skin Helm",
@@ -649,7 +621,7 @@
             "is_general": false,
             "price": "6750",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567825"
+            "id": "d0000026-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Awakened Skin Pauldrons",
@@ -659,7 +631,7 @@
             "is_general": false,
             "price": "6750",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567826"
+            "id": "d0000027-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Awakened Skin Gloves",
@@ -669,7 +641,7 @@
             "is_general": false,
             "price": "5300",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567827"
+            "id": "d0000028-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Awakened Skin Boots",
@@ -679,7 +651,7 @@
             "is_general": false,
             "price": "6750",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567828"
+            "id": "d0000029-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Awakened Skin Cloak",
@@ -689,7 +661,7 @@
             "is_general": false,
             "price": "5300",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567829"
+            "id": "d0000030-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Colossus: Zikel's Apparition",
@@ -699,7 +671,7 @@
             "is_general": false,
             "price": "14000",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567830"
+            "id": "d0000031-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Soul Crystal (Bound)",
@@ -709,7 +681,7 @@
             "is_general": false,
             "price": "50",
             "currency": "nightmare",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567831"
+            "id": "d0000032-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Wisdom Stone",
@@ -719,7 +691,7 @@
             "is_general": false,
             "price": "2800",
             "currency": "shugo",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567840"
+            "id": "d0000033-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Daevanion Crystal",
@@ -729,7 +701,7 @@
             "is_general": false,
             "price": "400",
             "currency": "shugo",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567841"
+            "id": "d0000034-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Violet Butterfly Wings",
@@ -739,7 +711,7 @@
             "is_general": false,
             "price": "2100",
             "currency": "shugo",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567842"
+            "id": "d0000035-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Spirit Wings",
@@ -749,7 +721,7 @@
             "is_general": false,
             "price": "4200",
             "currency": "shugo",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567843"
+            "id": "d0000036-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Springflower Butterfly Wings",
@@ -759,7 +731,7 @@
             "is_general": false,
             "price": "8350",
             "currency": "shugo",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567844"
+            "id": "d0000037-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Soul Crystal (Bound)",
@@ -769,7 +741,7 @@
             "is_general": false,
             "price": "20",
             "currency": "shugo",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567845"
+            "id": "d0000038-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Abyss Command (Bound)",
@@ -779,7 +751,7 @@
             "is_general": false,
             "price": "15000",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567850"
+            "id": "d0000039-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Abyss Command: Proficiency (Bound)",
@@ -789,7 +761,7 @@
             "is_general": false,
             "price": "37500",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567851"
+            "id": "d0000040-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Abyss Command: Elite (Bound)",
@@ -799,7 +771,7 @@
             "is_general": false,
             "price": "75000",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567852"
+            "id": "d0000041-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Abyss Command: Special Mission (Bound)",
@@ -809,7 +781,7 @@
             "is_general": false,
             "price": "150000",
             "currency": "kinah",
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567853"
+            "id": "d0000042-e5f6-7890-abcd-ef1234567800"
         }
     ],
     "task_templates": [
@@ -819,7 +791,7 @@
             "schedule": "weekly",
             "priority": "high",
             "is_general": false,
-            "id": "23977761-460c-4679-858b-ca8b274b162e"
+            "id": "d0000101-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Daily Commands",
@@ -827,7 +799,7 @@
             "schedule": "daily",
             "priority": "high",
             "is_general": false,
-            "id": "bef2de82-381a-4462-80fd-67b2406d57bb"
+            "id": "d0000102-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Ascension Trial",
@@ -835,7 +807,7 @@
             "schedule": "weekly",
             "priority": "high",
             "is_general": false,
-            "id": "a72bcbf6-f039-4210-88a0-9e2b338a26a3"
+            "id": "d0000103-e5f6-7890-abcd-ef1234567800"
         },
         {
             "title": "Nightmare",
@@ -843,7 +815,15 @@
             "schedule": "daily",
             "priority": "high",
             "is_general": false,
-            "id": "8c42c006-2863-419d-b39e-9da9db85c423"
+            "id": "d0000104-e5f6-7890-abcd-ef1234567800"
+        },
+        {
+            "title": "Duty Daily Command",
+            "location": "Journal",
+            "schedule": "daily",
+            "priority": "low",
+            "is_general": false,
+            "id": "0941c47c-e9c2-404f-9458-1a56d21fa046"
         }
     ]
 }

@@ -464,6 +464,7 @@ class NodeEditorPanel(QFrame):
             ("crafting", "Crafting"),
             ("supply_request", "Supply Request"),
             ("broker_market", "Broker Market"),
+            ("money", "Money"),
         ]
 
         if self.icon_dir:

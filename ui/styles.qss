@@ -67,6 +67,48 @@ QMenu::item:selected {
     border: none;
 }
 
+#topTabButton {
+    background-color: rgba(30, 41, 59, 0.55);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    border-radius: 11px;
+    padding: 12px 22px;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+#topTabButton:hover {
+    border-color: rgba(148, 163, 184, 0.75);
+}
+
+#topTabButton[active="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06b6d4, stop:1 #a855f7);
+    color: white;
+    border: none;
+}
+
+#pageIconButton {
+    background-color: rgba(30, 41, 59, 0.55);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    border-radius: 10px;
+    font-size: 20px;
+    font-weight: 700;
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
+}
+
+#pageIconButton:hover {
+    border-color: rgba(34, 211, 238, 0.75);
+    color: white;
+}
+
+#pageIconButton:pressed {
+    background-color: rgba(34, 211, 238, 0.2);
+}
+
 #statCard,
 #addPanel,
 #taskCard {
@@ -202,6 +244,25 @@ QDialog {
     font-size: 15px;
     font-weight: bold;
     margin-top: 10px;
+}
+
+#aboutH1 {
+    color: #22d3ee;
+    font-size: 22px;
+    font-weight: 800;
+    margin-top: 4px;
+}
+
+#aboutH2 {
+    color: #f1f5f9;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+#aboutH3 {
+    color: #e2e8f0;
+    font-size: 14px;
+    font-weight: 600;
 }
 
 #settingsRow {
@@ -755,6 +816,13 @@ QComboBox#priorityInput {
 
 #priorityInput:hover {
     border: 1px solid rgba(34, 211, 238, 0.7);
+}
+
+#priorityInput QLineEdit {
+    background: transparent;
+    color: #e2e8f0;
+    border: none;
+    padding: 0;
 }
 
 #priorityInput::drop-down {
@@ -1833,6 +1901,26 @@ QToolTip {
 #profileVersion {
     color: #64748b;
     font-size: 11px;
+}
+
+#profileSwitchButton {
+    background-color: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    border-radius: 8px;
+    color: #c7d2fe;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 6px;
+}
+
+#profileSwitchButton:hover {
+    background-color: rgba(99, 102, 241, 0.3);
+    border: 1px solid rgba(99, 102, 241, 0.7);
+    color: #ffffff;
+}
+
+#profileSwitchButton:pressed {
+    background-color: rgba(99, 102, 241, 0.45);
 }
 
 #updateAvailableButton {

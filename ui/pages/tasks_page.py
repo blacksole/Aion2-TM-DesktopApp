@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QLineEdit, QScrollArea,
-    QComboBox, QCheckBox, QButtonGroup
+    QComboBox, QCheckBox, QButtonGroup, QCompleter
 )
 from PySide6.QtCore import Signal, QRect, Qt, QRegularExpression
 from PySide6.QtGui import QIntValidator, QRegularExpressionValidator, QPainter, QColor, QLinearGradient, QBrush
@@ -246,8 +246,16 @@ class TasksPage(QWidget):
         self.template_combo = QComboBox()
         self.template_combo.setObjectName("priorityInput")
         self.template_combo.setMinimumWidth(160)
-        self.template_combo.setPlaceholderText(self.tr(self.language, "template_placeholder"))
         self.template_combo.setCurrentIndex(-1)
+        self.template_combo.setEditable(True)
+        self.template_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.template_combo.lineEdit().setPlaceholderText(self.tr(self.language, "template_placeholder"))
+
+        template_completer = QCompleter(self.template_combo.model(), self.template_combo)
+        template_completer.setCompletionMode(QCompleter.PopupCompletion)
+        template_completer.setFilterMode(Qt.MatchContains)
+        template_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.template_combo.setCompleter(template_completer)
 
         # Hint shown when template list is empty
         self.no_templates_hint = QLabel(self.tr(self.language, "no_templates_hint"))
@@ -640,7 +648,7 @@ class TasksPage(QWidget):
         )
 
         self._template_btn.setText(self.tr(self.language, "templates_btn"))
-        self.template_combo.setPlaceholderText(self.tr(self.language, "template_placeholder"))
+        self.template_combo.lineEdit().setPlaceholderText(self.tr(self.language, "template_placeholder"))
         self.no_templates_hint.setText(self.tr(self.language, "no_templates_hint"))
         self._manual_reset_btn.setToolTip(self.tr(self.language, "manual_reset_tooltip"))
 
@@ -663,6 +671,7 @@ class TasksPage(QWidget):
                 "price": tmpl.get("price", "0"),
                 "currency": tmpl.get("currency", "kinah"),
                 "character": self.char_input.currentData() or "",
+                "template_id": tmpl.get("id", ""),
             }
         elif self.active_tab == "tasks":
             tmpl = self.template_combo.currentData()
@@ -675,6 +684,7 @@ class TasksPage(QWidget):
                 "title": tmpl.get("title", ""),
                 "location": tmpl.get("location", ""),
                 "character": self.char_input.currentData() or "",
+                "template_id": tmpl.get("id", ""),
             }
         else:
             title = self.title_input.text().strip()

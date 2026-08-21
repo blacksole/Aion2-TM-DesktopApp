@@ -9,6 +9,7 @@ class HeaderWidget(QWidget):
     main_menu_requested = Signal()
     update_btn_clicked = Signal()
     avatar_changed = Signal(str)  # emits base64 PNG string
+    profile_menu_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -46,12 +47,19 @@ class HeaderWidget(QWidget):
         top_row.addWidget(self.avatar_label)
         top_row.addLayout(text_col, 1)
 
+        self.profile_switch_btn = QPushButton("Profile")
+        self.profile_switch_btn.setObjectName("profileSwitchButton")
+        self.profile_switch_btn.setCursor(Qt.PointingHandCursor)
+        self.profile_switch_btn.setFixedWidth(140)
+        self.profile_switch_btn.clicked.connect(self.profile_menu_requested.emit)
+
         self.update_btn = QPushButton()
         self.update_btn.setObjectName("updateAvailableButton")
         self.update_btn.hide()
         self.update_btn.clicked.connect(self.update_btn_clicked.emit)
 
         root.addLayout(top_row)
+        root.addWidget(self.profile_switch_btn, 0, Qt.AlignLeft)
         root.addWidget(self.update_btn)
 
     def mousePressEvent(self, event):
@@ -115,7 +123,7 @@ class HeaderWidget(QWidget):
             self.avatar_label.setText((name or "P")[:1].upper())
 
     def update_language(self, language, tr_func):
-        pass
+        self.profile_switch_btn.setText(tr_func(language, "profile"))
 
     def show_update(self, version: str):
         self.update_btn.setText(f"v{version} verfügbar — Changelog")

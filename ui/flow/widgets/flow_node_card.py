@@ -104,7 +104,7 @@ class FlowNodeCard(QFrame):
 
         self.add_node_hint_btn = QPushButton()
         self.add_node_hint_btn.setObjectName("FlowNodeAddHintButton")
-        self.add_node_hint_btn.setFixedSize(72, 64)
+        self.add_node_hint_btn.setFixedSize(int(72 * zoom), int(64 * zoom))
         self.add_node_hint_btn.setCursor(Qt.PointingHandCursor)
         self.add_node_hint_btn.setEnabled(False)
         self.add_node_hint_btn.setProperty("visibleState", "false")
@@ -112,7 +112,7 @@ class FlowNodeCard(QFrame):
         if self.parent_window:
             plus_icon = self.parent_window.flow_tool_icon_dir / "cursor_addNode.png"
             self.add_node_hint_btn.setIcon(QIcon(str(plus_icon)))
-            self.add_node_hint_btn.setIconSize(QSize(50, 50))
+            self.add_node_hint_btn.setIconSize(QSize(int(50 * zoom), int(50 * zoom)))
         else:
             self.add_node_hint_btn.setText("+")
 
@@ -122,9 +122,11 @@ class FlowNodeCard(QFrame):
         self.done_btn.setCursor(Qt.PointingHandCursor)
 
         grid = QGridLayout(self)
-        grid.setContentsMargins(22, 18, 18, 14)
-        grid.setHorizontalSpacing(18)
-        grid.setVerticalSpacing(2)
+        grid.setContentsMargins(
+            int(22 * zoom), int(18 * zoom), int(18 * zoom), int(14 * zoom)
+        )
+        grid.setHorizontalSpacing(int(18 * zoom))
+        grid.setVerticalSpacing(int(2 * zoom))
 
         grid.addWidget(self.icon_box, 0, 0, 3, 1, Qt.AlignTop)
         grid.addWidget(self.title_label, 0, 1, Qt.AlignLeft | Qt.AlignTop)
@@ -160,6 +162,15 @@ class FlowNodeCard(QFrame):
         self.setFixedSize(int(NODE_WIDTH * zoom), int(NODE_HEIGHT * zoom))
         box_px = int(ICON_BOX_SIZE * zoom)
         self.icon_box.setFixedSize(box_px, box_px)
+
+        grid = self.layout()
+        grid.setContentsMargins(
+            int(22 * zoom), int(18 * zoom), int(18 * zoom), int(14 * zoom)
+        )
+        grid.setHorizontalSpacing(int(18 * zoom))
+        grid.setVerticalSpacing(int(2 * zoom))
+        self.add_node_hint_btn.setFixedSize(int(72 * zoom), int(64 * zoom))
+        self.add_node_hint_btn.setIconSize(QSize(int(50 * zoom), int(50 * zoom)))
         if self._original_pixmap:
             icon_px = int(ICON_SIZE * zoom)
             self.icon_box.setPixmap(

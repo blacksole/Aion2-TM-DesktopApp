@@ -694,12 +694,15 @@ class FlowMapWindow(QMainWindow):
             "level":         "level.png",
             "expedition":    "expedition.png",
             "daily_dungeon": "daily_dungeon.png",
+            "dungeon":       "dungeon.png",
             "sanctuary":     "sanctuary.png",
             "pets":          "pets.png",
             "closet":        "closet.png",
             "enhancement":   "enhancement.png",
             "crafting":      "crafting.png",
             "supply_request":"supply_request.png",
+            "broker_market": "broker_market.png",
+            "money":         "money.png",
         }
 
         filename = icon_map.get(icon_key, "level.png")

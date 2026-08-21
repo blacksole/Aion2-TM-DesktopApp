@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton
+from PySide6.QtCore import Signal
 
 
 class TimerInfoCard(QFrame):
@@ -23,6 +24,9 @@ class TimerInfoCard(QFrame):
 
 
 class TimersPage(QWidget):
+    manage_timers_requested = Signal()
+    timer_settings_requested = Signal()
+
     def __init__(self):
         super().__init__()
 
@@ -30,14 +34,35 @@ class TimersPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
 
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(4)
         self.title_label = QLabel("Timer")
         self.title_label.setObjectName("mainTitle")
 
         self.subtitle_label = QLabel("Reset Timer und Advanced Timer")
         self.subtitle_label.setObjectName("subtitle")
 
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.subtitle_label)
+        title_col.addWidget(self.title_label)
+        title_col.addWidget(self.subtitle_label)
+        header_row.addLayout(title_col, 1)
+
+        self.manage_timers_btn = QPushButton("＋")
+        self.manage_timers_btn.setObjectName("pageIconButton")
+        self.manage_timers_btn.setToolTip("Custom Timer verwalten")
+        self.manage_timers_btn.clicked.connect(self.manage_timers_requested.emit)
+
+        self.timer_settings_btn = QPushButton("⚙")
+        self.timer_settings_btn.setObjectName("pageIconButton")
+        self.timer_settings_btn.setToolTip("Timer-Einstellungen öffnen")
+        self.timer_settings_btn.clicked.connect(self.timer_settings_requested.emit)
+
+        header_row.addWidget(self.manage_timers_btn)
+        header_row.addWidget(self.timer_settings_btn)
+
+        layout.addLayout(header_row)
 
         # ── Haupt-Timer Reihe (Daily, Weekly, Shugo, Riss) ───────────────
         main_row = QHBoxLayout()

@@ -26,6 +26,7 @@ class ShoppingCard(QFrame):
         is_event=False,   # legacy — mapped to "season" on load
         currency="kinah",
         character="",
+        template_id="",
     ):
         super().__init__()
 
@@ -41,6 +42,7 @@ class ShoppingCard(QFrame):
         self.schedule = schedule
         self.currency = currency
         self.character = character
+        self.template_id = template_id
         self.completed = False
 
         self.price_display = self.format_price(price, currency)
@@ -108,6 +110,29 @@ class ShoppingCard(QFrame):
         layout.addWidget(self.schedule_label)
         layout.addWidget(self.priority_label)
         layout.addWidget(self.delete_btn)
+
+    def update_from_template(self, tmpl: dict):
+        """Refresh title/location/price/currency/priority/schedule from an edited template.
+        Amount and character stay untouched — those are entry-specific, not template-specific."""
+        self.priority = tmpl.get("priority", self.priority)
+        self.title = tmpl.get("title", self.title)
+        self.location = tmpl.get("location", self.location)
+        self.price = tmpl.get("price", self.price)
+        self.schedule = tmpl.get("schedule", self.schedule)
+        self.currency = tmpl.get("currency", self.currency)
+        self.price_display = self.format_price(self.price, self.currency)
+
+        self.title_label.setText(self.title)
+        self.info_label.setText(f"{self.location} • {self.price_display}")
+        self.priority_label.setText(self.priority.upper())
+
+        schedule_text = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}.get(
+            self.schedule, self.schedule.upper()
+        )
+        self.schedule_label.setText(schedule_text)
+        self.schedule_label.setObjectName(_SCHEDULE_OBJECT_NAMES.get(self.schedule, "scheduleDaily"))
+        self.style().unpolish(self.schedule_label)
+        self.style().polish(self.schedule_label)
 
     def toggle(self):
         self.completed = not self.completed

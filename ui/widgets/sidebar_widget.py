@@ -12,10 +12,8 @@ class SidebarWidget(QWidget):
         self.setFixedWidth(190)
 
         self.pages = {
-            "tasks": "tasks",
-            "timers": "timers",
+            "tasks": "todo",
             "plan": "plan",
-            "profile": "profile",
             "settings": "settings",
             "about": "about",
         }
