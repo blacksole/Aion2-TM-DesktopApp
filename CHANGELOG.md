@@ -24,6 +24,16 @@ These features are **not** part of an official update yet and are still under ac
 
 ---
 
+# Version 1.3.2
+
+Release Date: 2026-08-23
+
+## 🐛 Bug Fixes
+
+- **Armory (Beta): icons and item/recipe/skill data missing after installing from the download** — this only affected the installed release build, not running from source. The Item Database, Crafting Calculator and Build Planner now correctly show their icons and item/recipe/skill data after unlocking the Beta Area.
+
+---
+
 # Version 1.3.1
 
 Release Date: 2026-08-23

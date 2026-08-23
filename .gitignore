@@ -6,7 +6,6 @@ __pycache__/
 dist/
 build/
 release/
-*.spec
 profiles/last_profile.txt
 *.db
 *.sqlite

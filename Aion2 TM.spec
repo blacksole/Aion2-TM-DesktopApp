@@ -1,0 +1,70 @@
+# -*- mode: python ; coding: utf-8 -*-
+
+
+a = Analysis(
+    ['main.py'],
+    pathex=[],
+    binaries=[],
+    datas=[
+        ('assets', 'assets'),
+        ('ui/styles.qss', 'ui'),
+        ('ItemDatabase/app.py', 'ItemDatabase'),
+        ('ItemDatabase/styles.qss', 'ItemDatabase'),
+        ('ItemDatabase/assets', 'ItemDatabase/assets'),
+        ('ItemDatabase/data/items_all.json', 'ItemDatabase/data'),
+        ('ItemDatabase/data/recipes_all.json', 'ItemDatabase/data'),
+        ('ItemDatabase/data/skills_all.json', 'ItemDatabase/data'),
+        ('ItemDatabase/data/arcana_info.json', 'ItemDatabase/data'),
+        ('ItemDatabase/data/arcana_class_skills.json', 'ItemDatabase/data'),
+        ('ItemDatabase/data/dungeons_all.json', 'ItemDatabase/data'),
+    ],
+    hiddenimports=['email', 'email.mime', 'email.mime.text', 'email.mime.multipart'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        'tkinter', 'unittest', 'xml', 'xmlrpc', 'pydoc', 'doctest',
+        'difflib', 'multiprocessing', 'concurrent', 'sqlite3',
+        'PySide6.QtBluetooth', 'PySide6.QtNfc', 'PySide6.QtSensors',
+        'PySide6.QtWebEngine', 'PySide6.QtWebEngineCore',
+        'PySide6.QtWebEngineWidgets', 'PySide6.QtWebChannel',
+        'PySide6.QtWebSockets', 'PySide6.Qt3DCore', 'PySide6.Qt3DRender',
+        'PySide6.Qt3DInput', 'PySide6.Qt3DLogic', 'PySide6.Qt3DAnimation',
+        'PySide6.Qt3DExtras', 'PySide6.QtCharts', 'PySide6.QtDataVisualization',
+        'PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
+        'PySide6.QtLocation', 'PySide6.QtPositioning',
+        'PySide6.QtRemoteObjects', 'PySide6.QtScxml',
+        'PySide6.QtSerialPort', 'PySide6.QtSerialBus',
+    ],
+    noarchive=False,
+    optimize=1,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='Aion2 TM',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=['assets\\icons\\aion2_tm_icon.ico'],
+)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='Aion2 TM',
+)

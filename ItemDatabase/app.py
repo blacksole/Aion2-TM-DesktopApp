@@ -45,11 +45,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-# When bundled by PyInstaller (onefile), __file__ points at a temp extraction
-# dir — use the actual .exe's own folder instead, so data/ persists next to it.
+# Two different directories, since PyInstaller (onedir) unpacks read-only
+# bundled files under _internal/ next to the exe, separate from the exe's own
+# folder:
+# - _BUNDLE_DIR: read-only assets/data shipped with the app (icons, static
+#   item/recipe/skill catalogs) -- lives inside _MEIPASS when frozen.
+# - BASE_DIR: writable, persists across restarts (unlike _MEIPASS, which is
+#   re-extracted fresh each launch for onefile builds) -- used for the
+#   IconCache/DetailCache HTTP caches, which the app populates itself.
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _BUNDLE_DIR = Path(sys._MEIPASS) / "ItemDatabase"
+else:
+    _BUNDLE_DIR = Path(__file__).parent
 BASE_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
 
-DATA_PATH = BASE_DIR / "data" / "items_all.json"
+DATA_PATH = _BUNDLE_DIR / "data" / "items_all.json"
 ICON_CACHE_DIR = BASE_DIR / "data" / "icons"
 DETAIL_CACHE_DIR = BASE_DIR / "data" / "details"
 DETAILS_API_URL = "https://shugo.gg/api/items/batch-details"
@@ -62,7 +72,7 @@ NAME_COLUMN = 2
 # game files) — shown until a real item is equipped, then replaced by the
 # item's own icon via IconCache as usual. No matching placeholder found for
 # Brooch1/Brooch2 on that site (skipped, stays blank until equipped).
-_PLACEHOLDER_DIR = BASE_DIR / "assets" / "slot_placeholders"
+_PLACEHOLDER_DIR = _BUNDLE_DIR / "assets" / "slot_placeholders"
 
 _EQUIPMENT_SLOT_PLACEHOLDER = {
     "MainHand": "weapon", "SubHand": "guard", "Helmet": "helm",
@@ -120,7 +130,7 @@ def _gear_type(item: dict) -> str:
 # using real ascending-rarity order Common < Rare < Legend < Unique < Epic
 # (a lower position than the name suggests — "Legend" scales weaker than
 # Unique in the enchant-bonus formulas too, see estimate_enchant_bonus).
-_RARITY_BG_DIR = BASE_DIR / "assets" / "backgrounds_rarity"
+_RARITY_BG_DIR = _BUNDLE_DIR / "assets" / "backgrounds_rarity"
 _RARITY_BG_FILES = {
     "Common": "UT_SlotGrade_Common.webp",
     "Rare": "UT_SlotGrade_Rare.webp",
@@ -1426,9 +1436,9 @@ ARCANA_CATEGORY_LABELS = {"pve": "PvE", "pvp": "PvP", "offense": "Offensiv", "de
 # banners never stretch/shrink oddly next to the card grid.
 _ARCANA_SET_COLUMN_WIDTH = 220
 
-ARCANA_DATA_PATH = BASE_DIR / "data" / "arcana_info.json"
-ARCANA_CLASS_SKILLS_PATH = BASE_DIR / "data" / "arcana_class_skills.json"
-ARCANA_ICON_DIR = BASE_DIR / "assets" / "arcana_icons"
+ARCANA_DATA_PATH = _BUNDLE_DIR / "data" / "arcana_info.json"
+ARCANA_CLASS_SKILLS_PATH = _BUNDLE_DIR / "data" / "arcana_class_skills.json"
+ARCANA_ICON_DIR = _BUNDLE_DIR / "assets" / "arcana_icons"
 
 
 def _load_arcana_theme_map() -> tuple[dict, dict]:
@@ -1987,7 +1997,7 @@ AION2_ACTIVE_CLASSES = [c for c in AION2_CLASSES if c != "Brawler"]
 # Real class emblem artwork — extracted from the game's own UI resources via
 # questlog.gg's public asset mirror (UT_Class_{Name}_Large.webp, converted to
 # PNG). Brawler intentionally excluded per request (not live at launch).
-_CLASS_ICON_DIR = BASE_DIR / "assets" / "class_icons"
+_CLASS_ICON_DIR = _BUNDLE_DIR / "assets" / "class_icons"
 
 
 def _class_icon(class_name: str) -> QIcon | None:
@@ -1999,7 +2009,7 @@ def _class_icon(class_name: str) -> QIcon | None:
 # processed PNGs, not scraped game files) — only the 6 base attributes
 # (STR/AGI/DEX/INT/WIS/CON) exist there; the other 10 "special" stats in the
 # icon grid have no matching real icon and keep the drawn badge instead.
-_STAT_ICON_DIR = BASE_DIR / "assets" / "stat_icons"
+_STAT_ICON_DIR = _BUNDLE_DIR / "assets" / "stat_icons"
 
 
 def _real_stat_icon(stat_id: str, size: int = 44) -> QPixmap | None:
@@ -2015,8 +2025,8 @@ def _real_stat_icon(stat_id: str, size: int = 44) -> QPixmap | None:
 # Real skill data (name/icon/class/description/specializations), scraped
 # from gamers4.life's per-skill database pages (see fetch_skills.py) — icons
 # themselves come from questlog.gg's public asset mirror, converted to PNG.
-SKILLS_DATA_PATH = BASE_DIR / "data" / "skills_all.json"
-SKILL_ICON_DIR = BASE_DIR / "assets" / "skill_icons"
+SKILLS_DATA_PATH = _BUNDLE_DIR / "data" / "skills_all.json"
+SKILL_ICON_DIR = _BUNDLE_DIR / "assets" / "skill_icons"
 
 
 def _load_skills_by_class() -> dict[str, list[dict]]:
@@ -2049,7 +2059,7 @@ def _skill_icon(skill: dict) -> QIcon | None:
 # fetch_recipes.py) — game-specific terms (recipe/material/profession/
 # category names) are never run through tr()/translations.py, per user
 # instruction, until an official in-game translation exists.
-RECIPE_DATA_PATH = BASE_DIR / "data" / "recipes_all.json"
+RECIPE_DATA_PATH = _BUNDLE_DIR / "data" / "recipes_all.json"
 
 # Real professions as shown in-game (user screenshot, 2026-08-23) — order
 # matches the live Crafting UI's own tab order. gamers4.life's own
