@@ -1,17 +1,26 @@
-# 🧪 Beta-Bereich
+# 🧪 Beta Area
 
-Diese Funktionen sind noch **nicht** Teil eines offiziellen Updates und befinden sich in aktiver Entwicklung. Freischaltbar auf eigene Gefahr über Einstellungen → „Beta Bereich freischalten".
+These features are **not** part of an official update yet and are still under active development. Unlockable at your own risk via Settings → "Unlock Beta Area".
 
 ## Armory
 
-### Item-Datenbank
-- Durchsuchbare Item-Datenbank mit Filtern nach Klasse, Kategorie, Rarity und Level.
-- EQ-Prioritätsliste je Ausrüstungs-Slot (Helm, Waffe, Rüstung, …) mit empfohlener Reihenfolge und Rarity-Icons.
+### Item Database
+- Searchable item database with filters for class, category, rarity and level.
+- Equipment priority list per gear slot (helmet, weapon, armor, …) with a recommended order and rarity icons.
 
 ### Crafting Calculator
-- Zeigt zu jedem herstellbaren Item die komplette Materialkette: benötigte Zutaten lassen sich einzeln aufklappen, sofern sie selbst wieder ein Rezept haben.
-- Filter nach Beruf (Schmiedekunst, Rüstungsschmiede, Handwerk, Alchemie, Kochen), Kategorie und Rarity.
-- Material-Icons zeigen den passenden Rarity-Hintergrund (Common/Rare/Unique/Epic/Legend).
+- Shows the full material chain for any craftable item: required ingredients can be expanded individually if they're themselves the result of another recipe.
+- Filter by profession (Blacksmithing, Armorsmithing, Handicrafting, Alchemy, Cooking), category and rarity.
+- Material icons show the matching rarity background (Common/Rare/Unique/Epic/Legend).
+
+### Build Planner
+- Assemble a virtual gear loadout slot by slot, with real item stats.
+- Save multiple named gear sets per class (e.g. "Default", "PvP") and switch between them instantly.
+- GearScore calculated from real item data, including enchant and exceed bonuses.
+- PvP / PvE / Neutral gear filter, linked to a matching toggle on the stat panel.
+- Consolidated stat panel (Main Stats, Sub Stats, Offense, Defense, Utility & Recovery).
+- Skill Planner tab: browse and filter class skills (Active/Passive/Stigma), build a priority list, save multiple named skill builds per class.
+- Arcana tab: browse all 10 card types across the 7 themed sets, with class-specific skill previews per card.
 
 ---
 
@@ -21,29 +30,29 @@ Release Date: 2026-08-21
 
 ## ✨ New Features
 
-### Custom Timer — Sound und Vorwarnung direkt beim Bearbeiten
-- Beim Anlegen oder Bearbeiten eines Custom-Timers kann jetzt direkt ein Benachrichtigungston ausgewählt und per Klick getestet werden.
-- Zusätzlich einstellbar, wie viele Minuten vorher die Benachrichtigung kommen soll (0/1/3/5/10 Min) — vorher wurde ausschließlich exakt bei Ablauf benachrichtigt.
+### Custom Timer — sound and warning time right in the editor
+- When creating or editing a custom timer, you can now pick a notification sound directly and preview it with one click.
+- Also configurable: how many minutes in advance the notification fires (0/1/3/5/10 min) — previously it only notified exactly at expiry.
 
-### Schnellzugriff auf der Timer-Seite
-- Neuer „+"-Button öffnet direkt ein Popup zum Verwalten von Custom-Timern (Kategorien anlegen, Timer hinzufügen/bearbeiten) — ohne Umweg über die Einstellungen.
-- Neues Zahnrad-Symbol springt direkt zu den Timer-Einstellungen.
+### Quick access on the Timer page
+- New "+" button opens a popup for managing custom timers directly (add categories, add/edit timers) — no detour through Settings.
+- New gear icon jumps straight to the timer settings.
 
-## 🎨 UI-Änderungen
+## 🎨 UI Changes
 
-### Profil-Verwaltung aufgeräumt
-- Statt einer eigenen Profil-Seite gibt es jetzt oben links unter dem Avatar einen kleinen „Profile"-Button für den schnellen Profilwechsel.
-- Speichern, Laden, Zurücksetzen, Events leeren, Duplizieren sowie Export/Import eines Profils sind jetzt gebündelt unter Einstellungen → Profile zu finden.
+### Profile management cleaned up
+- Instead of a dedicated profile page, there's now a small "Profile" button under the avatar (top-left) for quick profile switching.
+- Save, load, reset, clear events, duplicate, and export/import a profile are now bundled under Settings → Profiles.
 
-### Tasks und Timers zusammengeführt
-- Statt zwei getrennten Seitenleisten-Einträgen gibt es jetzt einen gemeinsamen Bereich „ToDo" mit zwei größer hervorgehobenen Reitern oben („ToDo" / „Timer"), darunter wie gewohnt Tasks/Shopping.
+### Tasks and Timers merged
+- Instead of two separate sidebar entries, there's now a shared "ToDo" area with two prominent tabs at the top ("ToDo" / "Timer"), with Tasks/Shopping underneath as before.
 
-### „Plan" heißt jetzt „Flow Map"
-- Der Seitenleisten-Eintrag wurde in allen Sprachen von „Plan" zu „Flow Map" umbenannt.
+### "Plan" renamed to "Flow Map"
+- The sidebar entry was renamed from "Plan" to "Flow Map" in all languages.
 
-### Einstellungen — Timer-Bereich neu sortiert
-- Der bisherige „Custom"-Reiter unter Timer-Einstellungen ist entfallen (Verwaltung jetzt über das neue Popup auf der Timer-Seite, siehe oben).
-- Benachrichtigungs-Einstellungen für Shugo/Riss sind jetzt als zweiter Reiter direkt unter Timer zu finden, statt als eigener Menüpunkt.
+### Settings — Timer section reorganized
+- The former "Custom" tab under Timer settings is gone (management now happens via the new popup on the Timer page, see above).
+- Shugo/Rift notification settings now live as a second tab directly under Timer, instead of their own menu entry.
 
 ---
 
@@ -53,32 +62,32 @@ Release Date: 2026-08-20
 
 ## ✨ New Features
 
-### Vorlagen-Suche in der Werkzeugleiste
-- Das Vorlagen-Dropdown beim Hinzufügen von Aufgaben und Einkäufen ist jetzt durchsuchbar: Einfach tippen, um die Liste live zu filtern, statt nur durch eine lange Liste zu scrollen.
+### Template search in the toolbar
+- The template dropdown when adding tasks and shopping entries is now searchable: just type to filter the list live instead of scrolling through a long list.
 
-### Vorlagen-Dialog — Suche und Sortierung nach Ort
-- Der Vorlagen-Dialog (Einkauf und Aufgaben) hat jetzt ein Suchfeld, das die Liste live nach Titel und Ort filtert.
-- Zusätzlich kann jetzt auch nach Ort sortiert werden (neben Name, Priorität, Schedule).
+### Template dialog — search and sort by location
+- The template dialog (Shopping and Tasks) now has a search field that filters the list live by title and location.
+- Sorting by location is now also possible (alongside name, priority, schedule).
 
-### About-Seite — Nützliche Links
-- Neue Sektion mit hilfreichen Tools für Aion2 — aktuell Guildnest (Gilden-Management-Tool mit Discord-Integration).
+### About page — Useful Links
+- New section with helpful tools for Aion 2 — currently Guildnest (guild management tool with Discord integration).
 
-### Flow Map — neues Icon „Money"
-- Ein weiteres Symbol steht bei der Node-Erstellung zur Auswahl.
+### Flow Map — new "Money" icon
+- An additional symbol is available when creating a node.
 
 ## 🐛 Bug Fixes
 
-- **Falsche Symbole in der Flow Map** — Die Icons „Dungeon" und „Broker Market" wurden nach der Auswahl nicht korrekt angezeigt, stattdessen erschien immer das Standard-Symbol. Behoben.
-- **Preisänderungen an Vorlagen wirkten sich nicht auf bereits hinzugefügte Einträge aus** — Wurde z. B. der Preis einer Einkaufs-Vorlage nachträglich geändert, blieben bereits hinzugefügte Listeneinträge auf dem alten Stand. Änderungen an Titel, Ort, Preis, Priorität und Zeitplan einer Vorlage werden jetzt automatisch an alle davon erzeugten Einträge weitergegeben.
-- **Charakter-Zuweisung bei Aufgaben ging optisch verloren** — Wurde einer bestehenden Aufgabe nachträglich ein Charakter zugewiesen, erschien das Charakter-Badge nicht auf der Karte. Behoben.
-- **Ort fehlte bei Aufgaben** — Aufgaben, die aus einer Vorlage mit hinterlegtem Ort erstellt wurden, zeigten diesen Ort nirgends an. Er wird jetzt auf der Aufgaben-Karte angezeigt.
-- **„+"-Symbol beim Verzweigen falsch positioniert** — Beim Heraus- oder Hereinzoomen der Flow Map saß das „+"-Symbol zum Hinzufügen eines neuen Knotens nicht mehr korrekt auf der Verbindungslinie. Behoben.
-- **Heller Hintergrund in den Einstellungen bei Windows-Dunkelmodus** — Die Einstellungs-Seite zeigte unter Windows im Dunkelmodus einen hellen statt dunklen Hintergrund. Behoben.
-- **Abyss Command Shop — falsche Währung** — Die vier Abyss-Command-Vorlagen waren fälschlicherweise mit Abyss Points hinterlegt, obwohl sie mit Kinah gekauft werden. Korrigiert.
+- **Wrong icons in the Flow Map** — the "Dungeon" and "Broker Market" icons weren't displayed correctly after selection, showing the default symbol instead. Fixed.
+- **Price changes to templates didn't apply to already-added entries** — e.g. changing a shopping template's price afterwards left already-added list entries at the old value. Changes to a template's title, location, price, priority and schedule are now automatically propagated to all entries created from it.
+- **Character assignment on tasks visually disappeared** — assigning a character to an existing task afterwards didn't show the character badge on the card. Fixed.
+- **Location missing on tasks** — tasks created from a template with a location set didn't show that location anywhere. It's now shown on the task card.
+- **"+" branch icon misplaced** — zooming the Flow Map in or out left the "+" icon for adding a new node no longer sitting correctly on the connection line. Fixed.
+- **Light background in Settings under Windows dark mode** — the Settings page showed a light instead of dark background under Windows dark mode. Fixed.
+- **Abyss Command Shop — wrong currency** — the four Abyss Command templates were incorrectly set up with Abyss Points, even though they're bought with Kinah. Corrected.
 
-## 🎨 UI-Änderungen
+## 🎨 UI Changes
 
-- **About-Seite — klare Überschriften-Hierarchie**: Seitentitel, Abschnitts-Titel (z. B. „Unterstützen", „Nützliche Links") und Einzeleinträge sind jetzt optisch klar voneinander unterschieden (Größe/Gewichtung).
+- **About page — clear heading hierarchy**: page title, section titles (e.g. "Support", "Useful Links") and individual entries are now visually clearly distinguished (size/weight).
 
 ---
 
@@ -88,25 +97,25 @@ Release Date: 2026-08-15
 
 ## ✨ New Features
 
-### Neue Währungen: Nightmare Points & Shugo Coins
-- Neben Kinah und Abyss Points gibt es jetzt zwei weitere Währungstypen: **NP** (Nightmare Points) und **SC** (Shugo Coins).
-- Einkaufskarten zeigen den Preis korrekt als NP oder SC an.
-- Im Vorlagen-Dialog können Einträge mit der passenden Währung angelegt und bearbeitet werden.
-- Die Einkaufs-Gesamtsumme in der Fortschrittsleiste wird jetzt pro Währung getrennt angezeigt — z. B. „100k Kinah + 52500 AP + 50 NP".
+### New currencies: Nightmare Points & Shugo Coins
+- Alongside Kinah and Abyss Points, there are now two more currency types: **NP** (Nightmare Points) and **SC** (Shugo Coins).
+- Shopping cards display the price correctly as NP or SC.
+- The template dialog lets you create and edit entries with the matching currency.
+- The shopping total in the progress bar is now shown separately per currency — e.g. "100k Kinah + 52500 AP + 50 NP".
 
-### Sprach-spezifische Standard-Profile
-- Es gibt jetzt drei Starter-Profile: **Default [EN]**, **Default [DE]** und **Default [RU]** — je mit übersetzten Vorlage-Einträgen.
-- Beim ersten Start wählt die App automatisch das zur eingestellten Sprache passende Profil.
-- Beim Sprachwechsel innerhalb eines Standard-Profils wechselt die App automatisch zum passenden Sprach-Default.
-- Im Profil-Menü erscheinen Benutzerprofile oben, darunter (getrennt durch eine Linie) die Standard-Profile.
+### Language-specific default profiles
+- There are now three starter profiles: **Default [EN]**, **Default [DE]** and **Default [RU]** — each with translated template entries.
+- On first launch, the app automatically picks the profile matching the configured language.
+- Switching languages within a default profile automatically switches to the matching language default.
+- User profiles appear at the top of the profile menu, with the default profiles below a separator line.
 
-### Shop-Vorlagen — Abyss Command Shop
-- Neue Vorlagen für den Abyss Command Shop: Abyss Command (15.000 AP), Abyss Command: Proficiency (37.500 AP), Elite (75.000 AP), Special Mission (150.000 AP) — alle wöchentlich.
+### Shop templates — Abyss Command Shop
+- New templates for the Abyss Command Shop: Abyss Command (15,000 AP), Abyss Command: Proficiency (37,500 AP), Elite (75,000 AP), Special Mission (150,000 AP) — all weekly.
 
 ## 🐛 Bug Fixes
 
-- **Übersetzung im Aufgaben-Tab unvollständig** — Mehrere Texte im Aufgaben-Tab und im Vorlagen-Dialog wurden bei einer anderen Sprache als Deutsch nicht übersetzt. Alle betroffenen Felder sind jetzt vollständig in das Übersetzungssystem eingebunden.
-- **Profile wurden beim App-Start verändert** — Beim Laden eines Profils wurde dieses automatisch neu gespeichert, was den Zeitstempel aktualisierte und Daten überschreiben konnte. Der automatische Speicheraufruf beim Profilladen wurde entfernt.
+- **Incomplete translation in the Tasks tab** — several texts in the Tasks tab and the template dialog weren't translated in languages other than German. All affected fields are now fully wired into the translation system.
+- **Profiles were modified on app start** — loading a profile automatically re-saved it, updating its timestamp and potentially overwriting data. The automatic save call on profile load was removed.
 
 ---
 
@@ -116,8 +125,8 @@ Release Date: 2026-08-14
 
 ## ✨ New Features
 
-### Profil-Avatar
-- Klick auf den Profilkreis im Header öffnet einen Datei-Dialog (PNG, JPG, WEBP). Das gewählte Bild wird kreisförmig zugeschnitten und als Avatar angezeigt. Der Avatar wird in der lokalen Konfiguration gespeichert und bleibt über Neustarts erhalten.
+### Profile Avatar
+- Clicking the profile circle in the header opens a file dialog (PNG, JPG, WEBP). The chosen image is cropped to a circle and shown as the avatar. The avatar is saved in the local configuration and persists across restarts.
 
 ---
 
@@ -127,21 +136,21 @@ Release Date: 2026-08-14
 
 ## ✨ New Features
 
-### Vorlagen-Dialog — Sortierung mit Richtungsanzeige
-- Im Vorlagen-Dialog (Einkauf und Aufgaben) kann jetzt nach Name, Priorität und Schedule sortiert werden. Ein erneuter Klick auf denselben Button dreht die Sortierrichtung um. Der aktive Button hebt sich farblich hervor und zeigt einen Pfeil (↑ / ↓).
+### Template dialog — sorting with direction indicator
+- The template dialog (Shopping and Tasks) can now be sorted by name, priority and schedule. Clicking the same button again reverses the sort direction. The active button is highlighted and shows an arrow (↑ / ↓).
 
-### Vorlagen-Dialog — Schedule- und Prioritäts-Badges
-- Jede Vorlage in der Liste zeigt jetzt ein farbiges Badge für Schedule (täglich / wöchentlich / Season) und Priorität (LOW / MID / HIGH) — auch bei Einkauf-Vorlagen, die nicht als Allgemein markiert sind.
+### Template dialog — schedule and priority badges
+- Every template in the list now shows a colored badge for schedule (daily / weekly / season) and priority (LOW / MID / HIGH) — including shopping templates not marked as general.
 
-### Preisfeld — Hinweis auf K-Einheit
-- Der Platzhaltertext im Preisfeld lautet jetzt „Preis (in K)", damit klar ist, dass der Preis in Tausend-Schritten (Kinah) angegeben wird.
+### Price field — hint about the K unit
+- The price field's placeholder text now reads "Price (in K)", making it clear the price is entered in thousands (Kinah).
 
 ## 🐛 Bug Fixes
 
-- **Aufgaben aus Charakter-Nodes fehlten in der Aufgabenliste** — Aufgaben (type: task), die einem Charakter-Node zugewiesen wurden, landeten fälschlicherweise in der Einkaufsliste. Sie werden jetzt korrekt als Aufgabenkarten in der Aufgabenliste angezeigt.
-- **Charakter-Dropdown zeigte keine Einträge** — Nach dem Laden eines Profils oder nach dem Profilwechsel blieb das Charakter-Dropdown leer. Es wird jetzt nach jedem Sync und nach dem Profilladen korrekt befüllt.
-- **Flackern beim Speichern eines Nodes** — Beim Speichern einer Node-Karte wurden alle Karten neu aufgebaut, was zu einem sichtbaren Flackern führte. Es wird jetzt nur noch die betroffene Karte aktualisiert.
-- **Flackern beim Öffnen der Flow Map** — Overlay-Positionen wurden verzögert gesetzt, was beim Öffnen des Fensters kurz aufflackerte. Die Positionierung erfolgt jetzt direkt beim Resize-Event.
+- **Tasks from character nodes were missing from the task list** — tasks (type: task) assigned to a character node incorrectly ended up in the shopping list. They're now correctly shown as task cards in the task list.
+- **Character dropdown showed no entries** — after loading a profile or switching profiles, the character dropdown stayed empty. It's now populated correctly after every sync and after profile load.
+- **Flicker when saving a node** — saving a node card rebuilt all cards, causing a visible flicker. Only the affected card is now updated.
+- **Flicker when opening the Flow Map** — overlay positions were set with a delay, causing a brief flicker when opening the window. Positioning now happens directly on the resize event.
 
 ---
 
@@ -151,44 +160,44 @@ Release Date: 2026-08-14
 
 ## ✨ New Features
 
-### Aufgaben-Tab — Komplett überarbeitet
-- "Tägl. Aufgaben" und "Wöch. Aufgaben" wurden zu einem einzigen "Aufgaben"-Tab zusammengeführt. Daily, Weekly und Season lassen sich per Filter umschalten — genau wie im Einkauf.
-- Aufgaben sind jetzt vorlagenbasiert: Man wählt eine Vorlage aus dem Dropdown, setzt Schedule, Priorität und optional einen Charakter.
-- Der Vorlagen-Dialog hat jetzt zwei Tabs: "Einkauf" und "Aufgaben". Aufgaben-Vorlagen haben keinen Preis — nur Titel, Kategorie und optionale Charakter-Zuweisung.
-- Der Vorlagen-Dialog öffnet automatisch den Tab, der dem aktuell aktiven Aufgaben-Tab entspricht.
+### Tasks tab — completely reworked
+- "Daily Tasks" and "Weekly Tasks" were merged into a single "Tasks" tab. Daily, Weekly and Season can be switched via filter — exactly like in Shopping.
+- Tasks are now template-based: pick a template from the dropdown, set schedule, priority and optionally a character.
+- The template dialog now has two tabs: "Shopping" and "Tasks". Task templates have no price — only title, category and an optional character assignment.
+- The template dialog automatically opens the tab matching the currently active tasks tab.
 
-### Flow Map — Liste bearbeiten
-- Der Charakter-Node hat jetzt eine "Liste bearbeiten"-Schaltfläche, die einen Dialog mit zwei Tabs öffnet: "Einkauf" und "Aufgaben". Vorlagen beider Typen können direkt dort zugewiesen werden.
-- Items und Aufgaben aus dem Flow-Plan erscheinen automatisch in den entsprechenden Listen. Die Synchronisation erfolgt beim Speichern und beim Laden des Profils.
+### Flow Map — edit list
+- The character node now has an "Edit list" button that opens a dialog with two tabs: "Shopping" and "Tasks". Templates of both types can be assigned directly there.
+- Items and tasks from the Flow plan automatically appear in the matching lists. Synchronization happens on save and on profile load.
 
 ### Season
-- In den Timer-Einstellungen lässt sich das Season-Ende als Datum + Uhrzeit eintragen.
-- Der Season-Countdown erscheint in der Timer-Übersicht als eigene Karte und im Aufgaben-/Einkauf-Tab, sobald der Season-Filter aktiv ist.
+- The Season end can now be entered as a date + time in the timer settings.
+- The Season countdown appears as its own card in the timer overview and in the Tasks/Shopping tab once the Season filter is active.
 
-### Shopping — Reset-Timer je nach Filter
-- Der Reset-Countdown im Einkauf-Tab passt sich dem aktiven Filter an: Daily → Tages-Countdown, Weekly → Wochen-Countdown, Season → Countdown bis Season-Ende. Bei "Alle" wird kein Timer angezeigt.
+### Shopping — reset timer per filter
+- The reset countdown in the Shopping tab now adapts to the active filter: Daily → daily countdown, Weekly → weekly countdown, Season → countdown to Season end. No timer is shown for "All".
 
-### Vorlagen — Priorität & Schedule beim Anhaken
-- Beim Anhaken einer Vorlage öffnet sich ein Popup, in dem Anzahl, Priorität und Schedule direkt angepasst werden können — vorausgefüllt mit den gespeicherten Vorlagenwerten.
+### Templates — priority & schedule when checking off
+- Checking off a template now opens a popup where amount, priority and schedule can be adjusted directly — pre-filled with the saved template values.
 
-### Preisfelder — k-Notation
-- Preisfelder akzeptieren jetzt die Kurzschreibweise: `42k`, `1.5k` etc. — sowohl für Kinah als auch für AP.
+### Price fields — k notation
+- Price fields now accept shorthand notation: `42k`, `1.5k` etc. — for both Kinah and AP.
 
 ## 🐛 Bug Fixes
 
-- **Node-Klick unzuverlässig** — Klicks im unteren Bereich einer Node-Karte wurden nicht erkannt. Behoben.
-- **Einkaufsliste zeigte keine Einträge** — Vorhandene Einträge wurden nach bestimmten Aktionen nicht mehr angezeigt, obwohl sie noch gespeichert waren. Behoben.
-- **Flow Map: Negative Größen beim Start** — Beim Öffnen der Flow Map wurden Qt-Warnungen über negative Widget-Größen ausgelöst, weil das Resize-Event feuerte bevor das Fenster vollständig aufgebaut war. Behoben.
+- **Unreliable node clicks** — clicks in the lower area of a node card weren't recognized. Fixed.
+- **Shopping list showed no entries** — existing entries stopped displaying after certain actions, even though they were still saved. Fixed.
+- **Flow Map: negative sizes on startup** — opening the Flow Map triggered Qt warnings about negative widget sizes, because the resize event fired before the window was fully built. Fixed.
 
-## 🎨 UI-Änderungen
+## 🎨 UI Changes
 
-- **Overlay**: Jede Zeile zeigt `[Task]` oder `[Shop]` als Typ, ein Schedule-Badge (D / W / S) und — bei Einkaufseinträgen mit Charakterzuweisung — den Charakternamen.
-- **Liste bearbeiten — Dialog**: Einträge werden jetzt als einzelne Karten mit Rahmen dargestellt, passend zum restlichen Design. Die Listenbereich ist größer, der Dialog breiter und luftiger.
-- **Liste bearbeiten — Schließen**: Der Button ist jetzt neutral gestaltet statt blau, um ihn klar vom Hinzufügen-Button zu unterscheiden.
-- **Löschen-Button**: Zeigt jetzt × statt des Papierkorb-Symbols.
-- **Charakter-Auswahl**: Das Dropdown zeigt "Char" als Platzhalter. Der erste Eintrag ist nicht wählbar. Nach dem Hinzufügen wird die Auswahl automatisch zurückgesetzt.
-- **Root-Node**: Zeigt immer das Home-Symbol, unabhängig von der gespeicherten Einstellung.
-- **Charakter-Node-Editor**: Das Charakter-Symbol kann im Startknoten nicht mehr ausgewählt werden.
+- **Overlay**: every row shows `[Task]` or `[Shop]` as the type, a schedule badge (D / W / S) and — for shopping entries with a character assigned — the character name.
+- **Edit list — dialog**: entries are now shown as individual bordered cards, matching the rest of the design. The list area is larger, the dialog wider and more spacious.
+- **Edit list — close**: the button is now styled neutrally instead of blue, to clearly distinguish it from the add button.
+- **Delete button**: now shows × instead of the trash can icon.
+- **Character selection**: the dropdown shows "Char" as a placeholder. The first entry isn't selectable. The selection resets automatically after adding.
+- **Root node**: always shows the home icon, regardless of the saved setting.
+- **Character node editor**: the character icon can no longer be selected on the start node.
 
 ---
 
@@ -198,8 +207,8 @@ Release Date: 2026-08-10
 
 ## 🐛 Bug Fixes
 
-- **Auto-Update: Update wurde nicht übernommen** — Das v0.9.7-Release-ZIP enthielt durch einen Build-Fehler nur `Aion2.exe` statt `Aion2 TM.exe` + `_internal/`. Robocopy kopierte daher nur eine fremde Datei in den App-Ordner — `_internal/` und `Aion2 TM.exe` blieben unverändert. Korrekter Ablauf jetzt: ZIP herunterladen → `_internal/` Inhalte ersetzen → `Aion2 TM.exe` überschreiben → `Aion2 TM.exe` neu starten.
-- **Auto-Update: Neustart auf `Aion2 TM.exe` hardcodiert** — Der Updater leitete den Neustart-EXE-Namen bisher dynamisch aus `sys.executable` ab, was zu falschen Starts führen konnte. Der EXE-Name ist jetzt fest auf `Aion2 TM.exe` gesetzt.
+- **Auto-Update: update wasn't applied** — the v0.9.7 release ZIP, due to a build error, only contained `Aion2.exe` instead of `Aion2 TM.exe` + `_internal/`. Robocopy therefore only copied an unrelated file into the app folder — `_internal/` and `Aion2 TM.exe` stayed unchanged. Correct flow now: download ZIP → replace `_internal/` contents → overwrite `Aion2 TM.exe` → restart `Aion2 TM.exe`.
+- **Auto-Update: restart hardcoded to `Aion2 TM.exe`** — the updater previously derived the restart EXE name dynamically from `sys.executable`, which could lead to the wrong file being started. The EXE name is now fixed to `Aion2 TM.exe`.
 
 ---
 
@@ -209,13 +218,13 @@ Release Date: 2026-08-10
 
 ## 🐛 Bug Fixes
 
-- **Profilordner-Wechsel lädt falsches Profil** — Nach dem Wechsel des Profilordners wurde `last_profile.txt` ausgelesen, die auf einen absoluten Pfad im alten Ordner zeigen konnte. Dadurch wurden Timer, Tasks, Shopping und Plan nicht aktualisiert. Jetzt wird immer direkt das beste Profil aus dem neuen Ordner geladen (erstes Nicht-Default-Profil, Fallback auf Default).
-- **PyInstaller: styles.qss nicht gefunden** — `load_styles` nutzt jetzt `sys._MEIPASS` im kompilierten Build, sodass die QSS-Datei im Bundle korrekt gefunden wird.
-- **Update-Angebot ohne gültiges Asset** — Der Update-Checker bot Updates an, auch wenn kein kompiliertes Release-Asset (`.zip`/`.exe`) vorhanden war. In dem Fall wurde das GitHub Source-Archiv heruntergeladen, das eine PyInstaller-Exe nicht aktualisieren kann. Jetzt wird das Update nur angeboten, wenn ein gültiges Asset existiert.
+- **Switching the profile folder loaded the wrong profile** — after changing the profile folder, `last_profile.txt` was read even though it could point to an absolute path in the old folder. As a result, Timer, Tasks, Shopping and Plan weren't updated. Now the best profile from the new folder is always loaded directly (first non-default profile, falling back to Default).
+- **PyInstaller: styles.qss not found** — `load_styles` now uses `sys._MEIPASS` in the compiled build, so the QSS file is found correctly inside the bundle.
+- **Update offered without a valid asset** — the update checker offered updates even when no compiled release asset (`.zip`/`.exe`) existed. In that case, the GitHub source archive was downloaded, which can't update a PyInstaller exe. The update is now only offered when a valid asset exists.
 
 ## 🔧 Improvements
 
-- **Build- und Release-Scripts** — `scripts/build_exe.bat` baut die Exe via PyInstaller. `scripts/create_release.bat` baut, erstellt das ZIP und lädt es automatisch als GitHub Release Asset hoch (`gh` CLI erforderlich).
+- **Build and release scripts** — `scripts/build_exe.bat` builds the exe via PyInstaller. `scripts/create_release.bat` builds it, creates the ZIP and automatically uploads it as a GitHub release asset (`gh` CLI required).
 
 ---
 
@@ -225,11 +234,11 @@ Release Date: 2026-08-10
 
 ## 🐛 Bug Fixes
 
-- **Custom Timer: Profil wurde zu früh gespeichert** — In `apply_settings_from_page` wurde `save_profile` aufgerufen, bevor `custom_timers` und `timer_categories` in den App-State übernommen wurden. Dadurch gingen beim nächsten App-Start aktivierte Timer und Kategorien verloren (Profil enthielt noch den alten Stand). Das `save_profile`-Call wurde ans Ende der Funktion verschoben, sodass immer der vollständige, aktuelle Stand gespeichert wird.
+- **Custom Timer: profile was saved too early** — `save_profile` was called before `custom_timers` and `timer_categories` were applied to the app state. This lost activated timers and categories on the next app start (the profile still held the old state). The `save_profile` call was moved to the end of the function so the complete, current state is always saved.
 
 ## 🔧 Improvements
 
-- **Custom Timer Dialog: Feldreihenfolge im Custom-Tab** — Im "Custom"-Modus-Tab erscheint jetzt zuerst das **Start**-Feld (Startuhrzeit), danach das **Intervall**-Feld. Logischere Lesereihenfolge: erst wann, dann wie oft.
+- **Custom Timer dialog: field order in the Custom tab** — the **Start** field (start time) now appears first in the "Custom" mode tab, followed by the **Interval** field. More logical reading order: when first, then how often.
 
 ---
 
@@ -239,9 +248,9 @@ Release Date: 2026-08-10
 
 ## ✨ New Features
 
-- **Timer-Kategorien** — Custom Timer können jetzt in Kategorien (Überschriften) gruppiert werden. Bis zu 4 Kategorien (1 Standard + 3 weitere) können in den Timer-Einstellungen verwaltet werden (hinzufügen, umbenennen, löschen). Beim Anlegen oder Bearbeiten eines Timers wählt man die gewünschte Kategorie. Auf der Timer-Übersichtsseite erscheinen die Timer-Karten unter der jeweiligen Kategorieüberschrift.
-- **Max. 8 Custom Timer** — Die bisherige Beschränkung auf 2 Custom Timer entfällt. Es können jetzt bis zu 8 Timer verwaltet werden, frei auf Kategorien verteilt.
-- **Custom Timer Start-Uhrzeit** — Beim Anlegen eines neuen Custom Timers wird die aktuelle Uhrzeit automatisch als Standard-Startzeitpunkt übernommen.
+- **Timer categories** — custom timers can now be grouped into categories (headings). Up to 4 categories (1 default + 3 more) can be managed in the timer settings (add, rename, delete). The desired category is chosen when creating or editing a timer. On the timer overview page, timer cards appear under their category heading.
+- **Max. 8 custom timers** — the previous limit of 2 custom timers is gone. Up to 8 timers can now be managed, freely distributed across categories.
+- **Custom Timer start time** — creating a new custom timer now automatically pre-fills the current time as the default start time.
 
 ---
 
@@ -251,16 +260,16 @@ Release Date: 2026-08-06
 
 ## ✨ New Features
 
-- **Custom Timer: 4 Modi** — Der Custom Timer Dialog wurde vollständig überarbeitet. Statt eines einzigen Anzeigeformats gibt es jetzt vier klar getrennte Modi:
-  - **Daily** — Countdown bis zu einer konfigurierten Tageszeit (täglich wiederholend), wie der Daily-Reset-Timer.
-  - **Weekly** — Countdown bis zu einem bestimmten Wochentag + Uhrzeit (wöchentlich wiederholend), wie der Weekly-Reset-Timer inkl. Tages-Buttons (Mo–So).
-  - **Hourly** — Intervall-Timer (1–6 h Schnellauswahl oder manuelle HH:mm-Eingabe per Stift-Button).
-  - **Custom** — Sekundengenaues Intervall via HH:mm:ss-Eingabe.
-- Modus-Buttons ersetzen das bisherige Anzeigeformat-Dropdown. Die Übersichtszeile in den Timer-Einstellungen zeigt je nach Modus eine passende Zusammenfassung (z.B. "Täglich 09:00", "Wöchentlich Di 09:00", "Alle 2h", "01:30:00").
+- **Custom Timer: 4 modes** — the Custom Timer dialog was completely reworked. Instead of a single display format, there are now four clearly separated modes:
+  - **Daily** — countdown to a configured time of day (repeating daily), like the Daily Reset timer.
+  - **Weekly** — countdown to a specific weekday + time (repeating weekly), like the Weekly Reset timer, including weekday buttons (Mo–Su).
+  - **Hourly** — interval timer (1–6 h quick-select or manual HH:mm entry via a pencil button).
+  - **Custom** — second-accurate interval via HH:mm:ss entry.
+- Mode buttons replace the previous display-format dropdown. The summary line in the timer settings shows a matching summary depending on the mode (e.g. "Daily 09:00", "Weekly Tue 09:00", "Every 2h", "01:30:00").
 
 ## 🐛 Bug Fixes
 
-- **Weekly-Reset feuert jetzt beim App-Start** — Der wöchentliche Reset wurde bisher nur ausgelöst, wenn die App exakt am konfigurierten Wochentag lief. Startet man die App an einem anderen Tag (z.B. Donnerstag), nachdem der Reset-Zeitpunkt (Mittwoch 09:00) bereits verstrichen war, feuerte der Reset nie. Jetzt wird beim Start geprüft, ob der letzte Reset-Zeitpunkt seit dem gespeicherten Datum verstrichen ist — unabhängig vom heutigen Wochentag.
+- **Weekly Reset now fires on app start** — the weekly reset previously only triggered if the app was running exactly on the configured weekday. Starting the app on a different day (e.g. Thursday) after the reset time (Wednesday 09:00) had already passed meant the reset never fired. The app now checks on startup whether the last reset time has elapsed since the saved date — regardless of today's weekday.
 
 ---
 
@@ -740,43 +749,43 @@ Release Date: 2026-06-15
 
 ## Flow Map
 
-* Neues Zoom-System für die Flow Map integriert.
-* Aktuellen Zoomwert in der Topbar ergänzt (`Ctrl + Wheel | Zoom XX%`).
-* Zoom-Anzeige wird nun dynamisch bei Änderungen aktualisiert.
-* Verbesserte Darstellung der Node-Karten bei verschiedenen Zoomstufen.
-* Vorbereitung für automatische Zentrierung der Flow-Struktur im Viewport.
+* Integrated a new zoom system for the Flow Map.
+* Added the current zoom value to the topbar (`Ctrl + Wheel | Zoom XX%`).
+* The zoom display now updates dynamically on change.
+* Improved node card rendering at different zoom levels.
+* Groundwork for automatically centering the flow structure in the viewport.
 
 ## Flow Editor
 
-* Node Editor Panel überarbeitet.
-* Ein- und Ausklappen des Editor-Panels optimiert.
-* Verbesserte Symbolauswahl mit Icon-Vorschau.
-* Speicherung von Titel, Beschreibung und Symbol direkt aus dem Editor möglich.
+* Reworked the Node Editor panel.
+* Optimized collapsing/expanding the editor panel.
+* Improved icon selection with icon preview.
+* Title, description and icon can now be saved directly from the editor.
 
 ## Navigation & Tools
 
-* Tool-System für Select, Add Node, Branch und Delete erweitert.
-* Individuelle Cursor für alle Flow-Werkzeuge hinzugefügt.
-* Hover-Feedback für Node-Aktionen verbessert.
+* Extended the tool system for Select, Add Node, Branch and Delete.
+* Added individual cursors for all Flow tools.
+* Improved hover feedback for node actions.
 
 ## Debug & Development
 
-* Erweiterte Maus- und Container-Debuganzeige im Footer.
-* Anzeige von Content-, Map- und Container-Koordinaten ergänzt.
-* Unterstützung zur Analyse von Viewport-, Map- und Node-Positionen hinzugefügt.
-* Mehrere Darstellungsprobleme bei Viewport und Node-Rendering behoben.
+* Extended mouse and container debug display in the footer.
+* Added display of content, map and container coordinates.
+* Added support for analyzing viewport, map and node positions.
+* Fixed several rendering issues with the viewport and node rendering.
 
 ## UI
 
-* Verbesserte Darstellung der rechten Seitenleiste.
-* Optimierungen bei Größenanpassung und Overlay-Positionierung.
-* Footer-Informationen erweitert und übersichtlicher gestaltet.
+* Improved rendering of the right sidebar.
+* Optimizations to sizing and overlay positioning.
+* Expanded and cleaned up footer information.
 
 ## Fixes
 
-* Problem behoben, bei dem Nodes zeitweise nicht sichtbar waren.
-* Diverse Layout- und Rendering-Probleme in der Flow Map korrigiert.
-* Stabilitätsverbesserungen beim Neurendern des Flows.
+* Fixed an issue where nodes were temporarily invisible.
+* Fixed various layout and rendering issues in the Flow Map.
+* Stability improvements when re-rendering the flow.
 
 
 # Version 0.6.2
