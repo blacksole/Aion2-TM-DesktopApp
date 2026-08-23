@@ -9,8 +9,10 @@ from PySide6.QtCore import Signal, QTime, QDate, QDateTime, QSize, Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QDateEdit, QButtonGroup, QGridLayout,
-    QFileDialog, QLineEdit, QScrollArea, QTabWidget,
+    QFileDialog, QLineEdit, QScrollArea, QTabWidget, QMessageBox,
 )
+
+from core.version import CURRENT_BETA_FEATURE_NAME
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
 
@@ -194,6 +196,37 @@ class SettingsPage(QWidget):
         else:
             btn.setText("On" if checked else "Off")
 
+    def _on_armory_beta_toggled(self, checked: bool):
+        if checked and not self._confirm_armory_beta_warning():
+            # User backed out -- revert without re-triggering this same
+            # handler (blockSignals avoids recursing into itself).
+            self.armory_beta_btn.blockSignals(True)
+            self.armory_beta_btn.setChecked(False)
+            self.armory_beta_btn.blockSignals(False)
+            checked = False
+        self._set_toggle(self.armory_beta_btn, checked)
+
+    def _confirm_armory_beta_warning(self) -> bool:
+        lang, tr_func = self._cur_lang, self._cur_tr
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(tr_func(lang, "armory_beta_warning_title") if tr_func else "Enable Beta area?")
+        box.setText(tr_func(lang, "armory_beta_warning_body") if tr_func else "This area is still under development.")
+        confirm_btn = box.addButton(
+            tr_func(lang, "armory_beta_confirm_btn") if tr_func else "Enable",
+            QMessageBox.ButtonRole.AcceptRole,
+        )
+        cancel_btn = box.addButton(
+            tr_func(lang, "cancel") if tr_func else "Cancel",
+            QMessageBox.ButtonRole.RejectRole,
+        )
+        # Cancel as the default (Enter-triggered) button -- this isn't a
+        # routine confirmation, better to require a deliberate click on
+        # the riskier "Enable" option.
+        box.setDefaultButton(cancel_btn)
+        box.exec()
+        return box.clickedButton() is confirm_btn
+
     def update_language(self, language: str, tr_func):
         self._cur_lang = language
         self._cur_tr = tr_func
@@ -274,6 +307,12 @@ class SettingsPage(QWidget):
         self.update_check_title.setText(tr_func(language, "check_updates"))
         self.update_check_desc.setText(tr_func(language, "check_updates_desc"))
         self.check_update_btn.setText(tr_func(language, "check_updates_btn"))
+
+        self.beta_update_title.setText(tr_func(language, "armory_beta_unlock_title"))
+        self.beta_update_desc.setText(
+            tr_func(language, "armory_beta_unlock_desc", area=CURRENT_BETA_FEATURE_NAME)
+        )
+        self._update_toggle_text(self.armory_beta_btn, self.armory_beta_btn.isChecked(), language, tr_func)
 
         # ===== RESET TIMER =====
 
@@ -886,6 +925,7 @@ class SettingsPage(QWidget):
             "show_events": self.show_events_btn.isChecked(),
             "auto_save": self.auto_save_btn.isChecked(),
             "minimize_to_tray": self.tray_minimize_btn.isChecked(),
+            "armory_beta_enabled": self.armory_beta_btn.isChecked(),
             "dps_meter_path": self.dps_path_input.text().strip(),
             "dps_meter_autostart": self.dps_autostart_btn.isChecked(),
 
@@ -1204,6 +1244,35 @@ class SettingsPage(QWidget):
         update_layout.addLayout(update_text, 1)
         update_layout.addWidget(self.check_update_btn)
 
+        # ===== ARMORY BETA UNLOCK ROW =====
+        # Self-service opt-in instead of a separate beta branch/build: any
+        # user can flip this on themselves, at their own risk (warning
+        # dialog on enable, see _on_armory_beta_toggled) -- whichever area
+        # is "the current beta thing" is named via core.version's
+        # CURRENT_BETA_FEATURE_NAME, not baked into the translated text,
+        # since that changes as development moves on.
+        beta_update_row = QFrame()
+        beta_update_row.setObjectName("settingsRow")
+        beta_update_layout = QHBoxLayout(beta_update_row)
+        beta_update_layout.setContentsMargins(14, 12, 14, 12)
+        beta_update_layout.setSpacing(12)
+        beta_update_text = QVBoxLayout()
+        beta_update_text.setSpacing(2)
+        self.beta_update_title = QLabel()
+        self.beta_update_title.setObjectName("settingsLabel")
+        self.beta_update_desc = QLabel()
+        self.beta_update_desc.setObjectName("settingsDescription")
+        self.beta_update_desc.setWordWrap(True)
+        beta_update_text.addWidget(self.beta_update_title)
+        beta_update_text.addWidget(self.beta_update_desc)
+        self.armory_beta_btn = QPushButton("Off")
+        self.armory_beta_btn.setCheckable(True)
+        self.armory_beta_btn.setObjectName("toggleButton")
+        self.armory_beta_btn.setFixedWidth(70)
+        self.armory_beta_btn.toggled.connect(self._on_armory_beta_toggled)
+        beta_update_layout.addLayout(beta_update_text, 1)
+        beta_update_layout.addWidget(self.armory_beta_btn)
+
         # ===== DPS METER ROW =====
         dps_row = QFrame()
         dps_row.setObjectName("settingsRow")
@@ -1283,6 +1352,7 @@ class SettingsPage(QWidget):
         layout.addWidget(tray_row)
         layout.addWidget(dps_row)
         layout.addWidget(update_row)
+        layout.addWidget(beta_update_row)
         layout.addStretch()
 
         return page
@@ -1306,6 +1376,16 @@ class SettingsPage(QWidget):
             v = bool(data.get("minimize_to_tray", False))
             self.tray_minimize_btn.setChecked(v)
             self._set_toggle(self.tray_minimize_btn, v)
+
+        if hasattr(self, "armory_beta_btn"):
+            v = bool(data.get("armory_beta_enabled", False))
+            # blockSignals: restoring a saved "on" state on startup must
+            # NOT re-show the warning dialog -- that only makes sense when
+            # the user actually flips the switch themselves.
+            self.armory_beta_btn.blockSignals(True)
+            self.armory_beta_btn.setChecked(v)
+            self.armory_beta_btn.blockSignals(False)
+            self._set_toggle(self.armory_beta_btn, v)
 
         # Language
         if hasattr(self, "language_combo"):

@@ -3,5 +3,6 @@
   "dps_meter_path": "",
   "dps_meter_autostart": false,
   "minimize_to_tray": false,
+  "armory_beta_enabled": false,
   "avatar": ""
 }

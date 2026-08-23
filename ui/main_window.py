@@ -15,6 +15,7 @@ from .widgets.template_dialog import TemplateDialog
 from .pages.tasks_page import TasksPage
 from .pages.timers_page import TimersPage
 from .pages.todo_tabs_page import TodoTabsPage
+from .pages.armory_page import ArmoryPage
 from .pages.settings_page import SettingsPage
 from .pages.dashboard_page import DashboardPage
 from .pages.about_page import AboutPage
@@ -22,12 +23,13 @@ from .flow.flow_app_window import FlowMapWindow
 from .overlay.overlay_window import OverlayWindow
 from core.translations import tr
 from core.update_checker import UpdateChecker
+from core.version import ARMORY_ENABLED
 from PySide6.QtWidgets import QTimeEdit
 from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QMenu, QComboBox, QStackedWidget, QFileDialog, QMessageBox,
-    QSystemTrayIcon, QInputDialog,
+    QSystemTrayIcon, QInputDialog, QApplication,
 )
 from datetime import datetime, timedelta
 from PySide6.QtCore import QTimer
@@ -214,6 +216,10 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self._log_about_to_quit)
+
         self.auto_save = True
         self._pending_update = None
         self._checker = None
@@ -253,6 +259,7 @@ class MainWindow(QMainWindow):
         self.dps_meter_path = ""
         self.dps_meter_autostart = False
         self.minimize_to_tray = None  # None = not asked yet
+        self.armory_beta_enabled = False  # self-service opt-in, see _update_armory_visibility
         self._avatar_b64 = ""
         self.characters: list = []
 
@@ -297,6 +304,8 @@ class MainWindow(QMainWindow):
 
         self.flow_maps: dict = {}
         self.active_flow_map_name: str = "Map 1"
+
+        self.item_database_window = None
 
         self.flow_map_window = FlowMapWindow(self, language=self.language, tr_func=tr)
         self.flow_map_window.map_switch_requested.connect(self._switch_flow_map)
@@ -531,6 +540,42 @@ class MainWindow(QMainWindow):
         self.flow_map_window.raise_()
         self.flow_map_window.activateWindow()
 
+    def _ensure_item_database_window(self):
+        if self.item_database_window is None:
+            import importlib.util
+
+            if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+                # Bundled datas extract under _MEIPASS (onedir: the _internal/ folder), not next to the exe.
+                db_dir = Path(sys._MEIPASS) / "ItemDatabase"
+            else:
+                db_dir = self.project_root / "ItemDatabase"
+            spec = importlib.util.spec_from_file_location("item_database_app", db_dir / "app.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            # No Qt parent on purpose: an owned top-level window on Windows
+            # shares the owner's taskbar entry, and closing it can leave the
+            # whole app looking "minimized" until something restores focus.
+            # This window's lifetime is already managed explicitly via this
+            # singleton attribute, not by Qt parent-child ownership.
+            self.item_database_window = module.create_window(parent=None)
+
+        return self.item_database_window
+
+    def open_item_database_window(self):
+        window = self._ensure_item_database_window()
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def open_build_planner_window(self):
+        window = self._ensure_item_database_window()
+        window.open_loadout_window()
+
+    def open_crafting_calculator_window(self):
+        window = self._ensure_item_database_window()
+        window.open_crafting_calculator()
+
     def _switch_flow_map(self, name: str):
         if name == self.active_flow_map_name or not name:
             return
@@ -663,6 +708,19 @@ class MainWindow(QMainWindow):
     
     def _setup_sidebar(self):
         self.sidebar = SidebarWidget()
+        self._update_armory_visibility()
+
+    def _update_armory_visibility(self):
+        # Item Database / Crafting Calculator / Build Planner: either
+        # fully released (ARMORY_ENABLED, see core/version.py) or reached
+        # early via the self-service "Beta Bereich freischalten" toggle in
+        # Settings (armory_beta_enabled, opt-in at the user's own risk).
+        # Called both at startup and whenever that setting changes, so the
+        # nav entry updates live without needing a restart.
+        show = ARMORY_ENABLED or self.armory_beta_enabled
+        self.sidebar.buttons["armory"].setVisible(show)
+        self.sidebar.set_armory_beta_marked(show and not ARMORY_ENABLED)
+        self.sidebar.update_language(self.language, tr)
 
 
     def _setup_pages(self):
@@ -676,18 +734,21 @@ class MainWindow(QMainWindow):
 
         self.timers_page = TimersPage()
         self.todo_page = TodoTabsPage(self.tasks_page, self.timers_page)
+        self.armory_page = ArmoryPage()
         self.settings_page = SettingsPage()
         self.about_page = AboutPage()
 
         self.page_indexes = {
             "dashboard": 0,
             "tasks": 1,
-            "settings": 2,
-            "about": 3,
+            "armory": 2,
+            "settings": 3,
+            "about": 4,
         }
 
         self.page_stack.addWidget(self.dashboard_page)
         self.page_stack.addWidget(self.todo_page)
+        self.page_stack.addWidget(self.armory_page)
         self.page_stack.addWidget(self.settings_page)
         self.page_stack.addWidget(self.about_page)
 
@@ -722,6 +783,10 @@ class MainWindow(QMainWindow):
 
         self.timers_page.manage_timers_requested.connect(self.open_custom_timer_manager)
         self.timers_page.timer_settings_requested.connect(self.open_timer_settings)
+
+        self.armory_page.open_item_database_requested.connect(self.open_item_database_window)
+        self.armory_page.open_crafting_calculator_requested.connect(self.open_crafting_calculator_window)
+        self.armory_page.open_build_planner_requested.connect(self.open_build_planner_window)
 
         if hasattr(self.settings_page, "theme_changed"):
             self.settings_page.theme_changed.connect(
@@ -1309,9 +1374,20 @@ class MainWindow(QMainWindow):
         self._force_quit = True
         self.close()
 
+    def _log_about_to_quit(self):
+        app = QApplication.instance()
+        widgets = app.topLevelWidgets() if app else []
+        print("[MainWindow] aboutToQuit fired. Top-level widgets still around:")
+        for w in widgets:
+            print(f"    - {type(w).__name__} (visible={w.isVisible()})")
+
     def closeEvent(self, event):
+        print(f"[MainWindow] closeEvent (force_quit={getattr(self, '_force_quit', False)}, "
+              f"minimize_to_tray={self.minimize_to_tray})")
         if getattr(self, "_force_quit", False):
+            self.save_profile(silent=True)
             event.accept()
+            QApplication.instance().quit()
             return
 
         if self.minimize_to_tray is True:
@@ -1350,10 +1426,14 @@ class MainWindow(QMainWindow):
             else:
                 self.minimize_to_tray = False
                 self._save_app_config()
+                self.save_profile(silent=True)
                 event.accept()
+                QApplication.instance().quit()
             return
 
+        self.save_profile(silent=True)
         event.accept()
+        QApplication.instance().quit()
 
     def _launch_dps_meter_if_configured(self):
         if self.dps_meter_autostart and self.dps_meter_path:
@@ -1864,6 +1944,7 @@ class MainWindow(QMainWindow):
                 self.dps_meter_autostart = cfg.get("dps_meter_autostart", False)
                 raw_mtt = cfg.get("minimize_to_tray", None)
                 self.minimize_to_tray = bool(raw_mtt) if raw_mtt is not None else None
+                self.armory_beta_enabled = bool(cfg.get("armory_beta_enabled", False))
                 self._avatar_b64 = cfg.get("avatar", "")
                 custom = cfg.get("profile_dir", "")
                 if custom:
@@ -1887,6 +1968,7 @@ class MainWindow(QMainWindow):
             "dps_meter_path": self.dps_meter_path,
             "dps_meter_autostart": self.dps_meter_autostart,
             "minimize_to_tray": self.minimize_to_tray,
+            "armory_beta_enabled": self.armory_beta_enabled,
             "avatar": self._avatar_b64,
         }
         self.app_config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
@@ -2023,6 +2105,7 @@ class MainWindow(QMainWindow):
         self.settings_page.update_language(self.language, tr)
         self.tasks_page.update_language(self.language)
         self.todo_page.update_language(self.language, tr)
+        self.armory_page.update_language(self.language, tr)
 
         if self.flow_map_window:
             self.flow_map_window.update_language(self.language, tr)
@@ -2612,6 +2695,9 @@ class MainWindow(QMainWindow):
         if "minimize_to_tray" in data:
             self.minimize_to_tray = data["minimize_to_tray"]
 
+        self.armory_beta_enabled = data.get("armory_beta_enabled", self.armory_beta_enabled)
+        self._update_armory_visibility()
+
         old_path = self.dps_meter_path
         self.dps_meter_path = data.get("dps_meter_path", self.dps_meter_path)
         self.dps_meter_autostart = data.get("dps_meter_autostart", self.dps_meter_autostart)
@@ -2661,6 +2747,7 @@ class MainWindow(QMainWindow):
             "dps_meter_path": self.dps_meter_path,
             "dps_meter_autostart": self.dps_meter_autostart,
             "minimize_to_tray": bool(self.minimize_to_tray),
+            "armory_beta_enabled": self.armory_beta_enabled,
 
             "profile_dir": str(self.profile_dir),
         })
@@ -2786,10 +2873,6 @@ class MainWindow(QMainWindow):
             lambda: self.show_toast(tr(self.language, "up_to_date_toast"))
         )
         self._checker.start()
-
-    def closeEvent(self, event):
-        self.save_profile(silent=True)
-        event.accept()
 
     def duplicate_profile(self):
         self.save_profile(silent=True)

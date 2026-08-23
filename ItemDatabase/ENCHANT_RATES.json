@@ -1,0 +1,90 @@
+{
+  "meta": {
+    "source": "117 reale Datenpunkte (101 Waffen/Accessoires + 16 Ruestungsteile) via shugo.gg API, echte ausgeruestete Items realer Charaktere",
+    "date": "2026-08-21",
+    "notes": [
+      "Nur bestimmte Main-Stats aendern sich beim Verzaubern, alle anderen Main-Stats bleiben unveraendert.",
+      "Bonus wird addiert, nicht in den Basiswert eingerechnet (Anzeige z.B. '396 ~ 545 (+350)').",
+      "Bonus friert ein, sobald die reguläre Maximalstufe erreicht ist (danach beginnt der Exceed-Bereich).",
+      "Substats (Werte mit Bereich, z.B. '81 ~ 100') aendern sich NIE durch Verzaubern, nur durch Soulbinding."
+    ]
+  },
+  "weapons_and_guard": {
+    "categories": ["Weapon (alle Klassenwaffen)", "Guard (Off-Hand)"],
+    "scaling_stat": "Attack",
+    "by_grade": {
+      "Legend":  { "rate_per_level": 10.0,  "cap_level": 15, "bonus_at_cap": 150,  "curve": "linear", "confirmed": true },
+      "Unique":  { "rate_per_level": null,  "cap_level": 15, "bonus_at_cap": 225,  "curve": "power (k=5.733, p=1.355)", "confirmed": true, "note": "nicht exakt linear, ca. +15 bis +22 pro Stufe steigend" },
+      "Heroic":  { "rate_per_level": 17.5, "cap_level": 20, "bonus_at_cap": 350,  "curve": "linear", "confirmed": true },
+      "Common/Rare": { "rate_per_level": null, "cap_level": 15, "bonus_at_cap": null, "curve": "unbekannt", "confirmed": false, "note": "keine Daten gefunden, App nutzt Legend-Formel als Platzhalter" }
+    },
+    "exceed": {
+      "Attack": { "type": "flat", "per_level": 30 },
+      "Attack increase": { "type": "percent", "per_level": 1 }
+    }
+  },
+  "accessories": {
+    "categories": ["Necklace", "Earrings", "Ring", "Bracelet", "Brooch", "Amulet"],
+    "scaling_stat": "Attack",
+    "rate_per_level": 5.0,
+    "note": "Rate ist grade-unabhaengig (immer +5/Stufe), nur Cap-Stufe unterscheidet sich",
+    "by_grade": {
+      "Legend": { "cap_level": 15, "bonus_at_cap": 75 },
+      "Unique": { "cap_level": 15, "bonus_at_cap": 75 },
+      "Heroic": { "cap_level": 20, "bonus_at_cap": 100 }
+    },
+    "exceed": {
+      "Attack": { "type": "flat", "per_level": 20 },
+      "Defense": { "type": "flat", "per_level": 40, "note": "neu, Accessoires haben sonst kein Defense" },
+      "Attack increase": { "type": "percent", "per_level": 1 }
+    }
+  },
+  "armor": {
+    "categories": ["Helmet", "Torso", "Shoulder", "Gloves", "Pants", "Boots", "Cape"],
+    "scaling_stats": ["Defense", "HP"],
+    "note": "Ruestung skaliert ZWEI Stats gleichzeitig (Waffen/Accessoires nur einen)",
+    "by_grade": {
+      "Unique": {
+        "cap_level": 15,
+        "defense": { "rate_per_level": 30.0, "bonus_at_cap": 450 },
+        "hp":      { "rate_per_level": 20.0, "bonus_at_cap": 300 }
+      },
+      "Heroic": {
+        "cap_level": 20,
+        "defense": { "rate_per_level": 35.0, "bonus_at_cap": 700 },
+        "hp":      { "rate_per_level": 20.0, "bonus_at_cap": 400 }
+      }
+    },
+    "exceed": {
+      "Defense": { "type": "flat", "per_level": 80 },
+      "HP": { "type": "flat", "per_level": 80 },
+      "Defense increase": { "type": "percent", "per_level": 1 },
+      "HP increase": { "type": "percent", "per_level": 1 }
+    }
+  },
+  "belt": {
+    "categories": ["Belt"],
+    "scaling_stats": ["Defense", "HP"],
+    "note": "Sonderfall: eigene, niedrigere Maximalstufe (10), unabhaengig von Raritaet. Beide getesteten Raritaeten liefern identische Werte.",
+    "by_grade": {
+      "Unique": {
+        "cap_level": 10,
+        "defense": { "rate_per_level": 30.0, "bonus_at_cap": 300 },
+        "hp":      { "rate_per_level": 50.0, "bonus_at_cap": 500 }
+      },
+      "Heroic": {
+        "cap_level": 10,
+        "defense": { "rate_per_level": 30.0, "bonus_at_cap": 300 },
+        "hp":      { "rate_per_level": 50.0, "bonus_at_cap": 500 }
+      }
+    },
+    "exceed": {
+      "note": "nicht getestet (kein Sample ueber Stufe 10 gefunden), App nimmt die allgemeine Ruestungs-Exceed-Rate an (siehe armor.exceed)"
+    }
+  },
+  "open_issues": [
+    "Common/Rare-Grade bei Waffen komplett ungetestet, Legend-Formel als Platzhalter genutzt.",
+    "Belt-Exceed-Bereich ohne echte Daten, Annahme = allgemeine Ruestungs-Exceed-Rate.",
+    "Unique-Waffen-Kurve ist ein Kurven-Fit, kein exakt bestaetigter linearer Wert - Zwischenstufen koennen leicht abweichen (~5 Einheiten)."
+  ]
+}

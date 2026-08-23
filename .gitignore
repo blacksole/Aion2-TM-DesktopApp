@@ -13,3 +13,6 @@ profiles/last_profile.txt
 *.sqlite3
 .vscode/
 test_*.py
+
+# ItemDatabase — cached API data/icons, not source
+ItemDatabase/data/

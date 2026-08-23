@@ -1,9 +1,7 @@
 name: Build and Release Aion2
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -24,15 +22,44 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build executable
+      - name: Build executable (Onedir)
         run: |
-          pyinstaller main.py --noconfirm --onefile --windowed --name Aion2
+          pyinstaller "Aion2 TM.spec" --clean --noconfirm
 
       - name: Create ZIP
         run: |
-          powershell Compress-Archive -Path dist/Aion2.exe -DestinationPath Aion2.zip
+          powershell Compress-Archive -Path "dist/Aion2 TM/*" -DestinationPath Aion2_TM.zip
+
+      - name: Extract changelog section
+        shell: python
+        run: |
+          import re
+          import os
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          version = tag.lstrip("v")
+
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          sections = re.split(r"(?m)^#\s+(?:Version\s+|Changelog\s+[–-]\s+Version\s+)", text)
+
+          notes = ""
+          for section in sections[1:]:
+              lines = section.strip().splitlines()
+              if lines and lines[0].strip() == version:
+                  notes = "\n".join(lines[1:]).strip()
+                  break
+
+          notes = re.sub(r"\n-{3,}\s*$", "", notes).strip()
+
+          if not notes:
+              notes = f"Release {tag}"
+
+          with open("release_notes.md", "w", encoding="utf-8") as f:
+              f.write(notes)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: Aion2.zip
+          name: "Aion2 Task Manager ${{ github.ref_name }}"
+          body_path: release_notes.md
+          files: Aion2_TM.zip

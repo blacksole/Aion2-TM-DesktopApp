@@ -186,6 +186,17 @@ TRANSLATIONS = {
 
         "toast_plan_opened": "Ablaufplan geöffnet",
 
+        # ================= ARMORY =================
+        "armory": "Armory",
+        "armory_subtitle": "Items, Crafting, Fraktion & Buildplaner — in Vorbereitung",
+        "armory_roadmap_items_title": "Item-Datenbank",
+        "armory_roadmap_items_desc": "Alle Items durchsuchbar, mit Filter- und Sortiermöglichkeiten — u. a. nach Fraktion (Asmodae/Elyos).",
+        "armory_open_btn": "Öffnen",
+        "armory_roadmap_crafting_title": "Crafting-Kalkulator",
+        "armory_roadmap_crafting_desc": "Rezepte und benötigte Ressourcen auf einen Blick.",
+        "armory_roadmap_builds_title": "Buildplaner",
+        "armory_roadmap_builds_desc": "Charakterverwaltung mit Gearscore-Anzeige und Charakternamen.",
+
         "flow_title": "Ablaufplan",
         "flow_window_title": "Ablaufplan Map",
 
@@ -277,6 +288,11 @@ TRANSLATIONS = {
         "check_updates": "Nach Updates suchen",
         "check_updates_desc": "Manuell nach einer neuen App-Version suchen.",
         "check_updates_btn": "Jetzt prüfen",
+        "armory_beta_unlock_title": "Beta Bereich freischalten",
+        "armory_beta_unlock_desc": "Mit dem Freischalten der Beta wird ein weiterer Bereich angezeigt: {area}. Dieser Bereich befindet sich noch in aktiver Entwicklung.",
+        "armory_beta_warning_title": "Beta-Bereich aktivieren?",
+        "armory_beta_warning_body": "Achtung: Dieser Bereich befindet sich noch in aktiver Entwicklung und ist noch nicht Teil des offiziellen App-Updates. Du aktivierst ihn auf eigene Gefahr — es kann zu Fehlern oder unerwartetem Verhalten kommen.",
+        "armory_beta_confirm_btn": "Aktivieren",
         "update_available_toast": "Update v{version} verfügbar!",
         "up_to_date_toast": "App ist aktuell.",
 
@@ -536,6 +552,18 @@ TRANSLATIONS = {
         # ================= PLAN / FLOW MAP =================
         "plan": "Flow Map",
         "toast_plan_opened": "План открыт",
+
+        # ================= ARMORY =================
+        "armory": "Armory",
+        "armory_subtitle": "Предметы, крафт, фракция и планировщик билдов — скоро",
+        "armory_roadmap_items_title": "База предметов",
+        "armory_roadmap_items_desc": "Все предметы с фильтрацией и сортировкой — в том числе по фракции (Асмодиане/Элиос).",
+        "armory_open_btn": "Открыть",
+        "armory_roadmap_crafting_title": "Калькулятор крафта",
+        "armory_roadmap_crafting_desc": "Рецепты и необходимые ресурсы на одном экране.",
+        "armory_roadmap_builds_title": "Планировщик билдов",
+        "armory_roadmap_builds_desc": "Управление персонажами с отображением GearScore и именами персонажей.",
+
         "flow_title": "Блок-схема",
         "flow_window_title": "Карта блок-схемы",
 
@@ -627,6 +655,11 @@ TRANSLATIONS = {
         "check_updates": "Проверить обновления",
         "check_updates_desc": "Вручную проверить наличие новой версии приложения.",
         "check_updates_btn": "Проверить",
+        "armory_beta_unlock_title": "Разблокировать бета-раздел",
+        "armory_beta_unlock_desc": "При разблокировке беты появится дополнительный раздел: {area}. Этот раздел ещё активно разрабатывается.",
+        "armory_beta_warning_title": "Активировать бета-раздел?",
+        "armory_beta_warning_body": "Внимание: этот раздел ещё активно разрабатывается и пока не является частью официального обновления приложения. Вы активируете его на свой страх и риск — возможны ошибки или неожиданное поведение.",
+        "armory_beta_confirm_btn": "Активировать",
         "update_available_toast": "Доступно обновление v{version}!",
         "up_to_date_toast": "Приложение актуально.",
 
@@ -887,6 +920,17 @@ TRANSLATIONS = {
         "toast_plan_opened": "Plan opened",
         "plan": "Flow Map",
 
+        # ================= ARMORY =================
+        "armory": "Armory",
+        "armory_subtitle": "Items, crafting, faction & build planner — coming soon",
+        "armory_roadmap_items_title": "Item Database",
+        "armory_roadmap_items_desc": "Browse all items with filtering and sorting — including by faction (Asmodae/Elyos).",
+        "armory_open_btn": "Open",
+        "armory_roadmap_crafting_title": "Crafting Calculator",
+        "armory_roadmap_crafting_desc": "Recipes and required resources at a glance.",
+        "armory_roadmap_builds_title": "Build Planner",
+        "armory_roadmap_builds_desc": "Character management with GearScore display and character names.",
+
         "flow_title": "Flow",
         "flow_window_title": "Flow Map",
 
@@ -979,6 +1023,11 @@ TRANSLATIONS = {
         "check_updates": "Check for Updates",
         "check_updates_desc": "Manually check for a new app version.",
         "check_updates_btn": "Check now",
+        "armory_beta_unlock_title": "Unlock Beta Area",
+        "armory_beta_unlock_desc": "Unlocking Beta shows an additional area: {area}. This area is still under active development.",
+        "armory_beta_warning_title": "Enable Beta area?",
+        "armory_beta_warning_body": "Warning: this area is still under active development and not yet part of the official app update. You're enabling it at your own risk — bugs or unexpected behavior may occur.",
+        "armory_beta_confirm_btn": "Enable",
         "update_available_toast": "Update v{version} available!",
         "up_to_date_toast": "App is up to date.",
 
