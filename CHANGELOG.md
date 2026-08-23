@@ -24,6 +24,18 @@ These features are **not** part of an official update yet and are still under ac
 
 ---
 
+# Version 1.3.1
+
+Release Date: 2026-08-23
+
+## ✨ New Features
+
+### Unlock Beta Area
+- New toggle in Settings: "Unlock Beta Area" — opt into in-development features at your own risk. Shows a warning before enabling, since these areas aren't finished and may still change or misbehave.
+- See the 🧪 Beta Area section above for what's currently available once unlocked.
+
+---
+
 # Version 1.3.0
 
 Release Date: 2026-08-21
