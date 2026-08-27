@@ -53,3 +53,12 @@ def get_logger(name: str | None = None) -> logging.Logger:
     """Get a logger under the shared app logger, configuring it on first use."""
     setup_logging()
     return _root_logger.getChild(name) if name else _root_logger
+
+
+def get_log_path() -> Path:
+    """Where app.log actually lives -- used by Settings' "View Log" button
+    (User-Wunsch, 2026-08-27) so the user can see what happened (which
+    window opened when, which assets/colors loaded or failed to) without
+    having to find the file manually."""
+    setup_logging()
+    return _log_dir() / "app.log"

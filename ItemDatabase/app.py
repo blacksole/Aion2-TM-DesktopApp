@@ -62,7 +62,7 @@ from PySide6.QtGui import (
     QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap,
     QPolygonF, QStandardItem, QStandardItemModel,
 )
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -303,12 +303,22 @@ def _parse_wing_effects(description: str) -> tuple[set[str], set[str]]:
 # (a lower position than the name suggests — "Legend" scales weaker than
 # Unique in the enchant-bonus formulas too, see estimate_enchant_bonus).
 _RARITY_BG_DIR = _BUNDLE_DIR / "assets" / "backgrounds_rarity"
+# .png, not .webp -- real bug found via a packaged-build screenshot (User,
+# 2026-08-27: "bei meinem ist alles mit Grautönen hinterlegt. in der
+# Entwicklungsumgebung farbig"): QPixmap loads .webp fine when running from
+# source (the installed PySide6 wheel's own Qt plugins are all on disk and
+# found normally), but PyInstaller doesn't reliably bundle Qt's WebP
+# imageformat plugin into the frozen EXE -- QPixmap(path) then silently
+# returns a null pixmap there (file itself WAS bundled correctly, see
+# Aion2 TM.spec's datas list), and _rarity_background's null-check fell
+# back to the flat slate-gray fill. .png needs no optional Qt plugin at
+# all, so this can't recur regardless of what PyInstaller decides to bundle.
 _RARITY_BG_FILES = {
-    "Common": "UT_SlotGrade_Common.webp",
-    "Rare": "UT_SlotGrade_Rare.webp",
-    "Unique": "UT_SlotGrade_Unique.webp",
-    "Epic": "UT_SlotGrade_Epic.webp",
-    "Legend": "UT_SlotGrade_Legend.webp",
+    "Common": "UT_SlotGrade_Common.png",
+    "Rare": "UT_SlotGrade_Rare.png",
+    "Unique": "UT_SlotGrade_Unique.png",
+    "Epic": "UT_SlotGrade_Epic.png",
+    "Legend": "UT_SlotGrade_Legend.png",
 }
 _rarity_bg_cache: dict[str, QPixmap] = {}
 
@@ -319,6 +329,10 @@ def _rarity_background(grade: str | None) -> QPixmap | None:
     if grade not in _rarity_bg_cache:
         path = _RARITY_BG_DIR / _RARITY_BG_FILES[grade]
         pix = QPixmap(str(path)) if path.exists() else QPixmap()
+        if pix.isNull():
+            logger.warning("Rarity background FAILED to load (grade=%s, path=%s, exists=%s) -- falling back to flat gray", grade, path, path.exists())
+        else:
+            logger.info("Rarity background loaded (grade=%s, path=%s, size=%s)", grade, path, pix.size())
         _rarity_bg_cache[grade] = pix
     pix = _rarity_bg_cache[grade]
     return pix if not pix.isNull() else None
@@ -463,11 +477,17 @@ class IconCache(QObject):
 
     def _on_finished(self, url: str, reply, disk_path: Path):
         self._pending.discard(url)
+        network_error = reply.error()
         data = reply.readAll()
         reply.deleteLater()
 
+        if network_error != QNetworkReply.NoError:
+            logger.warning("Icon fetch FAILED (network error=%s, url=%s)", network_error, url)
+            return
+
         raw = QPixmap()
         if not raw.loadFromData(data):
+            logger.warning("Icon fetch FAILED (could not decode image data, url=%s, bytes=%s)", url, len(data))
             return
 
         try:

@@ -71,7 +71,7 @@ Export/Import profiles as `.json` for backup or sharing.
 ### 🔗 Community
 
 * GitHub, version copy and Discord links on the About page
-* Discord dropdown links to the official Aion 2 Discord and the ZasseZer0 Gaming Discord
+(If you like my tool and want to share it, I can link your community as well)
 
 ### 🌈 Themes
 

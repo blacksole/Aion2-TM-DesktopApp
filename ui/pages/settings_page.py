@@ -9,10 +9,11 @@ from PySide6.QtCore import Signal, QTime, QDate, QDateTime, QSize, Qt, QRectF, Q
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QDateEdit, QButtonGroup, QGridLayout,
-    QFileDialog, QLineEdit, QScrollArea, QTabWidget, QMessageBox,
+    QFileDialog, QLineEdit, QScrollArea, QTabWidget, QMessageBox, QDialog, QPlainTextEdit,
 )
 
 from core.version import CURRENT_BETA_FEATURE_NAME
+from core.app_logger import get_log_path
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
 
@@ -60,6 +61,70 @@ class _FlowingSettingsPanel(QFrame):
         painter.setPen(QPen(QBrush(gradient), pen_width))
         painter.drawPath(path)
 
+
+
+class _LogViewerDialog(QDialog):
+    """Read-only viewer for app.log (User-Wunsch, 2026-08-27: "einen
+    allgemeinen Log ... den man über die Settings abrufen kann") -- lets the
+    user see what happened (which window opened when, which assets/colors
+    loaded or failed to, etc.) without hunting for the file manually, which
+    is exactly what made diagnosing a real packaged-build bug (rarity
+    background silently falling back to grey) slow the first time around."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("App Log")
+        self.resize(760, 560)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        self._path_label = QLabel()
+        self._path_label.setObjectName("settingsDescription")
+        self._path_label.setWordWrap(True)
+        layout.addWidget(self._path_label)
+
+        self._text = QPlainTextEdit()
+        self._text.setReadOnly(True)
+        self._text.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self._text.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
+        layout.addWidget(self._text, 1)
+
+        button_row = QHBoxLayout()
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.clicked.connect(self._reload)
+        button_row.addWidget(refresh_btn)
+        open_folder_btn = QPushButton("Open Folder")
+        open_folder_btn.clicked.connect(self._open_folder)
+        button_row.addWidget(open_folder_btn)
+        button_row.addStretch(1)
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        button_row.addWidget(close_btn)
+        layout.addLayout(button_row)
+
+        self._reload()
+
+    def _reload(self):
+        path = get_log_path()
+        self._path_label.setText(str(path))
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as e:
+            text = f"(Log konnte nicht gelesen werden: {e})"
+        self._text.setPlainText(text)
+        # Scroll to the end -- the most recent entries are what you actually
+        # want to see first, not the (possibly hours/days) oldest ones.
+        scrollbar = self._text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _open_folder(self):
+        path = get_log_path()
+        try:
+            subprocess.Popen(["explorer", "/select,", str(path)])
+        except OSError:
+            pass
 
 
 class SettingsPage(QWidget):
@@ -386,6 +451,10 @@ class SettingsPage(QWidget):
             tr_func(language, "armory_beta_unlock_desc", area=CURRENT_BETA_FEATURE_NAME)
         )
         self._update_toggle_text(self.armory_beta_btn, self.armory_beta_btn.isChecked(), language, tr_func)
+
+        self.log_title.setText(tr_func(language, "view_log_title"))
+        self.log_desc.setText(tr_func(language, "view_log_desc"))
+        self.view_log_btn.setText(tr_func(language, "view_log_btn"))
 
         # ===== RESET TIMER =====
 
@@ -1346,6 +1415,29 @@ class SettingsPage(QWidget):
         beta_update_layout.addLayout(beta_update_text, 1)
         beta_update_layout.addWidget(self.armory_beta_btn)
 
+        # ===== LOG ROW ===== (User-Wunsch, 2026-08-27: "einen allgemeinen
+        # Log ... den man über die Settings abrufen kann, mit Zeitstempel")
+        log_row = QFrame()
+        log_row.setObjectName("settingsRow")
+        log_layout = QHBoxLayout(log_row)
+        log_layout.setContentsMargins(14, 12, 14, 12)
+        log_layout.setSpacing(12)
+        log_text = QVBoxLayout()
+        log_text.setSpacing(2)
+        self.log_title = QLabel()
+        self.log_title.setObjectName("settingsLabel")
+        self.log_desc = QLabel()
+        self.log_desc.setObjectName("settingsDescription")
+        self.log_desc.setWordWrap(True)
+        log_text.addWidget(self.log_title)
+        log_text.addWidget(self.log_desc)
+        self.view_log_btn = QPushButton()
+        self.view_log_btn.setObjectName("secondaryButton")
+        self.view_log_btn.setFixedWidth(110)
+        self.view_log_btn.clicked.connect(self._open_log_viewer)
+        log_layout.addLayout(log_text, 1)
+        log_layout.addWidget(self.view_log_btn)
+
         # ===== DPS METER ROW =====
         dps_row = QFrame()
         dps_row.setObjectName("settingsRow")
@@ -1426,9 +1518,14 @@ class SettingsPage(QWidget):
         layout.addWidget(dps_row)
         layout.addWidget(update_row)
         layout.addWidget(beta_update_row)
+        layout.addWidget(log_row)
         layout.addStretch()
 
         return page
+
+    def _open_log_viewer(self):
+        dialog = _LogViewerDialog(self)
+        dialog.exec()
 
     def set_values(self, data: dict):
         # Allgemein

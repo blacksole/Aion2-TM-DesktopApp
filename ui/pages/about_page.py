@@ -18,7 +18,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 # Each entry: (display name, invite URL).
 _DISCORD_SERVERS = [
     ("Aion 2 Discord", "https://discord.gg/aion2global"),
-    ("ZasseZer0 Gaming", "https://discord.gg/EJAJpDFDeq"),
+    ("ZasseZer0 / App Support", "https://discord.gg/EJAJpDFDeq"),
 ]
 
 # Official Discord "Clyde" logomark (Simple Icons, CC0), used here purely to
