@@ -9068,10 +9068,19 @@ class ItemDatabaseWindow(QMainWindow):
 
 def _bundled_resource(name: str) -> Path:
     """styles.qss is bundled *inside* the exe (PyInstaller _MEIPASS), unlike
-    data/ which lives next to the exe so the cache persists across runs."""
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        return Path(sys._MEIPASS) / name
-    return Path(__file__).parent / name
+    data/ which lives next to the exe so the cache persists across runs.
+
+    Real bug found via a packaged-build screenshot (User, 2026-08-27: "was
+    farbig angezeigt wird, ist das Icon eines Items - der Rest Grau mit
+    weißer Schrift"): this used to build the frozen path as
+    `_MEIPASS / name` directly, one level too shallow -- Aion2 TM.spec
+    bundles this module's files under `ItemDatabase/` inside _MEIPASS (same
+    as _BUNDLE_DIR above), so `_MEIPASS / "styles.qss"` never actually
+    existed there and _load_qss_text() silently applied an empty
+    stylesheet, leaving every widget on Qt's bare default style. Reusing
+    _BUNDLE_DIR here (already correct -- items_all.json/icons load fine
+    through it) instead of recomputing an independent, wrong path."""
+    return _BUNDLE_DIR / name
 
 
 def _load_qss_text() -> str:
