@@ -7,6 +7,7 @@ dist/
 build/
 release/
 profiles/last_profile.txt
+app.log
 *.db
 *.sqlite
 *.sqlite3

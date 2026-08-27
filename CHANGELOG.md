@@ -5,13 +5,20 @@ These features are **not** part of an official update yet and are still under ac
 ## Armory
 
 ### Item Database
-- Searchable item database with filters for class, category, rarity and level.
-- Equipment priority list per gear slot (helmet, weapon, armor, …) with a recommended order and rarity icons.
+- Searchable item database with filters for grade/rarity, category, class, and PvP/PvE/Neutral gear type.
+- Right-hand Categories sidebar groups the catalog into Gear, Wings, Arcana, Materials & Enhancement, Consumables, Tools & Services, Cosmetics, and Chests & Misc — pick one to narrow the list and the Category filter above it.
+- Gear further breaks down into Weapons / Armor / Accessories via the Category filter.
+- Wings get two dedicated filters (Equip Effect / Owned Effect) in place of Category/Class, matching how Wings stats actually work.
+- Grade/Rarity filter is a row of colored pill buttons (one click, no dropdown needed).
+- Optional "Show Item ID" checkbox to reveal the internal item ID column (hidden by default).
+- Item names are colored by rarity throughout the table.
+- Double-clicking an item shows its full details, including every possible substat/skill it can roll — purely informational here (no picking), since selecting real Soulbinding rolls only makes sense for an actually-equipped item in the Build Planner.
 
 ### Crafting Calculator
 - Shows the full material chain for any craftable item: required ingredients can be expanded individually if they're themselves the result of another recipe.
 - Filter by profession (Blacksmithing, Armorsmithing, Handicrafting, Alchemy, Cooking), category and rarity.
 - Material icons show the matching rarity background (Common/Rare/Unique/Epic/Legend).
+- "Vergleich" tab compares crafting an item directly versus transferring it from an existing item of the same line, including Kinah cost.
 
 ### Build Planner
 - Assemble a virtual gear loadout slot by slot, with real item stats.
@@ -19,8 +26,46 @@ These features are **not** part of an official update yet and are still under ac
 - GearScore calculated from real item data, including enchant and exceed bonuses.
 - PvP / PvE / Neutral gear filter, linked to a matching toggle on the stat panel.
 - Consolidated stat panel (Main Stats, Sub Stats, Offense, Defense, Utility & Recovery).
+- "Quick Select" button to auto-equip a full gear set — crafted, dungeon-drop (Expedition) or PvP Abyss Gear, matched to your race — in one click, plus a separate "Eigenschaften-Priorität" editor to customize which substats get picked per role and Gear-Typ.
 - Skill Planner tab: browse and filter class skills (Active/Passive/Stigma), build a priority list, save multiple named skill builds per class.
 - Arcana tab: browse all 10 card types across the 7 themed sets, with class-specific skill previews per card.
+
+---
+
+# Version 1.4.0
+
+Release Date: 2026-08-27
+
+## ✨ New Features
+
+- **Item Database (Beta): Categories sidebar** — a new right-hand panel groups the catalog into Gear, Wings, Arcana, Materials & Enhancement, Consumables, Tools & Services, Cosmetics and Chests & Misc, instead of one long flat category list. Picking a group narrows both the table and the Category filter above it to that group's own subcategories (Gear further splits into Weapons / Armor / Accessories).
+- **Item Database (Beta): dedicated Wings filters** — Wings now has its own "Equip Effect" and "Owned Effect" filters (e.g. Attack Bonus, Flight Power, Back Attack) in place of Category/Class, since Wings stats work differently from regular gear.
+- **Item Database (Beta): Grade filter as pill buttons** — the rarity filter is now a row of colored, one-click pill buttons (Common/Rare/Legend/Unique/Epic) instead of a dropdown.
+- **Item Database (Beta): "Show Item ID" checkbox** — optionally reveals the internal item ID column (hidden by default).
+- **EQ-Priority (Beta): "Only show equipped items" checkbox** — when picking an item for a priority slot, optionally filter the list down to just the items currently equipped in the Build Planner.
+- **Build Planner (Beta): equipment saved with your profile** — the currently equipped gear and your class/race selection are now saved and restored together with your profile, so switching or reloading a profile keeps your loadout instead of resetting it.
+- **Build Planner (Beta): Quick Select now includes dungeon-drop gear** — alongside the crafted Dragon Lord chain, the "Item-Set" dropdown now also lists dungeon sets (Expedition), sorted by GearScore with the strongest at the top and colored by rarity. A new "Gear Type-Filter" switches between them.
+- **Build Planner (Beta): Gear Type-Filter linked to the PvP/PvE/Neutral toggle** — picking PvE shows Crafting sets, PvP shows Abyss Gear, and Neutral shows dungeon-drop sets. Defaults to PvE + Neutral and remembers your last choice in your profile.
+- **Build Planner (Beta): PvP Abyss Gear in Quick Select** — the 5 Abyss rank sets (Decanus through High Commander) are now available in the Item-Set dropdown when PvP is active, automatically matched to your character's race (Guardian for Elyos, Archon for Asmodae).
+- **Build Planner (Beta): real enchant range per item** — the enchant slider's maximum now reflects the actually equipped item's own max enchant + exceed level instead of a flat 0–30 range.
+- **Build Planner (Beta): "Eigenschaften-Priorität" editor** — a new gear-icon button next to "Eigenschaften" lets you customize which substats get auto-picked, per role (Angreifer/Verteidiger/Support) and per Gear-Typ (PvE/PvP), across 4 equipment categories (Weapon/Guard, Armor, Jewelry, Bracelets). Your choices are saved to your profile. Still Beta — Equipment-Priority list and character skills aren't factored in yet.
+- **About page: Discord community links** — a new "Discord" row with a dropdown lists the official Aion2 Discord and the ZasseZer0 Gaming Discord.
+
+## 🎨 UI Changes
+
+- **Item Database (Beta): item names colored by rarity** in the main table, matching the color already used for the Grade column.
+- **Item Database (Beta): "Item Details" popup is now read-only** — double-clicking a row shows every possible substat/skill the item can roll as plain info, without the pick/select interaction (that only applies to an actually-equipped item in the Build Planner).
+- **Item Database (Beta): Class filter now hidden where it never applies** — only shown for "All Categories" and "Gear" (classNames only ever matters for weapons), instead of appearing everywhere with no real effect.
+- **App window title renamed to "Aion 2 Companion"** (was "Aion Companion").
+- **Build Planner (Beta): enchant level shown under each equipped slot** — the redundant "change item" button under each equipment slot (clicking the icon itself already lets you change the item and its enchant) was replaced with a small "+N" label showing that slot's enchant level, so you can check at a glance whether every item has actually been enhanced. Its color now follows your chosen Layout theme (Settings → Layout) instead of one fixed color.
+- **Armory (Beta) windows now follow your Layout theme** — the Item Database and Build Planner windows' background now match your chosen Layout theme (Settings → Layout: Abyss/Inferno/Emerald/Frostbite/Obsidian/Void) instead of always showing Abyss.
+- **Build Planner (Beta): role buttons color-coded** — Angreifer/Verteidiger/Support now each get their own accent color (orange/blue/green) when selected, in both "Eigenschaften" and the new priority editor.
+
+## 🐛 Bug Fixes
+
+- **Armory (Beta): now follows your language setting** — Item Database, Crafting Calculator and Build Planner previously always showed German text regardless of your chosen language (Settings → Language); all UI text (buttons, labels, tooltips, messages) now follows English/Deutsch/Русский correctly. Item, recipe, skill and material names stay in their original form (no official in-game translation exists yet for those).
+- **Armory (Beta): Elementalist renamed to Spiritmaster** — matches the class's actual current name; affects the Class filter, Build Planner and Skill Planner.
+- **Build Planner (Beta): "Quick Select" no longer resets enchant levels on earlier slots** — auto-equipping a full gear set previously only kept the enchant level of the last item it processed; every item now correctly keeps its own assigned enchant level.
 
 ---
 

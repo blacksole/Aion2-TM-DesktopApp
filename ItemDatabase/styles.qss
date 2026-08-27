@@ -70,6 +70,24 @@ QComboBox::drop-down {
     width: 22px;
 }
 
+/* No down-arrow rule existed before -- drop-down reserved 22px of empty
+   space but never drew anything into it, so every combo box (Grade/
+   Category/Class filter row) rendered as a plain borderless field with no
+   visual "this opens a dropdown" affordance. A CSS-only border-triangle
+   was tried first but rendered as a solid grey square instead of a
+   triangle (Qt's ::down-arrow subcontrol sizing doesn't cooperate with the
+   web border-trick) -- using a real small PNG asset instead, same pattern
+   as every other bundled image in this app. __DROPDOWN_ARROW_URL__ is
+   substituted with an absolute file path by _load_qss_text() at runtime
+   (must be absolute, not relative, so it also resolves correctly from
+   inside the PyInstaller-bundled exe). */
+QComboBox::down-arrow {
+    image: url(__DROPDOWN_ARROW_URL__);
+    width: 10px;
+    height: 10px;
+    margin-right: 10px;
+}
+
 QComboBox QAbstractItemView {
     background-color: #0f172a;
     border: 1px solid rgba(100, 116, 139, 0.45);
@@ -78,6 +96,7 @@ QComboBox QAbstractItemView {
     color: #e2e8f0;
     padding: 4px;
 }
+
 
 #ResultLabel {
     color: #94a3b8;
@@ -286,25 +305,13 @@ QPushButton:pressed {
     background-color: rgba(34, 211, 238, 0.25);
 }
 
-#SlotChangeButton {
-    background-color: rgba(30, 41, 59, 0.6);
-    border: 1px solid rgba(100, 116, 139, 0.35);
-    border-radius: 6px;
-    color: #94a3b8;
-    font-size: 9px;
-    font-weight: 600;
-    padding: 3px;
-}
-
-#SlotChangeButton:hover {
-    border: 1px solid rgba(34, 211, 238, 0.6);
-    color: #e5e7eb;
-}
-
-#SlotChangeButton:disabled {
-    background-color: rgba(15, 23, 42, 0.4);
-    border: 1px solid rgba(100, 116, 139, 0.2);
-    color: #475569;
+#SlotEnchantLabel {
+    background: transparent;
+    border: none;
+    color: #c084fc;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px;
 }
 
 #EquipSectionLabel {
@@ -333,6 +340,42 @@ QPushButton:pressed {
     background-color: rgba(34, 211, 238, 0.22);
     border: 1px solid rgba(34, 211, 238, 0.9);
     color: #22d3ee;
+}
+
+/* Eigenschaften-Priorität Rolle buttons -- same base look as
+   SkillFilterButton, but each role gets its own accent color when checked
+   (User-Wunsch: "Angreifer 'Orange', Verteidiger 'Blau' und Support
+   'Grün'... bei Auswahl des Reiters eine entsprechende Farbkombi"). Own
+   #-scoped rules instead of reusing #SkillFilterButton so this doesn't
+   affect any other SkillFilterButton in the app. */
+#RoleButtonAngreifer, #RoleButtonVerteidiger, #RoleButtonSupport {
+    background-color: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+}
+
+#RoleButtonAngreifer:hover { border: 1px solid rgba(251, 146, 60, 0.6); color: #e5e7eb; }
+#RoleButtonVerteidiger:hover { border: 1px solid rgba(96, 165, 250, 0.6); color: #e5e7eb; }
+#RoleButtonSupport:hover { border: 1px solid rgba(74, 222, 128, 0.6); color: #e5e7eb; }
+
+#RoleButtonAngreifer:checked {
+    background-color: rgba(251, 146, 60, 0.22);
+    border: 1px solid rgba(251, 146, 60, 0.9);
+    color: #fb923c;
+}
+#RoleButtonVerteidiger:checked {
+    background-color: rgba(96, 165, 250, 0.22);
+    border: 1px solid rgba(96, 165, 250, 0.9);
+    color: #60a5fa;
+}
+#RoleButtonSupport:checked {
+    background-color: rgba(74, 222, 128, 0.22);
+    border: 1px solid rgba(74, 222, 128, 0.9);
+    color: #4ade80;
 }
 
 #SkillTileIcon {

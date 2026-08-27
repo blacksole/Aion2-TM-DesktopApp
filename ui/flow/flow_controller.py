@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QMessageBox
 
 from core.flow_model import FlowNode
-from ui.flow.flow_layout import find_free_child_position
+from ui.flow.flow_layout import find_free_child_position, NODE_HEIGHT, CONNECTOR_BASE_HEIGHT
 from ui.flow.widgets.delete_confirm_dialog import DeleteConfirmDialog, UnsavedChangesDialog
 
 
@@ -51,6 +51,22 @@ class FlowController:
 
         self.window.nodes[new_node.id] = new_node
 
+        # User-Wunsch: inserting a node between an existing parent and its
+        # child(ren) left the new node sitting on top of the bumped-down
+        # child instead of making room for it. Real bug: find_free_child_position
+        # below only looks at parent_node.children, which by this point is
+        # already just [new_node.id] (old_children were just moved under
+        # new_node above) -- it has no idea the old child(ren) even exist,
+        # so it computes the exact same "first child of parent" position
+        # they already occupy. Fix: push the reparented old_children (and
+        # their whole subtrees) down by one full level first, so the new
+        # node's own position (computed after, still via
+        # find_free_child_position) lands in the now-vacated spot instead
+        # of overlapping them.
+        level_step = NODE_HEIGHT + CONNECTOR_BASE_HEIGHT
+        for old_child_id in old_children:
+            self._shift_subtree_y(old_child_id, level_step)
+
         pos = find_free_child_position(parent_id, self.window.nodes)
         if pos:
             new_node.x, new_node.y = pos
@@ -61,6 +77,21 @@ class FlowController:
         self.window.expand_editor_panel()
         self.window.load_node_into_editor(new_node.id)
         self.window.mark_unsaved()
+
+    def _shift_subtree_y(self, node_id: str, delta_y: float):
+        """Shifts node_id and every one of its descendants down by delta_y,
+        keeping their relative spacing intact -- used when a node gets
+        inserted between an existing parent and this (now one level
+        deeper) subtree, see add_child_node. Skips nodes still at the
+        default (0, 0) -- not yet placed on canvas, same convention
+        find_free_child_position already uses."""
+        node = self.window.nodes.get(node_id)
+        if not node:
+            return
+        if node.x != 0 or node.y != 0:
+            node.y += delta_y
+        for child_id in node.children:
+            self._shift_subtree_y(child_id, delta_y)
 
     def add_branch_node(self, parent_id: str):
         parent_node = self.window.nodes.get(parent_id)

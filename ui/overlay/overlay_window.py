@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QMenu, QSlider,
+    QScrollArea, QSlider,
 )
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QColor, QLinearGradient, QBrush
 
 PRIORITY_COLORS = {
@@ -124,11 +124,74 @@ class OverlayGuideRow(_ColoredRow):
         layout.addWidget(status_lbl)
 
 
+class _AccordionSection(QWidget):
+    """A collapsible section: clickable header (chevron/title/count) + body.
+
+    Sections are only ever added to the overlay when they actually have rows
+    -- there is no "empty section" state, unlike the rows inside a section
+    (Tasks/Guide keep their own "all done" placeholder row).
+    """
+
+    def __init__(self, title: str, count: int, open_by_default: bool, parent=None):
+        super().__init__(parent)
+        self._open = open_by_default
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._header = QWidget()
+        self._header.setObjectName("OverlaySectionHead")
+        self._header.setCursor(Qt.PointingHandCursor)
+        # A plain QWidget doesn't paint its stylesheet background/border by
+        # default (unlike QLabel/QPushButton) -- without this, #OverlaySectionHead's
+        # background tint and border lines silently don't render at all.
+        self._header.setAttribute(Qt.WA_StyledBackground, True)
+        header_row = QHBoxLayout(self._header)
+        header_row.setContentsMargins(10, 6, 10, 6)
+        header_row.setSpacing(8)
+
+        self._chevron = QLabel()
+        self._chevron.setObjectName("OverlayChevron")
+        self._chevron.setFixedWidth(10)
+
+        title_lbl = QLabel(title)
+        title_lbl.setObjectName("OverlaySectionTitle")
+
+        self._count_lbl = QLabel(str(count))
+        self._count_lbl.setObjectName("OverlaySectionCount")
+
+        header_row.addWidget(self._chevron)
+        header_row.addWidget(title_lbl, 1)
+        header_row.addWidget(self._count_lbl)
+
+        self._body = QWidget()
+        self._body_layout = QVBoxLayout(self._body)
+        self._body_layout.setContentsMargins(0, 0, 0, 0)
+        self._body_layout.setSpacing(1)
+
+        outer.addWidget(self._header)
+        outer.addWidget(self._body)
+
+        self._header.mousePressEvent = lambda _event: self._toggle()
+        self._apply_open_state()
+
+    def add_row(self, widget: QWidget):
+        self._body_layout.addWidget(widget)
+
+    def _toggle(self):
+        self._open = not self._open
+        self._apply_open_state()
+
+    def _apply_open_state(self):
+        self._chevron.setText("▾" if self._open else "▸")
+        self._body.setVisible(self._open)
+
+
 class OverlayWindow(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
-        self._mode = "tasks"
         self._drag_pos = None
         self._resize_pos = None
         self._resize_start_h = None
@@ -172,12 +235,6 @@ class OverlayWindow(QWidget):
         )
         self.setWindowOpacity(0.9)
 
-        gear_btn = QPushButton("⚙")
-        gear_btn.setObjectName("OverlayIconBtn")
-        gear_btn.setFixedSize(26, 26)
-        gear_btn.setCursor(Qt.PointingHandCursor)
-        gear_btn.clicked.connect(self._show_settings)
-
         close_btn = QPushButton("✕")
         close_btn.setObjectName("OverlayIconBtn")
         close_btn.setFixedSize(26, 26)
@@ -187,7 +244,6 @@ class OverlayWindow(QWidget):
         title_row.addWidget(dot)
         title_row.addWidget(self._profile_lbl, 1)
         title_row.addWidget(self._opacity_slider)
-        title_row.addWidget(gear_btn)
         title_row.addWidget(close_btn)
 
         outer.addWidget(self._title_bar)
@@ -247,15 +303,33 @@ class OverlayWindow(QWidget):
 
         self._profile_lbl.setText(self.main_window.profile_name)
 
-        if self._mode == "tasks":
-            self._populate_tasks()
-        else:
-            self._populate_guide()
+        sections = [self._build_tasks_section(), self._build_guide_section()]
+
+        # Skills/Equipment become sections here once their priority lists are
+        # actually persisted somewhere the overlay can read -- right now
+        # both live only in the Build Planner's in-memory session state, so
+        # there is nothing to show yet. Sections only ever appear when they
+        # have real content (see _AccordionSection docstring).
+        skill_data = self._skill_priority_data()
+        if skill_data:
+            sections.append(self._build_skill_section(skill_data))
+        equip_data = self._equip_priority_data()
+        if equip_data:
+            sections.append(self._build_equip_section(equip_data))
+
+        for section in sections:
+            self._content_layout.insertWidget(self._content_layout.count() - 1, section)
+
+    def _skill_priority_data(self):
+        return None
+
+    def _equip_priority_data(self):
+        return None
 
     # populate
 
-    def _populate_tasks(self):
-        count = 0
+    def _build_tasks_section(self) -> _AccordionSection:
+        rows = []
         for tab_key, cards in self.main_window.task_lists.items():
             for i, card in enumerate(cards):
                 if card.completed:
@@ -269,57 +343,57 @@ class OverlayWindow(QWidget):
                 if character:
                     title = f"{title} · {character}"
                 schedule = getattr(card, "schedule", "daily")
-                if tab_key == "shopping":
-                    title = f"[Shop] {title}"
-                    badge = SCHEDULE_BADGES.get(schedule, SCHEDULE_BADGES["daily"])
-                else:
-                    title = f"[Task] {title}"
-                    badge = SCHEDULE_BADGES.get(schedule, SCHEDULE_BADGES["daily"])
+                badge = SCHEDULE_BADGES.get(schedule, SCHEDULE_BADGES["daily"])
+                title = f"[Shop] {title}" if tab_key == "shopping" else f"[Task] {title}"
                 row = OverlayTaskRow(tab_key, i, title, priority, badge=badge)
                 row.check_btn.clicked.connect(
                     lambda _, tk=tab_key, idx=i: self._toggle_task(tk, idx)
                 )
-                self._content_layout.insertWidget(self._content_layout.count() - 1, row)
-                count += 1
+                rows.append(row)
 
-        if count == 0:
-            self._add_empty("No active tasks ✓")
+        section = _AccordionSection("Tasks", len(rows), open_by_default=True)
+        for row in rows:
+            section.add_row(row)
+        if not rows:
+            section.add_row(self._empty_row("No active tasks ✓"))
+        return section
 
-    def _populate_guide(self):
+    def _build_guide_section(self) -> _AccordionSection:
         mw = self.main_window
         fw = getattr(mw, "flow_map_window", None)
-        if not fw:
-            self._add_empty("No flow loaded")
-            return
+        rows = []
 
-        from core.flow_model import FlowNode
+        if fw:
+            from core.flow_model import FlowNode
 
-        # Collect all maps marked for overlay; use live data for the active map
-        all_maps = dict(getattr(mw, "flow_maps", {}))
-        active_name = getattr(mw, "active_flow_map_name", None)
-        if fw and active_name:
-            all_maps[active_name] = fw.get_flow_data()
+            # Collect all maps marked for overlay; use live data for the active map
+            all_maps = dict(getattr(mw, "flow_maps", {}))
+            active_name = getattr(mw, "active_flow_map_name", None)
+            if active_name:
+                all_maps[active_name] = fw.get_flow_data()
 
-        count = 0
-        for map_name, map_data in all_maps.items():
-            if not map_data.get("show_in_overlay", False):
-                continue
-            nodes = {
-                nid: FlowNode.from_dict(nd)
-                for nid, nd in map_data.get("nodes", {}).items()
-            }
-            for node in nodes.values():
-                if node.status in ("active", "locked", "completed"):
-                    row = OverlayGuideRow(node.id, node.title, node.status)
-                    if node.status in ("active", "completed"):
-                        row.check_btn.clicked.connect(
-                            lambda _, nid=node.id, mn=map_name: self._toggle_node(nid, mn)
-                        )
-                    self._content_layout.insertWidget(self._content_layout.count() - 1, row)
-                    count += 1
+            for map_name, map_data in all_maps.items():
+                if not map_data.get("show_in_overlay", False):
+                    continue
+                nodes = {
+                    nid: FlowNode.from_dict(nd)
+                    for nid, nd in map_data.get("nodes", {}).items()
+                }
+                for node in nodes.values():
+                    if node.status in ("active", "locked", "completed"):
+                        row = OverlayGuideRow(node.id, node.title, node.status)
+                        if node.status in ("active", "completed"):
+                            row.check_btn.clicked.connect(
+                                lambda _, nid=node.id, mn=map_name: self._toggle_node(nid, mn)
+                            )
+                        rows.append(row)
 
-        if count == 0:
-            self._add_empty("All steps completed ✓")
+        section = _AccordionSection("Guide", len(rows), open_by_default=False)
+        for row in rows:
+            section.add_row(row)
+        if not rows:
+            section.add_row(self._empty_row("No flow loaded" if not fw else "All steps completed ✓"))
+        return section
 
     def _toggle_node(self, node_id: str, map_name: str = None):
         mw = self.main_window
@@ -347,12 +421,12 @@ class OverlayWindow(QWidget):
         mw.save_profile(silent=True)
         self.refresh()
 
-    def _add_empty(self, text: str):
+    def _empty_row(self, text: str) -> QLabel:
         lbl = QLabel(text)
         lbl.setObjectName("OverlayEmpty")
         lbl.setAlignment(Qt.AlignCenter)
         lbl.setFixedHeight(40)
-        self._content_layout.insertWidget(0, lbl)
+        return lbl
 
     # actions
 
@@ -362,24 +436,6 @@ class OverlayWindow(QWidget):
             cards[index].toggle()
             self.main_window.refresh()
             self.main_window.save_profile(silent=True)
-
-    def _show_settings(self):
-        menu = QMenu(self)
-        menu.setObjectName("OverlayMenu")
-        a_tasks = menu.addAction("Active Tasks")
-        a_guide = menu.addAction("Guide Overview")
-        a_tasks.setCheckable(True)
-        a_guide.setCheckable(True)
-        a_tasks.setChecked(self._mode == "tasks")
-        a_guide.setChecked(self._mode == "guide")
-        pos = self.sender().mapToGlobal(QPoint(0, self.sender().height()))
-        action = menu.exec(pos)
-        if action == a_tasks and self._mode != "tasks":
-            self._mode = "tasks"
-            self.refresh()
-        elif action == a_guide and self._mode != "guide":
-            self._mode = "guide"
-            self.refresh()
 
     # drag & resize
 

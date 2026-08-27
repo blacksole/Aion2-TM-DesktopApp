@@ -28,6 +28,70 @@ QMenu::item:selected {
     background-color: #374151;
 }
 
+/* No QScrollBar rule existed anywhere in the app before -- every scroll
+   area (Settings, Tasks, Template dialog, ...) fell back to the platform's
+   native scrollbar (light grey track + arrow buttons under Fusion), which
+   clashed badly against the dark theme (User-Screenshot). Global type
+   selector, not scoped to one objectName, so every scroll area in the app
+   picks this up automatically. Flat, no arrow buttons (add-line/sub-line
+   zeroed out) to match the rest of the app's already-flat, native-chrome-
+   free look. */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: rgba(100, 116, 139, 0.6);
+    border-radius: 5px;
+    min-height: 24px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: rgba(34, 211, 238, 0.6);
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+    background: none;
+    border: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: rgba(100, 116, 139, 0.6);
+    border-radius: 5px;
+    min-width: 24px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: rgba(34, 211, 238, 0.6);
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+    background: none;
+    border: none;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}
+
 #appIcon {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #06b6d4, stop:1 #a855f7);
     color: white;
@@ -575,6 +639,107 @@ QDialog {
     );
     color: white;
     border: none;
+}
+
+/* SettingsPage's own sidebar frame -- separate from the shared
+   "#settingsSidebar" above (still used by the older SettingsDialog).
+   Deliberately borderless/transparent (not a boxed panel like the dialog's
+   sidebar): the "flowing tab" design needs the active button to reach the
+   content panel with nothing in between, which a bordered/padded sidebar
+   box would block. */
+#settingsPageSidebar {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+/* SettingsPage's own nav buttons (ui/pages/settings_page.py) -- separate
+   from #settingsSidebarButton above (the older SettingsDialog's buttons,
+   which use real :checked state) since these track "active" via a plain
+   Qt property + style().unpolish()/polish(), not setCheckable(). Real bug
+   fixed here: this objectName never had a matching rule at all before
+   (the code set "settingsNavButton", every rule here was written for
+   "settingsSidebarButton") -- so every nav button silently fell back to
+   the platform's default grey QPushButton look. "Flowing tab" look
+   approved via a live HTML/CSS preview -- the exact color-mix()/gradient-
+   border/background-clip CSS tricks used there don't exist in Qt's QSS
+   engine, so the gradient fill below uses precomputed qlineargradient
+   stops (same 55%/45% blend ratios), and the gradient BORDER became a
+   single flat translucent-purple color on 3 sides (QSS borders can't do
+   gradients).
+
+   Real bug found on first live run: the fade's end color was hardcoded to
+   #0f172a (GradientBackground's "abyss" theme first stop), assuming that
+   would match the page behind it -- but GradientBackground paints ONE
+   diagonal gradient across the WHOLE WINDOW (see ui/main_window.py's
+   THEMES), so #0f172a is only correct in the window's exact top-left
+   corner. Anywhere else (which is everywhere Settings actually renders)
+   the true local color is some blend further along that gradient, so the
+   flat #0f172a read as a mismatched grey box instead of blending in.
+   Fixed by fading the ALPHA to 0 (fully transparent) instead of to a
+   fixed color, and making #settingsContentPanel's fill transparent too --
+   both then just reveal whatever the real background actually is at that
+   position, correct regardless of theme or where the window sits. */
+#settingsNavButton {
+    background-color: transparent;
+    color: #cbd5e1;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 13.5px;
+    font-weight: 600;
+}
+
+#settingsNavButton:hover {
+    background-color: rgba(51, 65, 85, 0.8);
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    color: white;
+}
+
+#settingsNavButton[active="true"] {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(10, 110, 136, 255),
+        stop:0.18 rgba(84, 51, 134, 255),
+        stop:0.42 rgba(84, 51, 134, 0),
+        stop:1 rgba(84, 51, 134, 0)
+    );
+    color: white;
+    border-top: 1px solid rgba(168, 85, 247, 0.55);
+    border-left: 1px solid rgba(168, 85, 247, 0.55);
+    border-bottom: 1px solid rgba(168, 85, 247, 0.55);
+    border-right: none;
+    border-top-right-radius: 0px;
+    border-bottom-right-radius: 0px;
+}
+
+#settingsNavButton[active="true"]:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(10, 110, 136, 255),
+        stop:0.18 rgba(84, 51, 134, 255),
+        stop:0.42 rgba(84, 51, 134, 0),
+        stop:1 rgba(84, 51, 134, 0)
+    );
+    color: white;
+}
+
+/* Wraps SettingsPage's scroll area (see settings_page.py) -- a NEW,
+   settings-only objectName (not the shared "#scrollArea" used by
+   tasks_page.py/template_dialog.py) so this doesn't leak into other
+   pages. Transparent fill (see the note above the nav button rules) so
+   it reveals the real window-wide background instead of a hardcoded
+   mismatched color; square top-left corner is what makes the active nav
+   button flow straight into this panel with no seam. */
+/* Border is hand-painted by _FlowingSettingsPanel (settings_page.py) now
+   -- QSS can't fade a border from purple to grey, only paint it flat, so
+   this only owns the transparent fill. */
+#settingsContentPanel {
+    background-color: transparent;
+    border: none;
+    border-radius: 10px;
+    border-top-left-radius: 0px;
 }
 
 #statCard,
@@ -2185,26 +2350,35 @@ QToolTip {
     background: transparent;
 }
 
-#OverlayMenu {
-    background-color: #0f172a;
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    border-radius: 6px;
-    color: #cbd5e1;
+#OverlaySectionHead {
+    background: rgba(255, 255, 255, 0.02);
+    border-top: 1px solid rgba(100, 116, 139, 0.25);
+    border-bottom: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+#OverlaySectionHead:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+#OverlayChevron {
+    color: #64748b;
+    font-size: 10px;
+    background: transparent;
+}
+
+#OverlaySectionTitle {
+    color: #f8fafc;
     font-size: 12px;
-    padding: 4px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    background: transparent;
 }
 
-#OverlayMenu::item {
-    padding: 6px 12px;
-    border-radius: 4px;
-}
-
-#OverlayMenu::item:selected {
-    background: rgba(59, 130, 246, 0.2);
-    color: #93c5fd;
-}
-
-#OverlayMenu::item:checked {
-    color: #3b82f6;
+#OverlaySectionCount {
+    color: #64748b;
+    font-size: 10.5px;
     font-weight: 600;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 1px 6px;
 }

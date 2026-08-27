@@ -4,8 +4,8 @@ import subprocess
 import webbrowser
 import winsound
 from pathlib import Path
-from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtCore import Signal, QTime, QDate, QDateTime, QSize, Qt
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QPainterPath, QPen, QBrush, QLinearGradient, QColor
+from PySide6.QtCore import Signal, QTime, QDate, QDateTime, QSize, Qt, QRectF, QPointF
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QDateEdit, QButtonGroup, QGridLayout,
@@ -15,6 +15,50 @@ from PySide6.QtWidgets import (
 from core.version import CURRENT_BETA_FEATURE_NAME
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
+
+
+class _FlowingSettingsPanel(QFrame):
+    """Content panel for the Settings page's "flowing tab" sidebar (User-
+    Wunsch) -- Qt's stylesheet engine can only paint a FLAT border color,
+    never a gradient, so the browser-mockup's purple-fading-to-grey border
+    (continuing from the active nav button's own accent border) has to be
+    hand-painted here instead of in QSS. Fill/background stays whatever
+    #settingsContentPanel's QSS says (transparent, so the real window
+    gradient behind it always shows through correctly); this only adds the
+    border stroke on top, square at the top-left corner (flush against the
+    active tab) and rounded everywhere else."""
+
+    _RADIUS = 10.0
+
+    def paintEvent(self, event):
+        super().paintEvent(event)  # lets the QSS background/fill render first
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        pen_width = 1.0
+        rect = QRectF(self.rect()).adjusted(pen_width / 2, pen_width / 2, -pen_width / 2, -pen_width / 2)
+        r = self._RADIUS
+
+        path = QPainterPath()
+        path.moveTo(rect.left(), rect.top())
+        path.lineTo(rect.right() - r, rect.top())
+        path.arcTo(rect.right() - 2 * r, rect.top(), 2 * r, 2 * r, 90, -90)
+        path.lineTo(rect.right(), rect.bottom() - r)
+        path.arcTo(rect.right() - 2 * r, rect.bottom() - 2 * r, 2 * r, 2 * r, 0, -90)
+        path.lineTo(rect.left() + r, rect.bottom())
+        path.arcTo(rect.left(), rect.bottom() - 2 * r, 2 * r, 2 * r, -90, -90)
+        path.lineTo(rect.left(), rect.top())
+
+        gradient = QLinearGradient(
+            rect.topLeft(),
+            QPointF(rect.left() + rect.width() * 0.35, rect.top() + rect.height() * 0.35),
+        )
+        gradient.setColorAt(0.0, QColor(168, 85, 247, 200))       # purple, matches the tab's own border
+        gradient.setColorAt(1.0, QColor(100, 116, 139, 115))      # normal app border grey
+
+        painter.setPen(QPen(QBrush(gradient), pen_width))
+        painter.drawPath(path)
 
 
 
@@ -61,15 +105,21 @@ class SettingsPage(QWidget):
         root_layout.addWidget(self.title_label)
         root_layout.addWidget(self.subtitle_label)
 
+        # No spacing here (User-Wunsch: "flowing tab") -- the active nav
+        # button's right edge needs to sit flush against the content
+        # panel's left edge with nothing in between for the fill/border to
+        # visually merge; see #settingsPageSidebar/#settingsContentPanel.
         body_layout = QHBoxLayout()
-        body_layout.setSpacing(16)
+        body_layout.setSpacing(0)
 
         self.settings_sidebar = QFrame()
-        self.settings_sidebar.setObjectName("settingsSidebar")
+        self.settings_sidebar.setObjectName("settingsPageSidebar")
         self.settings_sidebar.setFixedWidth(220)
 
         sidebar_layout = QVBoxLayout(self.settings_sidebar)
-        sidebar_layout.setContentsMargins(12, 12, 12, 12)
+        # No right margin -- same "flush against the panel" reason as the
+        # spacing above; left/top/bottom keep breathing room.
+        sidebar_layout.setContentsMargins(12, 12, 0, 12)
         sidebar_layout.setSpacing(8)
 
         self.btn_general = QPushButton()
@@ -118,9 +168,32 @@ class SettingsPage(QWidget):
         scroll_area.setFrameShape(QFrame.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setWidget(self.content_stack)
+        # QAbstractScrollArea's viewport paints its own QPalette::Base
+        # background regardless of the outer widget's "#scrollArea { background:
+        # transparent }" rule (that only reaches the QScrollArea itself, not its
+        # internal viewport child) -- under Fusion that palette role defaults to
+        # a light grey/white, which showed as a solid grey box instead of the
+        # real window gradient behind #settingsContentPanel. Scoped to just
+        # this instance rather than editing the shared "#scrollArea" QSS rule
+        # (also used by tasks_page.py/template_dialog.py).
+        scroll_area.viewport().setStyleSheet("background: transparent;")
+
+        # Bordered panel around the content (User-Wunsch: the active nav
+        # button's "flowing tab" fill/border needs a real panel to join
+        # into -- the scroll area itself stays transparent/borderless as
+        # before, this just wraps it). Own objectName, not the shared
+        # "#scrollArea" one (used by Tasks/Template dialog too), so the
+        # panel styling stays scoped to Settings. _FlowingSettingsPanel
+        # hand-paints the fading border (see its docstring); QSS still
+        # owns the transparent fill via the same objectName.
+        content_panel = _FlowingSettingsPanel()
+        content_panel.setObjectName("settingsContentPanel")
+        content_panel_layout = QVBoxLayout(content_panel)
+        content_panel_layout.setContentsMargins(4, 4, 4, 4)
+        content_panel_layout.addWidget(scroll_area)
 
         body_layout.addWidget(self.settings_sidebar)
-        body_layout.addWidget(scroll_area, 1)
+        body_layout.addWidget(content_panel, 1)
 
         root_layout.addLayout(body_layout, 1)
 

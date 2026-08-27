@@ -1,8 +1,8 @@
 # Aion2 Task Manager
 
-**v1.3.0** — Modern desktop productivity manager for Aion players.
+**v1.4.0** — Modern desktop productivity manager for Aion players.
 
-Aion2 Task Manager combines task management, shopping organization, event timers, a visual flow map planner and an in-game HUD overlay into a single lightweight desktop application — built specifically for Aion 2 players who want to stay on top of their daily and weekly goals without alt-tabbing constantly.
+Aion2 Task Manager combines task management, shopping organization, event timers, a visual flow map planner and an in-game HUD overlay into a single lightweight desktop application — built specifically for Aion 2 players who want to stay on top of their daily and weekly goals without alt-tabbing constantly. An Armory module (item database, crafting calculator, build planner) is available as an opt-in Beta and is still under active development — see the Roadmap section below.
 
 ---
 
@@ -68,13 +68,10 @@ Export/Import profiles as `.json` for backup or sharing.
 * One-click in-place installation (downloads ZIP, extracts, clears cache)
 * App restarts automatically after update
 
-### 🧪 Armory (Beta)
+### 🔗 Community
 
-Opt-in area for gear planning, unlockable at your own risk via Settings → "Unlock Beta Area" (shows a warning before enabling — still under active development).
-
-* **Item Database** — searchable catalog with class, category, rarity and level filters; per-slot equipment priority lists with recommended order.
-* **Crafting Calculator** — full material chain for any craftable item, expandable ingredient-by-ingredient; filterable by profession, category and rarity, with rarity-textured material icons.
-* **Build Planner** — assemble a virtual character loadout, compare stats, save multiple named gear/skill sets per class.
+* GitHub, version copy and Discord links on the About page
+* Discord dropdown links to the official Aion 2 Discord and the ZasseZer0 Gaming Discord
 
 ### 🌈 Themes
 
@@ -121,31 +118,40 @@ See [CHANGELOG.md](../CHANGELOG.md) for the full version history.
 
 ## 🧭 Roadmap
 
-Ideas gathered so far, not yet implemented — no fixed timeline, order isn't priority.
+Everything above this section is current, shipped functionality. The **Armory** module and its Item Database are still under active development — this is where ongoing and planned work lives, no fixed timeline, order isn't priority.
 
-**Armory / Gear**
+### 🧪 Armory (Beta)
+
+Opt-in area for gear planning, unlockable at your own risk via Settings → "Unlock Beta Area" (shows a warning before enabling).
+
+**Already available in Beta:**
+* **Item Database** — searchable catalog with category/class/rarity/PvP-PvE-Neutral filters, a grouped Categories sidebar, dedicated Wings filters
+* **Crafting Calculator** — full material chain for any craftable item, expandable ingredient-by-ingredient; a Vergleich (Direct Craft vs. Transfer) comparison tab
+* **Build Planner** — assemble a virtual character loadout, compare stats, save multiple named gear/skill sets per class, enchant-level tracking per slot, and a Quick Select for auto-equipping a full crafted/dungeon-drop/PvP gear set by race and gear tier in one click, plus a Stat Priority editor to customize which substats get picked per role and gear mode
+* **Full English/Deutsch/Русский localization** across all three Armory windows, following your Settings → Language choice (item/recipe/skill/material names stay in their original form until an official in-game translation exists)
+
+**Planned / in progress:**
+* Templates: pick items directly from the Item Database instead of typing them in
 * Rune slots (Clash Rune / Devotion Rune) in the Build Planner
-* Jewelry-granted skills factored into the Skill Planner
-* Quick Select — auto-suggest a full gear set by role and gear tier
+* Jewelry-granted skills and character passive/active skills factored into the Build Planner's stat calculation
+* Stat-based ranking per role (Attacker/Defender/Support) for Quick Select
 * Favoriting individual stat rows for a pinned quick-glance view
+* Monthly automatic refresh of the item/skill database
+* Season-aware dungeon/material availability (once a reliable patch-notes source is available)
 * Shugo.gg character import & stat comparison (blocked until a Global-region endpoint exists)
 
-**Overlay & Flow Map**
+### Overlay & Flow Map
 * Skills and Equipment sections in the in-game overlay, with two-way sync back to the app when checked off
 * Per-section toggle for which equipment priorities show up in the overlay
 * Flow Map: item picker + a dedicated "Item Node" card type
 * Flow Map: merge branches instead of a strict tree
 
-**Item Database & Crafting**
-* Monthly automatic refresh of the item/skill database
-* Season-aware dungeon/material availability (once a reliable patch-notes source is available)
-
-**Quality of Life**
-* Templates: pick items directly from the database instead of typing them in
+### Quality of Life
 * Profile sharing via a short share-code
 * In-app wiki / documentation
 * About page banner
 * Overlay timer mode (Daily/Weekly/Shugo/Rift countdowns in the HUD)
+* Automated Discord update announcements with screenshots (currently posted manually via webhook)
 
 ---
 

@@ -21,9 +21,12 @@ from .pages.dashboard_page import DashboardPage
 from .pages.about_page import AboutPage
 from .flow.flow_app_window import FlowMapWindow
 from .overlay.overlay_window import OverlayWindow
+from core.app_logger import get_logger
 from core.translations import tr
 from core.update_checker import UpdateChecker
 from core.version import ARMORY_ENABLED
+
+logger = get_logger("main_window")
 from PySide6.QtWidgets import QTimeEdit
 from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
 from PySide6.QtWidgets import (
@@ -216,10 +219,6 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        app = QApplication.instance()
-        if app is not None:
-            app.aboutToQuit.connect(self._log_about_to_quit)
-
         self.auto_save = True
         self._pending_update = None
         self._checker = None
@@ -306,6 +305,15 @@ class MainWindow(QMainWindow):
         self.active_flow_map_name: str = "Map 1"
 
         self.item_database_window = None
+        # Build Planner state (User-Wunsch, 2026-08-25: "die Informationen
+        # vom Buildplanner im Profil gespeichert werden" -- first step,
+        # scoped to equipment + class/race). ItemDatabase/LoadoutWindow are
+        # both lazily created (see _ensure_item_database_window /
+        # ItemDatabaseWindow.open_loadout_window), so this holds whatever
+        # was last loaded/saved even while neither window exists yet this
+        # session -- handed off to the LoadoutWindow the moment it's
+        # actually created, and refreshed from it (if open) on every save.
+        self._build_planner_state: dict | None = None
 
         self.flow_map_window = FlowMapWindow(self, language=self.language, tr_func=tr)
         self.flow_map_window.map_switch_requested.connect(self._switch_flow_map)
@@ -520,11 +528,13 @@ class MainWindow(QMainWindow):
         if self.overlay.isVisible():
             self.overlay.hide()
             self.overlay_toggle_btn.setChecked(False)
+            logger.debug("Overlay hidden")
         else:
             self.overlay.refresh()
             self.overlay.show()
             self.overlay.raise_()
             self.overlay_toggle_btn.setChecked(True)
+            logger.debug("Overlay shown")
 
     def open_flow_map_window(self):
         if self.flow_map_window is None:
@@ -549,6 +559,7 @@ class MainWindow(QMainWindow):
                 db_dir = Path(sys._MEIPASS) / "ItemDatabase"
             else:
                 db_dir = self.project_root / "ItemDatabase"
+            logger.info("Loading ItemDatabase module from: %s", db_dir)
             spec = importlib.util.spec_from_file_location("item_database_app", db_dir / "app.py")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -558,21 +569,28 @@ class MainWindow(QMainWindow):
             # whole app looking "minimized" until something restores focus.
             # This window's lifetime is already managed explicitly via this
             # singleton attribute, not by Qt parent-child ownership.
-            self.item_database_window = module.create_window(parent=None)
+            self.item_database_window = module.create_window(parent=None, language=self.language)
+            if hasattr(self.item_database_window, "set_theme"):
+                self.item_database_window.set_theme(self.current_theme)
+            if self._build_planner_state and hasattr(self.item_database_window, "set_pending_loadout_state"):
+                self.item_database_window.set_pending_loadout_state(self._build_planner_state)
 
         return self.item_database_window
 
     def open_item_database_window(self):
+        logger.debug("Opening Item Database window")
         window = self._ensure_item_database_window()
         window.show()
         window.raise_()
         window.activateWindow()
 
     def open_build_planner_window(self):
+        logger.debug("Opening Build Planner window")
         window = self._ensure_item_database_window()
         window.open_loadout_window()
 
     def open_crafting_calculator_window(self):
+        logger.debug("Opening Crafting Calculator window")
         window = self._ensure_item_database_window()
         window.open_crafting_calculator()
 
@@ -720,6 +738,10 @@ class MainWindow(QMainWindow):
         show = ARMORY_ENABLED or self.armory_beta_enabled
         self.sidebar.buttons["armory"].setVisible(show)
         self.sidebar.set_armory_beta_marked(show and not ARMORY_ENABLED)
+        logger.debug(
+            "Armory visibility updated: show=%s (ARMORY_ENABLED=%s, armory_beta_enabled=%s)",
+            show, ARMORY_ENABLED, self.armory_beta_enabled,
+        )
         self.sidebar.update_language(self.language, tr)
 
 
@@ -1316,6 +1338,12 @@ class MainWindow(QMainWindow):
 
         styles = styles.replace("ASSET_PATH", base_path.as_posix())
         self.setStyleSheet(styles)
+        # OverlayWindow has no Qt parent (it's a standalone Qt.Tool window, see
+        # its __init__), so it never receives this stylesheet through normal
+        # widget-tree cascade -- it needs its own copy applied directly.
+        if hasattr(self, "overlay"):
+            self.overlay.setStyleSheet(styles)
+        logger.debug("Stylesheet loaded: %s (%d bytes)", style_path, len(styles))
 
     def toggle_events(self):
         self.tasks_page.set_event_features_visible(
@@ -1374,16 +1402,7 @@ class MainWindow(QMainWindow):
         self._force_quit = True
         self.close()
 
-    def _log_about_to_quit(self):
-        app = QApplication.instance()
-        widgets = app.topLevelWidgets() if app else []
-        print("[MainWindow] aboutToQuit fired. Top-level widgets still around:")
-        for w in widgets:
-            print(f"    - {type(w).__name__} (visible={w.isVisible()})")
-
     def closeEvent(self, event):
-        print(f"[MainWindow] closeEvent (force_quit={getattr(self, '_force_quit', False)}, "
-              f"minimize_to_tray={self.minimize_to_tray})")
         if getattr(self, "_force_quit", False):
             self.save_profile(silent=True)
             event.accept()
@@ -1444,13 +1463,13 @@ class MainWindow(QMainWindow):
         if not path:
             return
         if not os.path.isfile(path):
-            print(f"[DPS Meter] Datei nicht gefunden: {path}")
+            logger.warning("DPS Meter file not found: %s", path)
             return
         try:
             os.startfile(path)
-            print(f"[DPS Meter] Gestartet: {path}")
+            logger.info("DPS Meter started: %s", path)
         except Exception as e:
-            print(f"[DPS Meter] Fehler beim Starten: {e}")
+            logger.error("DPS Meter failed to start: %s", e)
 
     def _fire_notification(self, title: str, message: str):
         if hasattr(self, "tray_icon"):
@@ -1807,11 +1826,15 @@ class MainWindow(QMainWindow):
             for node in self.flow_map_window.nodes.values():
                 if node.icon == "character" and node.character_items:
                     self._sync_character_items_to_shopping(node.title, node.character_items)
+        self._build_planner_state = data.get("build_planner")
+        if self.item_database_window and hasattr(self.item_database_window, "set_pending_loadout_state"):
+            self.item_database_window.set_pending_loadout_state(self._build_planner_state)
+
         self._rebuild_characters()
         if hasattr(self.header, "set_profile"):
             self.header.set_profile(self.profile_name)
         self.save_last_profile(profile_path)
-        print("Profil geladen:", self.profile_name)
+        logger.info("Profile loaded: %s", self.profile_name)
 
     def serialize_card(self, card):
         if isinstance(card, ShoppingCard):
@@ -1867,6 +1890,9 @@ class MainWindow(QMainWindow):
             self.save_profile(silent=True)
 
     def save_profile(self, silent=False):
+        if self.item_database_window and hasattr(self.item_database_window, "get_loadout_state"):
+            self._build_planner_state = self.item_database_window.get_loadout_state()
+
         data = {
             "profile_name": self.profile_name,
             "theme": self.current_theme,
@@ -1922,6 +1948,7 @@ class MainWindow(QMainWindow):
             "active_flow_map": self.active_flow_map_name,
             "item_templates": self.item_templates,
             "task_templates": self.task_templates,
+            "build_planner": self._build_planner_state,
         }
 
         profile_path = self.profile_dir / f"{self.profile_name}.json"
@@ -1931,7 +1958,7 @@ class MainWindow(QMainWindow):
 
         self.save_last_profile(profile_path)
 
-        print("Profil gespeichert:", profile_path)
+        logger.debug("Profile saved: %s", profile_path)
         if not silent:
             self.show_toast(tr(self.language, "profile_saved"))
 
@@ -2099,7 +2126,7 @@ class MainWindow(QMainWindow):
         self.show_toast(tr(self.language, "event_entries_removed"))
 
     def apply_language(self):
-        self.setWindowTitle("Aion Companion")
+        self.setWindowTitle("Aion 2 Companion")
 
         self.timers_page.update_language(self.language, tr)
         self.settings_page.update_language(self.language, tr)
@@ -2109,6 +2136,9 @@ class MainWindow(QMainWindow):
 
         if self.flow_map_window:
             self.flow_map_window.update_language(self.language, tr)
+
+        if self.item_database_window and hasattr(self.item_database_window, "update_language"):
+            self.item_database_window.update_language(self.language)
 
         # Update priority labels + event badges on all existing cards
         prio_display = {
@@ -2157,6 +2187,9 @@ class MainWindow(QMainWindow):
             if hasattr(self, "theme_logo_label"):
                 self.update_theme_logo()
             self.background.setProperty("theme", theme)
+
+        if self.item_database_window is not None and hasattr(self.item_database_window, "set_theme"):
+            self.item_database_window.set_theme(theme)
 
         for widget in self.findChildren(QWidget):
             widget.style().unpolish(widget)
@@ -2444,7 +2477,7 @@ class MainWindow(QMainWindow):
             self.last_weekly_reset_date = last_weekly_reset_date
 
     def handle_sidebar_page_changed(self, page_key: str):
-        print("Sidebar clicked:", page_key)
+        logger.debug("Sidebar clicked: %s", page_key)
 
         if page_key in self.page_indexes:
             self.page_stack.setCurrentIndex(self.page_indexes[page_key])
