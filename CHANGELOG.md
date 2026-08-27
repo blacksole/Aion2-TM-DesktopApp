@@ -49,7 +49,6 @@ Release Date: 2026-08-27
 - **Build Planner (Beta): PvP Abyss Gear in Quick Select** — the 5 Abyss rank sets (Decanus through High Commander) are now available in the Item-Set dropdown when PvP is active, automatically matched to your character's race (Guardian for Elyos, Archon for Asmodae).
 - **Build Planner (Beta): real enchant range per item** — the enchant slider's maximum now reflects the actually equipped item's own max enchant + exceed level instead of a flat 0–30 range.
 - **Build Planner (Beta): "Eigenschaften-Priorität" editor** — a new gear-icon button next to "Eigenschaften" lets you customize which substats get auto-picked, per role (Angreifer/Verteidiger/Support) and per Gear-Typ (PvE/PvP), across 4 equipment categories (Weapon/Guard, Armor, Jewelry, Bracelets). Your choices are saved to your profile. Still Beta — Equipment-Priority list and character skills aren't factored in yet.
-- **About page: Discord community links** — a new "Discord" row with a dropdown lists the official Aion2 Discord and the ZasseZer0 / App Support Discord.
 - **Settings: "View Log" button** — opens a read-only viewer for the app's diagnostic log (which window opened when, which assets/colors loaded or failed to, etc.), useful for troubleshooting without having to find the log file manually.
 
 ## 🎨 UI Changes
