@@ -63,7 +63,7 @@ Release Date: 2026-08-27
 
 ## 🐛 Bug Fixes
 
-- **Armory (Beta): item slots showed a grey background instead of the rarity color** in the installed release build (worked fine when running from source) — the rarity background images were in a format the packaged build's image support didn't reliably decode; converted to a universally-supported format.
+- **Armory (Beta): item slots showed a grey background instead of the rarity color** in the installed release build (worked fine when running from source) — the rarity backdrop is now drawn directly instead of loaded from an image file, so it can no longer depend on how a given build happens to bundle image assets.
 - **Armory (Beta): now follows your language setting** — Item Database, Crafting Calculator and Build Planner previously always showed German text regardless of your chosen language (Settings → Language); all UI text (buttons, labels, tooltips, messages) now follows English/Deutsch/Русский correctly. Item, recipe, skill and material names stay in their original form (no official in-game translation exists yet for those).
 - **Armory (Beta): Elementalist renamed to Spiritmaster** — matches the class's actual current name; affects the Class filter, Build Planner and Skill Planner.
 - **Build Planner (Beta): "Quick Select" no longer resets enchant levels on earlier slots** — auto-equipping a full gear set previously only kept the enchant level of the last item it processed; every item now correctly keeps its own assigned enchant level.

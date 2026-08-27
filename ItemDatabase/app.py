@@ -59,7 +59,7 @@ def _t(key: str, **kwargs) -> str:
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, QSize, Qt, QSortFilterProxyModel, QTimer, Signal
 from PySide6.QtGui import (
-    QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap,
+    QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QRadialGradient,
     QPolygonF, QStandardItem, QStandardItemModel,
 )
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
@@ -296,46 +296,29 @@ def _parse_wing_effects(description: str) -> tuple[set[str], set[str]]:
     return _stat_names(match.group(1)), _stat_names(match.group(2))
 
 
-# Real per-rarity backdrop textures, saved locally under assets/ (from
-# questlog.gg's cdn.questlog.gg/aion-2/common/icon_backgrounds/ mirror) —
-# confirmed with the user via an artifact preview before wiring these in,
-# using real ascending-rarity order Common < Rare < Legend < Unique < Epic
-# (a lower position than the name suggests — "Legend" scales weaker than
-# Unique in the enchant-bonus formulas too, see estimate_enchant_bonus).
-_RARITY_BG_DIR = _BUNDLE_DIR / "assets" / "backgrounds_rarity"
-# .png, not .webp -- real bug found via a packaged-build screenshot (User,
-# 2026-08-27: "bei meinem ist alles mit Grautönen hinterlegt. in der
-# Entwicklungsumgebung farbig"): QPixmap loads .webp fine when running from
-# source (the installed PySide6 wheel's own Qt plugins are all on disk and
-# found normally), but PyInstaller doesn't reliably bundle Qt's WebP
-# imageformat plugin into the frozen EXE -- QPixmap(path) then silently
-# returns a null pixmap there (file itself WAS bundled correctly, see
-# Aion2 TM.spec's datas list), and _rarity_background's null-check fell
-# back to the flat slate-gray fill. .png needs no optional Qt plugin at
-# all, so this can't recur regardless of what PyInstaller decides to bundle.
-_RARITY_BG_FILES = {
-    "Common": "UT_SlotGrade_Common.png",
-    "Rare": "UT_SlotGrade_Rare.png",
-    "Unique": "UT_SlotGrade_Unique.png",
-    "Epic": "UT_SlotGrade_Epic.png",
-    "Legend": "UT_SlotGrade_Legend.png",
-}
-_rarity_bg_cache: dict[str, QPixmap] = {}
-
-
-def _rarity_background(grade: str | None) -> QPixmap | None:
-    if not grade or grade not in _RARITY_BG_FILES:
+# Per-rarity backdrop was originally a real texture image (from questlog.gg's
+# icon_backgrounds mirror, saved locally under assets/) -- replaced with a
+# painted gradient instead (User-Wunsch, 2026-08-27, after even a .png
+# re-encode of that texture STILL showed as flat grey in a freshly rebuilt +
+# reinstalled EXE on a second machine: "Kann man hierfür auf Dateien oder
+# Farben zurückgreifen, die direkt in der App hinterlegt sind?"). Drawing the
+# backdrop with QPainter from GRADE_COLORS (already a plain Python dict, no
+# file I/O at all) can't be affected by however a given PyInstaller build
+# happens to bundle -- or fail to bundle -- an image asset/plugin, unlike an
+# on-disk texture file. Visually a diagonal rarity-tinted glow instead of the
+# original artwork -- an intentional trade (User: "Das Problem ist nicht die
+# Entwicklungsumgebung", i.e. reliability in the real distributed build
+# matters here, not exact parity with the original texture's look).
+def _rarity_backdrop_gradient(size: int, grade: str | None) -> QLinearGradient | None:
+    color = GRADE_COLORS.get(grade) if grade else None
+    if not color:
         return None
-    if grade not in _rarity_bg_cache:
-        path = _RARITY_BG_DIR / _RARITY_BG_FILES[grade]
-        pix = QPixmap(str(path)) if path.exists() else QPixmap()
-        if pix.isNull():
-            logger.warning("Rarity background FAILED to load (grade=%s, path=%s, exists=%s) -- falling back to flat gray", grade, path, path.exists())
-        else:
-            logger.info("Rarity background loaded (grade=%s, path=%s, size=%s)", grade, path, pix.size())
-        _rarity_bg_cache[grade] = pix
-    pix = _rarity_bg_cache[grade]
-    return pix if not pix.isNull() else None
+    c = QColor(color)
+    gradient = QLinearGradient(0, 0, size, size)
+    gradient.setColorAt(0.0, QColor(c.red(), c.green(), c.blue(), 130))
+    gradient.setColorAt(0.55, QColor(30, 41, 59, 235))
+    gradient.setColorAt(1.0, QColor(15, 23, 42, 255))
+    return gradient
 
 # Same 4-stop diagonal gradients as cont_ToDo_app's 6 Layout themes — copied
 # on purpose so this semi-isolated sub-app looks consistent without
@@ -401,11 +384,11 @@ class IconCache(QObject):
         backdrop, the way game inventories normally present them.
 
         grade, when given a known rarity (GRADE_COLORS key), uses that
-        rarity's real backdrop texture (see _rarity_background) plus a
-        matching border, instead of the neutral slate default — baked into
-        the pixmap itself so it also works in contexts with no wrapper
-        widget to style (e.g. a QStandardItem's DecorationRole in the item
-        table)."""
+        rarity's own color for a painted backdrop gradient (see
+        _rarity_backdrop_gradient) plus a matching border, instead of the
+        neutral slate default — baked into the pixmap itself so it also
+        works in contexts with no wrapper widget to style (e.g. a
+        QStandardItem's DecorationRole in the item table)."""
         composed = QPixmap(size, size)
         composed.fill(Qt.transparent)
 
@@ -418,18 +401,11 @@ class IconCache(QObject):
         painter.setRenderHint(QPainter.Antialiasing)
 
         border_color = GRADE_COLORS.get(grade) if grade else None
-        bg_texture = _rarity_background(grade)
+        bg_gradient = _rarity_backdrop_gradient(size, grade)
 
         painter.setClipPath(clip_path)
-        if bg_texture:
-            scale = max(size / bg_texture.width(), size / bg_texture.height())
-            scaled_bg = bg_texture.scaled(
-                int(bg_texture.width() * scale) + 1, int(bg_texture.height() * scale) + 1,
-                Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation,
-            )
-            bx = (size - scaled_bg.width()) // 2
-            by = (size - scaled_bg.height()) // 2
-            painter.drawPixmap(bx, by, scaled_bg)
+        if bg_gradient is not None:
+            painter.fillRect(0, 0, size, size, bg_gradient)
         else:
             painter.fillRect(0, 0, size, size, QColor(71, 85, 105))
         painter.setClipping(False)
