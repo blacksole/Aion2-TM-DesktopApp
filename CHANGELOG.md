@@ -63,6 +63,7 @@ Release Date: 2026-08-27
 
 ## 🐛 Bug Fixes
 
+- **Armory (Beta): no styling at all in the installed release build** — Item Database, Crafting Calculator and Build Planner rendered with Qt's bare default look (flat grey, plain default buttons) instead of the app's actual dark theme, because the stylesheet file was being looked for at the wrong internal path and silently never loaded. Only ever affected the installed download, never running from source.
 - **Armory (Beta): item slots showed a grey background instead of the rarity color** in the installed release build (worked fine when running from source) — the rarity backdrop is now drawn directly instead of loaded from an image file, so it can no longer depend on how a given build happens to bundle image assets.
 - **Armory (Beta): now follows your language setting** — Item Database, Crafting Calculator and Build Planner previously always showed German text regardless of your chosen language (Settings → Language); all UI text (buttons, labels, tooltips, messages) now follows English/Deutsch/Русский correctly. Item, recipe, skill and material names stay in their original form (no official in-game translation exists yet for those).
 - **Armory (Beta): Elementalist renamed to Spiritmaster** — matches the class's actual current name; affects the Class filter, Build Planner and Skill Planner.
