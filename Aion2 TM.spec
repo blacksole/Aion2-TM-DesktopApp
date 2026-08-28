@@ -17,6 +17,8 @@ a = Analysis(
         ('ItemDatabase/data/arcana_info.json', 'ItemDatabase/data'),
         ('ItemDatabase/data/arcana_class_skills.json', 'ItemDatabase/data'),
         ('ItemDatabase/data/dungeons_all.json', 'ItemDatabase/data'),
+        ('ItemDatabase/data/daevanion_boards_s.json', 'ItemDatabase/data'),
+        ('ItemDatabase/data/daevanion_boards_a.json', 'ItemDatabase/data'),
     ],
     hiddenimports=['email', 'email.mime', 'email.mime.text', 'email.mime.multipart'],
     hookspath=[],
