@@ -7,6 +7,7 @@ Run fetch_items.py first to populate data/items_all.json, then:
 
 import copy
 import json
+import math
 import re
 import sys
 from collections import deque
@@ -59,7 +60,7 @@ def _t(key: str, **kwargs) -> str:
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, QSize, Qt, QSortFilterProxyModel, QTimer, Signal
 from PySide6.QtGui import (
-    QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QRadialGradient,
+    QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap,
     QPolygonF, QStandardItem, QStandardItemModel,
 )
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
@@ -84,6 +85,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QSlider,
     QSpinBox,
@@ -161,6 +163,74 @@ GRADE_COLORS = {
     "Epic": "#f59e0b",
     "Legend": "#38bdf8",
 }
+
+# Skill Points available at the current level-45 cap (User-Wunsch,
+# 2026-08-27) -- researched externally, not derivable from our own item/
+# recipe data since Empyrean Trace/Monolith is a pure map-collectible system
+# (see project_skillpoint_sources.md memory for the full source list).
+# Base: 1 Skill Point per level-up, levels 2-45 (level 1 itself gives none).
+_SKILLPOINTS_BASE_AT_LEVEL_45 = 44
+
+# Wisdom Stone rewards per Monolith level (1 Wisdom Stone = 1 permanent
+# Skill Point) -- only the character's own starting-zone Monolith (Verteron
+# for Elyos, Altgard for Asmodae) grants these; the other two Monoliths
+# (Morheim/Eltnen, Ereshkigal) give cosmetics/PvP stats instead, no Skill
+# Points. (level_from, level_to, wisdom_stones_per_level_in_range).
+_MONOLITH_WISDOM_STONE_TIERS = [
+    (2, 2, 1), (3, 9, 2), (10, 14, 3), (15, 19, 4), (20, 24, 5), (25, 29, 6), (30, 30, 7),
+]
+_MONOLITH_MAX_LEVEL = 30
+_SKILLPOINTS_MONOLITH_MAX_BONUS = sum(amount * (hi - lo + 1) for lo, hi, amount in _MONOLITH_WISDOM_STONE_TIERS)
+
+
+def _monolith_skillpoints(level: int) -> int:
+    """Cumulative Skill Points (1 per Wisdom Stone) earned by reaching a
+    given Monolith level, from _MONOLITH_WISDOM_STONE_TIERS."""
+    level = max(0, min(_MONOLITH_MAX_LEVEL, level))
+    total = 0
+    for lo, hi, amount in _MONOLITH_WISDOM_STONE_TIERS:
+        if level < lo:
+            break
+        total += amount * (min(level, hi) - lo + 1)
+    return total
+
+# Every skill's "normal" cap via plain Skill Points -- levels beyond this
+# come from other systems (gear/Arcana/Daevanion Board), see the per-skill
+# level counter's own docstring for why those aren't modeled with a real
+# per-skill max yet. Stigma skills use a different, higher breakpoint since
+# they're paid for from a wholly separate Stigma Point pool, not Skill
+# Points (User-Wunsch, 2026-08-27: "Bei Stigmas gibt es erst blaue Zahlen
+# ab Level 20").
+_SKILL_LEVEL_BASE_CAP = 10
+_STIGMA_LEVEL_BASE_CAP = 20
+
+
+_ARCANA_WISH_COLOR = "#c084fc"
+
+
+def _format_skill_level_html(manual_level: int, bonus_level: int = 0, wish_level: int = 0) -> str:
+    """White = Skill Points actually invested via the -/+ counter, shown
+    as-is regardless of any cap (the 10/20-per-skill BUDGET cap still
+    applies separately -- see _refresh_skillpoints_label/
+    _refresh_stigma_points_label -- it just no longer decides this label's
+    color). A positive bonus -- equipped Trait/Skill picks plus active
+    Daevanion Board skill_level nodes, never Skill Points -- is appended
+    in blue as "(+N)" (User-Wunsch, 2026-08-28: "Die weisse Zahl ist nur
+    für das Nutzen von Skillpunkten. Sobald man über das Gear oder Board
+    etc Skill Level bekommt, werden diese in blau in Klammern angezeigt").
+    A separate positive Arcana wish -- what you'd still like the Arcana
+    Planner to cover, on top of the other two -- gets its OWN parenthetical
+    in purple, e.g. "10 (+6) (+4)" (User-Wunsch, 2026-08-28: "eine weitere
+    farbige Zahl ... testweise mal lila ... 10 weiss, 6 tuerkis, 4 lila").
+    Supersedes the earlier convention where manual+bonus were summed into
+    one number and only the generic 10/20-level cap decided white vs. blue,
+    which wrongly colored manually-overinvested points blue too."""
+    html = f"<span style='color:white; font-weight:700;'>{manual_level}</span>"
+    if bonus_level > 0:
+        html += f" <span style='color:#22d3ee; font-weight:700;'>(+{bonus_level})</span>"
+    if wish_level > 0:
+        html += f" <span style='color:{_ARCANA_WISH_COLOR}; font-weight:700;'>(+{wish_level})</span>"
+    return html
 
 # Enchant-level label accent per app Layout theme (User-Wunsch, 2026-08-26:
 # make the enchant badge follow the app's Layout theme instead of one fixed
@@ -296,29 +366,39 @@ def _parse_wing_effects(description: str) -> tuple[set[str], set[str]]:
     return _stat_names(match.group(1)), _stat_names(match.group(2))
 
 
-# Per-rarity backdrop was originally a real texture image (from questlog.gg's
-# icon_backgrounds mirror, saved locally under assets/) -- replaced with a
-# painted gradient instead (User-Wunsch, 2026-08-27, after even a .png
-# re-encode of that texture STILL showed as flat grey in a freshly rebuilt +
-# reinstalled EXE on a second machine: "Kann man hierfür auf Dateien oder
-# Farben zurückgreifen, die direkt in der App hinterlegt sind?"). Drawing the
-# backdrop with QPainter from GRADE_COLORS (already a plain Python dict, no
-# file I/O at all) can't be affected by however a given PyInstaller build
-# happens to bundle -- or fail to bundle -- an image asset/plugin, unlike an
-# on-disk texture file. Visually a diagonal rarity-tinted glow instead of the
-# original artwork -- an intentional trade (User: "Das Problem ist nicht die
-# Entwicklungsumgebung", i.e. reliability in the real distributed build
-# matters here, not exact parity with the original texture's look).
-def _rarity_backdrop_gradient(size: int, grade: str | None) -> QLinearGradient | None:
-    color = GRADE_COLORS.get(grade) if grade else None
-    if not color:
+# Per-rarity backdrop is the real texture image the user sourced from
+# questlog.gg (saved locally under assets/backgrounds_rarity/, .png). A
+# 2026-08-27 detour briefly replaced these with a painted gradient after the
+# packaged build showed flat grey -- but the actual bug was unrelated
+# (_bundled_resource() missing a path prefix, see _BUNDLE_DIR/_bundled_resource
+# below, since fixed) and the gradient was a much paler, less saturated stand-
+# in for the real artwork (User, 2026-08-27: "Der Orangene Hintergrund von
+# Epischen Gegenständen war kräftig von der Farbe her" / current gradient
+# looked "blass"). Reverted back to the real texture files.
+_RARITY_BG_DIR = _BUNDLE_DIR / "assets" / "backgrounds_rarity"
+_RARITY_BG_FILES = {
+    "Common": "UT_SlotGrade_Common.png",
+    "Rare": "UT_SlotGrade_Rare.png",
+    "Unique": "UT_SlotGrade_Unique.png",
+    "Epic": "UT_SlotGrade_Epic.png",
+    "Legend": "UT_SlotGrade_Legend.png",
+}
+_rarity_bg_cache: dict[str, QPixmap] = {}
+
+
+def _rarity_background(grade: str | None) -> QPixmap | None:
+    if not grade or grade not in _RARITY_BG_FILES:
         return None
-    c = QColor(color)
-    gradient = QLinearGradient(0, 0, size, size)
-    gradient.setColorAt(0.0, QColor(c.red(), c.green(), c.blue(), 130))
-    gradient.setColorAt(0.55, QColor(30, 41, 59, 235))
-    gradient.setColorAt(1.0, QColor(15, 23, 42, 255))
-    return gradient
+    if grade not in _rarity_bg_cache:
+        path = _RARITY_BG_DIR / _RARITY_BG_FILES[grade]
+        pix = QPixmap(str(path)) if path.exists() else QPixmap()
+        if pix.isNull():
+            logger.warning("Rarity background FAILED to load (grade=%s, path=%s, exists=%s) -- falling back to flat gray", grade, path, path.exists())
+        else:
+            logger.info("Rarity background loaded (grade=%s, path=%s, size=%s)", grade, path, pix.size())
+        _rarity_bg_cache[grade] = pix
+    pix = _rarity_bg_cache[grade]
+    return pix if not pix.isNull() else None
 
 # Same 4-stop diagonal gradients as cont_ToDo_app's 6 Layout themes — copied
 # on purpose so this semi-isolated sub-app looks consistent without
@@ -384,11 +464,11 @@ class IconCache(QObject):
         backdrop, the way game inventories normally present them.
 
         grade, when given a known rarity (GRADE_COLORS key), uses that
-        rarity's own color for a painted backdrop gradient (see
-        _rarity_backdrop_gradient) plus a matching border, instead of the
-        neutral slate default — baked into the pixmap itself so it also
-        works in contexts with no wrapper widget to style (e.g. a
-        QStandardItem's DecorationRole in the item table)."""
+        rarity's own texture backdrop (see _rarity_background) plus a
+        matching border, instead of the neutral slate default — baked into
+        the pixmap itself so it also works in contexts with no wrapper
+        widget to style (e.g. a QStandardItem's DecorationRole in the item
+        table)."""
         composed = QPixmap(size, size)
         composed.fill(Qt.transparent)
 
@@ -401,11 +481,14 @@ class IconCache(QObject):
         painter.setRenderHint(QPainter.Antialiasing)
 
         border_color = GRADE_COLORS.get(grade) if grade else None
-        bg_gradient = _rarity_backdrop_gradient(size, grade)
+        bg_texture = _rarity_background(grade)
 
         painter.setClipPath(clip_path)
-        if bg_gradient is not None:
-            painter.fillRect(0, 0, size, size, bg_gradient)
+        if bg_texture is not None:
+            scaled_bg = bg_texture.scaled(
+                size, size, Qt.IgnoreAspectRatio, Qt.SmoothTransformation,
+            )
+            painter.drawPixmap(0, 0, scaled_bg)
         else:
             painter.fillRect(0, 0, size, size, QColor(71, 85, 105))
         painter.setClipping(False)
@@ -849,6 +932,43 @@ def _clear_layout(layout):
                 _clear_layout(sub_layout)
 
 
+def _build_collapsible_section(title: str, expanded: bool) -> tuple[QWidget, QVBoxLayout]:
+    """Small reusable collapsible section (Qt has no built-in accordion) --
+    a checkable QToolButton header toggles the body's visibility. Built
+    for the Daevanion Board sidebar (User-Wunsch, 2026-08-28: "Accordions
+    bauen") and reused by the Arcana Calculator results popup -- shares
+    the same #DaevanionAccordionSection/Header/Body QSS rules since both
+    want the identical dark-card-with-chevron look, not just similar
+    code."""
+    container = QWidget()
+    container.setObjectName("DaevanionAccordionSection")
+    outer = QVBoxLayout(container)
+    outer.setContentsMargins(0, 0, 0, 0)
+    outer.setSpacing(0)
+
+    header = QToolButton()
+    header.setObjectName("DaevanionAccordionHeader")
+    header.setCheckable(True)
+    header.setChecked(expanded)
+    header.setCursor(Qt.PointingHandCursor)
+
+    body = QWidget()
+    body.setObjectName("DaevanionAccordionBody")
+    body_layout = QVBoxLayout(body)
+    body_layout.setContentsMargins(10, 4, 10, 10)
+    body_layout.setSpacing(2)
+    body.setVisible(expanded)
+
+    def set_text(checked: bool):
+        header.setText(("▾  " if checked else "▸  ") + title)
+    set_text(expanded)
+    header.toggled.connect(lambda checked: (body.setVisible(checked), set_text(checked)))
+
+    outer.addWidget(header)
+    outer.addWidget(body)
+    return container, body_layout
+
+
 _PVP_STAT_HINTS = ("abnormal", "pvp", "suppress", "resil", "tenacity", "resist")
 _DEFENSIVE_STAT_HINTS = ("defense", "evasion", "hpmax", "mpmax", "block")
 
@@ -1212,13 +1332,19 @@ class ItemDetailWidget(QWidget):
     def load_item(
         self, item_id: int, name: str, image_url: str,
         preset_substats: set[int] | None = None, preset_enchant: int = 0,
-        character_class: str | None = None,
+        character_class: str | None = None, preset_philosopher_stone: bool = False,
     ):
         """preset_substats/preset_enchant restore a previously-saved
         selection when reopening an already-equipped slot — without them,
         every reopen would silently reset the item back to +0/no substats,
         even though the slot's actual saved state (used for Stat Info)
-        still had the real values."""
+        still had the real values. preset_philosopher_stone does the same
+        for the Stone toggle -- previously always reset to False here, so
+        reopening a slot (or Quick Select rebuilding it, see
+        _apply_quick_substats) silently forgot it was active, even though
+        the extra substat pick it allowed stayed checked (User-Wunsch,
+        2026-08-27: "wird bislang der Philostein wieder entfernt und es
+        steht wieder bei 6/6 statt 7/7")."""
         self._item_id = item_id
         self._image_url = image_url
         self._detail = None
@@ -1226,7 +1352,7 @@ class ItemDetailWidget(QWidget):
         self._selected_substats = set(preset_substats or ())
         self._selected_substats_order = list(self._selected_substats)
         self._sub_stat_count = 0
-        self._philosopher_stone_active = False
+        self._philosopher_stone_active = preset_philosopher_stone
         self._character_class = character_class
         self._skill_options = []
         self.enchant_value.setText(f"+{preset_enchant}")
@@ -1248,7 +1374,7 @@ class ItemDetailWidget(QWidget):
         _clear_layout(self.skills_tab_layout)
         self._substat_checkboxes = {}
         self.philosopher_stone_btn.blockSignals(True)
-        self.philosopher_stone_btn.setChecked(False)
+        self.philosopher_stone_btn.setChecked(preset_philosopher_stone)
         self.philosopher_stone_btn.blockSignals(False)
         self.philosopher_stone_btn.setVisible(False)
 
@@ -1487,8 +1613,33 @@ class ItemDetailWidget(QWidget):
 
         sub_stats = self._detail.get("subStats") or []
         self._sub_stat_count = int(self._detail.get("subStatCount") or 0)
+        # Requires BOTH: a real substat roll (subStatCount>0, same signal
+        # the Priority List/auto-pick already uses) AND Unique grade or
+        # better -- the grade half of this got wrongly dropped in an
+        # earlier pass today (reasoned purely from "which grades have real
+        # substats", which isn't the same question). Re-confirmed via
+        # external sources after the user double-checked their own memory
+        # (2026-08-27, "soweit ich weiß/glaube, kann man Philo Steine nur
+        # auf Unique Gear und höher setzen"): Aion 2's real Soul Binding/
+        # "Philosopher's Stone: Revelation" system is Unique-grade-and-up
+        # only, independent of whether a lower-grade item happens to roll
+        # real substats too (questlog.gg patch notes, aion2hub item DB).
+        # "Legend" excluded here -- real rarity order in this app is Common
+        # < Rare < Legend < Unique < Epic (see RARITY_ORDER and the enchant
+        # defaults, which climb in that same order), so Legend sits BELOW
+        # Unique despite its name, not "Unique or better". Deliberately NOT
+        # grade_name (which prefers the detail API's "gradeName" field) --
+        # that's a DIFFERENT axis used only for the enchant-curve formulas
+        # above (e.g. an Epic-rarity item can have gradeName "Heroic", see
+        # _ARMOR_DEFENSE_RATE/_WEAPON_CURVE_PARAMS), unrelated to the item's
+        # actual displayed rarity that Soul Binding eligibility goes by --
+        # comparing grade_name here silently misclassified real items
+        # (verified: "Elder Greatsword" is rarity Legend but gradeName
+        # "Epic", "Noble Dragon Lord Greatsword" is rarity Epic but
+        # gradeName "Heroic" -- exactly backwards from intended).
+        item_rarity = self._detail.get("grade") or ""
         self.philosopher_stone_btn.setVisible(
-            self._selectable and self._sub_stat_count > 0 and grade_name in ("Unique", "Epic", "Legend")
+            self._selectable and self._sub_stat_count > 0 and item_rarity in ("Unique", "Epic")
         )
 
         # A class-specific skill can be slotted into these same substat
@@ -1613,7 +1764,14 @@ class ItemDetailWidget(QWidget):
                 if visible_skills:
                     skill_key = "active_skills" if skill_type == "active" else "passive_skills"
                     skill_badge_text = _t("arm_badge_active_skills") if skill_type == "active" else _t("arm_badge_passive_skills")
-                    grid = add_accordion_section(self.skills_tab_layout, skill_key, skill_badge_text, "250,204,21", visible_skills)
+                    # "Only show selected" merges Skills into the same tab
+                    # as Substats instead of keeping them split (User-Wunsch,
+                    # 2026-08-27: "alle traits und skills gemeinsam anzeigen
+                    # ... nur ein Tab") -- reviewing a short combined
+                    # selection doesn't need two near-empty tabs to click
+                    # between.
+                    skill_target_layout = self.substats_layout if self._only_show_selected else self.skills_tab_layout
+                    grid = add_accordion_section(skill_target_layout, skill_key, skill_badge_text, "250,204,21", visible_skills)
                     for pos, (idx, skill) in enumerate(visible_skills):
                         row_btn = make_substat_row(idx, skill.get("name", ""))
                         grid_row, grid_col = divmod(pos, 2)
@@ -1621,9 +1779,16 @@ class ItemDetailWidget(QWidget):
         else:
             self.substats_header_label.setText("")
 
-        self.substats_tabs.setTabVisible(0, bool(sub_stats))
-        self.substats_tabs.setTabVisible(1, bool(self._skill_options))
-        self.substats_tabs.setVisible(bool(sub_stats) or bool(self._skill_options))
+        # Same merge: hide the now-redundant Skills tab entirely while
+        # filtering to selected-only, and make sure tab 0 (which now hosts
+        # the combined view) is the one actually shown.
+        show_tab0 = bool(sub_stats) or (self._only_show_selected and bool(self._skill_options))
+        show_tab1 = bool(self._skill_options) and not self._only_show_selected
+        self.substats_tabs.setTabVisible(0, show_tab0)
+        self.substats_tabs.setTabVisible(1, show_tab1)
+        self.substats_tabs.setVisible(show_tab0 or show_tab1)
+        if self._only_show_selected and show_tab0:
+            self.substats_tabs.setCurrentIndex(0)
         self._update_substats_status()
 
         sub_skills = self._detail.get("subSkills") or []
@@ -1733,6 +1898,9 @@ class ItemDetailWidget(QWidget):
 
     def get_enchant_level(self) -> int:
         return self._enchant_level
+
+    def get_philosopher_stone_active(self) -> bool:
+        return self._philosopher_stone_active
 
 
 class ItemDetailDialog(QDialog):
@@ -1869,6 +2037,343 @@ ARCANA_CARD_TYPES = [
     "Key", "Hourglass", "Dice", "Lantern",
 ]
 ARCANA_THEME_ORDER = ["Vigor", "Magic", "Frenzy", "Purity", "Punishment", "Protection", "Indomitability"]
+
+# ---- Arcana Planner (2026-08-29) -------------------------------------------
+# One equip slot per Lord card TYPE (not a generic duplicates-allowed pool --
+# corrected by the user after an initial wrong assumption: "da bei Magic und
+# Vigor keine Waage existiert, sind es nur 5 Karten, somit betraegt die
+# gesamt Anzahl der Setkarten nur 5, nicht 6"). Each slot's real in-game
+# card can be leveled up independently of its base grade -- each level-up
+# always grants +1 to exactly ONE random skill from the card's pool (never
+# player-chosen -- User, 2026-08-29: "Der Spieler kann nicht waehlen,
+# welcher Wert gelevelt wird ... nur immer wieder neue Karten farmen und
+# leveln") -- and grade caps the max level reachable (Rare=3, Legend=4,
+# Unique=5, User-confirmed). The Calculator deliberately does NOT simulate
+# that randomness -- "Wir machen das aber nicht im Kalkulator, wir gehen
+# von den perfekten Werten aus": it shows the PERFECT/best-case reference
+# (every level-up landing on the one skill you care about, on a maxed
+# Unique card) so a player can judge how close their own randomly-rolled
+# real cards are to that ceiling -- not a literal "buy this and get
+# exactly this" recommendation. Same perfect-case logic applies to the
+# card's own Empyrean Lord stat effect, which also gains +1 per level
+# (User: "Bei Magic und Vigor geht der Hauptwert ... auch nur +1"), so a
+# maxed Unique card's Lord effect is shown at its max level's value too.
+# Applies to ONE skill chosen from that type's class-specific pool
+# (grade-independent -- see _load_arcana_class_skills), constrained by the
+# type's fixed skill category: Chalice can target either an Active or a
+# Passive skill ("Mastery"), Parchment/Compass/Scales only Active, Bell/
+# Mirror only Passive. Common grade doesn't exist for any Lord card.
+_ARCANA_LORD_TYPES = ["Chalice", "Parchment", "Compass", "Bell", "Mirror", "Scales"]
+_ARCANA_LORD_CATEGORY = {
+    "Chalice": "both", "Parchment": "active", "Compass": "active",
+    "Bell": "passive", "Mirror": "passive", "Scales": "active",
+}
+_ARCANA_GRADE_MAX_LEVEL = {"Rare": 3, "Legend": 4, "Unique": 5}
+# The Calculator always reasons about the perfect/best case -- a maxed
+# Unique card -- so this is simply the Unique entry above. This is the
+# CARD's overall level (how many shared extra-points its leveling
+# provides in total -- see _ARCANA_CARD_EXTRA_BUDGET below, same number),
+# distinct from _ARCANA_PER_SKILL_CAP (the max any ONE skill on that card
+# can individually reach).
+_ARCANA_MAX_CARD_LEVEL = _ARCANA_GRADE_MAX_LEVEL["Unique"]
+
+# "Season 1" assumption (User-Wunsch, 2026-08-29, explicitly UNVERIFIED --
+# "die Wahrscheinlichkeit ist sehr hoch, dass nur Vigor und Magic
+# existieren"): only these two themes are treated as currently obtainable.
+# The other 5 (Frenzy/Purity/Punishment/Protection/Indomitability) stay out
+# of the planner's candidate pool for now -- same forward-compat intent as
+# the Daevanion Board's _s/_a split, but here it's one flat set rather than
+# two named variants since the user wants more seasons/slots addable later
+# without a redesign (see _arcana_usable_lord_types below).
+_ARCANA_ACTIVE_THEMES = {"Vigor", "Magic"}
+
+
+def _arcana_usable_lord_types(theme_map: dict, active_themes: set[str]) -> list[str]:
+    """Which Lord card types actually exist in at least one of the given
+    themes -- e.g. Scales has no Vigor/Magic entry at all, so it's excluded
+    from the Season-1 candidate pool entirely, dropping the real usable
+    total from 6 to 5. Data-driven (reads theme_map, already scanned from
+    arcana_info.json) rather than a hardcoded count, so a later season
+    adding Scales -- or a wholly new theme -- just changes the result here,
+    no separate constant to update."""
+    return [
+        ct for ct in _ARCANA_LORD_TYPES
+        if any(ct in theme_map.get(theme, {}) for theme in active_themes)
+    ]
+
+
+_ARCANA_SKILL_SLOTS_PER_CARD = 4
+# A real card rolls _ARCANA_SKILL_SLOTS_PER_CARD (4) of its type's ~5-6
+# possible skills; the instant one is rolled it already sits at
+# _ARCANA_SKILL_BASELINE (1), not 0 (User, 2026-08-29: "bei diesen Skills
+# ist das Startlevel nicht '0' sondern 1" / "kann eine Karte, wenn sie +0
+# ist, folgende Werte haben: Rushing Smash +1, Spinning Strike +1,
+# Impactful Crush +1, Dark Crush +1"). Leveling the card then spends a
+# SHARED pool of _ARCANA_CARD_EXTRA_BUDGET (5, for Unique) extra points,
+# one at a time, each landing on ONE random already-rolled skill (never
+# player-chosen) -- but no single skill can exceed _ARCANA_PER_SKILL_CAP
+# (4) regardless of how many hits land on it (User: "das Limit ist +4 auf
+# den Skills und das maximale Level, das eine Arcana erhalten kann, ist
+# +5, also 5 Level auf die vorhandenen Skills verteilen"). Verified
+# against the user's own worked examples: Parchment showing Onslaught +4
+# (needs 3 hits beyond baseline) and Spinning Strike +3 (needs 2 hits) =
+# exactly 5 hits, the full shared budget, with the card's other 2
+# (unlisted, uninteresting) slots staying at baseline; Chalice showing
+# Dark Crush +4 (3 hits, AT the per-skill cap) + Rushing Smash +2 (1 hit)
+# = 4 of 5 hits used, the 5th would be wasted since Dark Crush is already
+# capped. Both examples are inconsistent with either "no shared budget,
+# every skill independently to +5" (Parchment's 2 slots alone would need
+# 5 hits for just +4/+3, leaving nothing baseline-related unaccounted)
+# or "one skill per card" (both cards clearly show 2+ skills at once).
+_ARCANA_SKILL_BASELINE = 1
+_ARCANA_CARD_EXTRA_BUDGET = _ARCANA_MAX_CARD_LEVEL
+_ARCANA_PER_SKILL_CAP = 4
+
+
+def _arcana_eligible_skills_for_type(
+    ct: str, wishes: dict[str, int], class_skill_pools: dict[str, list[dict]], skill_type_by_id: dict[str, str],
+) -> list[str]:
+    """Wished skills this Lord type could ever roll (in its pool, matching
+    its fixed Active/Passive/both category)."""
+    category = _ARCANA_LORD_CATEGORY.get(ct)
+    pool_ids = {s["id"] for s in class_skill_pools.get(ct, [])}
+    return [
+        sid for sid in wishes
+        if sid in pool_ids and (category == "both" or skill_type_by_id.get(sid) == category)
+    ]
+
+
+def _arcana_full_pool_for_type(ct: str, class_skill_pools: dict[str, list[dict]]) -> list[str]:
+    """Every real skill id this Lord type's pool can roll, wished or not --
+    used to fill a card's 4 skill slots with something sensible once real
+    wishes run out (User-Wunsch, 2026-08-29: "Immer alle 5 verteilen" /
+    "kannst bei der Verteilung der restlichen Punkte auch gerne die
+    Prioliste der Skills nehmen"), instead of leaving slots/budget
+    stranded just because nothing was explicitly wished for them."""
+    return [s["id"] for s in class_skill_pools.get(ct, [])]
+
+
+def _arcana_best_card_contribution(
+    eligible: list[str], full_pool: list[str], priority_rank: dict[str, int],
+    wishes: dict[str, int], covered: dict[str, int],
+) -> dict[str, int]:
+    """What ONE card of this type contributes in the perfect/best case,
+    given what's ALREADY covered by other assigned cards so far. Two
+    phases:
+
+    1. Choose up to _ARCANA_SKILL_SLOTS_PER_CARD (4) of the card's real
+       skill slots: eligible (wished) skills with remaining unmet need
+       first (an exchange argument shows no reason to pick a skill with
+       less need over one with more, so no need to try every possible
+       4-of-N subset), ranked by need then Priority List position as a
+       tiebreak; if fewer than 4 wished skills have real need, the
+       remaining slots are filled from the type's FULL pool ranked by
+       Priority List position, then pool order as a last resort (User,
+       2026-08-29: "kannst bei der Verteilung der restlichen Punkte auch
+       gerne die Prioliste der Skills nehmen" / "wenn dort nur 4 Skills
+       angegeben sind, nimm den erst besten") -- so a card's slots are
+       never left conceptually "empty" just because nothing was wished.
+    2. Spend the shared _ARCANA_CARD_EXTRA_BUDGET one point at a time,
+       never past _ARCANA_PER_SKILL_CAP: real wish-need first, then once
+       every chosen skill's own wish is met, keep spending the REST of
+       the budget too (User: "Immer alle 5 verteilen") on whichever
+       chosen skill ranks highest on the Priority List, falling back to
+       pool order -- a real card's leveling doesn't stop just because
+       your specific wish was already satisfied.
+
+    Returns {skill_id: added_value} for the chosen skills (empty only if
+    the type's pool has nothing at all matching its category)."""
+    def remaining_need(sid: str, value: int) -> int:
+        return max(0, wishes.get(sid, 0) - covered.get(sid, 0) - value)
+
+    def choice_key(sid: str) -> tuple:
+        need = max(0, wishes.get(sid, 0) - covered.get(sid, 0))
+        return (-need, priority_rank.get(sid, float("inf")), sid)
+
+    chosen = sorted(
+        (sid for sid in eligible if wishes.get(sid, 0) - covered.get(sid, 0) > 0),
+        key=choice_key,
+    )[:_ARCANA_SKILL_SLOTS_PER_CARD]
+    if len(chosen) < _ARCANA_SKILL_SLOTS_PER_CARD:
+        filler = sorted(
+            (sid for sid in full_pool if sid not in chosen),
+            key=lambda sid: (priority_rank.get(sid, float("inf")), sid),
+        )
+        chosen += filler[: _ARCANA_SKILL_SLOTS_PER_CARD - len(chosen)]
+    if not chosen:
+        return {}
+
+    values = {sid: _ARCANA_SKILL_BASELINE for sid in chosen}
+    budget = _ARCANA_CARD_EXTRA_BUDGET
+    while budget > 0:
+        candidates = [sid for sid in chosen if values[sid] < _ARCANA_PER_SKILL_CAP]
+        if not candidates:
+            break
+        best_sid = min(
+            candidates,
+            key=lambda sid: (-remaining_need(sid, values[sid]), priority_rank.get(sid, float("inf")), sid),
+        )
+        values[best_sid] += 1
+        budget -= 1
+    return values
+
+
+def _arcana_best_combination(
+    usable_types: list[str], type_to_theme: dict[str, str],
+    eligible_by_type: dict[str, list[str]], full_pool_by_type: dict[str, list[str]],
+    priority_rank: dict[str, int], wishes: dict[str, int],
+) -> tuple[dict[str, int], list[dict]]:
+    """Each of the 5 usable Lord types is now a real, fixed card (its
+    theme chosen up front via ArcanaThemeChoiceDialog, not searched) --
+    so unlike the earlier count-budget model, there's no more "which
+    theme"/"skip this type" decision left to explore. Each type's card
+    independently contributes _arcana_best_card_contribution's perfect-
+    case values (sequentially, in usable_types order, so a later type's
+    "remaining need" already reflects what earlier types covered)."""
+    covered: dict[str, int] = {}
+    path: list[dict] = []
+    for ct in usable_types:
+        theme = type_to_theme.get(ct)
+        if not theme:
+            continue
+        contribution = _arcana_best_card_contribution(
+            eligible_by_type.get(ct, []), full_pool_by_type.get(ct, []), priority_rank, wishes, covered,
+        )
+        if not contribution:
+            continue
+        for sid, value in contribution.items():
+            covered[sid] = covered.get(sid, 0) + value
+        path.append({"type": ct, "theme": theme, "skill_ids": contribution})
+    return covered, path
+
+
+def _arcana_compute_combinations(
+    usable_types: list[str], type_to_theme: dict[str, str],
+    class_skill_pools: dict[str, list[dict]], wishes: dict[str, int],
+    skill_type_by_id: dict[str, str], priority_rank: dict[str, int] | None = None,
+    max_results: int = 3,
+) -> list[dict]:
+    """Up to max_results distinct combinations, best first: the single
+    result from _arcana_best_combination, then that same sequential fill
+    repeated with the previous result's exact (type, skill) pairs excluded
+    from that type's eligible AND full pool each time, forcing a
+    structurally different combination whenever a type's real pool has
+    more viable wished skills than its 4 slots (or a skill is shared
+    across more than one type's pool) -- the only remaining source of
+    alternatives now that each type's theme is fixed rather than
+    searched. Pruning full_pool_by_type too (not just eligible_by_type)
+    matters: otherwise a skill excluded as a WISH target could still
+    silently reappear as plain FILLER on the very same card (filler
+    selection draws from the whole pool), quietly re-covering the same
+    wish and making the "different" combination not actually different."""
+    if not wishes:
+        return []
+
+    eligible_by_type = {
+        ct: _arcana_eligible_skills_for_type(ct, wishes, class_skill_pools, skill_type_by_id)
+        for ct in usable_types
+    }
+    full_pool_by_type = {ct: _arcana_full_pool_for_type(ct, class_skill_pools) for ct in usable_types}
+    priority_rank = priority_rank or {}
+
+    results = []
+    excluded: set[tuple] = set()
+    for _ in range(max_results):
+        pruned_eligible = {
+            ct: [sid for sid in eligible if (ct, sid) not in excluded]
+            for ct, eligible in eligible_by_type.items()
+        }
+        pruned_full_pool = {
+            ct: [sid for sid in pool if (ct, sid) not in excluded]
+            for ct, pool in full_pool_by_type.items()
+        }
+        covered, path = _arcana_best_combination(
+            usable_types, type_to_theme, pruned_eligible, pruned_full_pool, priority_rank, wishes,
+        )
+        if not path:
+            break
+        results.append({"assignments": path, "covered": covered})
+        for a in path:
+            for sid in a["skill_ids"]:
+                excluded.add((a["type"], sid))
+    return results
+
+
+def _arcana_result_coverage_percent(result: dict, wishes: dict[str, int]) -> float:
+    """What percentage of the total wishlist this combination covers,
+    clamped per skill at its own wish (overshoot on one skill doesn't
+    offset a shortfall on another) -- used to filter out combinations
+    that aren't a useful alternative (User-Wunsch, 2026-08-29: "nur
+    Kombinationen anzeigen, die besser als 50% sind")."""
+    total_wish = sum(wishes.values())
+    if total_wish <= 0:
+        return 0.0
+    covered = result.get("covered", {})
+    total_useful = sum(min(covered.get(sid, 0), need) for sid, need in wishes.items())
+    return total_useful / total_wish * 100.0
+
+
+def _arcana_eligible_types(
+    skill_id: str, category: str | None, usable_types: list[str], class_skill_pools: dict[str, list[dict]],
+) -> list[str]:
+    """Which usable Lord types could ever target this skill -- in its
+    pool AND matching its Active/Passive category (Chalice's "both"
+    always matches)."""
+    return [
+        ct for ct in usable_types
+        if any(s["id"] == skill_id for s in class_skill_pools.get(ct, []))
+        and (_ARCANA_LORD_CATEGORY.get(ct) == "both" or _ARCANA_LORD_CATEGORY.get(ct) == category)
+    ]
+
+
+def _arcana_max_ceiling(
+    skill_id: str, category: str | None, usable_types: list[str], class_skill_pools: dict[str, list[dict]],
+) -> int:
+    """The absolute most this skill could ever gain from Arcana THIS
+    season assuming perfect leveling, ignoring every other wish -- one
+    maxed Unique card can push any ONE skill up to _ARCANA_PER_SKILL_CAP
+    (4), per eligible Lord type, since a type can go to whichever theme
+    still has budget when the real split is chosen later (User-Wunsch,
+    2026-08-29: "wenn ein Skill bereits +4 ist, kann der Rest maximal
+    noch +3 werden" -- this is the standalone half of that; the OTHER
+    half, how much competing wishes actually leave once slots are shared,
+    is what _arcana_compute_combinations/_arcana_uncovered_reason resolve
+    for a specific split+wishlist instead of a live, always-on number)."""
+    eligible = _arcana_eligible_types(skill_id, category, usable_types, class_skill_pools)
+    return len(eligible) * _ARCANA_PER_SKILL_CAP
+
+
+def _arcana_uncovered_reason(
+    skill_id: str, wish: int, covered: int, usable_types: list[str],
+    class_skill_pools: dict[str, list[dict]], skill_type_by_id: dict[str, str],
+) -> tuple[str, dict]:
+    """Why a wished skill didn't fully reach its target in a given result
+    (User-Wunsch, 2026-08-29: "einen Grund zeigen, warum gewisse Skills
+    nicht gepusht werden koennen") -- returns a translation key + kwargs
+    for _t(), one of three tiers:
+
+    1. No eligible Lord type at all -- structural, can never be covered
+       regardless of slots (skill isn't in any usable card's pool, or
+       none match its Active/Passive category).
+    2. Eligible types exist, but even dedicating every one of them to
+       ONLY this skill can't reach the wish -- a hard ceiling from this
+       season's real card pool, not specific to this one combination
+       (theme choice no longer matters here: every usable type is always
+       a real card regardless of which theme it's set to).
+    3. Eligible types exist and COULD in principle reach the wish, just
+       not in this particular combination -- those slots went to other
+       wishes instead in this solve."""
+    category = skill_type_by_id.get(skill_id)
+    eligible_types = _arcana_eligible_types(skill_id, category, usable_types, class_skill_pools)
+    if not eligible_types:
+        return "arm_arcana_reason_no_card", {}
+
+    max_possible = len(eligible_types) * _ARCANA_PER_SKILL_CAP
+    if max_possible < wish:
+        return "arm_arcana_reason_not_enough_slots", {"max": max_possible}
+
+    return "arm_arcana_reason_competing_wishes", {}
+
 
 # Real Empyrean Lord stat effects — each Lord's value scales two stats at
 # once by the same percentage, confirmed via a real character's own stat
@@ -2013,6 +2518,28 @@ def _skills_data_class_key(display_name: str) -> str:
     return _SKILLS_DATA_CLASS_ALIASES.get(key, key)
 
 
+def _dedupe_bound_unbound(items) -> list[dict]:
+    """Collapses Bound/Unbound catalog duplicates -- same name, grade and
+    substat options, just a different tradable flag and item id (User-
+    Wunsch, 2026-08-27: "werden noch doppelte Items angezeigt ... Entweder
+    ist eines Unbound und das andere Bound"). Verified against the whole
+    catalog: ~1969 such exact pairs exist (checked options AND full detail
+    JSON -- byte-identical subStats/subStatCount/level/maxEnchantLevel
+    between a pair), so keeping just one representative changes nothing
+    mechanically, only removes the confusing lookalike row. Keeps
+    whichever copy is encountered first (list order from items_all.json is
+    stable run-to-run, so this is deterministic, not arbitrary per-call)."""
+    seen: set[tuple] = set()
+    result = []
+    for item in items:
+        key = (item.get("name"), item.get("grade"), tuple(item.get("options") or []))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
 # Tile size for ItemPickerPopup's grid (was a single full-width column) —
 # sized so 3 tiles fit across the popup's fixed width, per user request to
 # cap the count of items shown per row at 3-4 rather than a single long
@@ -2041,7 +2568,7 @@ class ItemPickerPopup(QWidget):
         self.setFixedWidth(3 * _PICKER_TILE_WIDTH + 40)
         self.setMinimumHeight(420)
 
-        self._items = [i for i in items if i.get("categoryName") in categories]
+        self._items = _dedupe_bound_unbound(i for i in items if i.get("categoryName") in categories)
         self.icon_cache = icon_cache
         self.detail_cache = detail_cache
         # Set by the persistent PvP/PvE/Neutral toggle up in the header row
@@ -2947,6 +3474,21 @@ def _make_plus_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
+def _make_minus_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
+    """Draws a minus sign -- same reasoning as _make_plus_icon (used for the
+    per-skill level -/+ counter, see _build_skill_description_card)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setBrush(QColor(color))
+    painter.setPen(Qt.NoPen)
+    thickness = size * 0.2
+    painter.drawRoundedRect(QRectF(size * 0.1, (size - thickness) / 2, size * 0.8, thickness), thickness * 0.3, thickness * 0.3)
+    painter.end()
+    return QIcon(pixmap)
+
+
 def _make_edit_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     """Draws a small pencil glyph for the 'rename build' action."""
     pixmap = QPixmap(size, size)
@@ -2966,6 +3508,24 @@ def _make_edit_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
         QPointF(0, body_h / 2),
     ])
     painter.drawPolygon(tip)
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _make_duplicate_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
+    """Draws two overlapping squares (back outlined, front filled) -- the
+    classic 'copy/duplicate' glyph, for the 'duplicate this Set' action
+    (User-Wunsch, 2026-08-28)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(QPen(QColor(color), size * 0.09))
+    painter.setBrush(Qt.NoBrush)
+    painter.drawRoundedRect(QRectF(size * 0.10, size * 0.10, size * 0.56, size * 0.56), size * 0.08, size * 0.08)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor(color))
+    painter.drawRoundedRect(QRectF(size * 0.36, size * 0.36, size * 0.56, size * 0.56), size * 0.08, size * 0.08)
     painter.end()
     return QIcon(pixmap)
 
@@ -3058,6 +3618,28 @@ def _make_check_icon(size: int = 20, color: str = "#facc15") -> QPixmap:
     return pixmap
 
 
+def _make_star_icon(size: int = 18, color: str = "#facc15") -> QPixmap:
+    """Draws a filled 5-point star -- marks a skill that's on the Priority
+    List, on its Skill Description card (User-Wunsch, 2026-08-27)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setBrush(QColor(color))
+    painter.setPen(Qt.NoPen)
+
+    cx, cy = size / 2, size / 2
+    outer_r, inner_r = size * 0.5, size * 0.5 * 0.42
+    points = []
+    for i in range(10):
+        angle = math.pi / 2 + i * math.pi / 5
+        r = outer_r if i % 2 == 0 else inner_r
+        points.append(QPointF(cx + r * math.cos(angle), cy - r * math.sin(angle)))
+    painter.drawPolygon(QPolygonF(points))
+    painter.end()
+    return pixmap
+
+
 def _make_save_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     """Draws a simple floppy-disk glyph instead of relying on an emoji that
     may not render (or may render too small/faint) in this button's font."""
@@ -3073,6 +3655,39 @@ def _make_save_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     painter.setBrush(QColor("#0f172a"))
     painter.drawRect(QRectF(size * 0.26, size * 0.10, size * 0.34, size * 0.24))
     painter.drawRoundedRect(QRectF(size * 0.22, size * 0.50, size * 0.56, size * 0.34), size * 0.05, size * 0.05)
+
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _make_compare_icon(size: int = 20, color: str = "#e5e7eb") -> QIcon:
+    """Draws two opposing arrows ('vs'/swap glyph) for the 'Build Vergleich'
+    tab button."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setBrush(QColor(color))
+    painter.setPen(Qt.NoPen)
+
+    thickness = size * 0.14
+    # Top arrow, pointing right.
+    painter.drawRoundedRect(QRectF(size * 0.15, size * 0.28 - thickness / 2, size * 0.55, thickness), thickness * 0.4, thickness * 0.4)
+    top_head = QPolygonF([
+        QPointF(size * 0.68, size * 0.28 - size * 0.16),
+        QPointF(size * 0.88, size * 0.28),
+        QPointF(size * 0.68, size * 0.28 + size * 0.16),
+    ])
+    painter.drawPolygon(top_head)
+
+    # Bottom arrow, pointing left.
+    painter.drawRoundedRect(QRectF(size * 0.30, size * 0.72 - thickness / 2, size * 0.55, thickness), thickness * 0.4, thickness * 0.4)
+    bottom_head = QPolygonF([
+        QPointF(size * 0.32, size * 0.72 - size * 0.16),
+        QPointF(size * 0.12, size * 0.72),
+        QPointF(size * 0.32, size * 0.72 + size * 0.16),
+    ])
+    painter.drawPolygon(bottom_head)
 
     painter.end()
     return QIcon(pixmap)
@@ -3567,6 +4182,36 @@ class _BuildTabButton(QPushButton):
         super().mouseDoubleClickEvent(event)
 
 
+class _SkillPickerListWidget(QListWidget):
+    """QListWidget with a hover-tracked signal for SkillPickerDialog's
+    tooltip (User-Wunsch, 2026-08-28: "wär es geil, wenn man hier ein
+    Tooltip hat"). Only re-emits when the hovered item actually CHANGES,
+    not on every pixel of mouse movement -- same fix already needed for
+    DaevanionBoardCanvas's own hover tooltip, which caused Windows
+    layered-window redraw spam when it re-showed/repositioned on every
+    mouseMoveEvent instead of only on a real change."""
+
+    itemHoverChanged = Signal(object)  # QListWidgetItem or None
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self._hovered_item: QListWidgetItem | None = None
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        item = self.itemAt(event.position().toPoint())
+        if item is not self._hovered_item:
+            self._hovered_item = item
+            self.itemHoverChanged.emit(item)
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        if self._hovered_item is not None:
+            self._hovered_item = None
+            self.itemHoverChanged.emit(None)
+
+
 class SkillPickerDialog(QDialog):
     """Small search-and-pick list for choosing a skill, used by the Skill
     Build priority list's empty slots."""
@@ -3578,6 +4223,8 @@ class SkillPickerDialog(QDialog):
         self.resize(360, 480)
         self.selected_skill: dict | None = None
         self._skills = skills
+        self._tooltip = SkillInfoTooltip(self)
+        self.finished.connect(lambda _result: self._tooltip.hide())
 
         layout = QVBoxLayout(self)
 
@@ -3586,9 +4233,10 @@ class SkillPickerDialog(QDialog):
         self.search_input.textChanged.connect(self._refresh_list)
         layout.addWidget(self.search_input)
 
-        self.list_widget = QListWidget()
+        self.list_widget = _SkillPickerListWidget()
         self.list_widget.setIconSize(QSize(28, 28))
         self.list_widget.itemDoubleClicked.connect(self._accept_current)
+        self.list_widget.itemHoverChanged.connect(self._on_item_hover)
         layout.addWidget(self.list_widget, 1)
 
         choose_btn = QPushButton(_t("arm_select_btn"))
@@ -3609,6 +4257,17 @@ class SkillPickerDialog(QDialog):
                 list_item.setIcon(icon)
             list_item.setData(Qt.UserRole, skill)
             self.list_widget.addItem(list_item)
+
+    def _on_item_hover(self, item: QListWidgetItem | None):
+        if item is None:
+            self._tooltip.hide()
+            return
+        skill = item.data(Qt.UserRole)
+        if not skill:
+            self._tooltip.hide()
+            return
+        self._tooltip.set_skill(skill)
+        self._tooltip.show_at(QCursor.pos())
 
     def _accept_current(self):
         current = self.list_widget.currentItem()
@@ -4837,6 +5496,28 @@ class CraftingCalculatorWindow(QMainWindow):
 # _ordered_tier_chain.
 RACE_TIER_ROOT = {"Elyos": "True Dragon Lord", "Asmodae": "Star Dragon Lord"}
 
+# The first Epic-grade crafted tier (User-Wunsch, 2026-08-27: "jetzt sollten
+# wir einmal bei Crafting die Epischen rezepte hinzufügen, denn Derzeit haben
+# wir nur die Unique rezepte drin") -- a genuinely SEPARATE root from
+# RACE_TIER_ROOT above, not its continuation: verified in recipes_all.json
+# that "Noble/Horned Dragon Lord Ring" craft from "Artisan's Splendent
+# Sapphire Ring" + Balaur materials, not from any Splendent Obsidian/Crimson
+# Dragon Lord item, so _ordered_tier_chain's Transfer-hop BFS from
+# RACE_TIER_ROOT can never reach it on its own. Race resolved via the
+# recipe's own input item ID for that shared display name ("Artisan's
+# Splendent Sapphire Ring" is id 310330013 with qualificationRace "light" for
+# the Noble recipe, id 310330014 "dark" for the Horned recipe -- light/dark
+# are Elyos/Asmodae, same convention confirmed elsewhere via Abyss Gear).
+# "Splendent Noble/Horned Dragon Lord X" is a bonus-chance combo output of
+# that SAME recipe (learnType=="combo", empty inputs), not a further Transfer
+# hop, so it's listed directly here as a fixed 2nd entry rather than
+# discovered via BFS. Genesis/Nemesis Dragon Lord (the next Epic tier up --
+# same stats as each other, higher than Noble/Horned) exist in items_all.json
+# but have ZERO recipes anywhere in recipes_all.json (checked 2026-08-27) --
+# not actually craftable with what's currently scraped, so intentionally left
+# out; add once a real recipe for either shows up in a data refresh.
+RACE_EPIC_TIER_ROOT = {"Elyos": "Noble Dragon Lord", "Asmodae": "Horned Dragon Lord"}
+
 # "Abyss Gear" (Gear Type-Filter, PvP) roots are race-locked, unlike every
 # other Dungeon-Quelle tag -- e.g. "Guardian Decanus Ring" and "Archon
 # Decanus Ring" are two different items, not the same item reachable by
@@ -5028,12 +5709,74 @@ _QUICK_GEAR_SLOT_LABELS = {
 # _QUICK_GEAR_SLOT_LABELS above for why).
 _STAT_PRIORITY_CATEGORIES: list[tuple[str, str, list[str]]] = [
     ("weapon", "arm_category_weapon", ["MainHand", "SubHand"]),
-    ("armor", "arm_category_armor", ["Helmet", "Shoulder", "Torso", "Gloves", "Pants", "Boots"]),
-    ("jewelry", "arm_category_jewelry", ["Earring1", "Earring2", "Necklace", "Amulet", "Ring1", "Ring2"]),
+    # Armor split into one category per real piece (User-Wunsch, 2026-08-27:
+    # "Jedes Rüstungsteil hat eine eigene Prio Liste" -- the guide gives a
+    # genuinely different priority per piece), each reusing its existing
+    # SLOT_LAYOUT label key rather than new ones.
+    ("helmet", "arm_slot_helmet", ["Helmet"]),
+    ("shoulder", "arm_slot_shoulder", ["Shoulder"]),
+    ("torso", "arm_slot_torso", ["Torso"]),
+    ("gloves", "arm_slot_gloves", ["Gloves"]),
+    ("pants", "arm_slot_pants", ["Pants"]),
+    ("boots", "arm_slot_boots", ["Boots"]),
+    # Split from one combined "jewelry" tab (User-Wunsch, 2026-08-27, after
+    # the user's own guide showed Rings need a fundamentally different
+    # priority -- "Active Skill 1-6 > Attack" -- from Earring/Necklace's
+    # "Attack > Accuracy > Critical Hit > Passive Skills") -- Ring is also
+    # the only one offering an Active skill option (_ACTIVE_SUBSKILL_SLOT_
+    # CATEGORIES: "Unterschied zwischen Ring und Ohrring -> Aktive und
+    # passive Skills"), so this split also removes the old active+passive
+    # skill-type ambiguity for free. Amulet dropped entirely (User-Wunsch:
+    # "Amulet kannst du rauslassen - hat nur static Werte") -- confirmed all
+    # 8 Amulet items in the catalog have subStatRandom=False, nothing to
+    # ever prioritize. Quick Select's own equip-slot grouping
+    # (_QUICK_GEAR_CATEGORY_GROUPS) stays combined as "Jewelry" -- explicitly
+    # NOT part of this split ("nur bei der Quickslot kann das gerne weiterhin
+    # unter 'Schmuck' zusammengefasst werden").
+    ("ring", "arm_category_ring", ["Ring1", "Ring2"]),
+    ("jewelry", "arm_category_earring_necklace", ["Earring1", "Earring2", "Necklace"]),
     ("bracelet", "arm_category_bracelet", ["Bracelet1", "Bracelet2"]),
 ]
 _SLOT_TO_STAT_CATEGORY: dict[str, str] = {
     slot_id: key for key, _, slots in _STAT_PRIORITY_CATEGORIES for slot_id in slots
+}
+# Which of the 3 top-level group buttons (User-Wunsch, 2026-08-27: "Wir
+# machen 3 Buttons ... Waffe/Guard, Rüstung, Schmuck ... jedes Teil separat
+# via Reiter") each category tab lives under, and in what order within that
+# group. A group with only one category (Weapon/Guard) shows that
+# category's rank editor directly instead of nesting a redundant single-tab
+# QTabWidget inside the group page.
+_STAT_PRIORITY_GROUPS: list[tuple[str, str, list[str]]] = [
+    ("weapon_guard", "arm_category_weapon", ["weapon"]),
+    ("armor", "arm_category_armor", ["helmet", "shoulder", "torso", "gloves", "pants", "boots"]),
+    ("jewelry", "arm_category_jewelry", ["ring", "jewelry", "bracelet"]),
+]
+# Which skill-option type (see _ACTIVE_SUBSKILL_SLOT_CATEGORIES) applies to
+# each Stat-Priority-Editor category tab -- unambiguous now that Ring has
+# its own tab, split from "jewelry" (Earring/Necklace). Bracelet has none at
+# all: real data confirms subSkillCountMax is always 0 across every
+# Bracelet in the catalog (checked all 21, User-Wunsch, 2026-08-27: "Hier
+# zeigen Bracelets skills an - bitte korrigieren") -- unlike weapon/armor/
+# ring/jewelry, where subSkillCountMax mirrors subStatCount.
+_STAT_PRIORITY_CATEGORY_SKILL_TYPES: dict[str, list[str]] = {
+    "weapon": ["active"], "ring": ["active"], "jewelry": ["passive"],
+    "helmet": ["passive"], "shoulder": ["passive"], "torso": ["passive"],
+    "gloves": ["passive"], "pants": ["passive"], "boots": ["passive"],
+}
+
+# Overrides the dropdown's default frequency order (compute_stat_priority_
+# options.py's "most common on real items first") for categories where the
+# guide gives an explicit preference instead (User-Wunsch, 2026-08-27:
+# "die Reihenfolge der Auswahl anhand meines Guides bestimmen"). Guide:
+# "Bracelet priority: top 4 = Wisdom, Time, Illusion, Destruction; then
+# Death, Freedom, Justice" -- doesn't rank Life/Destiny/Space, which fall
+# back to the default frequency order after these 7, same as any category
+# without an override at all.
+_STAT_PRIORITY_CATEGORY_ORDER_OVERRIDE: dict[str, list[str]] = {
+    "bracelet": [
+        "Wisdom [Lumiel]", "Time [Siel]", "Illusion [Kaisinel]", "Destruction [Zikel]",
+        "Death [Triniel]", "Freedom [Vaizel]", "Justice [Nezekan]",
+    ],
 }
 
 # Eigenschaften-Priorität profiles are keyed [gear_type][role][category] ->
@@ -5068,11 +5811,50 @@ _STAT_PRIORITY_MAX_ENTRIES = 7
 # 2026-08-24, offered as a "recommendation, please double-check"); the
 # other 5 profiles reuse it as a reasonable starting point rather than
 # shipping empty (an empty list would leave every substat slot unfilled).
+# Names/casing must match the real catalog exactly (not the guide's own
+# prose wording, e.g. "Attack increase"/"Move Speed", not "Attack Increase"/
+# "Movement Speed") -- the editor's dropdown restore (QComboBox.findData) is
+# an exact-string lookup, unlike the case-insensitive matching
+# _pick_priority_substats uses for the real auto-pick, so a wording
+# mismatch here silently resets to "— empty —" in the editor even though
+# auto-pick itself would have matched fine.
 _DEFAULT_STAT_PRIORITY_BY_CATEGORY: dict[str, list[str]] = {
     "weapon": ["Weapon Damage Boost", "Combat Speed", "Damage Boost", "Might", "Precision", "Attack", "Multi-hit Chance"],
-    "armor": ["Damage Boost", "Attack Increase", "Critical Damage Boost", "Attack", "Endurance", "Defense Increase", "Accuracy"],
+    # Per-piece armor priorities straight from the guide's detailed
+    # per-slot breakdown (User-Wunsch, 2026-08-27: "Jedes Rüstungsteil hat
+    # eine eigene Prio Liste"). "Passive Skills" (every guide line's last
+    # entry) isn't a literal matchable name -- whatever ranks remain after
+    # these already get filled from the player's own Passive Skill Priority
+    # List automatically (see _apply_quick_substats), no explicit entry
+    # needed, same reasoning as Jewelry/Ring below.
+    "helmet": ["Attack increase", "Smite", "Attack", "Endurance", "Incoming Heal"],
+    "shoulder": ["Critical Damage Boost", "Attack", "Endurance", "Defense increase", "Accuracy", "Critical Hit"],
+    "torso": ["Damage Boost", "Attack", "Endurance", "Defense increase", "Accuracy", "Critical Hit"],
+    "gloves": ["Combat Speed", "Attack", "Perfect Chance", "Defense increase", "Accuracy", "Critical Hit"],
+    "pants": ["Damage Tolerance", "Attack increase", "Attack", "Perfect Chance", "Endurance"],
+    "boots": ["Move Speed", "Attack", "Perfect Chance", "Defense increase", "Accuracy", "Critical Hit"],
+    # Guide: "Earrings & Necklace: Attack > Accuracy > Critical Hit >
+    # Passive Skills" -- the trailing "Passive Skills" isn't a literal
+    # matchable name (no fixed one is universal/class-agnostic), so it's
+    # left off here; whatever substat slots remain after these 3 already
+    # get filled from the player's own Passive Skill Priority List
+    # automatically (see _apply_quick_substats), no explicit entry needed.
     "jewelry": ["Attack", "Accuracy", "Critical Hit"],
-    "bracelet": ["Attack", "Critical Hit", "HP"],
+    # Guide: "Rings: Active Skill 1-6 (in slot order) > Attack" -- only the
+    # "Attack" fallback is a universal name safe to bake in; the 6 Active
+    # skill ranks ahead of it are class-/player-specific (same reasoning as
+    # Bracelet below) and must be set by hand via the editor, which already
+    # lists the player's own Active Skill Priority List first in this tab's
+    # dropdown for convenience (see StatPriorityEditorDialog).
+    "ring": ["Attack"],
+    # Left empty on purpose (User-Wunsch, 2026-08-27): only the fixed,
+    # non-random story-reward Bracelet ever rolled Attack/Critical Hit/HP,
+    # and its stats can't be changed anyway. Every actually customizable
+    # Bracelet (Abyssal and above) only rolls the 10 Deity stats instead
+    # (see compute_stat_priority_options.py) -- no real guide backing
+    # exists yet for ranking those against each other, so this stays empty
+    # rather than pointing at values no Bracelet can ever roll.
+    "bracelet": [],
 }
 
 
@@ -5615,6 +6397,22 @@ class QuickGearSelectDialog(QDialog):
                             self.tier_combo.setItemData(
                                 self.tier_combo.count() - 1, QColor(GRADE_COLORS[grade]), Qt.ForegroundRole
                             )
+            # Epic-tier root -- see RACE_EPIC_TIER_ROOT: not reachable via
+            # _ordered_tier_chain's Transfer-hop BFS (different, unconnected
+            # recipe chain), so its 2 entries (base + Splendent bonus output)
+            # are listed directly instead of discovered.
+            epic_root_prefix = RACE_EPIC_TIER_ROOT.get(race)
+            if epic_root_prefix:
+                for tier in (epic_root_prefix, f"Splendent {epic_root_prefix}"):
+                    grade = self._tier_grade(tier)
+                    if not grade:
+                        continue
+                    if self._selected_grade == "All" or grade == self._selected_grade:
+                        self.tier_combo.addItem(tier, (tier, grade))
+                        if grade in GRADE_COLORS:
+                            self.tier_combo.setItemData(
+                                self.tier_combo.count() - 1, QColor(GRADE_COLORS[grade]), Qt.ForegroundRole
+                            )
             # Default to the highest crafted tier if any made it through the
             # Rarität filter -- "give me the current best set" -- before the
             # dungeon-set entries below get appended after it.
@@ -5836,7 +6634,7 @@ class QuickStatSelectDialog(QDialog):
         self.accept()
 
 
-class StatPriorityEditorDialog(QDialog):
+class StatPriorityEditorDialog(QWidget):
     """Gear-icon editor next to "Eigenschaften" (User-Wunsch 2026-08-27:
     "Ein Zahnrad ... darüber soll man die Rollen und die Werte manuell
     anpassen können"). Edits the 6 (Gear-Typ x Rolle) priority profiles
@@ -5847,21 +6645,61 @@ class StatPriorityEditorDialog(QDialog):
     player never has to type a name freehand. A name picked in one rank is
     excluded from every other rank's dropdown in the same category (User-
     Wunsch: "jedes Dropdown schließt den ausgewählten Stat aus der gesamt
-    verfügbaren Liste aus")."""
+    verfügbaren Liste aus").
 
-    def __init__(self, profiles: dict, parent=None):
+    A full-panel takeover in equip_view_stack (back-arrow/X, same pattern
+    as Build Vergleich) rather than a separate modal popup (User-Wunsch,
+    2026-08-28: "Dann können wir im Equip Prio wieder mit Zurück-Pfeil und
+    X arbeiten") -- on_done(data_or_None) is called instead of accept()/
+    reject() since there's no QDialog result code to report back through."""
+
+    def __init__(
+        self, profiles: dict, skill_priority_names: dict[str, list[str]] | None = None,
+        on_done: "Callable[[dict | None], None] | None" = None, parent=None,
+    ):
         super().__init__(parent)
-        self.setWindowTitle(_t("arm_stat_priority_editor_title"))
-        self.setMinimumSize(560, 520)
+        self._on_done = on_done
         self._data = copy.deepcopy(profiles)
         self._available_options = _load_stat_priority_options()
+        # Skill names from the current class's Priority List, already in
+        # that list's rank order -- shown first in each relevant category's
+        # dropdown (User-Wunsch, 2026-08-27), ahead of the plain numeric
+        # stat names. Weapon/Guard/Ring slots take an Active skill,
+        # everything else a Passive one (_ACTIVE_SUBSKILL_SLOT_CATEGORIES);
+        # "jewelry" spans both since Ring (Active) and Earring/Necklace/
+        # Amulet (Passive) share that one category tab.
+        self._skill_priority_names = skill_priority_names or {"active": [], "passive": []}
         self._gear_type = _STAT_PRIORITY_GEAR_TYPES[0]
         self._role = _STAT_PRIORITY_ROLES[0]
-        self.result_profiles: dict | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 16, 16, 16)
         outer.setSpacing(10)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+        back_btn = QToolButton()
+        back_btn.setObjectName("PanelNavButton")
+        back_btn.setIcon(_make_back_icon())
+        back_btn.setIconSize(QSize(16, 16))
+        back_btn.setFixedSize(32, 32)
+        back_btn.setToolTip(_t("arm_back"))
+        back_btn.clicked.connect(self._cancel)
+        header_row.addWidget(back_btn)
+
+        title = QLabel(_t("arm_stat_priority_editor_title"))
+        title.setObjectName("DetailHeader")
+        header_row.addWidget(title, 1)
+
+        close_btn = QToolButton()
+        close_btn.setObjectName("PanelNavButton")
+        close_btn.setIcon(_make_close_icon())
+        close_btn.setIconSize(QSize(16, 16))
+        close_btn.setFixedSize(32, 32)
+        close_btn.setToolTip(_t("arm_close"))
+        close_btn.clicked.connect(self._cancel)
+        header_row.addWidget(close_btn)
+        outer.addLayout(header_row)
 
         gear_type_label = QLabel(_t("arm_gear_mode_label"))
         gear_type_label.setObjectName("EquipSectionLabel")
@@ -5899,29 +6737,43 @@ class StatPriorityEditorDialog(QDialog):
         role_row.addStretch(1)
         outer.addLayout(role_row)
 
-        self._tabs = QTabWidget()
+        # 3 group buttons (User-Wunsch, 2026-08-27: "Wir machen 3 Buttons
+        # ... Waffe/Guard, Rüstung, Schmuck ... dann machen wir bei jedem
+        # Content jedes Teil separat via Reiter") -- each switches which
+        # page of self._group_stack is shown; a group with only one
+        # category (Weapon/Guard) shows that category's editor directly,
+        # everything else nests a QTabWidget of its categories.
         self._category_combos: dict[str, list[QComboBox]] = {}
-        for key, label, _slots in _STAT_PRIORITY_CATEGORIES:
-            tab = QWidget()
-            tab_layout = QVBoxLayout(tab)
-            tab_layout.setContentsMargins(8, 10, 8, 8)
-            tab_layout.setSpacing(6)
-            combos: list[QComboBox] = []
-            for i in range(_STAT_PRIORITY_MAX_ENTRIES):
-                row = QHBoxLayout()
-                row.setSpacing(8)
-                pos_label = QLabel(f"{i + 1}.")
-                pos_label.setFixedWidth(20)
-                row.addWidget(pos_label)
-                combo = _build_stat_priority_combo()
-                combo.activated.connect(lambda _idx=0, k=key: self._rebuild_category_combos(k))
-                row.addWidget(combo, 1)
-                tab_layout.addLayout(row)
-                combos.append(combo)
-            tab_layout.addStretch(1)
-            self._category_combos[key] = combos
-            self._tabs.addTab(tab, _t(label))
-        outer.addWidget(self._tabs, 1)
+        group_row = QHBoxLayout()
+        group_row.setSpacing(6)
+        group_button_group = QButtonGroup(self)
+        group_button_group.setExclusive(True)
+        self._group_stack = QStackedWidget()
+        for group_idx, (_group_key, group_label, category_keys) in enumerate(_STAT_PRIORITY_GROUPS):
+            btn = QPushButton(_t(group_label))
+            btn.setObjectName("SkillFilterButton")
+            btn.setCheckable(True)
+            btn.setChecked(group_idx == 0)
+            btn.clicked.connect(lambda checked=False, idx=group_idx: self._group_stack.setCurrentIndex(idx))
+            group_button_group.addButton(btn)
+            group_row.addWidget(btn)
+
+            category_lookup = {key: (label, slots) for key, label, slots in _STAT_PRIORITY_CATEGORIES}
+            if len(category_keys) == 1:
+                page = self._build_stat_priority_category_widget(category_keys[0])
+            else:
+                page = QTabWidget()
+                for cat_key in category_keys:
+                    label_key, _slots = category_lookup[cat_key]
+                    # "&" is a Qt mnemonic marker in tab/button text (see
+                    # the same fix for "Utility & Recovery" elsewhere) --
+                    # escaped so "Earrings & Necklace" doesn't render as
+                    # "Earrings Necklace" with a hidden underline.
+                    page.addTab(self._build_stat_priority_category_widget(cat_key), _t(label_key).replace("&", "&&"))
+            self._group_stack.addWidget(page)
+        group_row.addStretch(1)
+        outer.addLayout(group_row)
+        outer.addWidget(self._group_stack, 1)
 
         self._load_profile_into_combos()
 
@@ -5931,12 +6783,41 @@ class StatPriorityEditorDialog(QDialog):
         button_row.addWidget(reset_btn)
         button_row.addStretch(1)
         cancel_btn = QPushButton(_t("arm_cancel"))
-        cancel_btn.clicked.connect(self.reject)
+        cancel_btn.clicked.connect(self._cancel)
         button_row.addWidget(cancel_btn)
         save_btn = QPushButton(_t("arm_save"))
         save_btn.clicked.connect(self._on_save)
         button_row.addWidget(save_btn)
         outer.addLayout(button_row)
+
+    def _build_stat_priority_category_widget(self, key: str) -> QWidget:
+        """One category's scrollable rank editor -- extracted so it can be
+        embedded either directly (Weapon/Guard, the only 1-category group)
+        or inside a group's inner QTabWidget (Armor's 6 pieces, Jewelry's
+        Ring/Earring+Necklace/Bracelet)."""
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(8, 10, 8, 8)
+        tab_layout.setSpacing(6)
+        combos: list[QComboBox] = []
+        for i in range(_STAT_PRIORITY_MAX_ENTRIES):
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            pos_label = QLabel(f"{i + 1}.")
+            pos_label.setFixedWidth(20)
+            row.addWidget(pos_label)
+            combo = _build_stat_priority_combo()
+            combo.activated.connect(lambda _idx=0, k=key: self._rebuild_category_combos(k))
+            row.addWidget(combo, 1)
+            tab_layout.addLayout(row)
+            combos.append(combo)
+        tab_layout.addStretch(1)
+        self._category_combos[key] = combos
+        tab_scroll = QScrollArea()
+        tab_scroll.setWidgetResizable(True)
+        tab_scroll.setFrameShape(QFrame.NoFrame)
+        tab_scroll.setWidget(tab)
+        return tab_scroll
 
     def _current_selections(self, key: str) -> list[str]:
         return [name for combo in self._category_combos[key] if (name := combo.currentData())]
@@ -5963,7 +6844,29 @@ class StatPriorityEditorDialog(QDialog):
             selections = selections[:len(combos)]
         else:
             selections = [combo.currentData() or "" for combo in combos]
-        options = self._available_options.get(key, [])
+        # Skill names from the Priority List come first, already in that
+        # list's rank order, ahead of the plain numeric stat names --
+        # User-Wunsch, 2026-08-27. Colored by skill type (same convention
+        # as the Skill Description cards' type label, _SKILL_TYPE_COLORS)
+        # so they visually stand out from plain stat names in the dropdown
+        # (User-Wunsch, 2026-08-27: "die Skills mit Farben markieren ...
+        # Schriftart der Farbe der Skillart anpassen").
+        skill_names: list[str] = []
+        skill_name_colors: dict[str, str] = {}
+        for skill_type in _STAT_PRIORITY_CATEGORY_SKILL_TYPES.get(key, []):
+            color = _SKILL_TYPE_COLORS.get(skill_type)
+            for name in self._skill_priority_names.get(skill_type, []):
+                if name not in skill_names:
+                    skill_names.append(name)
+                    if color:
+                        skill_name_colors[name] = color
+        # Guide-ordered names next (only the ones actually in this
+        # category's real option pool), then whatever's left in the
+        # default frequency order.
+        stat_pool = self._available_options.get(key, [])
+        guide_order = [n for n in _STAT_PRIORITY_CATEGORY_ORDER_OVERRIDE.get(key, []) if n in stat_pool]
+        already_placed = set(skill_names) | set(guide_order)
+        options = skill_names + guide_order + [n for n in stat_pool if n not in already_placed]
         for i, combo in enumerate(combos):
             others = {selections[j] for j in range(len(combos)) if j != i and selections[j]}
             combo.blockSignals(True)
@@ -5972,6 +6875,9 @@ class StatPriorityEditorDialog(QDialog):
             for name in options:
                 if name not in others:
                     combo.addItem(name, name)
+                    color = skill_name_colors.get(name)
+                    if color:
+                        combo.setItemData(combo.count() - 1, QColor(color), Qt.ForegroundRole)
             current = selections[i]
             idx = combo.findData(current) if current else 0
             combo.setCurrentIndex(idx if idx >= 0 else 0)
@@ -5997,10 +6903,14 @@ class StatPriorityEditorDialog(QDialog):
         }
         self._load_profile_into_combos()
 
+    def _cancel(self):
+        if self._on_done:
+            self._on_done(None)
+
     def _on_save(self):
         self._flush_combos_into_data()
-        self.result_profiles = self._data
-        self.accept()
+        if self._on_done:
+            self._on_done(self._data)
 
 
 def _build_stat_priority_combo() -> QComboBox:
@@ -6018,6 +6928,1176 @@ def _build_stat_priority_combo() -> QComboBox:
     completer.setFilterMode(Qt.MatchContains)
     completer.setCaseSensitivity(Qt.CaseInsensitive)
     return combo
+
+
+# ── Daevanion Board (2026-08-28) ─────────────────────────────────────────
+# Ported from the approved browser mockup (see [[project_daevanion_board_
+# port]] in memory for the full requirements list this was checked against).
+# Two variants per board, same ids overlapping between them (same game,
+# same internal numbering, different per-variant content) -- "_s" (Start)
+# is Global's real current content (48 boards: 6 deities x 8 classes, no
+# Fighter -- source: talentbuilds.com), "_a" (Advanced) is KR/TW's post-
+# Eltnen/Morheim content (72 boards: 8 deities x 9 classes -- source:
+# questlog.gg). Only "_s" ships; flipping _DAEVANION_DEV_MODE to True is a
+# local dev-only switch, never shipped as True (User-Wunsch, 2026-08-28).
+DAEVANION_START_PATH = _BUNDLE_DIR / "data" / "daevanion_boards_s.json"
+DAEVANION_ADVANCED_PATH = _BUNDLE_DIR / "data" / "daevanion_boards_a.json"
+_DAEVANION_DEV_MODE = False
+
+_DAEVANION_GRID_SIZE = 15
+_DAEVANION_GRADE_HEX = {
+    "start": "#22d3ee", "common": GRADE_COLORS["Common"], "rare": GRADE_COLORS["Rare"],
+    "legend": GRADE_COLORS["Legend"], "unique": GRADE_COLORS["Unique"],
+}
+_DAEVANION_GRADE_LABEL = {"start": "Start", "common": "Common", "rare": "Rare", "legend": "Legend", "unique": "Unique"}
+
+# Real per-grade node-frame art (see fetch_daevanion_node_sprites.py) --
+# User-found real CDN path, 2026-08-28: cdn.questlog.gg/aion-2/assets/
+# images-test/ (questlog.gg/assets/ , tried earlier that same day, serves
+# an identical SPA-fallback image for every filename -- a dead end).
+# "Disabled" is the locked/unpicked look; Start has no disabled variant
+# (always auto-active). One shared cache since the art is grade-only, not
+# per-board/per-variant.
+_DAEVANION_SPRITE_DIR = _BUNDLE_DIR / "assets" / "daevanion_nodes"
+_DAEVANION_SPRITE_GRADE_FILE = {"common": "Common", "rare": "Rare", "legend": "Legend", "unique": "Unique"}
+_daevanion_sprite_cache: dict[str, "QPixmap"] = {}
+
+
+def _daevanion_node_sprite(grade: str, enabled: bool, size: int) -> "QPixmap | None":
+    if grade == "start":
+        filename = "UT_FWindow_Daevanion_Node_Start_Sprite.webp"
+    else:
+        tier = _DAEVANION_SPRITE_GRADE_FILE.get(grade)
+        if not tier:
+            return None
+        suffix = "Sprite" if enabled else "Disabled_Sprite"
+        filename = f"UT_FWindow_Daevanion_Node_{tier}_{suffix}.webp"
+    cache_key = f"{filename}:{size}"
+    if cache_key not in _daevanion_sprite_cache:
+        path = _DAEVANION_SPRITE_DIR / filename
+        pix = QPixmap(str(path)) if path.exists() else QPixmap()
+        if not pix.isNull():
+            pix = pix.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        _daevanion_sprite_cache[cache_key] = pix
+    pix = _daevanion_sprite_cache[cache_key]
+    return pix if not pix.isNull() else None
+
+
+def _load_daevanion_raw(path: Path) -> dict:
+    if not path.exists():
+        return {"boards": [], "nodes": []}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+_daevanion_variant_cache: dict[str, dict] = {}
+
+
+# "fighter" only exists in the "_a" data (KR/TW) -- almost certainly the
+# app's own "Brawler" class (listed in AION2_CLASSES but deliberately kept
+# out of AION2_ACTIVE_CLASSES since it isn't released/selectable yet, see
+# [[project_daevanion_board_port]]). character_class_combo already can
+# never select it, so this is belt-and-suspenders: keeps that exclusion
+# explicit within the Daevanion feature itself rather than relying only on
+# the unrelated shared class list (User-Wunsch, 2026-08-28: "kann man den
+# Brawler genauso erstmal inaktiv setzen, bis dieser released wird").
+_DAEVANION_DISABLED_CLASSES = {"fighter"}
+
+
+def _daevanion_variant(variant: str) -> dict:
+    """Lazily builds+caches the per-variant lookup structures (board list,
+    class ids, deity orders, grid-by-board, node-by-id) -- mirrors the
+    browser mockup's SEASON_BUILD exactly, kept fully separate per variant
+    since board/node ids overlap between "s" and "a"."""
+    if variant not in _daevanion_variant_cache:
+        path = DAEVANION_START_PATH if variant == "s" else DAEVANION_ADVANCED_PATH
+        raw = _load_daevanion_raw(path)
+        boards = [b for b in raw.get("boards", []) if b["classId"] not in _DAEVANION_DISABLED_CLASSES]
+        allowed_board_ids = {b["id"] for b in boards}
+        nodes = [n for n in raw.get("nodes", []) if n["b"] in allowed_board_ids]
+        board_by_class_order = {(b["classId"], b["order"]): b for b in boards}
+        nodes_by_board: dict[str, dict[tuple[int, int], dict]] = {}
+        node_by_id: dict[str, dict] = {}
+        for n in nodes:
+            nodes_by_board.setdefault(n["b"], {})[(n["r"], n["c"])] = n
+            node_by_id[n["id"]] = n
+        _daevanion_variant_cache[variant] = {
+            "boards": boards,
+            "class_ids": sorted({b["classId"] for b in boards}),
+            "deity_orders": sorted({b["order"] for b in boards}),
+            "board_by_class_order": board_by_class_order,
+            "nodes_by_board": nodes_by_board,
+            "node_by_id": node_by_id,
+        }
+    return _daevanion_variant_cache[variant]
+
+
+def _daevanion_neighbors(r: int, c: int) -> list[tuple[int, int]]:
+    return [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
+
+
+def _daevanion_is_reachable(node: dict, grid: dict, active: set) -> bool:
+    """A node with no real stat/skill value can never bridge two others --
+    only nodes with a real value connect to each other (User-Wunsch,
+    2026-08-28: "Es können zum verbinden nur Felder genutzt werden, die
+    Werte beinhalten")."""
+    if node["id"] in active:
+        return True
+    for rc in _daevanion_neighbors(node["r"], node["c"]):
+        nb = grid.get(rc)
+        if nb and nb["g"] != "empty" and nb["id"] in active:
+            return True
+    return False
+
+
+def _daevanion_total_cost(grid: dict) -> int:
+    return sum(n["cost"] for n in grid.values())
+
+
+def _daevanion_spent_cost(active: set, node_by_id: dict) -> int:
+    return sum(node_by_id[nid]["cost"] for nid in active if nid in node_by_id)
+
+
+_DAEVANION_MP_NAMES = {"mpmax", "Max MP"}  # "a" data uses the lowercase questlog code, "s" data the plain name
+
+
+def _daevanion_node_mp_count(node: dict) -> int:
+    return 1 if any(e.get("t") == "s" and e.get("n") in _DAEVANION_MP_NAMES for e in node.get("e") or []) else 0
+
+
+def _daevanion_shortest_from_tree(grid: dict, tree: set, node_by_id: dict):
+    """Multi-source Dijkstra from every node already in `tree` (distance
+    (0, 0)) -- distance is (points, mpNodeCount), Python tuples already
+    compare lexicographically: cheapest point cost wins outright, ties
+    broken toward fewer Max MP nodes crossed (User-Wunsch, 2026-08-28).
+    "empty" cells are skipped entirely, never traversable."""
+    inf = (float("inf"), float("inf"))
+    dist = {n["id"]: ((0, 0) if n["id"] in tree else inf) for n in grid.values()}
+    prev: dict[str, str] = {}
+    visited: set[str] = set()
+    while len(visited) < len(dist):
+        best_id, best_d = None, inf
+        for nid, d in dist.items():
+            if nid not in visited and d < best_d:
+                best_d, best_id = d, nid
+        if best_id is None:
+            break
+        visited.add(best_id)
+        n = node_by_id[best_id]
+        for rc in _daevanion_neighbors(n["r"], n["c"]):
+            nb = grid.get(rc)
+            if not nb or nb["g"] == "empty" or nb["id"] in visited:
+                continue
+            in_tree = nb["id"] in tree
+            nd = (best_d[0] + (0 if in_tree else nb["cost"]), best_d[1] + (0 if in_tree else _daevanion_node_mp_count(nb)))
+            if nd < dist[nb["id"]]:
+                dist[nb["id"]] = nd
+                prev[nb["id"]] = best_id
+    return dist, prev
+
+
+def _daevanion_path_nodes_to_add(prev: dict, target_id: str, tree: set) -> list[str]:
+    chain = []
+    cur = target_id
+    while cur is not None:
+        chain.append(cur)
+        if cur in tree:
+            break
+        cur = prev.get(cur)
+    return chain
+
+
+def _daevanion_compute_auto_route(grid: dict, node_by_id: dict, wanted_ids: set, start_id: str) -> dict:
+    """Greedy Steiner-tree heuristic (identical to the approved browser
+    mockup): repeatedly connects whichever wanted node is currently
+    cheapest to reach from the tree built so far, until every wanted node
+    is connected or the board's point cap runs out."""
+    tree = {start_id}
+    cap = _daevanion_total_cost(grid)
+    spent = 0
+    remaining = set(wanted_ids) - {start_id}
+    included: set[str] = set()
+    skipped: set[str] = set()
+    while remaining:
+        dist, prev = _daevanion_shortest_from_tree(grid, tree, node_by_id)
+        best_id, best_d = None, (float("inf"), float("inf"))
+        for nid in remaining:
+            d = dist.get(nid, (float("inf"), float("inf")))
+            if d < best_d:
+                best_d, best_id = d, nid
+        if best_id is None or best_d[0] == float("inf") or spent + best_d[0] > cap:
+            skipped |= remaining
+            break
+        for nid in _daevanion_path_nodes_to_add(prev, best_id, tree):
+            if nid not in tree:
+                tree.add(nid)
+                spent += node_by_id[nid]["cost"]
+        included.add(best_id)
+        remaining.discard(best_id)
+    return {"tree": tree, "included": included, "skipped": skipped, "spent": spent, "cap": cap}
+
+
+def _daevanion_stat_key(raw: str) -> str:
+    """Canonical lookup key for a stat_name -- strips everything but
+    letters/digits and lowercases, so questlog's "_a" data (lowercase
+    joined codes like "fixingdamage") and talentbuilds' "_s" data (spaced
+    "Attack Bonus" OR un-spaced "PvPAddDamage", both occur -- confirmed via
+    the real data, not assumed) all converge on the same key regardless of
+    which convention a given raw name happens to use."""
+    return re.sub(r"[^a-z0-9]", "", raw.lower())
+
+
+# Exhaustive per-stat display labels, keyed by the canonical form above --
+# built from the real distinct stat_name values found in BOTH datasets (35
+# in "_s", 50 in "_a"), including a few pairs that are almost certainly the
+# same real stat under a different internal name between the two sites
+# (e.g. "_s"'s "HP"/"Max HP" grade vs "_a"'s "hpmax", both mapped to "Max
+# HP"; "_s"'s "Attack Bonus" vs "_a"'s "fixingdamage", both "Attack").
+_DAEVANION_STAT_LABELS: dict[str, str] = {
+    "hpmax": "Max HP", "hp": "Max HP", "maxhp": "Max HP",
+    "mpmax": "Max MP", "mp": "Max MP", "maxmp": "Max MP",
+    "fixingdamage": "Attack", "attackbonus": "Attack",
+    "defense": "Defense", "defensebonus": "Defense",
+    "critical": "Critical Hit", "criticalhit": "Critical Hit",
+    "criticalresist": "Critical Resist", "criticalhitresist": "Critical Resist",
+    "accuracy": "Accuracy", "block": "Block", "blockpierce": "Block Penetration",
+    "evasion": "Evasion", "weapondamage": "Weapon Damage",
+    "perfect": "Perfect Chance", "perfectresist": "Perfect Resist",
+    "combatspeed": "Combat Speed",
+    "restoration": "Restoration", "ignorerestoration": "Ignore Restoration",
+    "ironwall": "Iron Wall", "ignoreironwall": "Ignore Iron Wall",
+    "damageratio": "Damage Ratio", "defenseratio": "Defense Ratio", "maxhpratio": "Max HP Ratio",
+    "cooltimedecrease": "Cooldown Reduction", "cooldowndecrease": "Cooldown Reduction",
+    "amplifyalldamage": "Amplify All Damage",
+    "amplifycriticaldamage": "Amplify Critical Damage", "decreasecriticaldamage": "Decrease Critical Damage",
+    "amplifyweapondamage": "Amplify Weapon Damage", "decreaseweapondamage": "Decrease Weapon Damage",
+    "decreasedamage": "Decrease Damage",
+    "additionalhitrate": "Additional Hit Rate", "additionalhitresistrate": "Additional Hit Resist",
+    "multihitchance": "Multi-hit Chance", "multihitresist": "Multi-hit Resist",
+    "abnormalaccuracy": "Abnormal Accuracy", "abnormalresistance": "Abnormal Resistance",
+    "damageboost": "Damage Boost", "damagetolerance": "Damage Tolerance",
+    "criticaldamageboost": "Critical Damage Boost", "criticaldamagetolerance": "Critical Damage Tolerance",
+    "bossattack": "Boss Damage", "bossnpcadddamage": "Boss Damage",
+    "bossdefense": "Boss Defense", "bossnpcdefense": "Boss Defense",
+    "bossnpcamplifydamage": "Boss Amplify Damage", "bossnpcdecreasedamage": "Boss Decrease Damage",
+    "pvpaccuracy": "PvP Accuracy", "pveaccuracy": "PvE Accuracy",
+    "pvpevasion": "PvP Evasion", "pveevasion": "PvE Evasion",
+    "pvpcritical": "PvP Critical Hit", "pvpcriticalresist": "PvP Critical Resist",
+    "pvpadddamage": "PvP Damage", "pvpdamagedefense": "PvP Damage Defense", "pvpdefense": "PvP Damage Defense",
+    "pvpdecreasedamage": "PvP Decrease Damage", "pvpamplifydamage": "PvP Amplify Damage",
+    "pveattack": "PvE Damage", "pveadddamage": "PvE Damage",
+    "pvedamagedefense": "PvE Damage Defense", "pvedefense": "PvE Damage Defense",
+    "pvedecreasedamage": "PvE Decrease Damage", "pveamplifydamage": "PvE Amplify Damage",
+    "pvedamageboost": "PvE Damage Boost", "pvedamagetolerance": "PvE Damage Tolerance",
+}
+
+# Backward-compat alias -- _daevanion_effect_lines/_daevanion_build_node_icons
+# used to look this up directly by raw (non-canonicalized) name; now they go
+# through _daevanion_stat_label() below instead, which canonicalizes first.
+STAT_LABEL_OVERRIDES = _DAEVANION_STAT_LABELS
+
+
+def _daevanion_stat_label(raw_name: str) -> str:
+    return _DAEVANION_STAT_LABELS.get(_daevanion_stat_key(raw_name), raw_name)
+
+
+def _daevanion_effect_lines(node: dict, class_skills_by_id: dict) -> list[tuple[str, str]]:
+    """[(label, value)] pairs for a node's effects -- resolves skill_level
+    effects' real name/level against the SAME live skills_all.json lookup
+    the rest of the app already uses (class_skills_by_id), falling back to
+    whatever name the raw data itself carried (talentbuilds' "_s" data
+    embeds one; questlog's "_a" data doesn't)."""
+    lines = []
+    for e in node.get("e") or []:
+        if e.get("t") == "s":
+            name = e.get("n") or ""
+            label = _daevanion_stat_label(name)
+            value = e.get("v")
+            lines.append((label, f"{'+' if value and value > 0 else ''}{value}"))
+        elif e.get("t") == "k":
+            skill_id = str(e.get("skill_id") or "")
+            skill = class_skills_by_id.get(skill_id)
+            label = skill.get("name") if skill else (e.get("n") or f"Skill #{skill_id}")
+            lines.append((label, f"+{e.get('v')} Lvl"))
+    return lines
+
+
+class DaevanionBoardCanvas(QWidget):
+    """Paints one board's 15x15 grid and reports clicks/hover -- all
+    business logic (which nodes are active/reachable/highlighted, what a
+    click should do) lives in the owning DaevanionBoardTab; this widget
+    only knows how to draw a grid dict + active/highlighted id sets and
+    turn mouse events into (row, col) hits."""
+
+    nodeClicked = Signal(str)
+    nodeHovered = Signal(object)  # node dict or None
+
+    _CELL = 30
+    _GAP = 3
+    _PAD = 10
+    _ZOOM_MIN = 0.6
+    _ZOOM_MAX = 2.4
+    _ZOOM_STEP = 1.12
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._grid: dict[tuple[int, int], dict] = {}
+        self._active: set[str] = set()
+        self._highlighted: set[str] = set()
+        self._node_icons: dict[str, QPixmap] = {}
+        self._id_to_node: dict[str, dict] = {}
+        self._hovered_rc: tuple[int, int] | None = None
+        self._zoom = 1.0
+        self.setMouseTracking(True)
+        self.setCursor(Qt.PointingHandCursor)
+        self._update_geometry()
+
+    def set_data(self, grid: dict, active: set, highlighted: set, node_icons: dict[str, "QPixmap"]):
+        self._grid = grid
+        self._active = active
+        self._highlighted = highlighted
+        self._node_icons = node_icons
+        self._id_to_node = {n["id"]: n for n in grid.values()}
+        self.update()
+
+    def set_scroll_area(self, scroll_area: "QScrollArea"):
+        """So wheelEvent can re-center the viewport on whatever point the
+        zoom was centered on -- without this, growing the canvas keeps its
+        (0, 0) corner pinned to the viewport's top-left, so zooming in just
+        pushes content down/right into empty space instead of filling the
+        view (User-Wunsch, 2026-08-28: "von der Mitte aus zoomen ... dass
+        das Feld beim Zoomen komplett ausgefüllt wird")."""
+        self._scroll_area = scroll_area
+
+    def wheelEvent(self, event):
+        """Mouse-wheel zoom, centered on the viewport's current center (or
+        the cursor, if the wheel happens over a specific point) so the
+        zoomed board keeps filling the visible area instead of drifting
+        toward one corner."""
+        scroll = getattr(self, "_scroll_area", None)
+        anchor_x = anchor_y = None
+        if scroll is not None:
+            hbar, vbar = scroll.horizontalScrollBar(), scroll.verticalScrollBar()
+            viewport_w, viewport_h = scroll.viewport().width(), scroll.viewport().height()
+            old_w, old_h = max(1, self.width()), max(1, self.height())
+            anchor_x = (hbar.value() + viewport_w / 2) / old_w
+            anchor_y = (vbar.value() + viewport_h / 2) / old_h
+
+        factor = self._ZOOM_STEP if event.angleDelta().y() > 0 else 1 / self._ZOOM_STEP
+        self._zoom = max(self._ZOOM_MIN, min(self._ZOOM_MAX, self._zoom * factor))
+        self._update_geometry()
+        self.update()
+
+        if scroll is not None and anchor_x is not None:
+            hbar, vbar = scroll.horizontalScrollBar(), scroll.verticalScrollBar()
+            viewport_w, viewport_h = scroll.viewport().width(), scroll.viewport().height()
+            hbar.setValue(round(anchor_x * self.width() - viewport_w / 2))
+            vbar.setValue(round(anchor_y * self.height() - viewport_h / 2))
+        event.accept()
+
+    def _update_geometry(self):
+        cell = self._CELL * self._zoom
+        gap = self._GAP * self._zoom
+        pad = self._PAD * self._zoom
+        side = round(pad * 2 + _DAEVANION_GRID_SIZE * cell + (_DAEVANION_GRID_SIZE - 1) * gap)
+        self.setFixedSize(side, side)
+
+    def _cell_rect(self, r: int, c: int) -> QRectF:
+        cell = self._CELL * self._zoom
+        gap = self._GAP * self._zoom
+        pad = self._PAD * self._zoom
+        x = pad + (c - 1) * (cell + gap)
+        y = pad + (r - 1) * (cell + gap)
+        return QRectF(x, y, cell, cell)
+
+    def _rc_at(self, pos: QPointF) -> tuple[int, int] | None:
+        cell = self._CELL * self._zoom
+        gap = self._GAP * self._zoom
+        pad = self._PAD * self._zoom
+        step = cell + gap
+        c = int((pos.x() - pad) // step) + 1
+        r = int((pos.y() - pad) // step) + 1
+        if not (1 <= r <= _DAEVANION_GRID_SIZE and 1 <= c <= _DAEVANION_GRID_SIZE):
+            return None
+        rect = self._cell_rect(r, c)
+        return (r, c) if rect.contains(pos) else None
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.fillRect(self.rect(), QColor("#0b1220"))
+
+        # Connective lines between two active orthogonal neighbors.
+        painter.setPen(QPen(QColor(34, 211, 238, 90), max(1.2, 2 * self._zoom)))
+        for nid in self._active:
+            n = self._id_to_node.get(nid)
+            if not n:
+                continue
+            for rc in [(n["r"] + 1, n["c"]), (n["r"], n["c"] + 1)]:
+                nb = self._grid.get(rc)
+                if nb and nb["id"] in self._active:
+                    a, b = self._cell_rect(n["r"], n["c"]), self._cell_rect(*rc)
+                    painter.drawLine(a.center(), b.center())
+
+        icon_side = self._CELL * self._zoom * 0.62
+        cell_px = max(1, round(self._CELL * self._zoom))
+
+        for (r, c), n in self._grid.items():
+            rect = self._cell_rect(r, c)
+            is_active = n["id"] in self._active
+            reachable = not is_active and _daevanion_is_reachable(n, self._grid, self._active)
+            grade = n["g"]
+
+            if grade != "empty":
+                hex_color = _DAEVANION_GRADE_HEX.get(grade, _DAEVANION_GRADE_HEX["common"])
+                color = QColor(hex_color)
+                # Real per-grade frame art (see fetch_daevanion_node_sprites.py)
+                # -- "enabled" look once active, "disabled" (locked) look
+                # otherwise; falls back to the old drawn rounded-rect if the
+                # asset is somehow missing.
+                sprite = _daevanion_node_sprite(grade, is_active, cell_px)
+                if sprite:
+                    if not (is_active or reachable):
+                        painter.setOpacity(0.5)
+                    painter.drawPixmap(rect.toRect(), sprite)
+                    painter.setOpacity(1.0)
+                    if reachable:
+                        painter.setPen(QPen(QColor("#4ade80"), 1.4))
+                        painter.setBrush(Qt.NoBrush)
+                        painter.drawRoundedRect(rect, 8, 8)
+                elif is_active:
+                    fill = QColor(color)
+                    fill.setAlphaF(0.9 if grade == "start" else 0.85)
+                    painter.setPen(QPen(QColor("#22d3ee"), 1.5))
+                    painter.setBrush(fill)
+                    painter.drawRoundedRect(rect, 8, 8)
+                else:
+                    fill = QColor(color)
+                    fill.setAlphaF(0.16 if reachable else 0.06)
+                    painter.setBrush(fill)
+                    painter.setPen(QPen(QColor("#4ade80") if reachable else QColor(148, 163, 184, 46), 1.4))
+                    painter.drawRoundedRect(rect, 8, 8)
+
+                icon = self._node_icons.get(n["id"])
+                if icon and not icon.isNull():
+                    if not (is_active or reachable):
+                        painter.setOpacity(0.5)
+                    icon_rect = QRectF(0, 0, icon_side, icon_side)
+                    icon_rect.moveCenter(rect.center())
+                    painter.drawPixmap(icon_rect.toRect(), icon)
+                    painter.setOpacity(1.0)
+                elif grade != "start" and not sprite:
+                    dot = QColor(color)
+                    dot.setAlphaF(0.9 if (is_active or reachable) else 0.35)
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(dot)
+                    painter.drawEllipse(rect.center(), 4 * self._zoom, 4 * self._zoom)
+
+            if n["id"] in self._highlighted:
+                painter.setPen(QPen(QColor("#fbbf24"), 2.2))
+                painter.setBrush(Qt.NoBrush)
+                painter.drawRoundedRect(rect.adjusted(-2, -2, 2, 2), 9, 9)
+
+            if self._hovered_rc == (r, c):
+                painter.setPen(QPen(QColor("#f8fafc"), 2))
+                painter.setBrush(Qt.NoBrush)
+                painter.drawRoundedRect(rect.adjusted(-1.5, -1.5, 1.5, 1.5), 9, 9)
+
+        painter.end()
+
+    def mouseMoveEvent(self, event):
+        rc = self._rc_at(event.position())
+        if rc != self._hovered_rc:
+            self._hovered_rc = rc
+            self.update()
+            node = self._grid.get(rc) if rc else None
+            self.nodeHovered.emit(node)
+
+    def leaveEvent(self, event):
+        self._hovered_rc = None
+        self.update()
+        self.nodeHovered.emit(None)
+
+    def mousePressEvent(self, event):
+        rc = self._rc_at(event.position())
+        node = self._grid.get(rc) if rc else None
+        if node:
+            self.nodeClicked.emit(node["id"])
+
+
+class _TranslucentCardTooltip(QWidget):
+    """Base for floating, semi-transparent detail-card tooltips (rounded
+    dark card + drop shadow, native-tooltip window flags so they float
+    above everything without stealing focus) -- shared by
+    DaevanionNodeTooltip and SkillInfoTooltip so both stay visually
+    identical without duplicating the paint/shadow/positioning code
+    (User-Wunsch, 2026-08-28, re: the skill tooltip: "gerne ähnlicher
+    Aufbau des Tooltips wie beim Daeva Board")."""
+
+    def __init__(self, width: int, parent=None):
+        super().__init__(parent, Qt.ToolTip | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setFixedWidth(width)
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(48)
+        shadow.setOffset(0, 16)
+        shadow.setColor(QColor(0, 0, 0, 150))
+        self.setGraphicsEffect(shadow)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(QColor(148, 163, 184, 90), 1))
+        painter.setBrush(QColor(15, 22, 38, 235))
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 13, 13)
+        painter.end()
+
+    def show_at(self, global_pos: QPoint):
+        self.adjustSize()
+        screen = QApplication.screenAt(global_pos) or QApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else None
+        x = global_pos.x() + 16
+        y = global_pos.y() + 16
+        if avail is not None:
+            if x + self.width() > avail.right():
+                x = global_pos.x() - self.width() - 16
+            if y + self.height() > avail.bottom():
+                y = global_pos.y() - self.height() - 16
+            x = max(avail.left(), x)
+            y = max(avail.top(), y)
+        self.move(x, y)
+        self.show()
+
+
+class DaevanionNodeTooltip(_TranslucentCardTooltip):
+    """Node detail card -- replaces the native QToolTip (User-Wunsch,
+    2026-08-28: "Den Tooltip aus der Browservorschau fand ich noch
+    schoener") so effects can render as their own mini cards and the
+    status line as a colored pill, matching the browser mockup's
+    node-tooltip design -- a plain QToolTip's rich-text subset has no
+    per-row backgrounds/pills to work with."""
+
+    _STATUS_COLORS = {
+        "start": ("#22d3ee", 0.15),
+        "active": ("#22d3ee", 0.15),
+        "available": ("#4ade80", 0.14),
+        "locked": ("#94a3b8", 0.12),
+        "no_points": ("#fca5a5", 0.14),
+    }
+
+    def __init__(self, parent=None):
+        super().__init__(240, parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 14, 14, 14)
+        outer.setSpacing(10)
+
+        self._grade_label = QLabel()
+        outer.addWidget(self._grade_label, 0, Qt.AlignLeft)
+
+        self._title_label = QLabel()
+        self._title_label.setWordWrap(True)
+        self._title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #f1f5f9; background: transparent; border: none;")
+        outer.addWidget(self._title_label)
+
+        self._meta_label = QLabel()
+        self._meta_label.setWordWrap(True)
+        self._meta_label.setStyleSheet(
+            "font-size: 12px; color: #94a3b8; background: transparent;"
+            "border: none; border-top: 1px solid rgba(148, 163, 184, 60); padding-top: 8px;"
+        )
+        outer.addWidget(self._meta_label)
+
+        self._effects_container = QWidget()
+        self._effects_container.setStyleSheet("background: transparent;")
+        self._effects_layout = QVBoxLayout(self._effects_container)
+        self._effects_layout.setContentsMargins(0, 0, 0, 0)
+        self._effects_layout.setSpacing(6)
+        outer.addWidget(self._effects_container)
+
+        self._status_label = QLabel()
+        self._status_label.setAlignment(Qt.AlignCenter)
+        self._status_label.setWordWrap(True)
+        outer.addWidget(self._status_label)
+
+    def set_node(
+        self,
+        name: str,
+        grade_label: str,
+        grade_hex: str,
+        cost: int,
+        level: int,
+        effect_rows: list[tuple[str, str]],
+        status_key: str,
+        status_text: str,
+    ):
+        self._grade_label.setText(grade_label.upper())
+        self._grade_label.setStyleSheet(
+            "font-size: 10.5px; font-weight: 700; letter-spacing: 1px;"
+            "padding: 2px 8px; border-radius: 9px;"
+            f"background: {_rgba_str(grade_hex, 0.2)}; color: {grade_hex}; border: none;"
+        )
+        self._title_label.setText(name)
+        self._meta_label.setText(f"Cost: {cost} pt{'s' if cost != 1 else ''} · Required level: {level}")
+
+        while self._effects_layout.count():
+            item = self._effects_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        for label, value in effect_rows:
+            row = QFrame()
+            row.setStyleSheet(
+                "background: rgba(15, 23, 42, 150); border: 1px solid rgba(148, 163, 184, 50); border-radius: 8px;"
+            )
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(10, 8, 10, 8)
+            lbl = QLabel(label)
+            lbl.setStyleSheet("font-size: 12px; color: #cbd5e1; background: transparent; border: none;")
+            lbl.setWordWrap(True)
+            val = QLabel(value)
+            val.setStyleSheet("font-size: 12px; font-weight: 700; color: #22d3ee; background: transparent; border: none;")
+            row_layout.addWidget(lbl, 1)
+            row_layout.addWidget(val, 0)
+            self._effects_layout.addWidget(row)
+
+        color, alpha = self._STATUS_COLORS.get(status_key, self._STATUS_COLORS["locked"])
+        self._status_label.setText(status_text)
+        self._status_label.setStyleSheet(
+            "font-size: 12px; font-weight: 600; border-radius: 8px; padding: 8px 10px; border: none;"
+            f"background: {_rgba_str(color, alpha)}; color: {color};"
+        )
+
+        self.adjustSize()
+
+
+class SkillInfoTooltip(_TranslucentCardTooltip):
+    """Skill detail card for hovering a skill in the Priority List's picker
+    dialog (SkillPickerDialog) -- same visual language as
+    DaevanionNodeTooltip (User-Wunsch, 2026-08-28: "wär es geil, wenn man
+    hier ein Tooltip hat, welcher nochmal die Infos zum Skill anzeigt.
+    gerne ähnlicher Aufbau des Tooltips wie beim Daeva Board")."""
+
+    def __init__(self, parent=None):
+        super().__init__(260, parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 14, 14, 14)
+        outer.setSpacing(10)
+
+        self._type_label = QLabel()
+        outer.addWidget(self._type_label, 0, Qt.AlignLeft)
+
+        self._title_label = QLabel()
+        self._title_label.setWordWrap(True)
+        self._title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #f1f5f9; background: transparent; border: none;")
+        outer.addWidget(self._title_label)
+
+        self._desc_label = QLabel()
+        self._desc_label.setWordWrap(True)
+        self._desc_label.setTextFormat(Qt.RichText)
+        self._desc_label.setStyleSheet("font-size: 12px; color: #cbd5e1; background: transparent; border: none;")
+        outer.addWidget(self._desc_label)
+
+        self._stats_label = QLabel()
+        self._stats_label.setWordWrap(True)
+        self._stats_label.setTextFormat(Qt.RichText)
+        self._stats_label.setStyleSheet(
+            "font-size: 12px; color: #94a3b8; background: transparent;"
+            "border: none; border-top: 1px solid rgba(148, 163, 184, 60); padding-top: 8px;"
+        )
+        outer.addWidget(self._stats_label)
+
+    def set_skill(self, skill: dict):
+        skill_type = skill.get("type", "")
+        color = _SKILL_TYPE_COLORS.get(skill_type, "#94a3b8")
+        self._type_label.setText(skill_type.upper())
+        self._type_label.setStyleSheet(
+            "font-size: 10.5px; font-weight: 700; letter-spacing: 1px;"
+            "padding: 2px 8px; border-radius: 9px;"
+            f"background: {_rgba_str(color, 0.2)}; color: {color}; border: none;"
+        )
+        self._title_label.setText(skill.get("name", ""))
+
+        desc = _render_skill_description(skill.get("description", ""), skill.get("levels"), 1)
+        self._desc_label.setText(desc)
+        self._desc_label.setVisible(bool(desc))
+
+        stats = _format_skill_stats(skill)
+        self._stats_label.setText(stats)
+        self._stats_label.setVisible(bool(stats))
+
+        self.adjustSize()
+
+
+class ArcanaCardTooltip(_TranslucentCardTooltip):
+    """Card detail tooltip for hovering one card in the Arcana Calculator
+    results popup -- same CONTENT style as the existing Arcana tab's own
+    hover popover (_ArcanaSkillPopup: Active/Passive skill columns with
+    level ranges), plus the card's Empyrean Lord effect at its maxed
+    value, with whichever skill THIS combination committed to (if any)
+    highlighted at its real perfect-case value instead of the generic
+    range (User-Wunsch, 2026-08-29: "Das Tooltip soll similar zu dem sein,
+    welches wir bereits als Hover bei den Arcanas nutzen")."""
+
+    def __init__(self, parent=None):
+        super().__init__(280, parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 14, 14, 14)
+        outer.setSpacing(8)
+
+        self._title_label = QLabel()
+        self._title_label.setWordWrap(True)
+        self._title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #f1f5f9; background: transparent; border: none;")
+        outer.addWidget(self._title_label)
+
+        self._lord_label = QLabel()
+        self._lord_label.setWordWrap(True)
+        self._lord_label.setTextFormat(Qt.RichText)
+        self._lord_label.setStyleSheet(
+            "font-size: 11px; background: transparent;"
+            "border: none; border-bottom: 1px solid rgba(148, 163, 184, 60); padding-bottom: 8px;"
+        )
+        outer.addWidget(self._lord_label)
+
+        columns = QHBoxLayout()
+        columns.setSpacing(14)
+        self._active_container, self._active_layout = self._build_category_column("arm_active")
+        self._passive_container, self._passive_layout = self._build_category_column("arm_passive")
+        columns.addWidget(self._active_container, 1)
+        columns.addWidget(self._passive_container, 1)
+        outer.addLayout(columns)
+
+    @staticmethod
+    def _build_category_column(title_key: str) -> tuple[QWidget, QVBoxLayout]:
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        col = QVBoxLayout(container)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(4)
+        head = QLabel(_t(title_key))
+        head.setStyleSheet(
+            "font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #64748b; background: transparent; border: none;"
+        )
+        col.addWidget(head)
+        rows_layout = QVBoxLayout()
+        rows_layout.setSpacing(3)
+        col.addLayout(rows_layout)
+        return container, rows_layout
+
+    @staticmethod
+    def _clear(layout: QVBoxLayout):
+        # setParent(None) BEFORE deleteLater() -- takeAt() alone only
+        # detaches the widget from layout *management*, it stays a
+        # visible child at its old position until the deferred delete
+        # actually runs (same fix already documented on _clear_layout
+        # above). Missing here caused the real bug the user spotted: old
+        # skill rows from the PREVIOUS hovered card stayed on screen,
+        # overlapping the new card's rows underneath.
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+    def set_card(
+        self, card_type: str, theme: str, lord: str | None, pool: list[dict],
+        assigned_values: dict[str, int],
+    ):
+        self._title_label.setText(f"{card_type} — {theme}")
+        if lord:
+            effect = ARCANA_LORD_EFFECTS.get(lord, "")
+            self._lord_label.setText(
+                f'<span style="color:#facc15;font-weight:700;">{lord}</span> '
+                f'<span style="color:#22d3ee;font-weight:700;">+{_ARCANA_CARD_EXTRA_BUDGET}</span><br>'
+                f'<span style="color:#64748b;">{effect}</span>'
+            )
+        else:
+            self._lord_label.setText("")
+
+        self._clear(self._active_layout)
+        self._clear(self._passive_layout)
+        has_active = any(skill.get("type") == "active" for skill in pool)
+        has_passive = any(skill.get("type") == "passive" for skill in pool)
+        # A card type is always fixed to Active-only, Passive-only, or
+        # both (Chalice) -- never zero -- so at least one of these is
+        # always true. Hiding the empty side lets the other take the
+        # full width instead of an empty "Passive"/"Active" header
+        # floating over nothing (User-Wunsch, 2026-08-29: "koennen wir
+        # bei den Tooltips von Karten, keine Passiven haben, das
+        # einspaltig anzeigen? genauso wenn keine Aktiven Skills?").
+        self._active_container.setVisible(has_active)
+        self._passive_container.setVisible(has_passive)
+        for skill in pool:
+            target = self._active_layout if skill.get("type") == "active" else self._passive_layout
+            sid = skill.get("id")
+            is_assigned = sid in assigned_values
+            value_text = (
+                f"+{assigned_values[sid]}" if is_assigned
+                else f"+{_ARCANA_SKILL_BASELINE}–{_ARCANA_PER_SKILL_CAP}"
+            )
+            name_color = "#f1f5f9" if is_assigned else "#94a3b8"
+            value_color = "#22d3ee" if is_assigned else "#64748b"
+            row = QLabel(
+                f'<span style="color:{name_color};">{skill.get("name", "")}</span> '
+                f'<span style="color:{value_color};font-weight:700;">{value_text}</span>'
+            )
+            row.setTextFormat(Qt.RichText)
+            row.setWordWrap(True)
+            row.setStyleSheet("font-size: 11px; background: transparent; border: none;")
+            target.addWidget(row)
+
+        self.adjustSize()
+
+
+class _ArcanaResultCardIcon(QLabel):
+    """One hoverable card icon in an Arcana Calculator result row -- shows
+    an ArcanaCardTooltip on hover instead of relying on a plain QToolTip,
+    for the same reason DaevanionNodeTooltip replaced the native one
+    (richer layout than the native rich-text subset allows). Highlighted
+    border marks a card that's actually committed to one of the wished
+    skills this round; unassigned cards (still shown -- User-Wunsch,
+    2026-08-29: "Es sollen alle 5 Karten gezeigt werden") get a plainer
+    border since they're just "along for the ride" this combination."""
+
+    def __init__(
+        self, tooltip: ArcanaCardTooltip, card_type: str, theme: str, lord: str | None,
+        pool: list[dict], assigned_values: dict[str, int], parent=None,
+    ):
+        super().__init__(parent)
+        self._tooltip = tooltip
+        self._card_type = card_type
+        self._theme = theme
+        self._lord = lord
+        self._pool = pool
+        self._assigned_values = assigned_values
+        self.setFixedSize(56, 56)
+        self.setAlignment(Qt.AlignCenter)
+        border = "rgba(34, 211, 238, 0.7)" if assigned_values else "rgba(100, 116, 139, 0.5)"
+        self.setStyleSheet(
+            f"background: rgba(15, 23, 42, 0.75); border: 2px solid {border}; border-radius: 8px;"
+        )
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        # A floating, cursor-following translucent window sitting right
+        # next to/over its own small source widget can trigger spurious
+        # native enter/leave messages on Windows, which then repeatedly
+        # resizes+repositions/hides+reshows the tooltip in a tight loop
+        # (User-reported: "UpdateLayeredWindowIndirect failed" spammed
+        # while hovering). Two guards, same category of fix already
+        # proven for the Daevanion Board canvas / skill-picker list (only
+        # re-emit hover on an actual CHANGE, not on every event):
+        # 1. A hover "token" bumped on every enter -- leaveEvent's
+        #    deferred hide (below) checks this is still current before
+        #    actually hiding, so a leave immediately followed by a
+        #    re-enter (the flicker pattern) never hides at all.
+        # 2. Skip the rebuild+reposition entirely if we're already
+        #    showing this exact card (covers spurious repeated enters
+        #    with no leave in between).
+        self._tooltip._hover_token = getattr(self._tooltip, "_hover_token", 0) + 1
+        key = (self._card_type, self._theme)
+        if getattr(self._tooltip, "_shown_for_key", None) == key:
+            return
+        self._tooltip._shown_for_key = key
+        self._tooltip.set_card(self._card_type, self._theme, self._lord, self._pool, self._assigned_values)
+        self._tooltip.show_at(QCursor.pos())
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        token = getattr(self._tooltip, "_hover_token", 0)
+        tooltip = self._tooltip
+
+        def _maybe_hide():
+            if getattr(tooltip, "_hover_token", 0) == token:
+                tooltip._shown_for_key = None
+                tooltip.hide()
+
+        QTimer.singleShot(0, _maybe_hide)
+
+
+class _ArcanaThemeOption(QFrame):
+    """One Magic/Vigor pill inside ArcanaThemeChoiceDialog's table -- a
+    whole clickable row (not just a tiny radio dot) that highlights gold
+    when selected, wrapping a real QRadioButton (kept for QButtonGroup
+    exclusivity + keyboard nav) so the widget tree stays a normal radio
+    group underneath the custom look. Matches the browser mockup the
+    user approved before asking to "in diesem Design uebernehmen"
+    (2026-08-29)."""
+
+    _BASE_STYLE = (
+        "QFrame#ArcanaThemeOption { background: transparent; border: 1px solid transparent; border-radius: 8px; }"
+        "QFrame#ArcanaThemeOption:hover { background: rgba(34, 211, 238, 0.08); }"
+    )
+    _SELECTED_STYLE = (
+        "QFrame#ArcanaThemeOption { background: rgba(250, 204, 21, 0.10); "
+        "border: 1px solid rgba(250, 204, 21, 0.35); border-radius: 8px; }"
+    )
+    _RADIO_STYLE = (
+        "QRadioButton::indicator { width: 14px; height: 14px; border-radius: 7px; "
+        "border: 2px solid #64748b; background: transparent; }"
+        "QRadioButton::indicator:checked { border-color: #facc15; background: #facc15; }"
+        "QRadioButton::indicator:disabled { border-color: #334155; }"
+    )
+
+    def __init__(self, theme: str, lord: str | None, group: QButtonGroup, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ArcanaThemeOption")
+        self.setStyleSheet(self._BASE_STYLE)
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(10, 6, 10, 6)
+        row.setSpacing(8)
+
+        self.radio = QRadioButton()
+        self.radio.setStyleSheet(self._RADIO_STYLE)
+        self.radio.setEnabled(bool(lord))
+        group.addButton(self.radio)
+        row.addWidget(self.radio)
+
+        text_col = QVBoxLayout()
+        text_col.setSpacing(0)
+        self._lord_label = QLabel(f"{lord} +{_ARCANA_CARD_EXTRA_BUDGET}" if lord else "—")
+        self._lord_label.setStyleSheet("font-size: 12.5px; font-weight: 600; background: transparent; border: none;")
+        text_col.addWidget(self._lord_label)
+        row.addLayout(text_col)
+
+        if lord:
+            effect = ARCANA_LORD_EFFECTS.get(lord, "")
+            tooltip = f"{lord}\n{effect}" if effect else lord
+            self.setToolTip(tooltip)
+            self.radio.setToolTip(tooltip)
+            self.setCursor(Qt.PointingHandCursor)
+        self.radio.toggled.connect(self._on_toggled)
+
+    def _on_toggled(self, checked: bool):
+        self.setStyleSheet(self._SELECTED_STYLE if checked else self._BASE_STYLE)
+        color = "#facc15" if checked else "#e2e8f0"
+        self._lord_label.setStyleSheet(
+            f"font-size: 12.5px; font-weight: 600; color: {color}; background: transparent; border: none;"
+        )
+
+    def mousePressEvent(self, event):
+        if self.radio.isEnabled():
+            self.radio.setChecked(True)
+        super().mousePressEvent(event)
+
+
+class ArcanaThemeChoiceDialog(QDialog):
+    """First step of the Arcana Calculator: for each of this season's
+    usable Lord card TYPES, pick whether you're running its Vigor or
+    Magic version -- each of the 5 slots is always a real, specific card
+    now, not an abstract Vigor/Magic head-count budget (User-Spezifikation,
+    2026-08-29: "Tabelle ... Magic links / Vigor rechts, 5 Zeilen
+    [untereinander] ... Radiobutton + Karte + Lord-Wert")."""
+
+    def __init__(self, usable_types: list[str], theme_map: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(_t("arm_arcana_theme_title"))
+        self.type_to_theme: dict[str, str] | None = None
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        hint = QLabel(_t("arm_arcana_theme_hint"))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #94a3b8; font-size: 12px;")
+        layout.addWidget(hint)
+
+        header = QHBoxLayout()
+        header.addWidget(QLabel(""), 1)
+        for theme in ("Magic", "Vigor"):
+            head = QLabel(theme)
+            head.setStyleSheet("font-weight: 700; font-size: 11px; letter-spacing: 1px; color: #64748b;")
+            header.addWidget(head, 2, Qt.AlignCenter)
+        layout.addLayout(header)
+
+        self._options: dict[str, dict[str, _ArcanaThemeOption]] = {}
+        for ct in usable_types:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            type_label = QLabel(ct)
+            type_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+            row.addWidget(type_label, 1)
+            group = QButtonGroup(self)
+            self._options[ct] = {}
+            for theme in ("Magic", "Vigor"):
+                entry = theme_map.get(theme, {}).get(ct, {})
+                option = _ArcanaThemeOption(theme, entry.get("lord"), group, self)
+                row.addWidget(option, 2)
+                self._options[ct][theme] = option
+            default_theme = "Vigor" if self._options[ct]["Vigor"].radio.isEnabled() else "Magic"
+            if self._options[ct][default_theme].radio.isEnabled():
+                self._options[ct][default_theme].radio.setChecked(True)
+            layout.addLayout(row)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        cancel_btn = QPushButton(_t("arm_cancel"))
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+        ok_btn = QPushButton(_t("arm_apply_btn"))
+        ok_btn.clicked.connect(self._accept)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+    def _accept(self):
+        self.type_to_theme = {}
+        for ct, options in self._options.items():
+            for theme, option in options.items():
+                if option.radio.isChecked():
+                    self.type_to_theme[ct] = theme
+                    break
+        self.accept()
+
+
+class ArcanaResultsDialog(QDialog):
+    """Second step: shows every combination _arcana_compute_combinations
+    found, one collapsible "Kombination N" per result (User-Wunsch:
+    "ein Popup ... Am besten Accordion pro Set. Mit Set meine ich ...
+    eine Zusammenstellung.") -- reuses _build_collapsible_section, the
+    same accordion look as the Daevanion Board sidebar. Each combination
+    shows ALL 5 usable Lord card types as a single hoverable-icon row --
+    not just the ones committed to a wished skill this round (User-
+    Wunsch, 2026-08-29: "Es sollen alle 5 Karten gezeigt werden ... alle
+    Karten sollen auf Stufe 5 dargestellt werden auch mit dem
+    Gotteswert") -- followed by a green/red line per wished skill, red
+    ones getting an extra reason line from _arcana_uncovered_reason
+    ("einen Grund zeigen, warum gewisse Skills nicht gepusht werden
+    koennen")."""
+
+    _MIN_COVERAGE_PERCENT = 50
+
+    # Emitted with one combination's {card_type: assignment} dict when the
+    # user clicks that combination's "Use this combination" button (User-
+    # Wunsch, 2026-08-29: "einen Button in den Calc, der dafuer sorgt,
+    # dass die richtigen Karten in die Slots kommen") -- the dialog itself
+    # doesn't own _skill_builds_data/arcana_cards, so it just hands the
+    # chosen combination back to whoever opened it (LoadoutWindow), which
+    # does the actual overwrite-confirmation + persistence.
+    arcana_combination_chosen = Signal(dict)
+
+    def __init__(
+        self, results: list[dict], wishes: dict[str, int], skill_names: dict[str, str],
+        theme_map: dict, usable_types: list[str], class_skill_pools: dict[str, list[dict]],
+        skill_type_by_id: dict[str, str], type_to_theme: dict[str, str], parent=None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle(_t("arm_arcana_results_title"))
+        self.resize(640, 720)
+        self._card_tooltip = ArcanaCardTooltip(self)
+
+        # Only combinations that actually cover more than half the total
+        # wishlist are worth showing -- a combo that reaches almost none
+        # of what you asked for isn't a useful "alternative" (User-Wunsch,
+        # 2026-08-29: "nur Kombinationen anzeigen, die besser als 50%
+        # sind ... eine Kombination von 5 Skills, die nicht erreicht
+        # werden, brauchen wir nicht"). If NONE clear that bar, the
+        # wishlist itself is too ambitious for what 5 real cards can ever
+        # deliver -- say so instead of showing a discouraging result
+        # (this shouldn't normally happen at all, since the live "max +N"
+        # ceiling hint next to each purple counter already stops you from
+        # wishing higher than Arcana could ever reach -- but the Priority-
+        # List-based "always spend the full budget" fill can still shift
+        # coverage around unevenly across combinations, so this is a
+        # safety net, not the primary guard).
+        had_any_result = bool(results)
+        results = [
+            r for r in results
+            if _arcana_result_coverage_percent(r, wishes) > self._MIN_COVERAGE_PERCENT
+        ]
+
+        layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setAlignment(Qt.AlignTop)
+        content_layout.setSpacing(8)
+
+        if not results:
+            # Distinct messages: the solver found literally nothing at all
+            # (structurally impossible, e.g. no card can ever reach any
+            # wished skill) vs. it found combinations but none cleared the
+            # 50% bar (the wishlist is just too ambitious for 5 real cards).
+            empty_key = "arm_arcana_too_many_wishes" if had_any_result else "arm_arcana_no_combination"
+            empty = QLabel(_t(empty_key))
+            empty.setWordWrap(True)
+            content_layout.addWidget(empty)
+        else:
+            for i, result in enumerate(results):
+                section, body = _build_collapsible_section(
+                    _t("arm_arcana_combination_label", n=i + 1), expanded=(i == 0)
+                )
+
+                assignment_by_type = {a["type"]: a for a in result["assignments"]}
+
+                card_row = QHBoxLayout()
+                card_row.setSpacing(8)
+                card_row.addStretch(1)
+                for ct in usable_types:
+                    assignment = assignment_by_type.get(ct)
+                    theme = assignment["theme"] if assignment else type_to_theme.get(ct, "")
+                    assigned_values = assignment["skill_ids"] if assignment else {}
+                    lord = theme_map.get(theme, {}).get(ct, {}).get("lord")
+                    icon_file = theme_map.get(theme, {}).get(ct, {}).get("iconFile")
+                    pool = class_skill_pools.get(ct, [])
+                    icon = _ArcanaResultCardIcon(self._card_tooltip, ct, theme, lord, pool, assigned_values)
+                    pix = _arcana_icon(icon_file, 44)
+                    if pix:
+                        icon.setPixmap(pix)
+                    card_row.addWidget(icon)
+                card_row.addStretch(1)
+                body.addLayout(card_row)
+
+                divider = QFrame()
+                divider.setFrameShape(QFrame.HLine)
+                body.addWidget(divider)
+
+                for sid, need in wishes.items():
+                    covered = result["covered"].get(sid, 0)
+                    name = skill_names.get(sid, sid)
+                    fully_covered = covered >= need
+                    color = "#4ade80" if fully_covered else "#f87171"
+                    summary = QLabel(
+                        f'<span style="color:{color};font-weight:700;">'
+                        f'{_t("arm_arcana_covered_label", name=name, covered=covered, wish=need)}</span>'
+                    )
+                    summary.setTextFormat(Qt.RichText)
+                    summary.setWordWrap(True)
+                    body.addWidget(summary)
+
+                    if not fully_covered:
+                        reason_key, reason_kwargs = _arcana_uncovered_reason(
+                            sid, need, covered, usable_types, class_skill_pools, skill_type_by_id,
+                        )
+                        reason = QLabel(_t(reason_key, **reason_kwargs))
+                        reason.setStyleSheet("color: #94a3b8; font-size: 11px;")
+                        reason.setWordWrap(True)
+                        body.addWidget(reason)
+
+                apply_btn = QPushButton(_t("arm_arcana_apply_combination"))
+                apply_btn.setObjectName("EqPriorityButton")
+                apply_btn.clicked.connect(
+                    lambda checked=False, a=assignment_by_type: self._on_apply_clicked(a)
+                )
+                body.addWidget(apply_btn)
+
+                content_layout.addWidget(section)
+
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+
+        close_btn = QPushButton(_t("arm_close"))
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+
+    def _on_apply_clicked(self, assignment_by_type: dict):
+        self.arcana_combination_chosen.emit(assignment_by_type)
+        self.accept()
 
 
 class LoadoutWindow(QMainWindow):
@@ -6039,6 +8119,7 @@ class LoadoutWindow(QMainWindow):
         self._equipped: dict[str, dict] = {}
         self._equipped_substats: dict[str, set[int]] = {}
         self._equipped_enchant: dict[str, int] = {}
+        self._equipped_philosopher_stone: dict[str, bool] = {}
         self._equip_builds_data: dict[str, dict[str, dict]] = {}
         self._current_equip_build_name = "Default"
         self._slot_icon_buttons: dict[str, QToolButton] = {}
@@ -6089,6 +8170,22 @@ class LoadoutWindow(QMainWindow):
         self.skill_planner_class_combo = QComboBox()
         self.skill_planner_class_combo.setIconSize(QSize(22, 22))
         class_row.addWidget(self.skill_planner_class_combo)
+
+        # Name/Race moved here from the old "Character Settings" popup
+        # (gear button, bottom-right of the Jewelry column) -- that spot
+        # now opens the Eigenschaften-Priorität editor instead, and Class/
+        # GearScore were already shown elsewhere too, so only Name/Race
+        # actually needed a new home (User-Wunsch, 2026-08-28: "In die
+        # Kopfzeile verschieben").
+        class_row.addSpacing(12)
+        self.character_name_input = QLineEdit()
+        self.character_name_input.setPlaceholderText(_t("arm_character_name_placeholder"))
+        self.character_name_input.setMaximumWidth(140)
+        class_row.addWidget(self.character_name_input)
+        self.character_race_combo = QComboBox()
+        self.character_race_combo.addItems(AION2_RACES)
+        self.character_race_combo.setToolTip(_t("arm_race_label"))
+        class_row.addWidget(self.character_race_combo)
         outer.addLayout(class_row)
 
         self.main_tabs = QTabWidget()
@@ -6124,34 +8221,62 @@ class LoadoutWindow(QMainWindow):
         self.quick_stat_btn.clicked.connect(self._open_quick_stat_select)
         equip_header_row.addWidget(self.quick_stat_btn)
         self.stat_priority_edit_btn = QToolButton()
+        self.stat_priority_edit_btn.setObjectName("StatPriorityEditBtn")
         self.stat_priority_edit_btn.setIcon(_make_gear_icon())
         self.stat_priority_edit_btn.setIconSize(QSize(20, 20))
         self.stat_priority_edit_btn.setFixedSize(32, 32)
         self.stat_priority_edit_btn.setToolTip(_t("arm_stat_priority_editor_title"))
         self.stat_priority_edit_btn.clicked.connect(self._open_stat_priority_editor)
         equip_header_row.addWidget(self.stat_priority_edit_btn)
-        equipment_outer.addLayout(equip_header_row)
+        # Wrapped in a widget (not addLayout directly) so it can be hidden
+        # as a unit while a full-panel takeover page is showing -- Set
+        # tabs/Quick Select are meaningless there and just cost vertical
+        # space, forcing extra scrolling (User-Wunsch, 2026-08-28, re:
+        # EQ Priority: "können wir diese Leiste ausblenden? ... spart Platz
+        # und man braucht nicht scrollen").
+        self.equip_top_bar = QWidget()
+        self.equip_top_bar.setLayout(equip_header_row)
+        equipment_outer.addWidget(self.equip_top_bar)
 
-        equip_root = QHBoxLayout()
+        equip_normal_page = QWidget()
+        equip_root = QHBoxLayout(equip_normal_page)
         equip_root.setContentsMargins(16, 16, 16, 16)
         equip_root.setSpacing(20)
         equip_root.addLayout(self._build_weapon_armor_column(), 0)
         equip_root.addWidget(self._build_equip_center_stack(), 1)
         equip_root.addLayout(self._build_accessory_column(), 0)
-        equipment_outer.addLayout(equip_root, 1)
+
+        # "Build Vergleich" (User-Wunsch, 2026-08-27) is a 2nd full-panel
+        # page in the same stack as the normal equip view, not a popup --
+        # switched to via a tab-like button in equip_build_tabs_row (see
+        # _rebuild_equip_build_tabs), left via its own back-arrow/X header.
+        self.equip_view_stack = QStackedWidget()
+        self.equip_view_stack.addWidget(equip_normal_page)
+        self.equip_view_stack.addWidget(self._build_compare_page())
+        self._equip_priority_page_index = self.equip_view_stack.addWidget(self._build_equip_priority_page())
+        self._stat_priority_editor_widget: QWidget | None = None
+        equipment_outer.addWidget(self.equip_view_stack, 1)
         self.main_tabs.addTab(equipment_tab, _t("arm_equipment_btn"))
 
-        self.main_tabs.addTab(self._build_equip_priority_tab(), _t("arm_eq_priority_tab"))
+        # "EQ Priority" moved out of main_tabs into its own equip_view_stack
+        # takeover (see _open_equip_priority_page) -- this slot now holds
+        # the Daevanion Board (User-Wunsch, 2026-08-28: "da wo EQ Priority
+        # steht, da soll stattdessen Daevanionboard hin"). Placeholder for
+        # now -- the real interactive board (72 boards x 225 nodes, ported
+        # from the browser mockup) is its own separate, larger task.
+        self.main_tabs.addTab(self._build_daevanion_board_tab(), _t("arm_daevanion_board_tab"))
 
-        arcana_tab = QWidget()
-        arcana_root = QHBoxLayout(arcana_tab)
-        arcana_root.setContentsMargins(16, 16, 16, 16)
-        arcana_root.setSpacing(30)
-        arcana_root.addLayout(self._build_arcana_column())
-        arcana_root.addStretch()
-        self.main_tabs.addTab(arcana_tab, _t("arm_arcana_tab"))
+        # Built before the Arcana tab below even though it appears AFTER it
+        # in the tab bar -- _build_arcana_sets_tab() needs
+        # self._skill_builds_data/_current_build_name/skill_build_tabs_row
+        # to already exist (a build now spans Skill AND Arcana together,
+        # see _rebuild_skill_build_tabs), and _build_skill_planner_tab() is
+        # what sets those up.
+        skill_planner_widget = self._build_skill_planner_tab()
 
-        self.main_tabs.addTab(self._build_skill_planner_tab(), _t("arm_skill_planner_tab"))
+        self.main_tabs.addTab(self._build_arcana_tab(), _t("arm_arcana_tab"))
+
+        self.main_tabs.addTab(skill_planner_widget, _t("arm_skill_planner_tab"))
 
         icon_cache.icon_ready.connect(self._on_icon_ready)
         detail_cache.detail_ready.connect(self._on_detail_ready)
@@ -6180,6 +8305,16 @@ class LoadoutWindow(QMainWindow):
         self._rebuild_equip_build_tabs()
         self._load_current_equip_build_state()
 
+        # _build_daevanion_board_tab() ran earlier, above, before
+        # character_class_combo had any items/selection at all (it's only
+        # populated here) -- currentText() was "" at that point, so its
+        # first render always showed the "no board for this class" state
+        # regardless of the real starting class. Re-run now that the combo
+        # actually has a value (User-reported bug, 2026-08-28: "aktuell wird
+        # noch nichts angezeigt").
+        self._daevanion_rebuild_deity_tabs()
+        self._daevanion_refresh()
+
         self.character_class_combo.currentTextChanged.connect(self._rebuild_status_chance_rows)
         self._rebuild_status_chance_rows()
 
@@ -6194,6 +8329,44 @@ class LoadoutWindow(QMainWindow):
     # ── "Skill Planner" tab — Skill Description (real data) + Skill Build ──
 
     def _build_skill_planner_tab(self) -> QWidget:
+        # Initialized here (before the "Skillpunkte frei" label below reads
+        # it for the first time) rather than in _build_skill_description_tab,
+        # which only runs later when this tab's inner QTabWidget is built.
+        self._skill_levels: dict[str, int] = {}
+        # Auto-computed (never persisted directly, never touched by
+        # _on_skill_level_changed) -- +1 per equipped Trait/Skill substat
+        # pick, stacking across slots (User-Wunsch, 2026-08-28: "2 Ringe ->
+        # Skills die auf beiden vorhanden sind werden dann im Skillplaner
+        # +2 gerechnet"), PLUS every active Daevanion Board skill_level
+        # node for the current class (User-Wunsch, 2026-08-28: "die Skills
+        # auf den Skillplaner rechnen"). Recomputed in _refresh_stat_info,
+        # which already runs after every equip mutation (Quick Select,
+        # manual substat pick, Set switch) and after Daevanion node clicks.
+        self._skill_bonus: dict[str, int] = {}
+        # Arcana Planner wish list (User-Wunsch, 2026-08-28/29): "die
+        # zusaetzlichen Punkte, die man nicht durch Daeva Board und Gear
+        # erreichen kann" -- a manual per-skill planning target, purely an
+        # input to _arcana_compute_combinations, not part of the level
+        # math above. Persisted like _skill_levels (see
+        # get_persistable_state/apply_persisted_state).
+        self._skill_arcana_wish: dict[str, int] = {}
+        # So _on_skill_arcana_wish_changed can re-enable/disable the "+"
+        # button live as the wish approaches its ceiling, without a full
+        # card rebuild (see _arcana_ceiling_for_skill).
+        self._arcana_wish_plus_buttons: dict[str, QPushButton] = {}
+        self._skill_level_labels: dict[str, QLabel] = {}
+        self._skill_star_labels: dict[str, QLabel] = {}
+        # Empty placeholder -- the real per-type [None] entries are only
+        # added once _build_skill_priority_tab actually runs (later in this
+        # same method), but _build_skill_description_tab's cards (built
+        # first) already call _priority_skill_ids(), which reads this.
+        self._skill_priority_ids: dict[str, list[int | None]] = {}
+        # Real values filled in later by _build_skill_description_tab (which
+        # needs self._skills_by_class loaded first) -- empty here just so
+        # _refresh_skillpoints_label/_refresh_stigma_points_label below have
+        # something to read on this tab's very first construction.
+        self._skill_id_to_type: dict[str, str] = {}
+
         page = QWidget()
         outer = QVBoxLayout(page)
         outer.setContentsMargins(16, 16, 16, 16)
@@ -6204,7 +8377,62 @@ class LoadoutWindow(QMainWindow):
         title.setObjectName("DetailHeader")
         title_row.addWidget(title)
         title_row.addStretch(1)
+
+        # "Skillpunkte Frei" (User-Wunsch, 2026-08-27) -- total Skill Points
+        # available at the current level-45 cap: base from leveling (1 per
+        # level-up, levels 2-45) in white, plus however many Wisdom Stones
+        # the character's own starting-zone Monolith (Verteron/Altgard, 30
+        # levels -- see project_skillpoint_sources.md memory) has paid out
+        # SO FAR, in turquoise, e.g. "44 (+63)" at Monolith level 15 -- NOT
+        # always the theoretical level-30 max, since the user tracks their
+        # own real Monolith progress via the spinbox below (User: "Das ist
+        # die maximale Anzahl ... Dann brauchen wir eine Option, wo man das
+        # aktuelle Level des Monolithen angeben kann").
+        self.skillpoints_title_lbl = QLabel(_t("arm_skillpoints_free_label"))
+        self.skillpoints_title_lbl.setObjectName("EquipSectionLabel")
+        title_row.addWidget(self.skillpoints_title_lbl)
+        self.skillpoints_value_lbl = QLabel()
+        title_row.addWidget(self.skillpoints_value_lbl)
+
+        title_row.addSpacing(16)
+        self.monolith_level_title_lbl = QLabel(_t("arm_monolith_level_label"))
+        self.monolith_level_title_lbl.setObjectName("EquipSectionLabel")
+        title_row.addWidget(self.monolith_level_title_lbl)
+        self.monolith_level_spin = QSpinBox()
+        self.monolith_level_spin.setRange(0, _MONOLITH_MAX_LEVEL)
+        self.monolith_level_spin.setFixedWidth(60)
+        self.monolith_level_spin.valueChanged.connect(self._on_monolith_level_changed)
+        title_row.addWidget(self.monolith_level_spin)
+
+        # "Stigmapunkte" (User-Wunsch, 2026-08-27) -- separate from Skill
+        # Points entirely ("Stigma Punkte werden separat gerechnet und nicht
+        # von den Skillpunkten abgezogen"), so this doesn't share a pool
+        # with skillpoints_value_lbl above -- just counts how many points
+        # are currently assigned to Stigma-type skills, shown as a negative
+        # red number (no known budget/cap to count down from, unlike Skill
+        # Points, so there's nothing to subtract it FROM).
+        title_row.addSpacing(16)
+        self.stigma_points_title_lbl = QLabel(_t("arm_stigma_points_label"))
+        self.stigma_points_title_lbl.setObjectName("EquipSectionLabel")
+        title_row.addWidget(self.stigma_points_title_lbl)
+        self.stigma_points_value_lbl = QLabel()
+        title_row.addWidget(self.stigma_points_value_lbl)
+
+        # "Arcana Calculator" (User-Wunsch, 2026-08-28/29) -- disabled until
+        # at least one skill has a purple Arcana wish set (>0); opens the
+        # Vigor/Magic slot-split question, then runs
+        # _arcana_compute_combinations and shows the results.
+        title_row.addSpacing(16)
+        self.arcana_calculator_btn = QPushButton(_t("arm_arcana_calculator_btn"))
+        self.arcana_calculator_btn.setObjectName("EqPriorityButton")
+        self.arcana_calculator_btn.setEnabled(False)
+        self.arcana_calculator_btn.clicked.connect(self._on_arcana_calculator_clicked)
+        title_row.addWidget(self.arcana_calculator_btn)
+
         outer.addLayout(title_row)
+        self._monolith_level = 0
+        self._refresh_skillpoints_label()
+        self._refresh_stigma_points_label()
 
         self._skill_builds_data: dict[str, dict[str, dict]] = {}
         self._current_build_name = "Default"
@@ -6212,6 +8440,14 @@ class LoadoutWindow(QMainWindow):
         self.skill_build_tabs_row.setSpacing(6)
         self.skill_build_tabs_row.setAlignment(Qt.AlignLeft)
         outer.addLayout(self.skill_build_tabs_row)
+        # Mirrored build-tab row for the Arcana "Sets" sub-tab (built later
+        # in __init__, once this shared build state already exists) --
+        # not attached to any layout here, just created early so
+        # _rebuild_skill_build_tabs() can populate both rows uniformly
+        # regardless of which tab happens to be built/rebuilt first.
+        self.arcana_build_tabs_row = QHBoxLayout()
+        self.arcana_build_tabs_row.setSpacing(6)
+        self.arcana_build_tabs_row.setAlignment(Qt.AlignLeft)
 
         tabs = QTabWidget()
         tabs.setObjectName("timerModeTabWidget")
@@ -6220,6 +8456,62 @@ class LoadoutWindow(QMainWindow):
         outer.addWidget(tabs, 1)
 
         return page
+
+    def _on_monolith_level_changed(self, value: int):
+        self._monolith_level = value
+        self._refresh_skillpoints_label()
+
+    def _refresh_skillpoints_label(self):
+        """Shows what's actually still LEFT to spend, not the flat total --
+        every point put into a skill (see _on_skill_level_changed) counts
+        against this (User-Wunsch, 2026-08-27: "pro Skillpunkt der gesetzt
+        wird, oben ein Skillpunkt angezogen werden"). Spent points come out
+        of the white leveling pool first, then the turquoise Monolith pool,
+        matching how the two numbers already read left-to-right."""
+        base = _SKILLPOINTS_BASE_AT_LEVEL_45
+        bonus = _monolith_skillpoints(self._monolith_level)
+        # Only the first _SKILL_LEVEL_BASE_CAP levels of any NON-Stigma
+        # skill are paid for with actual Skill Points -- levels past that
+        # come from gear/Arcana/Daevanion Board instead (User-Wunsch,
+        # 2026-08-27: "Wichtig ist, dass nur bis 10 Skillpunkte abgezogen
+        # werden"), so each skill's contribution here is capped at 10 even
+        # though its own level counter keeps counting past that with no
+        # limit. Stigma skills are excluded entirely -- they're paid for
+        # with a separate Stigma Point pool (User-Wunsch, 2026-08-27:
+        # "Stigma Punkte werden separat gerechnet und nicht von den
+        # Skillpunkten abgezogen"), see _refresh_stigma_points_label.
+        spent = sum(
+            min(v, _SKILL_LEVEL_BASE_CAP) for sid, v in self._skill_levels.items()
+            if self._skill_id_to_type.get(sid) != "stigma"
+        )
+        remaining = max(0, base + bonus - spent)
+        remaining_base = min(remaining, base)
+        remaining_bonus = remaining - remaining_base
+        self.skillpoints_value_lbl.setText(
+            f"<span style='color:white; font-weight:700;'>{remaining_base}</span> "
+            f"<span style='color:#22d3ee; font-weight:700;'>(+{remaining_bonus})</span>"
+        )
+
+    def _refresh_stigma_points_label(self):
+        """Just a running count of points assigned to Stigma-type skills,
+        shown as a negative red number -- no budget to subtract it from
+        (unlike Skill Points), since Stigma Points have no known cap/source
+        data yet. Uncapped per skill (Stigma skills don't share the
+        Skill Points 10-per-skill cap either, since they're not paid for
+        from that pool at all)."""
+        spent = sum(
+            v for sid, v in self._skill_levels.items()
+            if self._skill_id_to_type.get(sid) == "stigma"
+        )
+        # Plain white "0" at rest (User-Wunsch, 2026-08-27: "und '0'
+        # Stigmapunkte sollte weiß sein") -- only turns red once something
+        # is actually assigned.
+        if spent <= 0:
+            self.stigma_points_value_lbl.setText("<span style='color:white; font-weight:700;'>0</span>")
+        else:
+            self.stigma_points_value_lbl.setText(
+                f"<span style='color:#f87171; font-weight:700;'>-{spent}</span>"
+            )
 
     def _build_skill_description_tab(self) -> QWidget:
         page = QWidget()
@@ -6259,10 +8551,45 @@ class LoadoutWindow(QMainWindow):
         self.skill_checked_only_btn.toggled.connect(self._refresh_skill_description_view)
         controls_row.addWidget(self.skill_checked_only_btn)
 
+        # "Nur Favoriten" (User-Wunsch, 2026-08-27) -- filters down to just
+        # the skills that are on the Priority List (see _priority_skill_ids),
+        # marked with a gold star on their card. Separate from "Only
+        # checked"/_skill_checked_ids above, which is an unrelated manual
+        # per-skill bookmark, not tied to the Priority List at all.
+        self.skill_favorites_only_btn = QPushButton(_t("arm_only_favorites"))
+        self.skill_favorites_only_btn.setObjectName("SkillFilterButton")
+        self.skill_favorites_only_btn.setCheckable(True)
+        self.skill_favorites_only_btn.setMinimumSize(100, 32)
+        self.skill_favorites_only_btn.toggled.connect(self._refresh_skill_description_view)
+        controls_row.addWidget(self.skill_favorites_only_btn)
+
         left_outer.addLayout(controls_row)
 
         self._skills_by_class = _load_skills_by_class()
+        # Flat skill id -> type lookup (User-Wunsch, 2026-08-27: "Stigma
+        # Punkte werden separat gerechnet und nicht von den Skillpunkten
+        # abgezogen") -- built once so _refresh_stigma_points_label can tell
+        # which entries in self._skill_levels are Stigma without re-scanning
+        # every class's skill list each time.
+        self._skill_id_to_type: dict[str, str] = {
+            s["id"]: s.get("type", "")
+            for skills in self._skills_by_class.values()
+            for s in skills
+        }
         self._skill_checked_ids: set = set()
+        # Per-skill invested level (User-Wunsch, 2026-08-27) -- keyed by
+        # skill id directly (already class-specific, no separate per-class
+        # keying needed; see _build_skill_planner_tab for where this dict
+        # is actually initialized, since the "Skillpunkte frei" label built
+        # there needs it to already exist). Skill ids are strings in the
+        # source data (unlike item ids, which are real ints) -- kept as-is,
+        # no int() cast. No enforced per-skill max for now: the real cap
+        # varies per skill and stacks from multiple systems (Skill Points,
+        # gear, Arcana, Daevanion Board) that aren't reliably derivable from
+        # our scraped data yet (see project_skillpoint_sources.md memory) --
+        # only a floor of 0 is enforced, in _on_skill_level_changed. Only
+        # the first _SKILL_LEVEL_BASE_CAP levels of any skill actually
+        # count against "Skillpunkte frei" (see _refresh_skillpoints_label).
 
         cards_container = QWidget()
         cards_outer = QVBoxLayout(cards_container)
@@ -6411,6 +8738,41 @@ class LoadoutWindow(QMainWindow):
         for type_key, _ in self._SKILL_BUILD_SECTIONS:
             self._rebuild_priority_row(type_key)
 
+    def _priority_skill_ids(self) -> set:
+        """Every skill id currently assigned to any Priority List slot
+        (Active/Passive/Stigma combined) -- drives the gold star + "Nur
+        Favoriten" filter on the Skill Description cards (User-Wunsch,
+        2026-08-27)."""
+        return {sid for ids in self._skill_priority_ids.values() for sid in ids if sid is not None}
+
+    def _skill_priority_rank(self) -> dict[str, int]:
+        """Flat skill_id -> position (0 = highest priority) across every
+        Priority List slot, active+passive combined (never stigma --
+        Arcana can't target those). Used by the Arcana Calculator to fill
+        a card's leftover skill slots/points sensibly once real wishes
+        are satisfied, instead of an arbitrary choice (User-Wunsch,
+        2026-08-29: "kannst bei der Verteilung der restlichen Punkte auch
+        gerne die Prioliste der Skills nehmen")."""
+        rank: dict[str, int] = {}
+        i = 0
+        for type_key in ("active", "passive"):
+            for sid in self._skill_priority_ids.get(type_key, []):
+                if sid is not None and sid not in rank:
+                    rank[sid] = i
+                    i += 1
+        return rank
+
+    def _refresh_favorite_stars(self):
+        """Cheap path for when the Priority List changes but the Skill
+        Description grid doesn't need a full rebuild -- just flips each
+        already-built card's star visibility. Only correct while "Nur
+        Favoriten" is off (a favorite being removed while that filter is on
+        must actually disappear from the grid, which needs a real rebuild
+        instead -- see _rebuild_priority_row)."""
+        favorite_ids = self._priority_skill_ids()
+        for sid, star in self._skill_star_labels.items():
+            star.setVisible(sid in favorite_ids)
+
     # ── Saved skill builds (per class): named tabs holding one priority-list
     # + level set each, e.g. "Default" / "PvP" / "PvE" — session-only for now,
     # not yet persisted to disk. ────────────────────────────────────────────
@@ -6418,6 +8780,14 @@ class LoadoutWindow(QMainWindow):
     def _empty_build_state(self) -> dict:
         return {
             "priority": {key: [None] for key, _ in self._SKILL_BUILD_SECTIONS},
+            # Placeholder for the future Arcana "Sets" equip slots (card
+            # type -> assigned card data) -- not written to by anything
+            # yet (the Sets tab is still just 5 empty placeholders, see
+            # _build_arcana_sets_tab), but reserved now so the schema
+            # doesn't need another migration once real card assignment
+            # ships (User-Wunsch, 2026-08-29: "Wie beim Buildplanner
+            # bauen wir bei Arcana und Skill einen gemeinsamen Build").
+            "arcana_cards": {},
         }
 
     def _ensure_class_builds(self, class_name: str):
@@ -6429,8 +8799,10 @@ class LoadoutWindow(QMainWindow):
         builds = self._skill_builds_data[class_name]
         if self._current_build_name not in builds:
             return
+        existing = builds[self._current_build_name]
         builds[self._current_build_name] = {
             "priority": {k: list(v) for k, v in self._skill_priority_ids.items()},
+            "arcana_cards": dict(existing.get("arcana_cards", {})),
         }
 
     def _load_current_build_state(self):
@@ -6443,17 +8815,33 @@ class LoadoutWindow(QMainWindow):
 
         self._skill_priority_ids = {k: list(v) for k, v in state["priority"].items()}
         self._rebuild_all_priority_rows()
+        self._refresh_arcana_equip_slots()
 
     def _rebuild_skill_build_tabs(self):
-        _clear_layout(self.skill_build_tabs_row)
+        """Populates BOTH build-tab rows -- the Skill Planner's own
+        (self.skill_build_tabs_row) and the Arcana "Sets" tab's mirrored
+        one (self.arcana_build_tabs_row) -- from the SAME
+        _skill_builds_data/_current_build_name, since a build now spans
+        Skill AND Arcana together (User-Wunsch, 2026-08-29: "Wie beim
+        Buildplanner bauen wir bei Arcana und Skill einen gemeinsamen
+        Build ... wenn ein Build beim Skillplaner angelegt wird, dieser
+        fuer die Arcana genauso gilt"). Each row gets its OWN button
+        instances/QButtonGroup (matching the existing pattern for the
+        two class combo boxes elsewhere in this window) since the same
+        QWidget can't live in two layouts at once."""
         class_name = self.character_class_combo.currentText().strip().lower()
         self._ensure_class_builds(class_name)
         builds = self._skill_builds_data[class_name]
         if self._current_build_name not in builds:
             self._current_build_name = next(iter(builds))
 
-        self._skill_build_tab_group = QButtonGroup(self)
-        self._skill_build_tab_group.setExclusive(True)
+        self._skill_build_tab_group = self._populate_build_tabs_row(self.skill_build_tabs_row, builds)
+        self._arcana_build_tab_group = self._populate_build_tabs_row(self.arcana_build_tabs_row, builds)
+
+    def _populate_build_tabs_row(self, row: QHBoxLayout, builds: dict) -> QButtonGroup:
+        _clear_layout(row)
+        group = QButtonGroup(self)
+        group.setExclusive(True)
         for build_name in builds:
             btn = _BuildTabButton(build_name)
             btn.setObjectName("SkillFilterButton")
@@ -6463,8 +8851,8 @@ class LoadoutWindow(QMainWindow):
             btn.clicked.connect(lambda checked=False, bn=build_name: self._on_switch_build(bn))
             btn.doubleClicked.connect(lambda bn=build_name: self._on_rename_build(bn))
             btn.setToolTip(_t("arm_rename_hint"))
-            self._skill_build_tab_group.addButton(btn)
-            self.skill_build_tabs_row.addWidget(btn)
+            group.addButton(btn)
+            row.addWidget(btn)
 
         add_btn = QPushButton()
         add_btn.setIcon(_make_plus_icon())
@@ -6472,7 +8860,15 @@ class LoadoutWindow(QMainWindow):
         add_btn.setFixedSize(40, 32)
         add_btn.setToolTip(_t("arm_add_new_build"))
         add_btn.clicked.connect(self._on_add_build)
-        self.skill_build_tabs_row.addWidget(add_btn)
+        row.addWidget(add_btn)
+
+        duplicate_btn = QPushButton()
+        duplicate_btn.setIcon(_make_duplicate_icon())
+        duplicate_btn.setIconSize(QSize(20, 20))
+        duplicate_btn.setFixedSize(40, 32)
+        duplicate_btn.setToolTip(_t("arm_duplicate_current_build"))
+        duplicate_btn.clicked.connect(self._on_duplicate_build)
+        row.addWidget(duplicate_btn)
 
         rename_btn = QPushButton()
         rename_btn.setIcon(_make_edit_icon())
@@ -6480,7 +8876,7 @@ class LoadoutWindow(QMainWindow):
         rename_btn.setFixedSize(40, 32)
         rename_btn.setToolTip(_t("arm_rename_current_build"))
         rename_btn.clicked.connect(lambda checked=False: self._on_rename_build(self._current_build_name))
-        self.skill_build_tabs_row.addWidget(rename_btn)
+        row.addWidget(rename_btn)
 
         save_btn = QPushButton()
         save_btn.setIcon(_make_save_icon())
@@ -6488,7 +8884,9 @@ class LoadoutWindow(QMainWindow):
         save_btn.setFixedSize(40, 32)
         save_btn.setToolTip(_t("arm_save_current_build"))
         save_btn.clicked.connect(self._on_save_current_build)
-        self.skill_build_tabs_row.addWidget(save_btn)
+        row.addWidget(save_btn)
+
+        return group
 
     def _on_save_current_build(self):
         class_name = self.character_class_combo.currentText().strip().lower()
@@ -6514,6 +8912,31 @@ class LoadoutWindow(QMainWindow):
             return
         self._save_current_build_state(class_name)
         builds[name] = self._empty_build_state()
+        self._current_build_name = name
+        self._rebuild_skill_build_tabs()
+        self._load_current_build_state()
+
+    def _on_duplicate_build(self):
+        """Copies the current build's Priority List (+ future Arcana Sets
+        card assignment) into a new, user-named build -- same "Duplicate"
+        pattern as the Gear/Equip builds already have (User-Wunsch,
+        2026-08-29: "Du kannst gerne wie aus dem Screenshot die gleichen
+        Buttons nutzen, wie 'neu', 'bearbeiten', 'Duplizieren' und
+        speichern")."""
+        class_name = self.character_class_combo.currentText().strip().lower()
+        self._save_current_build_state(class_name)
+        builds = self._skill_builds_data[class_name]
+        source_name = self._current_build_name
+        default_name = _t("arm_duplicate_default_name", name=source_name)
+        name, ok = QInputDialog.getText(self, _t("arm_duplicate_build_title"), _t("arm_name_colon"), text=default_name)
+        name = name.strip()
+        if not ok or not name or name in builds:
+            return
+        source = builds[source_name]
+        builds[name] = {
+            "priority": {k: list(v) for k, v in source["priority"].items()},
+            "arcana_cards": dict(source.get("arcana_cards", {})),
+        }
         self._current_build_name = name
         self._rebuild_skill_build_tabs()
         self._load_current_build_state()
@@ -6562,6 +8985,14 @@ class LoadoutWindow(QMainWindow):
         add_btn.clicked.connect(lambda checked=False, tk=type_key: self._on_add_priority_slot(tk))
         row.addWidget(add_btn)
 
+        # Keeps the Skill Description cards' gold stars (and "Nur
+        # Favoriten" filter) in sync with whatever the Priority List looks
+        # like now.
+        if self.skill_favorites_only_btn.isChecked():
+            self._refresh_skill_description_view()
+        else:
+            self._refresh_favorite_stars()
+
     def _build_priority_slot(self, type_key: str, index: int, skill: dict | None) -> QWidget:
         slot = QWidget()
         slot.setFixedWidth(76)
@@ -6581,7 +9012,28 @@ class LoadoutWindow(QMainWindow):
         btn.clicked.connect(lambda checked=False, tk=type_key, i=index: self._on_priority_slot_clicked(tk, i))
         layout.addWidget(btn, 0, Qt.AlignHCenter)
 
-        full_name = skill.get("name", "") if skill else "Skill wählen"
+        if skill:
+            # Overlay "x" badge, child of the icon button itself so its
+            # click is consumed there and doesn't also reopen the picker
+            # (same nested-QPushButton-inside-QPushButton pattern already
+            # used for the Skill Description cards' -/+ level buttons).
+            # User-Wunsch, 2026-08-28: "die Möglichkeit ... Skills zu
+            # entfernen. Wenn man einen Skill entfernt, soll der Skill
+            # aufrücken" -- _on_remove_priority_slot pops the entry outright
+            # rather than just clearing it to None, so every later slot
+            # shifts up by one for free.
+            remove_btn = QToolButton(btn)
+            remove_btn.setObjectName("PrioritySlotRemoveBtn")
+            remove_btn.setIcon(_make_close_icon(12))
+            remove_btn.setIconSize(QSize(10, 10))
+            remove_btn.setFixedSize(18, 18)
+            remove_btn.setCursor(Qt.PointingHandCursor)
+            remove_btn.move(64 - 18, 0)
+            remove_btn.setToolTip(_t("arm_remove_priority_skill"))
+            remove_btn.clicked.connect(lambda checked=False, tk=type_key, i=index: self._on_remove_priority_slot(tk, i))
+            remove_btn.raise_()
+
+        full_name = skill.get("name", "") if skill else _t("arm_choose_skill_title")
         name_label = QLabel(_short_skill_name(full_name, 11) if skill else full_name)
         name_label.setObjectName("SkillTileName")
         name_label.setAlignment(Qt.AlignCenter)
@@ -6606,11 +9058,33 @@ class LoadoutWindow(QMainWindow):
         self._skill_priority_ids[type_key].append(None)
         self._rebuild_priority_row(type_key)
 
+    def _on_remove_priority_slot(self, type_key: str, index: int):
+        """Pops the slot outright (not just clearing it to None) so every
+        later slot shifts up by one -- also what lets you actually swap a
+        skill for one that's currently used elsewhere: pull that other
+        entry out first, then it's free to pick here (User-Wunsch,
+        2026-08-28: "Wenn man einen Skill austauschen möchte, gegen einen
+        anderen, geht das nicht" -- there was no way to free up an
+        already-used skill before this)."""
+        ids = self._skill_priority_ids[type_key]
+        if 0 <= index < len(ids):
+            ids.pop(index)
+        if not ids:
+            ids.append(None)
+        self._rebuild_priority_row(type_key)
+
     _SKILL_DESC_CARD_COLUMNS = 2
 
     def _refresh_skill_description_view(self):
         for grid in self.skill_card_sections.values():
             _clear_layout(grid)
+        # Cards (and their level QLabels/star labels) are destroyed above --
+        # drop the now-dangling references so _on_skill_level_changed
+        # doesn't try to touch a deleted widget; rebuilt fresh per card
+        # below.
+        self._skill_level_labels = {}
+        self._skill_star_labels = {}
+        self._arcana_wish_plus_buttons = {}
 
         class_name = _skills_data_class_key(self.character_class_combo.currentText())
         all_skills = sorted(self._skills_by_class.get(class_name, []), key=lambda s: s.get("name", ""))
@@ -6618,11 +9092,14 @@ class LoadoutWindow(QMainWindow):
         active_types = {t for t, btn in self._skill_type_buttons.items() if btn.isChecked()}
         query = self.skill_search_input.text().strip().lower()
         checked_only = self.skill_checked_only_btn.isChecked()
+        favorites_only = self.skill_favorites_only_btn.isChecked()
+        favorite_ids = self._priority_skill_ids() if favorites_only else None
         skills = [
             s for s in all_skills
             if s.get("type", "") in active_types
             and (not query or query in s.get("name", "").lower())
             and (not checked_only or s.get("id") in self._skill_checked_ids)
+            and (favorite_ids is None or s.get("id") in favorite_ids)
         ]
 
         by_type: dict[str, list[dict]] = {key: [] for key, _ in self._SKILL_BUILD_SECTIONS}
@@ -6656,11 +9133,14 @@ class LoadoutWindow(QMainWindow):
         card.setObjectName("SkillDescCard")
         card.setCheckable(True)
         card.setCursor(Qt.PointingHandCursor)
-        card.setMinimumHeight(60)
+        card.setMinimumHeight(108)
 
-        layout = QHBoxLayout(card)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(10)
+        outer = QVBoxLayout(card)
+        outer.setContentsMargins(10, 8, 10, 8)
+        outer.setSpacing(6)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(10)
 
         icon_label = QLabel()
         icon_label.setObjectName("SkillRowIcon")
@@ -6669,7 +9149,7 @@ class LoadoutWindow(QMainWindow):
         icon = _skill_icon(skill)
         if icon:
             icon_label.setPixmap(icon.pixmap(36, 36))
-        layout.addWidget(icon_label)
+        top_row.addWidget(icon_label)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
@@ -6682,18 +9162,260 @@ class LoadoutWindow(QMainWindow):
         color = _SKILL_TYPE_COLORS.get(skill_type, "#94a3b8")
         type_label.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 700; letter-spacing: 1px;")
         text_col.addWidget(type_label)
-        layout.addLayout(text_col, 1)
+        top_row.addLayout(text_col, 1)
 
         skill_id = skill.get("id")
+
+        # Gold star = this skill is on the Priority List (User-Wunsch,
+        # 2026-08-27) -- separate from check_icon below, which is the
+        # older, unrelated manual "angehakt" bookmark.
+        star_icon = QLabel()
+        star_icon.setFixedSize(18, 18)
+        star_icon.setPixmap(_make_star_icon())
+        star_icon.setVisible(skill_id in self._priority_skill_ids())
+        star_icon.setToolTip(_t("arm_on_priority_list_tooltip"))
+        top_row.addWidget(star_icon)
+        self._skill_star_labels[skill_id] = star_icon
+
         check_icon = QLabel()
         check_icon.setFixedSize(20, 20)
         check_icon.setPixmap(_make_check_icon())
         check_icon.setVisible(skill_id in self._skill_checked_ids)
-        layout.addWidget(check_icon)
+        top_row.addWidget(check_icon)
+
+        outer.addLayout(top_row)
+
+        # Per-skill invested level (User-Wunsch, 2026-08-27): "-"/level/"+"
+        # -- deliberately no upper bound shown/enforced yet (real cap varies
+        # per skill and stacks from Skill Points + gear + Arcana + Daevanion
+        # Board, none of which we can reliably derive per-skill from our
+        # scraped data right now). Child QPushButtons inside this checkable
+        # card consume their own clicks, so pressing +/- doesn't also
+        # toggle the card's checked state.
+        level_row = QHBoxLayout()
+        level_row.setSpacing(6)
+        level_row.addStretch(1)
+
+        minus_btn = QPushButton()
+        minus_btn.setObjectName("SkillLevelStepBtn")
+        minus_btn.setIcon(_make_minus_icon(16))
+        minus_btn.setIconSize(QSize(14, 14))
+        minus_btn.setFixedSize(26, 26)
+        minus_btn.setCursor(Qt.PointingHandCursor)
+        minus_btn.clicked.connect(lambda checked=False, sid=skill_id: self._on_skill_level_changed(sid, -1))
+        level_row.addWidget(minus_btn)
+
+        manual_level = self._skill_levels.get(skill_id, 0)
+        bonus_level = self._skill_bonus.get(skill_id, 0)
+        wish_level = self._skill_arcana_wish.get(skill_id, 0)
+        level_label = QLabel(_format_skill_level_html(manual_level, bonus_level, wish_level))
+        level_label.setObjectName("SkillLevelValue")
+        level_label.setAlignment(Qt.AlignCenter)
+        level_label.setMinimumWidth(28)
+        level_row.addWidget(level_label)
+        self._skill_level_labels[skill_id] = level_label
+
+        plus_btn = QPushButton()
+        plus_btn.setObjectName("SkillLevelStepBtn")
+        plus_btn.setIcon(_make_plus_icon(16))
+        plus_btn.setIconSize(QSize(14, 14))
+        plus_btn.setFixedSize(26, 26)
+        plus_btn.setCursor(Qt.PointingHandCursor)
+        plus_btn.clicked.connect(lambda checked=False, sid=skill_id: self._on_skill_level_changed(sid, 1))
+        level_row.addWidget(plus_btn)
+
+        level_row.addStretch(1)
+        outer.addLayout(level_row)
+
+        # Arcana wish counter (User-Wunsch, 2026-08-28/29): a THIRD,
+        # independent -/+ counter -- "die zusaetzlichen Punkte, die man
+        # nicht durch Daeva Board und Gear erreichen kann. Sie sollen als
+        # Stuetze dienen, um die Sets fuer die Arcanas zu berechnen." Feeds
+        # the Arcana Calculator button (arm_arcana_calculator_btn), not the
+        # level display's own bonus math -- purely a planning target for
+        # _arcana_compute_combinations. Stigma skills don't get one: no
+        # Arcana card can ever target a Stigma skill (every real
+        # skillCategory in arcana_info.json is Mastery/Active/Passive or
+        # None for Stat cards -- never Stigma), so the counter would be
+        # meaningless there.
+        if skill_type in ("active", "passive"):
+            # Live ceiling (User-Wunsch, 2026-08-29: "im Skillplaner bei
+            # den lila Zahlen mit einkalkulieren beim setzen ... wenn ein
+            # Skill bereits +4 ist, kann der Rest maximal noch +3 werden")
+            # -- the independent half of that (ignores competition from
+            # OTHER wishes, which depends on a Vigor/Magic split not
+            # chosen yet at this point -- see _arcana_uncovered_reason for
+            # that half once a Calculator run's specific split is known).
+            ceiling = self._arcana_ceiling_for_skill(skill_id, skill_type)
+
+            wish_row = QHBoxLayout()
+            wish_row.setSpacing(4)
+            wish_row.addStretch(1)
+
+            if ceiling <= 0:
+                no_card_label = QLabel(_t("arm_arcana_reason_no_card"))
+                no_card_label.setStyleSheet("color: #64748b; font-size: 10px;")
+                no_card_label.setWordWrap(True)
+                no_card_label.setAlignment(Qt.AlignCenter)
+                wish_row.addWidget(no_card_label, 1)
+            else:
+                wish_minus_btn = QPushButton()
+                wish_minus_btn.setObjectName("ArcanaWishStepBtn")
+                wish_minus_btn.setIcon(_make_minus_icon(12, _ARCANA_WISH_COLOR))
+                wish_minus_btn.setIconSize(QSize(11, 11))
+                wish_minus_btn.setFixedSize(20, 20)
+                wish_minus_btn.setCursor(Qt.PointingHandCursor)
+                wish_minus_btn.setToolTip(_t("arm_arcana_wish_tooltip"))
+                wish_minus_btn.clicked.connect(lambda checked=False, sid=skill_id: self._on_skill_arcana_wish_changed(sid, -1))
+                wish_row.addWidget(wish_minus_btn)
+
+                max_hint_label = QLabel(_t("arm_arcana_max_hint", max=ceiling))
+                max_hint_label.setStyleSheet("color: #64748b; font-size: 10px;")
+                wish_row.addWidget(max_hint_label)
+
+                wish_plus_btn = QPushButton()
+                wish_plus_btn.setObjectName("ArcanaWishStepBtn")
+                wish_plus_btn.setIcon(_make_plus_icon(12, _ARCANA_WISH_COLOR))
+                wish_plus_btn.setIconSize(QSize(11, 11))
+                wish_plus_btn.setFixedSize(20, 20)
+                wish_plus_btn.setCursor(Qt.PointingHandCursor)
+                wish_plus_btn.setToolTip(_t("arm_arcana_wish_tooltip"))
+                wish_plus_btn.setEnabled(self._skill_arcana_wish.get(skill_id, 0) < ceiling)
+                wish_plus_btn.clicked.connect(lambda checked=False, sid=skill_id: self._on_skill_arcana_wish_changed(sid, 1))
+                wish_row.addWidget(wish_plus_btn)
+                self._arcana_wish_plus_buttons[skill_id] = wish_plus_btn
+
+            wish_row.addStretch(1)
+            outer.addLayout(wish_row)
 
         card.setChecked(skill_id in self._skill_checked_ids)
         card.toggled.connect(lambda checked, s=skill, ci=check_icon: self._on_skill_description_card_clicked(s, checked, ci))
         return card
+
+    def _on_skill_level_changed(self, skill_id: str, delta: int):
+        # Skill Points alone can raise a Passive/Active skill to at most
+        # _SKILL_LEVEL_BASE_CAP (10) -- Stigma has its own separate point
+        # pool/cap (_STIGMA_LEVEL_BASE_CAP, 20). Anything past that only
+        # ever comes from Gear/Daevanion Board (self._skill_bonus), never
+        # from this counter (User-Wunsch, 2026-08-28: "durch Skillpunkte
+        # passive und aktive skills maximal 10 level erhalten können") --
+        # previously unbounded above, only a floor of 0 was enforced.
+        is_stigma = self._skill_id_to_type.get(skill_id) == "stigma"
+        cap = _STIGMA_LEVEL_BASE_CAP if is_stigma else _SKILL_LEVEL_BASE_CAP
+        new_value = max(0, min(cap, self._skill_levels.get(skill_id, 0) + delta))
+        self._skill_levels[skill_id] = new_value
+        label = self._skill_level_labels.get(skill_id)
+        if label:
+            bonus_level = self._skill_bonus.get(skill_id, 0)
+            wish_level = self._skill_arcana_wish.get(skill_id, 0)
+            label.setText(_format_skill_level_html(new_value, bonus_level, wish_level))
+        self._refresh_skillpoints_label()
+        self._refresh_stigma_points_label()
+
+    def _on_skill_arcana_wish_changed(self, skill_id: str, delta: int):
+        skill_type = self._skill_id_to_type.get(skill_id)
+        ceiling = self._arcana_ceiling_for_skill(skill_id, skill_type)
+        new_value = max(0, min(ceiling, self._skill_arcana_wish.get(skill_id, 0) + delta))
+        self._skill_arcana_wish[skill_id] = new_value
+        label = self._skill_level_labels.get(skill_id)
+        if label:
+            manual_level = self._skill_levels.get(skill_id, 0)
+            bonus_level = self._skill_bonus.get(skill_id, 0)
+            label.setText(_format_skill_level_html(manual_level, bonus_level, new_value))
+        plus_btn = self._arcana_wish_plus_buttons.get(skill_id)
+        if plus_btn:
+            plus_btn.setEnabled(new_value < ceiling)
+        self._refresh_arcana_calculator_button()
+
+    def _arcana_usable_and_pools(self) -> tuple[list[str], dict[str, list[dict]]]:
+        """This class's usable Lord types + their (grade-independent)
+        skill pools -- shared by the live per-skill ceiling hint and the
+        actual Calculator run, so both agree on the exact same candidate
+        set."""
+        usable_types = _arcana_usable_lord_types(self._arcana_theme_map, _ARCANA_ACTIVE_THEMES)
+        class_key = _skills_data_class_key(self.character_class_combo.currentText())
+        class_skill_pools = {ct: self._arcana_class_skills.get(ct, {}).get(class_key, []) for ct in usable_types}
+        return usable_types, class_skill_pools
+
+    def _arcana_ceiling_for_skill(self, skill_id: str, skill_type: str) -> int:
+        """Live, always-on version of the "how much could this skill ever
+        gain from Arcana" question (User-Wunsch, 2026-08-29: "im Skillplaner
+        bei den lila Zahlen mit einkalkulieren beim setzen") -- the
+        independent ceiling only (ignores what OTHER wishes might also
+        need from the same shared card-type pool, since that competitive
+        half depends on a specific Vigor/Magic split the user hasn't
+        chosen yet at this point; see _arcana_uncovered_reason for that
+        half once a Calculator run's specific split is known)."""
+        usable_types, class_skill_pools = self._arcana_usable_and_pools()
+        return _arcana_max_ceiling(skill_id, skill_type, usable_types, class_skill_pools)
+
+    def _refresh_arcana_calculator_button(self):
+        has_wish = any(v > 0 for v in self._skill_arcana_wish.values())
+        self.arcana_calculator_btn.setEnabled(has_wish)
+
+    def _on_arcana_calculator_clicked(self):
+        wishes = {sid: v for sid, v in self._skill_arcana_wish.items() if v > 0}
+        if not wishes:
+            return
+
+        usable_types, class_skill_pools = self._arcana_usable_and_pools()
+
+        theme_dialog = ArcanaThemeChoiceDialog(usable_types, self._arcana_theme_map, self)
+        if theme_dialog.exec() != QDialog.Accepted or not theme_dialog.type_to_theme:
+            return
+
+        results = _arcana_compute_combinations(
+            usable_types, theme_dialog.type_to_theme, class_skill_pools, wishes, self._skill_id_to_type,
+            priority_rank=self._skill_priority_rank(), max_results=3,
+        )
+        skill_names = {sid: (self._find_skill_by_id(sid) or {}).get("name", sid) for sid in wishes}
+        results_dlg = ArcanaResultsDialog(
+            results, wishes, skill_names, self._arcana_theme_map, usable_types,
+            class_skill_pools, self._skill_id_to_type, theme_dialog.type_to_theme, self,
+        )
+        results_dlg.arcana_combination_chosen.connect(self._on_apply_arcana_combination)
+        results_dlg.exec()
+
+    def _on_apply_arcana_combination(self, assignment_by_type: dict):
+        """Writes one Arcana Calculator result straight into the current
+        build's "Sets" slots (User-Wunsch, 2026-08-29: "einen Button in
+        den Calc, der dafuer sorgt, dass die richtigen Karten in die
+        Slots kommen"), asking first if this would overwrite cards
+        already assigned there ("eine Abfrage einbauen, ob ... vorhandene
+        Karten ueberschrieben werden sollen")."""
+        class_name = self.character_class_combo.currentText().strip().lower()
+        self._ensure_class_builds(class_name)
+        build = self._skill_builds_data[class_name][self._current_build_name]
+        if build.get("arcana_cards"):
+            reply = QMessageBox.question(
+                self, _t("arm_arcana_overwrite_title"), _t("arm_arcana_overwrite_hint"),
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
+        build["arcana_cards"] = {
+            ct: {"theme": a["theme"], "skill_ids": dict(a["skill_ids"])}
+            for ct, a in assignment_by_type.items()
+        }
+        self._refresh_arcana_equip_slots()
+
+    def _refresh_arcana_equip_slots(self):
+        """Repaints the "Sets" tab's 5 slot widgets from the current
+        build's arcana_cards -- assigned slots show the real Lord/effect/
+        grade dots (same _ArcanaCardButton.set_themed_state the
+        "Informationen" browser already uses), unassigned ones stay in
+        the neutral default/"Empty" state."""
+        class_name = self.character_class_combo.currentText().strip().lower()
+        build = self._skill_builds_data.get(class_name, {}).get(self._current_build_name, {})
+        arcana_cards = build.get("arcana_cards") or {}
+        for ct, card in self._arcana_equip_slot_widgets.items():
+            assignment = arcana_cards.get(ct)
+            theme = assignment.get("theme") if assignment else None
+            entry = self._arcana_theme_map.get(theme, {}).get(ct) if theme else None
+            if entry:
+                card.set_themed_state(entry)
+            else:
+                card.set_default_state(self._arcana_default_icon.get(ct))
 
     def _on_skill_description_card_clicked(self, skill: dict, checked: bool, check_icon: QLabel):
         skill_id = skill.get("id")
@@ -6742,9 +9464,485 @@ class LoadoutWindow(QMainWindow):
 
         self.skill_desc_stats_label.setText(_format_skill_stats(skill))
 
+    # ── "Daevanion Board" tab (2026-08-28) ───────────────────────────────────
+    # Ported from the approved browser mockup -- see [[project_daevanion_
+    # board_port]] for the full requirement list this was checked against.
+    # Skill/GearScore integration (feeding node effects into the Skill
+    # Planner and Stat Info/GearScore) and Stat-Priority-List-aware sidebar
+    # ordering are NOT wired up yet (still open per that memory's points 1-3)
+    # -- this is the board + routing itself. Board state (which nodes are
+    # active) is session-only for now, keyed by "<variant>:<boardId>", not
+    # yet persisted into profiles/equip builds.
+
+    def _build_daevanion_board_tab(self) -> QWidget:
+        self._daevanion_variant = "s"
+        self._daevanion_order: int | None = None
+        self._daevanion_active: dict[str, set[str]] = {}
+        self._daevanion_filter_checked: dict[str, set[str]] = {}
+        self._daevanion_hovered_node: dict | None = None
+
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(10)
+
+        if _DAEVANION_DEV_MODE:
+            variant_row = QHBoxLayout()
+            variant_row.setSpacing(6)
+            variant_group = QButtonGroup(self)
+            variant_group.setExclusive(True)
+            self._daevanion_variant_buttons: dict[str, QPushButton] = {}
+            for key, label in (("s", "Start"), ("a", "Advanced (dev)")):
+                btn = QPushButton(label)
+                btn.setObjectName("SkillFilterButton")
+                btn.setCheckable(True)
+                btn.setChecked(key == self._daevanion_variant)
+                btn.clicked.connect(lambda checked=False, k=key: self._daevanion_switch_variant(k))
+                variant_group.addButton(btn)
+                variant_row.addWidget(btn)
+                self._daevanion_variant_buttons[key] = btn
+            variant_row.addStretch(1)
+            outer.addLayout(variant_row)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(6)
+        self._daevanion_deity_tabs_row = QHBoxLayout()
+        self._daevanion_deity_tabs_row.setSpacing(6)
+        header_row.addLayout(self._daevanion_deity_tabs_row)
+        header_row.addStretch(1)
+
+        budget_col = QVBoxLayout()
+        budget_col.setSpacing(2)
+        self._daevanion_budget_label = QLabel()
+        self._daevanion_budget_label.setObjectName("EquipSectionLabel")
+        budget_col.addWidget(self._daevanion_budget_label)
+        header_row.addLayout(budget_col)
+
+        reset_btn = QPushButton(_t("arm_reset_board"))
+        reset_btn.setObjectName("SkillFilterButton")
+        reset_btn.clicked.connect(self._daevanion_on_reset)
+        header_row.addWidget(reset_btn)
+        outer.addLayout(header_row)
+
+        body_row = QHBoxLayout()
+        body_row.setSpacing(16)
+
+        # A QScrollArea (not a shrink-wrapped fixed-size frame) since the
+        # canvas itself now resizes with mouse-wheel zoom (User-Wunsch,
+        # 2026-08-28: "die Map mit den Nodes zoomable machen mit Mausrad") --
+        # the viewport stays a fixed, reasonable size and scrolls once the
+        # zoomed-in board no longer fits.
+        canvas_scroll = QScrollArea()
+        canvas_scroll.setObjectName("DaevanionCanvasFrame")
+        canvas_scroll.setWidgetResizable(False)
+        # Sized generously above the unzoomed board (512px) so scrollbars
+        # only ever appear once you've genuinely zoomed in past what fits
+        # -- User-Wunsch, 2026-08-28: at the old 640px size, a small early
+        # zoom step (real board=642px) crossed the threshold by only ~4px,
+        # triggering scrollbars for an overflow too small to visually
+        # notice ("warum erscheinen Scrollbalken, wenn doch alle Nodes
+        # sichtbar sind"). Same 15x15/225-node grid on every board/variant,
+        # so this threshold behavior was identical everywhere, not
+        # board-specific -- confirmed across multiple zoom levels.
+        canvas_scroll.setFixedSize(760, 760)
+        canvas_scroll.setAlignment(Qt.AlignCenter)
+        canvas_scroll.viewport().setStyleSheet("background: transparent;")
+        self._daevanion_canvas = DaevanionBoardCanvas()
+        self._daevanion_canvas.nodeClicked.connect(self._daevanion_on_node_clicked)
+        self._daevanion_canvas.nodeHovered.connect(self._daevanion_on_node_hovered)
+        self._daevanion_tooltip = DaevanionNodeTooltip(self)
+        canvas_scroll.setWidget(self._daevanion_canvas)
+        self._daevanion_canvas.set_scroll_area(canvas_scroll)
+        body_row.addWidget(canvas_scroll, 0)
+
+        sidebar = QWidget()
+        sidebar.setFixedWidth(300)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(8)
+
+        route_btn = QPushButton(_t("arm_daevanion_find_route"))
+        route_btn.setObjectName("EqPriorityButton")
+        route_btn.clicked.connect(self._daevanion_on_route)
+        sidebar_layout.addWidget(route_btn)
+
+        self._daevanion_route_status_label = QLabel()
+        self._daevanion_route_status_label.setObjectName("DetailDisclaimer")
+        self._daevanion_route_status_label.setWordWrap(True)
+        sidebar_layout.addWidget(self._daevanion_route_status_label)
+
+        sidebar_scroll = QScrollArea()
+        sidebar_scroll.setWidgetResizable(True)
+        sidebar_scroll.setFrameShape(QFrame.NoFrame)
+        self._daevanion_sidebar_content = QWidget()
+        self._daevanion_sidebar_layout = QVBoxLayout(self._daevanion_sidebar_content)
+        self._daevanion_sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        self._daevanion_sidebar_layout.setSpacing(8)
+        self._daevanion_sidebar_layout.addStretch(1)
+        sidebar_scroll.setWidget(self._daevanion_sidebar_content)
+        sidebar_layout.addWidget(sidebar_scroll, 1)
+
+        body_row.addWidget(sidebar, 1)
+        outer.addLayout(body_row, 1)
+
+        self._daevanion_rebuild_deity_tabs()
+        self._daevanion_refresh()
+        return page
+
+    def _daevanion_class_key(self) -> str:
+        return _skills_data_class_key(self.character_class_combo.currentText())
+
+    def _daevanion_current_board(self) -> dict | None:
+        variant = _daevanion_variant(self._daevanion_variant)
+        class_key = self._daevanion_class_key()
+        if class_key not in variant["class_ids"]:
+            return None
+        if self._daevanion_order not in variant["deity_orders"]:
+            self._daevanion_order = variant["deity_orders"][0] if variant["deity_orders"] else None
+        if self._daevanion_order is None:
+            return None
+        return variant["board_by_class_order"].get((class_key, self._daevanion_order))
+
+    def _daevanion_active_set(self, board: dict, grid: dict) -> set[str]:
+        key = self._daevanion_variant + ":" + board["id"]
+        if key not in self._daevanion_active:
+            start_id = next((n["id"] for n in grid.values() if n["g"] == "start"), None)
+            self._daevanion_active[key] = {start_id} if start_id else set()
+        return self._daevanion_active[key]
+
+    def _daevanion_filter_set(self) -> set[str]:
+        """Shared across every board/deity of the CURRENT class within the
+        current variant (User-Wunsch, 2026-08-28: "den Filter fuer alle
+        Daevanion Seiten behalten") -- full_key is stat-name/skill-id
+        based, not board-specific, so a value checked once stays checked
+        on any other board of the same class that happens to carry it too;
+        a board without that value simply never lists it as an option, so
+        nothing extra needs pruning when switching boards. Keyed by class
+        too (not just variant) -- skill full_keys are skill-IDs, which are
+        only meaningful within one class, and a stat filter checked for one
+        class showing checked under an unrelated class would be confusing
+        (real bug found by user, 2026-08-28: switching from Gladiator to
+        Chanter kept Gladiator's checked substats highlighted)."""
+        key = self._daevanion_variant + ":" + self._daevanion_class_key()
+        if key not in self._daevanion_filter_checked:
+            self._daevanion_filter_checked[key] = set()
+        return self._daevanion_filter_checked[key]
+
+    def _daevanion_switch_variant(self, variant: str):
+        if variant == self._daevanion_variant:
+            return
+        self._daevanion_variant = variant
+        self._daevanion_order = None
+        self._daevanion_rebuild_deity_tabs()
+        self._daevanion_refresh()
+
+    def _daevanion_rebuild_deity_tabs(self):
+        _clear_layout(self._daevanion_deity_tabs_row)
+        variant = _daevanion_variant(self._daevanion_variant)
+        class_key = self._daevanion_class_key()
+        if class_key not in variant["class_ids"]:
+            return
+        if self._daevanion_order not in variant["deity_orders"]:
+            self._daevanion_order = variant["deity_orders"][0] if variant["deity_orders"] else None
+        group = QButtonGroup(self)
+        group.setExclusive(True)
+        for order in variant["deity_orders"]:
+            board = variant["board_by_class_order"].get((class_key, order))
+            if not board:
+                continue
+            btn = QPushButton(board["name"])
+            btn.setObjectName("SkillFilterButton")
+            btn.setCheckable(True)
+            btn.setChecked(order == self._daevanion_order)
+            btn.clicked.connect(lambda checked=False, o=order: self._daevanion_switch_order(o))
+            group.addButton(btn)
+            self._daevanion_deity_tabs_row.addWidget(btn)
+
+    def _daevanion_switch_order(self, order: int):
+        if order == self._daevanion_order:
+            return
+        self._daevanion_order = order
+        self._daevanion_refresh()
+
+    def _daevanion_refresh(self):
+        """Equivalent of the mockup's draw()+renderFilterPanel() -- redraws
+        the canvas, budget readout and rebuilds the sidebar to match
+        whatever board is currently selected."""
+        self._daevanion_tooltip.hide()
+        board = self._daevanion_current_board()
+        if not board:
+            self._daevanion_canvas.set_data({}, set(), set(), {})
+            self._daevanion_budget_label.setText(_t("arm_daevanion_no_board_for_class"))
+            _clear_layout(self._daevanion_sidebar_layout)
+            self._daevanion_sidebar_layout.addStretch(1)
+            return
+        variant = _daevanion_variant(self._daevanion_variant)
+        grid = variant["nodes_by_board"].get(board["id"], {})
+        active = self._daevanion_active_set(board, grid)
+        highlighted = self._daevanion_highlighted_ids(board, grid)
+        class_skills_by_id = {str(s["id"]): s for s in self._skills_by_class.get(self._daevanion_class_key(), [])}
+        node_icons = self._daevanion_build_node_icons(grid, class_skills_by_id)
+        self._daevanion_canvas.set_data(grid, active, highlighted, node_icons)
+
+        spent = _daevanion_spent_cost(active, variant["node_by_id"])
+        cap = _daevanion_total_cost(grid)
+        self._daevanion_budget_label.setText(_t("arm_daevanion_points_label", spent=spent, cap=cap))
+
+        for i in range(self._daevanion_deity_tabs_row.count()):
+            btn = self._daevanion_deity_tabs_row.itemAt(i).widget()
+            if isinstance(btn, QPushButton):
+                order = variant["deity_orders"][i] if i < len(variant["deity_orders"]) else None
+                btn.setChecked(order == self._daevanion_order)
+
+        self._daevanion_rebuild_sidebar(board, grid)
+
+    def _daevanion_build_node_icons(self, grid: dict, class_skills_by_id: dict) -> dict[str, "QPixmap"]:
+        """Real skill icon (same assets the Skill Description cards use)
+        for skill-granting nodes -- stat-granting nodes get no overlay at
+        all (just the real tier-frame sprite underneath), the sidebar's own
+        filter/search already covers finding a specific stat, so a label on
+        every tile was redundant clutter (User-Wunsch, 2026-08-28: "Die
+        Werte kannst du von den Kacheln auch entfernen. Durch den Filter
+        auf der rechten Seite, brauchen wir die links nicht")."""
+        icons: dict[str, QPixmap] = {}
+        for n in grid.values():
+            if n["g"] in ("empty", "start"):
+                continue
+            skill_effs = [e for e in n.get("e") or [] if e.get("t") == "k"]
+            if skill_effs:
+                skill_id = str(skill_effs[0].get("skill_id") or "")
+                skill = class_skills_by_id.get(skill_id)
+                icon = _skill_icon(skill) if skill else None
+                if icon and not icon.isNull():
+                    icons[n["id"]] = icon.pixmap(28, 28)
+        return icons
+
+    def _daevanion_build_filter_groups(self, grid: dict) -> dict[str, dict[str, dict]]:
+        class_key = self._daevanion_class_key()
+        class_skills = self._skills_by_class.get(class_key, [])
+        class_skills_by_id = {str(s["id"]): s for s in class_skills}
+        groups = {"substats": {}, "combined": {}, "passive": {}, "active": {}}
+        for n in grid.values():
+            stat_effs = [e for e in n.get("e") or [] if e.get("t") == "s"]
+            skill_effs = [e for e in n.get("e") or [] if e.get("t") == "k"]
+            if len(stat_effs) == 1:
+                name = stat_effs[0].get("n") or ""
+                label = _daevanion_stat_label(name)
+                entry = groups["substats"].setdefault(name, {"label": label, "ids": set(), "grades": set()})
+                entry["ids"].add(n["id"])
+                entry["grades"].add(n["g"])
+            elif len(stat_effs) > 1:
+                names = sorted(e.get("n") or "" for e in stat_effs)
+                key = "+".join(names)
+                labels = [_daevanion_stat_label(nm) for nm in names]
+                entry = groups["combined"].setdefault(key, {"label": " + ".join(labels), "ids": set(), "grades": set()})
+                entry["ids"].add(n["id"])
+                entry["grades"].add(n["g"])
+            for e in skill_effs:
+                skill_id = str(e.get("skill_id") or "")
+                skill = class_skills_by_id.get(skill_id)
+                name = skill.get("name") if skill else (e.get("n") or f"Skill #{skill_id}")
+                bucket = "active" if (skill and skill.get("type") == "active") else "passive"
+                entry = groups[bucket].setdefault(skill_id or name, {"label": name, "ids": set(), "grades": set()})
+                entry["ids"].add(n["id"])
+                entry["grades"].add(n["g"])
+        return groups
+
+    _DAEVANION_GRADE_RANK = {"unique": 3, "legend": 2, "rare": 1, "common": 0, "start": -1, "empty": -1}
+
+    def _daevanion_entry_accent_color(self, grades: set[str]) -> str | None:
+        """Highest-tier grade among an entry's nodes gets its board color as
+        a text accent in the sidebar (User-Wunsch, 2026-08-28: "die goldenen
+        oder epic nodes farbig markieren ... falls andere Statnodes mit blau
+        oder gruen existieren, diese farbig markieren") -- Common-only
+        entries stay the default label color, nothing to call out there."""
+        best = max(grades, default="common", key=lambda g: self._DAEVANION_GRADE_RANK.get(g, -1))
+        if self._DAEVANION_GRADE_RANK.get(best, -1) <= 0:
+            return None
+        return _DAEVANION_GRADE_HEX.get(best)
+
+    def _daevanion_highlighted_ids(self, board: dict, grid: dict) -> set[str]:
+        checked = self._daevanion_filter_set()
+        if not checked:
+            return set()
+        groups = self._daevanion_build_filter_groups(grid)
+        ids: set[str] = set()
+        for full_key in checked:
+            cat, _, key = full_key.partition("|")
+            entry = groups.get(cat, {}).get(key)
+            if entry:
+                ids |= entry["ids"]
+        return ids
+
+    _DAEVANION_FILTER_SECTIONS = [
+        ("substats", "arm_daevanion_substats"), ("combined", "arm_daevanion_combined_substats"),
+        ("passive", "arm_daevanion_passive_skills"), ("active", "arm_daevanion_active_skills"),
+    ]
+
+    def _daevanion_build_collapsible(self, title: str, expanded: bool) -> tuple[QWidget, QVBoxLayout]:
+        return _build_collapsible_section(title, expanded)
+
+    def _daevanion_rebuild_sidebar(self, board: dict, grid: dict):
+        _clear_layout(self._daevanion_sidebar_layout)
+        groups = self._daevanion_build_filter_groups(grid)
+        checked = self._daevanion_filter_set()
+        for i, (cat_key, label_key) in enumerate(self._DAEVANION_FILTER_SECTIONS):
+            entries = sorted(groups[cat_key].items(), key=lambda kv: kv[1]["label"])
+            section, body_layout = self._daevanion_build_collapsible(f"{_t(label_key)} ({len(entries)})", expanded=(i == 0))
+            for key, entry in entries:
+                full_key = cat_key + "|" + key
+                cb = QCheckBox(f"{entry['label']} (×{len(entry['ids'])})")
+                cb.setChecked(full_key in checked)
+                accent = self._daevanion_entry_accent_color(entry.get("grades", set()))
+                if accent:
+                    cb.setStyleSheet(f"color: {accent}; font-weight: 600;")
+                cb.toggled.connect(lambda on, fk=full_key: self._daevanion_on_filter_toggled(fk, on))
+                body_layout.addWidget(cb)
+            self._daevanion_sidebar_layout.addWidget(section)
+        self._daevanion_sidebar_layout.addStretch(1)
+
+    def _daevanion_on_filter_toggled(self, full_key: str, checked: bool):
+        board = self._daevanion_current_board()
+        if not board:
+            return
+        checked_set = self._daevanion_filter_set()
+        if checked:
+            checked_set.add(full_key)
+        else:
+            checked_set.discard(full_key)
+        self._daevanion_route_status_label.setText("")
+        variant = _daevanion_variant(self._daevanion_variant)
+        grid = variant["nodes_by_board"].get(board["id"], {})
+        active = self._daevanion_active_set(board, grid)
+        highlighted = self._daevanion_highlighted_ids(board, grid)
+        class_skills_by_id = {str(s["id"]): s for s in self._skills_by_class.get(self._daevanion_class_key(), [])}
+        node_icons = self._daevanion_build_node_icons(grid, class_skills_by_id)
+        self._daevanion_canvas.set_data(grid, active, highlighted, node_icons)
+
+    def _daevanion_on_node_clicked(self, node_id: str):
+        board = self._daevanion_current_board()
+        if not board:
+            return
+        variant = _daevanion_variant(self._daevanion_variant)
+        grid = variant["nodes_by_board"].get(board["id"], {})
+        node = variant["node_by_id"].get(node_id)
+        if not node or node["g"] in ("start", "empty"):
+            return
+        active = self._daevanion_active_set(board, grid)
+        if node_id in active:
+            active.discard(node_id)
+            self._daevanion_prune_unreachable(grid, active, variant["node_by_id"])
+        elif _daevanion_is_reachable(node, grid, active):
+            cap = _daevanion_total_cost(grid)
+            spent = _daevanion_spent_cost(active, variant["node_by_id"])
+            if spent + node["cost"] <= cap:
+                active.add(node_id)
+        self._daevanion_refresh()
+        self._recompute_skill_bonus()
+        self._daevanion_show_tooltip(node)
+
+    def _daevanion_prune_unreachable(self, grid: dict, active: set[str], node_by_id: dict):
+        """Cascade-remove any active (non-start) node no longer connected
+        to start, mirroring the mockup's pruneUnreachable exactly."""
+        changed = True
+        while changed:
+            changed = False
+            for nid in list(active):
+                node = node_by_id.get(nid)
+                if not node or node["g"] == "start":
+                    continue
+                connected = any(
+                    (nb := grid.get(rc)) and nb["id"] in active
+                    for rc in _daevanion_neighbors(node["r"], node["c"])
+                )
+                if not connected:
+                    active.discard(nid)
+                    changed = True
+
+    def _daevanion_on_node_hovered(self, node: dict | None):
+        self._daevanion_hovered_node = node
+        if not node or node["g"] == "empty":
+            self._daevanion_tooltip.hide()
+            return
+        self._daevanion_show_tooltip(node)
+
+    def _daevanion_show_tooltip(self, node: dict):
+        board = self._daevanion_current_board()
+        if not board:
+            return
+        variant = _daevanion_variant(self._daevanion_variant)
+        grid = variant["nodes_by_board"].get(board["id"], {})
+        active = self._daevanion_active_set(board, grid)
+        class_key = self._daevanion_class_key()
+        class_skills_by_id = {str(s["id"]): s for s in self._skills_by_class.get(class_key, [])}
+        is_active = node["id"] in active
+        reachable = not is_active and _daevanion_is_reachable(node, grid, active)
+        cap = _daevanion_total_cost(grid)
+        spent = _daevanion_spent_cost(active, variant["node_by_id"])
+
+        grade_label = _DAEVANION_GRADE_LABEL.get(node["g"], node["g"])
+        name = node.get("name") or grade_label
+        grade_hex = _DAEVANION_GRADE_HEX.get(node["g"], "#94a3b8")
+        effect_rows = _daevanion_effect_lines(node, class_skills_by_id)
+
+        if node["g"] == "start":
+            status_key, status_text = "start", _t("arm_daevanion_status_start")
+        elif is_active:
+            status_key, status_text = "active", _t("arm_daevanion_status_active")
+        elif not reachable:
+            status_key, status_text = "locked", _t("arm_daevanion_status_locked")
+        elif spent + node["cost"] > cap:
+            status_key, status_text = "no_points", _t("arm_daevanion_status_no_points")
+        else:
+            status_key, status_text = "available", _t("arm_daevanion_status_available")
+
+        self._daevanion_tooltip.set_node(
+            name, grade_label, grade_hex, node["cost"], node["lvl"], effect_rows, status_key, status_text
+        )
+        self._daevanion_tooltip.show_at(QCursor.pos())
+
+    def _daevanion_on_reset(self):
+        board = self._daevanion_current_board()
+        if not board:
+            return
+        variant = _daevanion_variant(self._daevanion_variant)
+        grid = variant["nodes_by_board"].get(board["id"], {})
+        start_id = next((n["id"] for n in grid.values() if n["g"] == "start"), None)
+        key = self._daevanion_variant + ":" + board["id"]
+        self._daevanion_active[key] = {start_id} if start_id else set()
+        self._daevanion_route_status_label.setText("")
+        self._daevanion_refresh()
+        self._recompute_skill_bonus()
+
+    def _daevanion_on_route(self):
+        board = self._daevanion_current_board()
+        if not board:
+            return
+        variant = _daevanion_variant(self._daevanion_variant)
+        grid = variant["nodes_by_board"].get(board["id"], {})
+        wanted = self._daevanion_highlighted_ids(board, grid)
+        if not wanted:
+            self._daevanion_route_status_label.setText(_t("arm_daevanion_route_pick_value"))
+            return
+        start_id = next((n["id"] for n in grid.values() if n["g"] == "start"), None)
+        result = _daevanion_compute_auto_route(grid, variant["node_by_id"], wanted, start_id)
+        key = self._daevanion_variant + ":" + board["id"]
+        self._daevanion_active[key] = result["tree"]
+        if result["skipped"]:
+            self._daevanion_route_status_label.setText(_t(
+                "arm_daevanion_route_partial", included=len(result["included"]),
+                total=len(result["included"]) + len(result["skipped"]), spent=result["spent"], cap=result["cap"],
+            ))
+        else:
+            self._daevanion_route_status_label.setText(_t(
+                "arm_daevanion_route_full", count=len(result["included"]), spent=result["spent"], cap=result["cap"],
+            ))
+        self._daevanion_refresh()
+        self._recompute_skill_bonus()
+
     # ── "EQ-Priorität" tab ──────────────────────────────────────────────────
 
-    def _build_equip_priority_tab(self) -> QWidget:
+    def _build_equip_priority_page(self) -> QWidget:
         """Same idea as the Skill Planner's own priority list (see
         _build_skill_priority_tab): a chain of slots per section, '+' to
         append — here for planning an acquisition/upgrade order across
@@ -6754,7 +9952,49 @@ class LoadoutWindow(QMainWindow):
 
         Laid out 3 sections per row (grid) instead of one full-width row
         per section — with 11 sections stacked one-per-row the tab was
-        mostly empty horizontal space either side of a short item chain."""
+        mostly empty horizontal space either side of a short item chain.
+
+        A full-panel takeover in equip_view_stack (back-arrow/X, same
+        pattern as Build Vergleich) rather than its own main_tabs entry
+        (User-Wunsch, 2026-08-28) -- freed that tab slot for the Daevanion
+        Board instead."""
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(16, 12, 16, 16)
+        container_layout.setSpacing(10)
+
+        # Styled circular pill (not a bare unstyled QToolButton, like Build
+        # Vergleich/Stat Priority Editor's back/X currently are -- User-
+        # Wunsch, 2026-08-28: "den Backpfeil und das 'X' an den Stil
+        # anpassen") so they read as real themed buttons instead of native
+        # Qt chrome floating on the dark background.
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+        back_btn = QToolButton()
+        back_btn.setObjectName("PanelNavButton")
+        back_btn.setIcon(_make_back_icon())
+        back_btn.setIconSize(QSize(16, 16))
+        back_btn.setFixedSize(32, 32)
+        back_btn.setToolTip(_t("arm_back"))
+        back_btn.clicked.connect(self._close_equip_priority_page)
+        header_row.addWidget(back_btn)
+
+        title = QLabel(_t("arm_eq_priority_tab"))
+        title.setObjectName("DetailHeader")
+        header_row.addWidget(title, 1)
+
+        close_btn = QToolButton()
+        close_btn.setObjectName("PanelNavButton")
+        close_btn.setIcon(_make_close_icon())
+        close_btn.setIconSize(QSize(16, 16))
+        close_btn.setFixedSize(32, 32)
+        close_btn.setToolTip(_t("arm_close"))
+        close_btn.clicked.connect(self._close_equip_priority_page)
+        header_row.addWidget(close_btn)
+        container_layout.addLayout(header_row)
+
+        # Scrollable body (unaffected by the header move) -- everything
+        # below stays exactly as it was as a plain main_tabs page.
         page = QWidget()
         outer = QVBoxLayout(page)
         outer.setContentsMargins(16, 16, 16, 16)
@@ -6818,7 +10058,8 @@ class LoadoutWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(page)
         scroll.viewport().setStyleSheet("background: transparent;")
-        return scroll
+        container_layout.addWidget(scroll, 1)
+        return container
 
     def _rebuild_equip_priority_row(self, section_key: str):
         row = self.equip_priority_rows[section_key]
@@ -6917,7 +10158,84 @@ class LoadoutWindow(QMainWindow):
         self._equip_priority_items[section_key].append(None)
         self._rebuild_equip_priority_row(section_key)
 
+    def _open_equip_priority_page(self):
+        self.equip_top_bar.setVisible(False)
+        self.equip_view_stack.setCurrentIndex(self._equip_priority_page_index)
+
+    def _close_equip_priority_page(self):
+        self.equip_top_bar.setVisible(True)
+        self.equip_view_stack.setCurrentIndex(0)
+
     # ── "Arcana & Titel" tab ────────────────────────────────────────────────
+
+    def _build_arcana_tab(self) -> QWidget:
+        """Main "Arcana" tab, now split into two sub-tabs (User-Wunsch,
+        2026-08-29): "Informationen" (the existing browse-only card/set
+        catalog, unchanged) and "Sets" (the real Arcana equip slots).
+        The "Arcana Types" legend used to be duplicated inside each
+        sub-tab's own layout -- now built once here as a permanent footer
+        below both (User-Wunsch, 2026-08-29: "Kann man das eventuell als
+        Dauerfooter setzen?"), so it stays visible no matter which
+        sub-tab is active instead of scrolling away with either one."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        self._arcana_sub_tabs = QTabWidget()
+        self._arcana_sub_tabs.setObjectName("timerModeTabWidget")
+        self._arcana_sub_tabs.addTab(self._build_arcana_information_tab(), _t("arm_arcana_information_tab"))
+        self._arcana_sub_tabs.addTab(self._build_arcana_sets_tab(), _t("arm_arcana_sets_tab"))
+        outer.addWidget(self._arcana_sub_tabs, 1)
+        outer.addWidget(self._build_arcana_lord_bar())
+        return page
+
+    def _build_arcana_information_tab(self) -> QWidget:
+        tab = QWidget()
+        root = QHBoxLayout(tab)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(30)
+        root.addLayout(self._build_arcana_column())
+        root.addStretch()
+        return tab
+
+    def _build_arcana_sets_tab(self) -> QWidget:
+        """"Sets" sub-tab: the 5 real Lord card slots (Chalice/Parchment/
+        Compass/Bell/Mirror, matching the Calculator's usable types), no
+        assignment functionality yet (User-Wunsch, 2026-08-29: "Unter Sets
+        haben wir dann nur noch die Slots fuer die Arcanas, die moeglich
+        sind ... Dort fuegen wir dann spaeter die ausgewaehlten Karten aus
+        dem Calc ein"). Reuses the exact same _ArcanaCardButton widget (in
+        its neutral "default"/empty state) as the "Informationen" browser
+        tab, at the same size -- just without that tab's Set-selection
+        sidebar, since these slots aren't about browsing a theme, they're
+        the real equip target
+        (User-Wunsch: "genauso aufbauen ... nur dass auf der linken Seite
+        die Sets nicht angezeigt werden und die Kartenslots leer sind").
+        Shares ONE build list with the Skill Planner via the mirrored
+        arcana_build_tabs_row (see _rebuild_skill_build_tabs) -- switching
+        builds here is the same as switching them in the Skill Planner."""
+        tab = QWidget()
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(12)
+
+        outer.addLayout(self.arcana_build_tabs_row)
+
+        grid = QGridLayout()
+        grid.setSpacing(14)
+        usable_types, _pools = self._arcana_usable_and_pools()
+        self._arcana_equip_slot_widgets: dict[str, _ArcanaCardButton] = {}
+        for col_idx, ct in enumerate(usable_types):
+            card = _ArcanaCardButton(ct)
+            card.set_default_state(self._arcana_default_icon.get(ct))
+            grid.addWidget(card, 0, col_idx)
+            self._arcana_equip_slot_widgets[ct] = card
+        grid_row = QHBoxLayout()
+        grid_row.addLayout(grid)
+        grid_row.addStretch(1)
+        outer.addLayout(grid_row)
+        outer.addStretch(1)
+        return tab
 
     def _build_arcana_column(self) -> QHBoxLayout:
         """Arcana Set/card browser, built from real data (see
@@ -7011,8 +10329,6 @@ class LoadoutWindow(QMainWindow):
             grid.addWidget(card, row, col_idx)
             self._arcana_card_widgets[card_type] = card
         right_col.addLayout(grid)
-
-        right_col.addWidget(self._build_arcana_lord_bar())
         right_col.addStretch()
         root.addLayout(right_col, 1)
 
@@ -7020,25 +10336,33 @@ class LoadoutWindow(QMainWindow):
         return root
 
     def _build_arcana_lord_bar(self) -> QFrame:
+        """Compact permanent footer for the whole "Arcana" tab (User-
+        Wunsch, 2026-08-29: "als Dauerfooter setzen ... gerne etwas
+        kompakter - durch das lang ziehen, sieht das wie verschwendeter
+        Platz aus") -- a single row (title + legend), tight dot
+        separators instead of the old 4-nbsp gaps, smaller text, so it
+        reads as a slim reference strip instead of a stretched panel."""
         frame = QFrame()
         frame.setObjectName("ArcanaLordBar")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 6, 14, 6)
+        layout.setSpacing(2)
 
-        title = QLabel(_t("arm_arcana_types"))
-        title.setObjectName("EquipSectionLabel")
-        layout.addWidget(title)
+        self._arcana_lord_bar_title = QLabel(_t("arm_arcana_types"))
+        self._arcana_lord_bar_title.setObjectName("EquipSectionLabel")
+        self._arcana_lord_bar_title.setStyleSheet("font-size: 10px;")
+        layout.addWidget(self._arcana_lord_bar_title)
 
         text = QLabel()
         text.setObjectName("DetailInfo")
         text.setWordWrap(True)
         text.setTextFormat(Qt.RichText)
+        text.setStyleSheet("font-size: 11px;")
         parts = [
             f'<span style="color:#facc15;font-weight:700;">{lord}</span> &rarr; {effect}'
             for lord, effect in ARCANA_LORD_EFFECTS.items()
         ]
-        text.setText("&nbsp;&nbsp;&nbsp;&nbsp;".join(parts))
+        text.setText(" &nbsp;·&nbsp; ".join(parts))
         layout.addWidget(text)
         return frame
 
@@ -7196,6 +10520,7 @@ class LoadoutWindow(QMainWindow):
             preset_substats=self._equipped_substats.get(slot_id),
             preset_enchant=self._equipped_enchant.get(slot_id, 0),
             character_class=self.character_class_combo.currentText(),
+            preset_philosopher_stone=self._equipped_philosopher_stone.get(slot_id, False),
         )
 
     def _on_equip_back_clicked(self):
@@ -7479,9 +10804,12 @@ class LoadoutWindow(QMainWindow):
         )
         self._refresh_stat_info()
 
-    def _refresh_stat_info(self):
+    def _compute_stat_totals(self, equipped: dict, substats: dict, enchant: dict) -> dict[str, float]:
+        """Shared with the Build Vergleich tab (see _open_build_compare) so
+        both a live-equipped build and an arbitrary saved build compute
+        totals the exact same way, instead of duplicating this logic."""
         totals: dict[str, float] = {}
-        for slot_id, item in self._equipped.items():
+        for slot_id, item in equipped.items():
             detail = self.detail_cache.get(item.get("id"))
             if not detail:
                 continue
@@ -7490,7 +10818,7 @@ class LoadoutWindow(QMainWindow):
                 if sid:
                     totals[sid] = totals.get(sid, 0.0) + _parse_stat_value(stat.get("value"))
             sub_stats = detail.get("subStats") or []
-            for i in self._equipped_substats.get(slot_id, set()):
+            for i in substats.get(slot_id, set()):
                 if i < len(sub_stats):
                     sid = sub_stats[i].get("id")
                     if sid:
@@ -7499,7 +10827,7 @@ class LoadoutWindow(QMainWindow):
             # Enchant bonus — same estimate formulas the item's own detail
             # panel uses for its "(+N)" line, so Stat Info stays consistent
             # with what that panel shows instead of ignoring the slider.
-            level = self._equipped_enchant.get(slot_id, 0)
+            level = enchant.get(slot_id, 0)
             if level:
                 grade_name = detail.get("gradeName") or detail.get("grade") or ""
                 category_name = detail.get("categoryName") or ""
@@ -7523,6 +10851,25 @@ class LoadoutWindow(QMainWindow):
                         totals["DamageRatio"] = totals.get("DamageRatio", 0.0) + exceed["attack_pct"]
                     if exceed["defense"]:
                         totals[_DEFENSE_STAT_ID] = totals.get(_DEFENSE_STAT_ID, 0.0) + exceed["defense"]
+        return totals
+
+    def _compute_gearscore(self, equipped: dict, enchant: dict) -> float:
+        """Shared with the Build Vergleich tab -- see _compute_stat_totals."""
+        total = 0.0
+        for slot_id, item in equipped.items():
+            detail = self.detail_cache.get(item.get("id"))
+            if not detail or not detail.get("level"):
+                continue
+            total += detail["level"]
+            level = enchant.get(slot_id, 0)
+            if not level:
+                continue
+            normal_max = int(detail.get("maxEnchantLevel") or 0)
+            total += _gearscore_push(level, normal_max)
+        return total
+
+    def _refresh_stat_info(self):
+        totals = self._compute_stat_totals(self._equipped, self._equipped_substats, self._equipped_enchant)
 
         label_groups = [
             (self._main_stat_labels, "—"),
@@ -7544,6 +10891,87 @@ class LoadoutWindow(QMainWindow):
                 value = totals.get(stat_id, 0.0)
                 suffix = "%" if stat_id in _PERCENT_STAT_IDS else ""
                 value_label.setText(f"{_format_number(value)}{suffix}")
+
+        self._recompute_skill_bonus()
+
+    def _recompute_skill_bonus(self):
+        """Combines the gear bonus (_compute_equipped_skill_bonus) and the
+        Daevanion Board bonus (_compute_daevanion_skill_bonus) into
+        self._skill_bonus and repaints every Skill Description card's level
+        label. Called from _refresh_stat_info (every equip mutation) AND
+        directly from the Daevanion node-click/reset/route handlers, since
+        those change self._daevanion_active without going through
+        _refresh_stat_info at all."""
+        self._skill_bonus = self._compute_equipped_skill_bonus()
+        for sid, v in self._compute_daevanion_skill_bonus().items():
+            self._skill_bonus[sid] = self._skill_bonus.get(sid, 0) + v
+        self._refresh_skill_level_labels()
+
+    def _compute_equipped_skill_bonus(self) -> dict[str, int]:
+        """+1 per equipped Trait/Skill substat pick, summed across every
+        slot (stacking -- the same Active skill picked on both Ring1 and
+        Ring2 counts twice). Mirrors the exact same skill_options
+        construction _apply_quick_substats/ItemDetailWidget._apply_detail
+        use (self._skills_by_class filtered by type), so the index space
+        lines up with what's actually stored in _equipped_substats."""
+        class_key = _skills_data_class_key(self.character_class_combo.currentText())
+        class_skills = self._skills_by_class.get(class_key, [])
+        bonus: dict[str, int] = {}
+        for slot_id, item in self._equipped.items():
+            detail = self.detail_cache.get(item.get("id"))
+            if not detail or not int(detail.get("subSkillCountMax") or 0):
+                continue
+            offset = len(detail.get("subStats") or [])
+            skill_type = "active" if detail.get("categoryName") in _ACTIVE_SUBSKILL_SLOT_CATEGORIES else "passive"
+            skill_options = [s for s in class_skills if s.get("type") == skill_type]
+            for i in self._equipped_substats.get(slot_id, ()):
+                if i >= offset and (i - offset) < len(skill_options):
+                    sid = skill_options[i - offset].get("id")
+                    if sid:
+                        bonus[sid] = bonus.get(sid, 0) + 1
+        return bonus
+
+    def _compute_daevanion_skill_bonus(self) -> dict[str, int]:
+        """+level_increase per active skill_level node, summed across every
+        one of the current class's Daevanion boards (User-Wunsch,
+        2026-08-28: "die Skills auf den Skillplaner rechnen") -- a class
+        has one board per deity, all contributing to the same skills, so
+        this sums over ALL of them, not just whichever one is currently on
+        screen. Uses self._daevanion_active directly (not
+        _daevanion_active_set, which lazily creates a {start_id}-only entry
+        as a side effect for boards never opened) since a never-opened
+        board simply has no bonus to contribute."""
+        class_key = self._daevanion_class_key()
+        variant = _daevanion_variant(self._daevanion_variant)
+        bonus: dict[str, int] = {}
+        for board in variant["boards"]:
+            if board["classId"] != class_key:
+                continue
+            active = self._daevanion_active.get(self._daevanion_variant + ":" + board["id"], set())
+            for node_id in active:
+                node = variant["node_by_id"].get(node_id)
+                if not node:
+                    continue
+                for e in node.get("e") or []:
+                    if e.get("t") == "k":
+                        sid = str(e.get("skill_id") or "")
+                        if sid:
+                            bonus[sid] = bonus.get(sid, 0) + int(e.get("v") or 0)
+        return bonus
+
+    def _refresh_skill_level_labels(self):
+        """Redraws every currently-built Skill Description card's level
+        number so it includes the gear + Daevanion Board bonus (see
+        _compute_equipped_skill_bonus/_compute_daevanion_skill_bonus) on
+        top of the manually-invested value -- called from
+        _refresh_stat_info, which already runs after every equip mutation
+        (Quick Select, manual substat pick, Set switch), so this stays in
+        sync for free."""
+        for skill_id, label in self._skill_level_labels.items():
+            manual_level = self._skill_levels.get(skill_id, 0)
+            bonus_level = self._skill_bonus.get(skill_id, 0)
+            wish_level = self._skill_arcana_wish.get(skill_id, 0)
+            label.setText(_format_skill_level_html(manual_level, bonus_level, wish_level))
 
     # ── Left/right equipment columns (Weapon+Armor left, Accessory right) ──
 
@@ -7620,24 +11048,39 @@ class LoadoutWindow(QMainWindow):
         col.addLayout(self._build_slot_sections(_RIGHT_EQUIP_SECTIONS))
         col.addStretch()
 
+        # Bottom-right slot used to hold the "Character Settings" gear
+        # button (Name/Race/redundant Class+GearScore popup) -- Name/Race
+        # moved into the always-visible header row instead (see class_row),
+        # Class/GearScore were already shown elsewhere too, so that popup
+        # is gone. This spot now opens the "EQ Priority" panel (User-Wunsch,
+        # 2026-08-28: the Eigenschaften-Priorität gear icon next to
+        # "Eigenschaften" stays where it was -- this is about the EQ
+        # Priority TAB, moved out of main_tabs into the same back-arrow/X
+        # equip_view_stack takeover Build Vergleich already uses, freeing
+        # that tab slot for the Daevanion Board instead).
+        # Labeled pill (same SkillFilterButton look as "Build Compare")
+        # instead of a bare icon button -- User-Wunsch, 2026-08-28: "der
+        # Button unten Rechts wird sonst übersehen". Own #EqPriorityButton
+        # rule (not #SkillFilterButton directly) since the plain 12px/4-10px
+        # padding still read as too small/easy to miss here -- User-Wunsch:
+        # "einen längeren Button ... Schriftgröße anpassen" -- a dedicated,
+        # bigger-font/bigger-padding style scoped to just this one button,
+        # same pattern as #RoleButtonAngreifer/etc. in styles.qss.
         gear_row = QHBoxLayout()
         gear_row.addStretch()
-        settings_btn = QToolButton()
-        settings_btn.setObjectName("SlotIconButton")
-        settings_btn.setText("⚙")
-        settings_btn.setFixedSize(40, 40)
-        settings_btn.setCursor(Qt.PointingHandCursor)
-        settings_btn.clicked.connect(self._open_character_settings)
-        gear_row.addWidget(settings_btn)
+        self.equip_priority_btn = QPushButton(_t("arm_eq_priority_tab"))
+        self.equip_priority_btn.setObjectName("EqPriorityButton")
+        self.equip_priority_btn.setMinimumSize(190, 40)
+        self.equip_priority_btn.setCursor(Qt.PointingHandCursor)
+        self.equip_priority_btn.clicked.connect(self._open_equip_priority_page)
+        gear_row.addWidget(self.equip_priority_btn)
         col.addLayout(gear_row)
 
-        # Character identity lives in a popup now (see _open_character_settings)
-        # rather than a persistent card, to make room for the Stat Info column.
-        self.character_name_input = QLineEdit()
+        # Never added to a visible layout -- kept in sync with the visible
+        # skill_planner_class_combo (see _class_combos/_on_any_class_combo_
+        # changed) purely so every other `character_class_combo.currentText()`
+        # read throughout this class keeps working unchanged.
         self.character_class_combo = QComboBox()
-        self.character_race_combo = QComboBox()
-        self.character_race_combo.addItems(AION2_RACES)
-        self.gearscore_label = QLabel(_t("arm_gearscore_zero"))
 
         return col
 
@@ -7658,40 +11101,15 @@ class LoadoutWindow(QMainWindow):
         self._refresh_skill_description_view()
         self._rebuild_skill_build_tabs()
         self._load_current_build_state()
+        # Switching class while Build Vergleich is open would otherwise keep
+        # showing it with the OLD class's build names still selected.
+        self._close_build_compare()
         self._rebuild_equip_build_tabs()
         self._load_current_equip_build_state()
 
-    def _open_character_settings(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle(_t("arm_character_title"))
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(10)
-
-        self.character_name_input.setPlaceholderText(_t("arm_character_name_placeholder"))
-        layout.addWidget(QLabel(_t("arm_name_label")))
-        layout.addWidget(self.character_name_input)
-
-        layout.addWidget(QLabel(_t("arm_class_label")))
-        layout.addWidget(self.character_class_combo)
-
-        layout.addWidget(QLabel(_t("arm_race_label")))
-        layout.addWidget(self.character_race_combo)
-
-        self.gearscore_label.setObjectName("DetailHeader")
-        self.gearscore_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.gearscore_label)
-        gearscore_hint = QLabel(_t("arm_gearscore_note"))
-        gearscore_hint.setObjectName("DetailDisclaimer")
-        gearscore_hint.setAlignment(Qt.AlignCenter)
-        gearscore_hint.setWordWrap(True)
-        layout.addWidget(gearscore_hint)
-
-        close_btn = QPushButton(_t("arm_close"))
-        close_btn.clicked.connect(dialog.accept)
-        layout.addWidget(close_btn)
-
-        dialog.exec()
+        self._daevanion_order = None
+        self._daevanion_rebuild_deity_tabs()
+        self._daevanion_refresh()
 
     def _capture_current_substats(self):
         """Saves whichever substats are checked and whatever enchant level
@@ -7702,6 +11120,7 @@ class LoadoutWindow(QMainWindow):
         if prev_slot and prev_slot in self._equipped:
             self._equipped_substats[prev_slot] = self.equip_detail_widget.get_selected_substat_indices()
             self._equipped_enchant[prev_slot] = self.equip_detail_widget.get_enchant_level()
+            self._equipped_philosopher_stone[prev_slot] = self.equip_detail_widget.get_philosopher_stone_active()
             self._refresh_stat_info()
             self._update_gearscore()
             self._update_slot_enchant_label(prev_slot)
@@ -7739,21 +11158,47 @@ class LoadoutWindow(QMainWindow):
 
     def update_language(self, language: str):
         """Forwarded by ItemDatabaseWindow.update_language() (see there).
-        Re-applies text to this window's always-visible top-level chrome --
-        deeply nested/dynamically-rebuilt content (tables, popups, per-slot
-        labels) picks up the new language naturally the next time it's
-        rebuilt (e.g. switching Sets/slots), since every build path already
-        reads through _t() at call time. Reopening the Build Planner always
-        guarantees a fully up-to-date language throughout."""
+        Re-applies text to this window's always-visible top-level chrome,
+        PLUS the Arcana tab's nested content (see below) -- everything
+        else (tables, popups, per-slot labels) picks up the new language
+        naturally the next time it's rebuilt (e.g. switching Sets/slots),
+        since every build path already reads through _t() at call time.
+
+        CORRECTION (User-reported, 2026-08-29): the old version of this
+        docstring claimed "reopening the Build Planner always guarantees
+        a fully up-to-date language" -- that's false. ItemDatabaseWindow
+        caches this window as a singleton (self._loadout_window) and
+        only ever calls .show()/.raise_() again on the SAME instance;
+        "closing" it doesn't destroy/rebuild anything, so any text not
+        explicitly re-applied HERE stays stuck in whatever language it
+        was originally built in, no matter how many times you close and
+        reopen the window. Confirmed by the user switching Russian ->
+        English, reopening, and still seeing the Arcana sub-tabs/Sets
+        cards/lord-bar footer in Russian. Fixed by explicitly refreshing
+        that content below, reusing its own existing rebuild helpers
+        (_refresh_arcana_cards/_refresh_arcana_equip_slots/
+        _rebuild_skill_build_tabs) rather than duplicating their logic."""
         set_armory_language(language)
         self.setWindowTitle(_t("arm_equip_character_title"))
         self.quick_gear_btn.setText(_t("arm_equipment_btn"))
         self.quick_stat_btn.setText(_t("arm_properties_btn"))
         self.stat_priority_edit_btn.setToolTip(_t("arm_stat_priority_editor_title"))
+        self.equip_priority_btn.setText(_t("arm_eq_priority_tab"))
         self.main_tabs.setTabText(0, _t("arm_equipment_btn"))
-        self.main_tabs.setTabText(1, _t("arm_eq_priority_tab"))
+        self.main_tabs.setTabText(1, _t("arm_daevanion_board_tab"))
         self.main_tabs.setTabText(2, _t("arm_arcana_tab"))
         self.main_tabs.setTabText(3, _t("arm_skill_planner_tab"))
+        self.skillpoints_title_lbl.setText(_t("arm_skillpoints_free_label"))
+        self.monolith_level_title_lbl.setText(_t("arm_monolith_level_label"))
+        self.stigma_points_title_lbl.setText(_t("arm_stigma_points_label"))
+        self.arcana_calculator_btn.setText(_t("arm_arcana_calculator_btn"))
+
+        self._arcana_sub_tabs.setTabText(0, _t("arm_arcana_information_tab"))
+        self._arcana_sub_tabs.setTabText(1, _t("arm_arcana_sets_tab"))
+        self._arcana_lord_bar_title.setText(_t("arm_arcana_types"))
+        self._refresh_arcana_cards()
+        self._refresh_arcana_equip_slots()
+        self._rebuild_skill_build_tabs()
 
     # ── Saved equipment sets (per class): named tabs holding one full
     # equipped-gear snapshot each, e.g. "Default" / "PvP" / "PvE" — same
@@ -7762,7 +11207,7 @@ class LoadoutWindow(QMainWindow):
     # to disk. ────────────────────────────────────────────────────────────
 
     def _empty_equip_build_state(self) -> dict:
-        return {"equipped": {}, "substats": {}, "enchant": {}}
+        return {"equipped": {}, "substats": {}, "enchant": {}, "philosopher_stone": {}}
 
     def _ensure_class_equip_builds(self, class_name: str):
         if class_name not in self._equip_builds_data:
@@ -7778,6 +11223,7 @@ class LoadoutWindow(QMainWindow):
             "equipped": dict(self._equipped),
             "substats": {k: set(v) for k, v in self._equipped_substats.items()},
             "enchant": dict(self._equipped_enchant),
+            "philosopher_stone": dict(self._equipped_philosopher_stone),
         }
 
     def _load_current_equip_build_state(self):
@@ -7791,12 +11237,27 @@ class LoadoutWindow(QMainWindow):
         self._equipped = dict(state["equipped"])
         self._equipped_substats = {k: set(v) for k, v in state["substats"].items()}
         self._equipped_enchant = dict(state["enchant"])
+        # .get(...) with a fallback -- "philosopher_stone" only exists in
+        # builds saved after this feature was added (User-Wunsch,
+        # 2026-08-27), an older/missing key just means none were active.
+        self._equipped_philosopher_stone = dict(state.get("philosopher_stone", {}))
         self._selected_equip_slot_id = None
-        self.equip_center_stack.setCurrentIndex(0)
-        self._refresh_all_equip_slot_icons()
-        self._update_gearscore()
-        self._refresh_stat_info()
-        self._update_quick_stat_btn_visibility()
+
+        # Same setUpdatesEnabled guard as the Quick Select bulk-equip path
+        # (see _open_quick_gear_select) -- switching Sets touches every
+        # slot icon plus the whole Stat Info panel in one go, which could
+        # otherwise paint in visibly separate steps (User, 2026-08-27:
+        # "kommt viel Flimmern durch die Fenster ... wie beim Flow Chart").
+        self.setUpdatesEnabled(False)
+        try:
+            self.equip_center_stack.setCurrentIndex(0)
+            self._refresh_all_equip_slot_icons()
+            self._update_gearscore()
+            self._refresh_stat_info()
+            self._update_quick_stat_btn_visibility()
+        finally:
+            self.setUpdatesEnabled(True)
+        self.update()
 
     # ── Profile persistence (User-Wunsch, 2026-08-25: "die Informationen
     # vom Buildplanner im Profil gespeichert werden") -- first step, scoped
@@ -7810,6 +11271,10 @@ class LoadoutWindow(QMainWindow):
         # first -- that dict only reflects the last explicit save
         # (_save_current_equip_build_state), not necessarily what's live.
         self._save_current_equip_build_state(self.character_class_combo.currentText().strip().lower())
+        # Same idea for the Skill Planner's Priority List builds -- these
+        # were session-only until now (User-Wunsch, 2026-08-27: "prüf mal,
+        # ob die Skill Prioliste im Profil gespeichert wird" -- it wasn't).
+        self._save_current_build_state(self.character_class_combo.currentText().strip().lower())
         return {
             "character_class": self.character_class_combo.currentText(),
             "character_race": self.character_race_combo.currentText(),
@@ -7821,16 +11286,52 @@ class LoadoutWindow(QMainWindow):
             # User-Wunsch, 2026-08-27: "die Werte Zuordnung ... anpassbar
             # durch den Spieler und dann im Profil gespeichert".
             "stat_priority_profiles": self._stat_priority_profiles,
+            # User-Wunsch, 2026-08-27: eigenes Monolith-Level (Empyrean
+            # Trace/Wisdom Stone Fortschritt) für die "Skillpunkte frei"-
+            # Anzeige im Skill Planner -- account-weit, nicht pro Build/Set.
+            "monolith_level": self._monolith_level,
+            # User-Wunsch, 2026-08-27: pro Skill investierte Level (-/+
+            # Zähler auf den Skill-Description-Karten) -- skill ids are
+            # already strings in the source data (unlike item ids, which
+            # are real ints), so this dict's keys need no type conversion
+            # in either direction.
+            "skill_levels": dict(self._skill_levels),
+            # Arcana Planner wish list (User-Wunsch, 2026-08-28/29) --
+            # purely a planning target, saved the same way as skill_levels
+            # so it survives a restart like everything else here.
+            "skill_arcana_wish": dict(self._skill_arcana_wish),
+            "current_skill_build_name": self._current_build_name,
+            "skill_builds_data": {
+                class_name: {
+                    build_name: {
+                        "priority": {k: list(v) for k, v in build["priority"].items()},
+                        "arcana_cards": dict(build.get("arcana_cards", {})),
+                    }
+                    for build_name, build in builds.items()
+                }
+                for class_name, builds in self._skill_builds_data.items()
+            },
             "equip_builds_data": {
                 class_name: {
                     build_name: {
                         "equipped": build["equipped"],
                         "substats": {k: list(v) for k, v in build["substats"].items()},
                         "enchant": build["enchant"],
+                        "philosopher_stone": build.get("philosopher_stone", {}),
                     }
                     for build_name, build in builds.items()
                 }
                 for class_name, builds in self._equip_builds_data.items()
+            },
+            # User-Wunsch, 2026-08-28: "diese Daevanion Boards einmal
+            # abspeichern im Build Profil" -- board progress belongs to
+            # the CLASS, not to any one gear Set (a character only has one
+            # real board state, same as skill_levels above), so this lives
+            # at the profile level like skill_levels/monolith_level, not
+            # inside equip_builds_data. Keyed by "variant:boardId", sets
+            # turned into sorted lists for JSON-safety.
+            "daevanion_active": {
+                key: sorted(ids) for key, ids in self._daevanion_active.items()
             },
         }
 
@@ -7841,6 +11342,7 @@ class LoadoutWindow(QMainWindow):
                     "equipped": build.get("equipped", {}),
                     "substats": {k: set(v) for k, v in build.get("substats", {}).items()},
                     "enchant": build.get("enchant", {}),
+                    "philosopher_stone": build.get("philosopher_stone", {}),
                 }
                 for build_name, build in builds.items()
             }
@@ -7867,9 +11369,47 @@ class LoadoutWindow(QMainWindow):
             if idx >= 0:
                 self.character_race_combo.setCurrentIndex(idx)
 
+        # "daevanion_active" only exists in profiles saved after this
+        # feature was added -- an older/missing key just keeps the fresh,
+        # empty state this window was constructed with. Restored BEFORE
+        # _load_current_equip_build_state() below, since that call's
+        # _refresh_stat_info() already recomputes the Skill Planner's
+        # Daevanion bonus (_compute_daevanion_skill_bonus) and needs this
+        # in place first; the class combo above was just switched (with
+        # signals blocked, so _on_any_class_combo_changed's own Daevanion
+        # rebuild never fired), so the tab still needs rebuilding here too
+        # -- same fix as the one applied in __init__ for the equivalent
+        # "class combo has no selection yet" ordering issue.
+        if "daevanion_active" in state:
+            self._daevanion_active = {
+                key: set(ids) for key, ids in state["daevanion_active"].items()
+            }
+        self._daevanion_order = None
+        self._daevanion_rebuild_deity_tabs()
+        self._daevanion_refresh()
+
         self._active_skill_class = self.character_class_combo.currentText().strip().lower()
         self._rebuild_equip_build_tabs()
         self._load_current_equip_build_state()
+
+        # Skill Planner Priority List builds (User-Wunsch, 2026-08-27) --
+        # "skill_builds_data" only exists in profiles saved after this was
+        # added; an older/missing key just keeps the fresh "Default" build
+        # this window was constructed with.
+        if "skill_builds_data" in state:
+            self._skill_builds_data = {
+                class_name: {
+                    build_name: {
+                        "priority": {k: list(v) for k, v in build.get("priority", {}).items()},
+                        "arcana_cards": dict(build.get("arcana_cards", {})),
+                    }
+                    for build_name, build in builds.items()
+                }
+                for class_name, builds in state["skill_builds_data"].items()
+            }
+            self._current_build_name = state.get("current_skill_build_name", "Default")
+            self._rebuild_skill_build_tabs()
+            self._load_current_build_state()
 
         # "active_gear_types" only exists in profiles saved after this
         # feature was added -- an older/missing key keeps the PvE+Neutral
@@ -7885,6 +11425,19 @@ class LoadoutWindow(QMainWindow):
         # missing from an older or partial profile with the default, rather
         # than leaving _pick_priority_substats with an empty list for it.
         self._stat_priority_profiles = _merge_stat_priority_profiles(state.get("stat_priority_profiles"))
+
+        self._monolith_level = state.get("monolith_level", 0)
+        self.monolith_level_spin.blockSignals(True)
+        self.monolith_level_spin.setValue(self._monolith_level)
+        self.monolith_level_spin.blockSignals(False)
+        self._refresh_skillpoints_label()
+
+        self._skill_levels = dict(state.get("skill_levels", {}))
+        self._skill_arcana_wish = dict(state.get("skill_arcana_wish", {}))
+        self._refresh_skill_description_view()
+        self._refresh_skillpoints_label()
+        self._refresh_stigma_points_label()
+        self._refresh_arcana_calculator_button()
 
     def _refresh_all_equip_slot_icons(self):
         """Re-applies every slot button's icon/tooltip from self._equipped —
@@ -7933,6 +11486,19 @@ class LoadoutWindow(QMainWindow):
             self._equip_build_tab_group.addButton(btn)
             self.equip_build_tabs_row.addWidget(btn)
 
+        # Not part of _equip_build_tab_group -- this doesn't select a build,
+        # it swaps the whole page (see equip_view_stack) into the compare
+        # view instead, so it stays a plain (non-exclusive, non-checkable)
+        # button among the build tabs.
+        compare_btn = QPushButton(_t("arm_build_compare_btn"))
+        compare_btn.setObjectName("SkillFilterButton")
+        compare_btn.setIcon(_make_compare_icon())
+        compare_btn.setIconSize(QSize(18, 18))
+        compare_btn.setMinimumHeight(32)
+        compare_btn.setToolTip(_t("arm_build_compare_tooltip"))
+        compare_btn.clicked.connect(self._open_build_compare)
+        self.equip_build_tabs_row.addWidget(compare_btn)
+
         add_btn = QPushButton()
         add_btn.setIcon(_make_plus_icon())
         add_btn.setIconSize(QSize(20, 20))
@@ -7940,6 +11506,14 @@ class LoadoutWindow(QMainWindow):
         add_btn.setToolTip(_t("arm_add_new_set"))
         add_btn.clicked.connect(self._on_add_equip_build)
         self.equip_build_tabs_row.addWidget(add_btn)
+
+        duplicate_btn = QPushButton()
+        duplicate_btn.setIcon(_make_duplicate_icon())
+        duplicate_btn.setIconSize(QSize(20, 20))
+        duplicate_btn.setFixedSize(40, 32)
+        duplicate_btn.setToolTip(_t("arm_duplicate_current_set"))
+        duplicate_btn.clicked.connect(self._on_duplicate_equip_build)
+        self.equip_build_tabs_row.addWidget(duplicate_btn)
 
         rename_btn = QPushButton()
         rename_btn.setIcon(_make_edit_icon())
@@ -7986,6 +11560,31 @@ class LoadoutWindow(QMainWindow):
         self._rebuild_equip_build_tabs()
         self._load_current_equip_build_state()
 
+    def _on_duplicate_equip_build(self):
+        """Copies the currently selected Set's full state (equipped items,
+        substats, enchant, Philosopher's Stone) into a new Set the user
+        names -- distinct from _on_add_equip_build, which always starts
+        from an empty Set (User-Wunsch, 2026-08-28)."""
+        class_name = self.character_class_combo.currentText().strip().lower()
+        self._save_current_equip_build_state(class_name)
+        builds = self._equip_builds_data[class_name]
+        source_name = self._current_equip_build_name
+        default_name = _t("arm_duplicate_default_name", name=source_name)
+        name, ok = QInputDialog.getText(self, _t("arm_duplicate_set_title"), _t("arm_name_colon"), text=default_name)
+        name = name.strip()
+        if not ok or not name or name in builds:
+            return
+        source = builds[source_name]
+        builds[name] = {
+            "equipped": dict(source["equipped"]),
+            "substats": {k: set(v) for k, v in source["substats"].items()},
+            "enchant": dict(source["enchant"]),
+            "philosopher_stone": dict(source.get("philosopher_stone", {})),
+        }
+        self._current_equip_build_name = name
+        self._rebuild_equip_build_tabs()
+        self._load_current_equip_build_state()
+
     def _on_rename_equip_build(self, old_name: str):
         new_name, ok = QInputDialog.getText(self, _t("arm_rename_set_title"), _t("arm_name_colon"), text=old_name)
         new_name = new_name.strip()
@@ -7999,6 +11598,277 @@ class LoadoutWindow(QMainWindow):
         if self._current_equip_build_name == old_name:
             self._current_equip_build_name = new_name
         self._rebuild_equip_build_tabs()
+
+    # ── "Build Vergleich" tab (User-Wunsch, 2026-08-27) -- full-panel
+    # takeover in equip_view_stack (see the equipment_tab construction
+    # above), not a popup. Iterated first as a browser mockup (User: "Die
+    # Darstellung des Vergleiches machen wir wieder im Browser"), approved
+    # unchanged ("Perfekt, den Vergleich kannst du genau so übernehmen") --
+    # ported 1:1 from that preview: 5 stat-category tabs (Main/Sub/Offense/
+    # Defense/Utility & Recovery), matching the existing Stat Info panel's
+    # own row lists even though that panel itself only groups them into 3
+    # real QTabWidget tabs (Sub Stats nests Offense+Defense inline) -- the
+    # 5-way split reads better side-by-side without one giant tab. ────────
+
+    _STAT_COMPARE_CATEGORIES = [
+        ("main", "arm_main_stats_tab", _MAIN_STAT_ROWS),
+        ("sub", "arm_sub_stats_tab", _SUB_STAT_ROWS),
+        ("offense", "arm_offense", _OFFENSE_STAT_ROWS),
+        ("defense", "arm_defense", _DEFENSE_STAT_ROWS),
+        ("utility", "arm_tab_utility_recovery", _UTILITY_RECOVERY_STAT_ROWS),
+        # The live Stat Info panel folds these two behind a PvE/PvP toggle
+        # (_set_stat_info_mode) since a character only ever has one active
+        # mode at a time -- but Build Compare's whole point is comparing
+        # across builds that may use different gear types, so both are
+        # shown here as their own tabs instead of a toggle (User-reported
+        # bug, 2026-08-28: comparing a PvP-geared build against a PvE one
+        # showed no PvP stats at all -- this whole category was simply
+        # missing from the comparison, not just hidden behind a toggle).
+        ("pve_mode", "arm_pve_stats", _PVE_MODE_STAT_ROWS),
+        ("pvp_mode", "arm_pvp_stats", _PVP_MODE_STAT_ROWS),
+    ]
+
+    def _build_compare_page(self) -> QWidget:
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(12)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+        back_btn = QToolButton()
+        back_btn.setObjectName("PanelNavButton")
+        back_btn.setIcon(_make_back_icon())
+        back_btn.setIconSize(QSize(16, 16))
+        back_btn.setFixedSize(32, 32)
+        back_btn.setToolTip(_t("arm_back"))
+        back_btn.clicked.connect(self._close_build_compare)
+        header_row.addWidget(back_btn)
+
+        title = QLabel(_t("arm_build_compare_title"))
+        title.setObjectName("DetailHeader")
+        header_row.addWidget(title, 1)
+
+        close_btn = QToolButton()
+        close_btn.setObjectName("PanelNavButton")
+        close_btn.setIcon(_make_close_icon())
+        close_btn.setIconSize(QSize(16, 16))
+        close_btn.setFixedSize(32, 32)
+        close_btn.setToolTip(_t("arm_close"))
+        close_btn.clicked.connect(self._close_build_compare)
+        header_row.addWidget(close_btn)
+        outer.addLayout(header_row)
+
+        picker_row = QHBoxLayout()
+        picker_row.setSpacing(16)
+        self.compare_build_a_combo = QComboBox()
+        self.compare_build_b_combo = QComboBox()
+        for combo, label_key in ((self.compare_build_a_combo, "arm_compare_build_a"),
+                                  (self.compare_build_b_combo, "arm_compare_build_b")):
+            col = QVBoxLayout()
+            col.setSpacing(4)
+            label = QLabel(_t(label_key))
+            label.setObjectName("EquipSectionLabel")
+            col.addWidget(label)
+            col.addWidget(combo)
+            picker_row.addLayout(col, 1)
+            combo.currentIndexChanged.connect(self._on_compare_build_changed)
+        outer.addLayout(picker_row)
+
+        gs_frame = QFrame()
+        gs_frame.setObjectName("TopBar")
+        gs_row = QHBoxLayout(gs_frame)
+        gs_row.setContentsMargins(16, 12, 16, 12)
+        self.compare_gs_a_label = QLabel()
+        self.compare_gs_a_label.setObjectName("DetailHeader")
+        self.compare_gs_a_label.setAlignment(Qt.AlignCenter)
+        gs_row.addWidget(self.compare_gs_a_label, 1)
+        vs_label = QLabel("VS")
+        vs_label.setObjectName("DetailInfo")
+        vs_label.setAlignment(Qt.AlignCenter)
+        gs_row.addWidget(vs_label)
+        self.compare_gs_b_label = QLabel()
+        self.compare_gs_b_label.setObjectName("DetailHeader")
+        self.compare_gs_b_label.setAlignment(Qt.AlignCenter)
+        gs_row.addWidget(self.compare_gs_b_label, 1)
+        outer.addWidget(gs_frame)
+
+        tabs_row = QHBoxLayout()
+        tabs_row.setSpacing(6)
+        self._compare_category_group = QButtonGroup(self)
+        self._compare_category_group.setExclusive(True)
+        for key, label_key, _rows in self._STAT_COMPARE_CATEGORIES:
+            btn = QPushButton(_t(label_key).replace("&", "&&"))
+            btn.setObjectName("SkillFilterButton")
+            btn.setCheckable(True)
+            btn.setChecked(key == "main")
+            btn.setMinimumHeight(30)
+            btn.clicked.connect(lambda checked=False, k=key: self._on_compare_category_changed(k))
+            self._compare_category_group.addButton(btn)
+            tabs_row.addWidget(btn)
+        tabs_row.addStretch(1)
+        outer.addLayout(tabs_row)
+
+        table_frame = QFrame()
+        table_frame.setObjectName("TopBar")
+        table_outer = QVBoxLayout(table_frame)
+        table_outer.setContentsMargins(0, 0, 0, 0)
+        table_outer.setSpacing(0)
+
+        head_row = QHBoxLayout()
+        head_row.setContentsMargins(16, 10, 16, 8)
+        head_row.addWidget(QLabel(""), 3)
+        self.compare_head_a_label = QLabel()
+        self.compare_head_a_label.setObjectName("DetailInfo")
+        self.compare_head_a_label.setAlignment(Qt.AlignCenter)
+        head_row.addWidget(self.compare_head_a_label, 2)
+        self.compare_head_b_label = QLabel()
+        self.compare_head_b_label.setObjectName("DetailInfo")
+        self.compare_head_b_label.setAlignment(Qt.AlignCenter)
+        head_row.addWidget(self.compare_head_b_label, 2)
+        table_outer.addLayout(head_row)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.viewport().setStyleSheet("background: transparent;")
+        self.compare_rows_container = QWidget()
+        self.compare_rows_layout = QVBoxLayout(self.compare_rows_container)
+        self.compare_rows_layout.setContentsMargins(16, 0, 16, 12)
+        self.compare_rows_layout.setSpacing(2)
+        self.compare_rows_layout.setAlignment(Qt.AlignTop)
+        scroll.setWidget(self.compare_rows_container)
+        table_outer.addWidget(scroll, 1)
+        outer.addWidget(table_frame, 1)
+
+        self._compare_active_category = "main"
+        return page
+
+    def _open_build_compare(self):
+        class_name = self.character_class_combo.currentText().strip().lower()
+        self._save_current_equip_build_state(class_name)
+        self._ensure_class_equip_builds(class_name)
+        builds = self._equip_builds_data[class_name]
+        build_names = list(builds.keys())
+
+        for combo in (self.compare_build_a_combo, self.compare_build_b_combo):
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItems(build_names)
+            combo.blockSignals(False)
+
+        self.compare_build_a_combo.setCurrentText(self._current_equip_build_name)
+        # Defaults Build B to a DIFFERENT build than A when one exists --
+        # comparing a build against itself on open would just show all
+        # zero-deltas, not useful as a first impression of the feature.
+        other = next((n for n in build_names if n != self._current_equip_build_name), self._current_equip_build_name)
+        self.compare_build_b_combo.setCurrentText(other)
+
+        self._request_compare_details()
+        self.equip_view_stack.setCurrentIndex(1)
+        self._refresh_build_compare()
+
+    def _close_build_compare(self):
+        self.equip_view_stack.setCurrentIndex(0)
+
+    def _on_compare_build_changed(self, _index: int):
+        self._request_compare_details()
+        self._refresh_build_compare()
+
+    def _request_compare_details(self):
+        class_name = self.character_class_combo.currentText().strip().lower()
+        builds = self._equip_builds_data.get(class_name, {})
+        for name in (self.compare_build_a_combo.currentText(), self.compare_build_b_combo.currentText()):
+            state = builds.get(name)
+            if not state:
+                continue
+            for item in state["equipped"].values():
+                if item.get("id"):
+                    self.detail_cache.request(item["id"])
+
+    def _on_compare_category_changed(self, key: str):
+        self._compare_active_category = key
+        self._rebuild_compare_stat_rows()
+
+    def _refresh_build_compare(self):
+        if self.equip_view_stack.currentIndex() != 1:
+            return
+        class_name = self.character_class_combo.currentText().strip().lower()
+        builds = self._equip_builds_data.get(class_name, {})
+        name_a = self.compare_build_a_combo.currentText()
+        name_b = self.compare_build_b_combo.currentText()
+        state_a = builds.get(name_a) or self._empty_equip_build_state()
+        state_b = builds.get(name_b) or self._empty_equip_build_state()
+
+        self.compare_head_a_label.setText(name_a)
+        self.compare_head_b_label.setText(name_b)
+
+        gs_a = self._compute_gearscore(state_a["equipped"], state_a["enchant"])
+        gs_b = self._compute_gearscore(state_b["equipped"], state_b["enchant"])
+        self.compare_gs_a_label.setText(f"{_format_number(gs_a)}")
+        delta = gs_b - gs_a
+        if delta:
+            sign = "+" if delta > 0 else ""
+            color = "#4ade80" if delta > 0 else "#f87171"
+            self.compare_gs_b_label.setText(
+                f"{_format_number(gs_b)} <span style='color:{color}; font-size:12px;'>({sign}{_format_number(delta)})</span>"
+            )
+        else:
+            self.compare_gs_b_label.setText(f"{_format_number(gs_b)}")
+
+        self._compare_totals_a = self._compute_stat_totals(state_a["equipped"], state_a["substats"], state_a["enchant"])
+        self._compare_totals_b = self._compute_stat_totals(state_b["equipped"], state_b["substats"], state_b["enchant"])
+        self._rebuild_compare_stat_rows()
+
+    def _rebuild_compare_stat_rows(self):
+        _clear_layout(self.compare_rows_layout)
+        rows = next(rows for key, _label, rows in self._STAT_COMPARE_CATEGORIES if key == self._compare_active_category)
+        totals_a = getattr(self, "_compare_totals_a", {})
+        totals_b = getattr(self, "_compare_totals_b", {})
+
+        for name, stat_id in rows:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            name_label = QLabel(name)
+            name_label.setObjectName("DetailInfo")
+            row.addWidget(name_label, 3)
+
+            if stat_id is None:
+                for _ in range(2):
+                    val_label = QLabel("—")
+                    val_label.setAlignment(Qt.AlignCenter)
+                    row.addWidget(val_label, 2)
+            else:
+                val_a = totals_a.get(stat_id, 0.0)
+                val_b = totals_b.get(stat_id, 0.0)
+                suffix = "%" if stat_id in _PERCENT_STAT_IDS else ""
+
+                label_a = QLabel(f"{_format_number(val_a)}{suffix}")
+                label_a.setAlignment(Qt.AlignCenter)
+                label_b = QLabel(f"{_format_number(val_b)}{suffix}")
+                label_b.setAlignment(Qt.AlignCenter)
+
+                if val_a != val_b:
+                    better_color, worse_color = "#4ade80", "#f87171"
+                    if val_a > val_b:
+                        label_a.setStyleSheet(f"color: {better_color}; font-weight: 700;")
+                        label_b.setStyleSheet(f"color: {worse_color}; font-weight: 700;")
+                    else:
+                        label_a.setStyleSheet(f"color: {worse_color}; font-weight: 700;")
+                        label_b.setStyleSheet(f"color: {better_color}; font-weight: 700;")
+                    delta = val_b - val_a
+                    sign = "+" if delta > 0 else ""
+                    delta_color = "#4ade80" if delta > 0 else "#f87171"
+                    label_b.setText(
+                        f"{_format_number(val_b)}{suffix} "
+                        f"<span style='color:{delta_color}; font-size:11px;'>({sign}{_format_number(delta)}{suffix})</span>"
+                    )
+                row.addWidget(label_a, 2)
+                row.addWidget(label_b, 2)
+
+            row_widget = QWidget()
+            row_widget.setLayout(row)
+            self.compare_rows_layout.addWidget(row_widget)
 
     def _on_gear_type_toggled(self, key: str, checked: bool):
         if checked:
@@ -8042,36 +11912,35 @@ class LoadoutWindow(QMainWindow):
         )
         if dlg.exec() != QDialog.Accepted:
             return
-        for slot_id, item in dlg.result_slots.items():
-            self._on_item_chosen_for_slot(slot_id, item)
-            # _on_item_chosen_for_slot itself resets enchant to none on
-            # equip, so the target level from the dialog must be applied
-            # after it, not before.
-            enchant = dlg.result_enchant.get(slot_id, 0)
-            if enchant:
-                self._equipped_enchant[slot_id] = enchant
-                # Real bug found here (User: "wenn man Items automatisch
-                # ausrüstet ... wurde laut Profil nur das letzte Item
-                # enhanced"): _on_item_chosen_for_slot's own
-                # _capture_current_substats() call, on the NEXT loop
-                # iteration, reads whatever the SHARED equip_detail_widget's
-                # slider is CURRENTLY showing for the PREVIOUSLY selected
-                # slot and overwrites _equipped_enchant with it -- but we
-                # only just set that dict entry directly above, without
-                # ever telling the actual slider widget about it (which
-                # still shows its freshly-equipped default of 0). The next
-                # slot's equip then stomps this slot's real value back to 0.
-                # Keeping the widget in sync here (only possible right now,
-                # since _on_item_chosen_for_slot above just made slot_id
-                # the selected/displayed one) closes that gap.
-                if self._selected_equip_slot_id == slot_id:
-                    self.equip_detail_widget.enchant_slider.setValue(enchant)
-                self._update_slot_enchant_label(slot_id)
-        if dlg.result_enchant:
-            self._update_gearscore()
-            self._refresh_stat_info()
-            if self._selected_equip_slot_id in dlg.result_slots:
-                self._refresh_equip_item_panel()
+
+        # setUpdatesEnabled(False) around the whole bulk-equip loop --
+        # refresh=False below already stops the redundant per-slot stat/
+        # panel recompute (see _on_item_chosen_for_slot's docstring), this
+        # additionally suppresses the visible flicker from ~13 individual
+        # icon/label repaints landing on screen one at a time (User,
+        # 2026-08-27: "kommt viel Flimmern durch die Fenster ... wie beim
+        # Flow Chart" -- same fix as FlowRenderer.render_flow there).
+        self.setUpdatesEnabled(False)
+        try:
+            self._capture_current_substats()
+            for slot_id, item in dlg.result_slots.items():
+                self._on_item_chosen_for_slot(slot_id, item, refresh=False)
+                # _on_item_chosen_for_slot itself resets enchant to none on
+                # equip, so the target level from the dialog must be applied
+                # after it, not before.
+                enchant = dlg.result_enchant.get(slot_id, 0)
+                if enchant:
+                    self._equipped_enchant[slot_id] = enchant
+                    self._update_slot_enchant_label(slot_id)
+            if dlg.result_enchant or dlg.result_slots:
+                self._update_gearscore()
+                self._refresh_stat_info()
+                self._update_quick_stat_btn_visibility()
+                if self._selected_equip_slot_id in dlg.result_slots:
+                    self._refresh_equip_item_panel()
+        finally:
+            self.setUpdatesEnabled(True)
+        self.update()
 
         if dlg.missing_slots:
             QMessageBox.information(
@@ -8080,6 +11949,16 @@ class LoadoutWindow(QMainWindow):
             )
 
     def _open_quick_stat_select(self):
+        # Flush whatever's LIVE in the currently-open slot's panel (picks,
+        # enchant, Philosopher's Stone) into _equipped_substats/_enchant/
+        # _philosopher_stone first -- without this, toggling the Stone (or
+        # picking a substat) on the slot that's still open when Quick
+        # Select runs used stale/uncaptured state, silently dropping the
+        # Stone back off (User-Wunsch, 2026-08-27: "Bei Waffe und Guard
+        # fliegt der Philostein auch raus, wenn man danach wieder Quick
+        # macht" -- not actually specific to Weapon/Guard, just whichever
+        # slot happened to still be open).
+        self._capture_current_substats()
         dlg = QuickStatSelectDialog(set(self._equipped.keys()), parent=self)
         if dlg.exec() != QDialog.Accepted:
             return
@@ -8088,9 +11967,42 @@ class LoadoutWindow(QMainWindow):
             QMessageBox.information(self, _t("arm_quick_select_result_title"), message)
 
     def _open_stat_priority_editor(self):
-        dlg = StatPriorityEditorDialog(self._stat_priority_profiles, parent=self)
-        if dlg.exec() == QDialog.Accepted and dlg.result_profiles is not None:
-            self._stat_priority_profiles = dlg.result_profiles
+        """Full-panel takeover in equip_view_stack (see _open_build_compare
+        for the same pattern) -- a fresh widget each open, matching the old
+        modal dialog's "start from the current saved profiles every time"
+        behavior (User-Wunsch, 2026-08-28: back-arrow/X navigation instead
+        of a separate popup window)."""
+        if self._stat_priority_editor_widget is not None:
+            self.equip_view_stack.removeWidget(self._stat_priority_editor_widget)
+            self._stat_priority_editor_widget.deleteLater()
+        widget = StatPriorityEditorDialog(
+            self._stat_priority_profiles, self._skill_priority_names_by_type(),
+            on_done=self._on_stat_priority_editor_done,
+        )
+        self._stat_priority_editor_widget = widget
+        self.equip_view_stack.addWidget(widget)
+        self.equip_view_stack.setCurrentWidget(widget)
+
+    def _on_stat_priority_editor_done(self, result_profiles: dict | None):
+        if result_profiles is not None:
+            self._stat_priority_profiles = result_profiles
+        self.equip_view_stack.setCurrentIndex(0)
+
+    def _skill_priority_names_by_type(self) -> dict[str, list[str]]:
+        """Current class's Active/Passive Priority List, resolved from ids
+        to names -- feeds both the skill-option auto-pick below and
+        StatPriorityEditorDialog's dropdowns (User-Wunsch, 2026-08-27:
+        "Skills sollten, sofern vorhanden, in der Reihenfolge der
+        Skillprioliste aufgelistet werden bei der Eigenschaftenauswahl")."""
+        result: dict[str, list[str]] = {"active": [], "passive": []}
+        for skill_type in result:
+            for sid in self._skill_priority_ids.get(skill_type, []):
+                if sid is None:
+                    continue
+                skill = self._find_skill_by_id(sid)
+                if skill and skill.get("name"):
+                    result[skill_type].append(skill["name"])
+        return result
 
     def _apply_quick_substats(self, target_slots: set[str], gear_type: str = "PvE", role: str = "Angreifer") -> str:
         """Auto-locks each targeted slot's substats using the selected
@@ -8098,10 +12010,33 @@ class LoadoutWindow(QMainWindow):
         to whatever is CURRENTLY equipped in that slot (freshly equipped
         this run or already there before), independent of the Equipment
         page's own slot selection, since the two accordions are separate
-        settings."""
+        settings.
+
+        Also auto-picks a skill-option slot (Weapon/Guard/Ring = Active,
+        everything else = Passive -- see _ACTIVE_SUBSKILL_SLOT_CATEGORIES),
+        when the item has one (User-Wunsch, 2026-08-27) -- previously never
+        auto-picked at all, only settable by hand in the Equipment Item
+        panel. Matched in ONE unified pass against the category's own
+        saved priority_names list (numeric stats AND skill names combined
+        into one candidate pool per slot), not two separate sequential
+        passes -- an earlier version of this tried all numeric matches
+        first and only gave skills whatever was left over, which silently
+        ignored the actual rank order the player set in the editor (e.g. a
+        Ring's real ranks 1-6 = Active skills, rank 7 = Attack, per the
+        user's own guide -- skills must be tried FIRST there, not last).
+        Skill picks share the SAME total budget as numeric substat picks
+        (subStatCount) rather than adding a separate one on top --
+        confirmed against the interactive Equipment Item panel's own
+        _effective_substat_cap(), which is subStatCount alone (ignores
+        subSkillCountMax entirely; that field is just a mirror of
+        subStatCount, "always equal" per an earlier finding, not an
+        independent budget) -- User-Wunsch, 2026-08-27: "wenn Traits schon
+        4/5 belegen, kann von Skills maximal noch 1 hinzugefügt werden"."""
         if not target_slots:
             return ""
         profile = self._stat_priority_profiles.get(gear_type, {}).get(role, {})
+        class_key = _skills_data_class_key(self.character_class_combo.currentText())
+        class_skills = self._skills_by_class.get(class_key, [])
         applied, pending, skipped = [], [], []
         for slot_id in target_slots:
             item = self._equipped.get(slot_id)
@@ -8117,12 +12052,28 @@ class LoadoutWindow(QMainWindow):
                 continue
             sub_stats = detail.get("subStats") or []
             count = int(detail.get("subStatCount") or 0)
-            if not sub_stats or not count:
+            if not count:
                 skipped.append(slot_id)
                 continue
+            # +1 if Philosopher's Stone is active for this slot -- same cap
+            # the interactive Equipment Item panel's own
+            # _effective_substat_cap() uses, previously ignored here
+            # entirely (User-Wunsch, 2026-08-27: "nachdem ein Philostein
+            # hinzugefügt wurde, Quickslot nutzt, wird ... der Philostein
+            # wieder entfernt und es steht wieder bei 6/6 statt 7/7").
+            if self._equipped_philosopher_stone.get(slot_id):
+                count += 1
+
+            candidates = list(sub_stats)
+            skill_count_max = int(detail.get("subSkillCountMax") or 0)
+            if skill_count_max and class_skills:
+                skill_type = "active" if detail.get("categoryName") in _ACTIVE_SUBSKILL_SLOT_CATEGORIES else "passive"
+                candidates += [s for s in class_skills if s.get("type") == skill_type]
+
             category = _SLOT_TO_STAT_CATEGORY.get(slot_id)
             priority_names = profile.get(category, []) if category else []
-            chosen = _pick_priority_substats(sub_stats, count, priority_names)
+            chosen = _pick_priority_substats(candidates, count, priority_names)
+
             if chosen:
                 self._equipped_substats[slot_id] = chosen
                 applied.append(slot_id)
@@ -8139,8 +12090,20 @@ class LoadoutWindow(QMainWindow):
             parts.append(_t("arm_details_not_loaded", slots=', '.join(pending)))
         return " ".join(parts)
 
-    def _on_item_chosen_for_slot(self, slot_id: str, item: dict):
-        self._capture_current_substats()
+    def _on_item_chosen_for_slot(self, slot_id: str, item: dict, refresh: bool = True):
+        """refresh=False skips the capture/recompute/panel-switch tail --
+        used by the Quick Select bulk-equip loop (see _open_quick_gear_select),
+        which used to call this once per slot (up to ~13x) with each call
+        doing its own full _refresh_stat_info() (recomputes totals across
+        EVERY equipped item, updates ~80 labels) AND flipping the inline
+        Equipment Item panel to whichever slot was just processed -- visibly
+        flickering through every slot's panel in sequence and repeating the
+        same full recompute 13 times over (User, 2026-08-27: "kommt viel
+        Flimmern durch die Fenster ... beschleunigen"). The caller now does
+        the capture once up front and the recompute/panel-refresh once at
+        the end instead."""
+        if refresh:
+            self._capture_current_substats()
         self._equipped[slot_id] = item
         self._equipped_substats.pop(slot_id, None)
         self._equipped_enchant.pop(slot_id, None)
@@ -8154,6 +12117,10 @@ class LoadoutWindow(QMainWindow):
             self.icon_cache.request(image_url)
         self._update_slot_enchant_label(slot_id)
         self.detail_cache.request(item.get("id"))
+
+        if not refresh:
+            return
+
         self._update_gearscore()
         self._refresh_stat_info()
         self._update_quick_stat_btn_visibility()
@@ -8179,21 +12146,8 @@ class LoadoutWindow(QMainWindow):
         self._refresh_equip_item_panel()
 
     def _update_gearscore(self):
-        total = 0.0
-        for slot_id, item in self._equipped.items():
-            detail = self.detail_cache.get(item.get("id"))
-            if not detail or not detail.get("level"):
-                continue
-            total += detail["level"]
-
-            level = self._equipped_enchant.get(slot_id, 0)
-            if not level:
-                continue
-            normal_max = int(detail.get("maxEnchantLevel") or 0)
-            total += _gearscore_push(level, normal_max)
-
+        total = self._compute_gearscore(self._equipped, self._equipped_enchant)
         text = f"GearScore: {_format_number(total)}"
-        self.gearscore_label.setText(text)
         self._stat_gearscore_label.setText(text)
 
     def _on_icon_ready(self, url: str):
@@ -8212,6 +12166,8 @@ class LoadoutWindow(QMainWindow):
         if any(item.get("id") == item_id for item in self._equipped.values()):
             self._refresh_stat_info()
             self._update_gearscore()
+        if self.equip_view_stack.currentIndex() == 1:
+            self._refresh_build_compare()
 
     def closeEvent(self, event):
         logger.debug("LoadoutWindow (Build Planner) closed")

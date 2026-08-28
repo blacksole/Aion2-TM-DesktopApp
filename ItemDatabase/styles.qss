@@ -187,6 +187,49 @@ QPushButton:pressed {
     background-color: rgba(34, 211, 238, 0.2);
 }
 
+/* Stat Priority editor's gear icon button (QToolButton, no default styling
+   of its own unlike QPushButton above) -- matches the surrounding buttons'
+   card look instead of Qt's flat native ToolButton chrome. */
+#StatPriorityEditBtn {
+    background-color: rgba(30, 41, 59, 0.75);
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    border-radius: 8px;
+}
+
+#StatPriorityEditBtn:hover {
+    border: 1px solid rgba(34, 211, 238, 0.7);
+}
+
+#StatPriorityEditBtn:pressed {
+    background-color: rgba(34, 211, 238, 0.2);
+}
+
+/* Per-skill level -/+ buttons (Skill Description cards) -- same card look
+   as the default QPushButton rule above, just without its 8px/14px padding,
+   which would otherwise crush a 26x26 icon-only button down to almost
+   nothing. */
+#SkillLevelStepBtn {
+    padding: 0px;
+}
+
+#SkillLevelValue {
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+/* Arcana wish -/+ counter (User-Wunsch, 2026-08-28/29) -- same icon-only
+   sizing fix as #SkillLevelStepBtn, plus a subtle purple hover so it reads
+   as a distinct, secondary control from the main level counter above it. */
+#ArcanaWishStepBtn {
+    padding: 0px;
+    border-radius: 10px;
+}
+
+#ArcanaWishStepBtn:hover {
+    background-color: rgba(192, 132, 252, 0.18);
+}
+
 #DetailIcon {
     background-color: rgba(71, 85, 105, 0.5);
     border: 1px solid rgba(148, 163, 184, 0.4);
@@ -340,6 +383,62 @@ QPushButton:pressed {
     background-color: rgba(34, 211, 238, 0.22);
     border: 1px solid rgba(34, 211, 238, 0.9);
     color: #22d3ee;
+}
+
+/* "EQ Priority" button, bottom-right of the Jewelry column -- same base
+   look as SkillFilterButton but bigger font/padding since the plain
+   12px/4-10px version still read as too small/easy to miss there
+   (User-Wunsch, 2026-08-27: "der Button unten Rechts wird sonst
+   übersehen ... einen längeren Button ... Schriftgröße anpassen"). Own
+   #-scoped rule, not #SkillFilterButton directly, so this doesn't affect
+   any other SkillFilterButton in the app. */
+#EqPriorityButton {
+    background-color: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    border-radius: 9px;
+    color: #94a3b8;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 8px 20px;
+}
+
+#EqPriorityButton:hover {
+    border: 1px solid rgba(34, 211, 238, 0.6);
+    color: #e5e7eb;
+}
+
+/* Back-arrow/X pair on a full-panel takeover page (EQ Priority, and reused
+   by any future one) -- plain QToolButtons had no styling at all before
+   this, just bare native icon chrome (User-Wunsch, 2026-08-28: "den
+   Backpfeil und das 'X' an den Stil anpassen"). Same dark-card/cyan-hover
+   language as #SlotIconButton, just round for a 32px icon button instead
+   of square for a slot tile. */
+#PanelNavButton {
+    background-color: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    border-radius: 16px;
+}
+
+#PanelNavButton:hover {
+    border: 1px solid rgba(34, 211, 238, 0.8);
+    background-color: rgba(34, 211, 238, 0.1);
+}
+
+#PanelNavButton:pressed {
+    background-color: rgba(34, 211, 238, 0.25);
+}
+
+/* Small "x" overlay badge on a filled Skill Priority List slot (User-Wunsch,
+   2026-08-28: "die Möglichkeit ... Skills zu entfernen"). */
+#PrioritySlotRemoveBtn {
+    background-color: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(100, 116, 139, 0.6);
+    border-radius: 9px;
+}
+
+#PrioritySlotRemoveBtn:hover {
+    border: 1px solid rgba(248, 113, 113, 0.8);
+    background-color: rgba(248, 113, 113, 0.2);
 }
 
 /* Eigenschaften-Priorität Rolle buttons -- same base look as
@@ -660,4 +759,42 @@ QListWidget::item {
 QListWidget::item:selected {
     background-color: rgba(34, 211, 238, 0.25);
     color: white;
+}
+
+/* Daevanion Board tab (2026-08-28) -- functional-first styling, visuals to
+   be revisited once the board itself is confirmed working (User-Wunsch:
+   "dann schauen wir, wie wir die Optik anpassen müssen"). */
+#DaevanionCanvasFrame {
+    background-color: #0b1220;
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    border-radius: 12px;
+}
+
+/* Sidebar accordion -- real card background per section (not just an
+   outline against the bare window background) + collapsible header
+   (User-Wunsch, 2026-08-28: "hier bitte nochmal den Hintergrund anpassen
+   und Accordions bauen"). */
+#DaevanionAccordionSection {
+    background-color: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 10px;
+}
+
+#DaevanionAccordionHeader {
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    color: #22d3ee;
+    font-weight: 700;
+    font-size: 13px;
+    text-align: left;
+    padding: 10px 12px;
+}
+
+#DaevanionAccordionHeader:hover {
+    background-color: rgba(34, 211, 238, 0.08);
+}
+
+#DaevanionAccordionBody {
+    background: transparent;
 }

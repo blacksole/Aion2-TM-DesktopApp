@@ -1,6 +1,6 @@
 # Aion2 Task Manager
 
-**v1.4.0** — Modern desktop productivity manager for Aion players.
+**v1.5.0** — Modern desktop productivity manager for Aion players.
 
 Aion2 Task Manager combines task management, shopping organization, event timers, a visual flow map planner and an in-game HUD overlay into a single lightweight desktop application — built specifically for Aion 2 players who want to stay on top of their daily and weekly goals without alt-tabbing constantly. An Armory module (item database, crafting calculator, build planner) is available as an opt-in Beta and is still under active development — see the Roadmap section below.
 
@@ -127,18 +127,22 @@ Opt-in area for gear planning, unlockable at your own risk via Settings → "Unl
 **Already available in Beta:**
 * **Item Database** — searchable catalog with category/class/rarity/PvP-PvE-Neutral filters, a grouped Categories sidebar, dedicated Wings filters
 * **Crafting Calculator** — full material chain for any craftable item, expandable ingredient-by-ingredient; a Vergleich (Direct Craft vs. Transfer) comparison tab
-* **Build Planner** — assemble a virtual character loadout, compare stats, save multiple named gear/skill sets per class, enchant-level tracking per slot, and a Quick Select for auto-equipping a full crafted/dungeon-drop/PvP gear set by race and gear tier in one click, plus a Stat Priority editor to customize which substats get picked per role and gear mode
-* **Full English/Deutsch/Русский localization** across all three Armory windows, following your Settings → Language choice (item/recipe/skill/material names stay in their original form until an official in-game translation exists)
+* **Build Planner** — assemble a virtual character loadout, compare gear side-by-side (Build Compare), save multiple named gear sets per class, enchant-level tracking per slot, and a Quick Select for auto-equipping a full crafted/dungeon-drop/PvP gear set by race and gear tier in one click, plus a Property Priority editor (per role and gear mode) to customize which substats get auto-picked
+* **Daevanion Board** — interactive per-class/deity board with real tier art, a checkable stat/skill sidebar, and an auto-router that finds the cheapest path to everything you've checked; feeds its skill bonuses straight into the Skill Planner and persists to your profile
+* **Skill Planner** — browse/filter class skills, track Skill Points and Stigma Points separately, build a Priority List (with remove/favorite/star), and an "Arcana Calculator" that finds the best-case Arcana card setup for a wishlist of extra skill levels
+* **Arcana tab** — an Information sub-tab to browse all card types/sets, and a Sets sub-tab holding your 5 real equip slots for this season's usable cards, which the Arcana Calculator can write straight into with one click; Sets share the same named build as the Skill Planner
+* **Full English/Deutsch/Русский localization** across all Armory windows, following your Settings → Language choice (item/recipe/skill/card/material names stay in their original form until an official in-game translation exists)
 
 **Planned / in progress:**
 * Templates: pick items directly from the Item Database instead of typing them in
 * Rune slots (Clash Rune / Devotion Rune) in the Build Planner
-* Jewelry-granted skills and character passive/active skills factored into the Build Planner's stat calculation
-* Stat-based ranking per role (Attacker/Defender/Support) for Quick Select
+* Jewelry-granted skills and character passive/active skills factored into the Build Planner's numeric stat calculation (they already feed the Skill Planner's own level display, not yet GearScore/Stat Info)
+* A real "equipped Arcana cards" state feeding GearScore, the same way Gear/Daevanion already do
 * Favoriting individual stat rows for a pinned quick-glance view
 * Monthly automatic refresh of the item/skill database
 * Season-aware dungeon/material availability (once a reliable patch-notes source is available)
 * Shugo.gg character import & stat comparison (blocked until a Global-region endpoint exists)
+* Skill Rotation planner (node-based sequence builder for skill casting order) — early idea, not yet scoped
 
 ### Overlay & Flow Map
 * Skills and Equipment sections in the in-game overlay, with two-way sync back to the app when checked off

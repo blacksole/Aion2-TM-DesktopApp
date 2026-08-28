@@ -22,13 +22,48 @@ These features are **not** part of an official update yet and are still under ac
 
 ### Build Planner
 - Assemble a virtual gear loadout slot by slot, with real item stats.
-- Save multiple named gear sets per class (e.g. "Default", "PvP") and switch between them instantly.
+- Save multiple named gear sets per class (e.g. "Default", "PvP") and switch between them instantly; a Build Compare tab shows two sets side by side, including GearScore and every stat category.
 - GearScore calculated from real item data, including enchant and exceed bonuses.
 - PvP / PvE / Neutral gear filter, linked to a matching toggle on the stat panel.
-- Consolidated stat panel (Main Stats, Sub Stats, Offense, Defense, Utility & Recovery).
-- "Quick Select" button to auto-equip a full gear set — crafted, dungeon-drop (Expedition) or PvP Abyss Gear, matched to your race — in one click, plus a separate "Eigenschaften-Priorität" editor to customize which substats get picked per role and Gear-Typ.
-- Skill Planner tab: browse and filter class skills (Active/Passive/Stigma), build a priority list, save multiple named skill builds per class.
-- Arcana tab: browse all 10 card types across the 7 themed sets, with class-specific skill previews per card.
+- Consolidated stat panel (Main Stats, Sub Stats, Offense, Defense, Utility & Recovery, PvE Stats, PvP Stats).
+- "Quick Select" button to auto-equip a full gear set — crafted, dungeon-drop (Expedition) or PvP Abyss Gear, matched to your race — in one click, plus a separate "Property Priority" editor to customize which substats get auto-picked per role and Gear Type.
+- Daevanion Board tab: interactive per-class/deity board (real tier art, checkable stat/skill sidebar, auto-router for the cheapest path to what you've checked), feeding its bonuses into the Skill Planner and persisting to your profile.
+- Skill Planner tab: browse/filter class skills (Active/Passive/Stigma), track Skill Points and Stigma Points separately, build a Priority List (remove/favorite/star support), and an Arcana Calculator that finds the best-case Arcana card setup for a wishlist of extra skill levels.
+- Arcana tab: an Information sub-tab to browse all card types/sets with class-specific skill previews, and a Sets sub-tab holding your 5 real equip slots for this season's cards — the Arcana Calculator can write a chosen combination straight into them, sharing the same named build as the Skill Planner.
+
+---
+
+# Version 1.5.0
+
+Release Date: 2026-08-29
+
+## ✨ New Features
+
+- **Build Planner (Beta): "Daevanion Board" tab** — an interactive board per class/deity: connect adjacent nodes to spend points on real stat/skill bonuses (plain connector cells don't count), click again to refund. Hovering a node shows a detail card (name, grade, cost, effects); a collapsible sidebar lists every stat/skill on the board, check any to highlight its node(s), then "Find best route" auto-connects them via the cheapest path. Your activated nodes persist to your profile and feed bonuses into the Skill Planner. Ships with Global's current board layout only.
+- **Build Planner (Beta): "Build Compare" tab** — pick any two of the current class's saved gear sets and see GearScore plus every stat category (including PvE/PvP Stats) side by side, with the better value highlighted.
+- **Skill Planner (Beta): Skill Points and Stigma Points tracking** — a "Skill Points Available" counter (base + your Monolith/Wisdom Stone progress) and a separate Stigma Points counter, plus a per-skill -/+ level counter on every skill card. The white number is always what you've manually invested (capped at 10, Stigma 20); any bonus from Gear or the Daevanion Board shows separately in blue.
+- **Skill Planner (Beta): Priority List improvements** — slots can now be removed (shifting later ones up), any skill on the list gets a gold star on its card plus an "Only favorites" filter, and hovering a skill in the picker shows its full info. The list now also feeds equipment skill slots directly (a ring/weapon/etc. with a skill-bonus slot auto-picks from it).
+- **Skill Planner (Beta): "Arcana Calculator"** — set a purple "wish" counter per skill for how much more level you want beyond Skill Points/Gear/Daevanion (capped live at whatever this season's cards could ever deliver), pick which Vigor/Magic card each of your 5 Lord card slots uses, and get up to 3 best-case combinations to judge your own randomly-farmed cards against (not a literal shopping list, since real card leveling is random). Any combination can be applied straight into a new **Arcana Sets** tab (alongside the existing card/set browser), which shares one named build with the Skill Planner.
+- **Build Planner (Beta): Quick Select's crafted item set now reaches Epic tier**, continuing past the previous Unique-grade stopping point.
+- **Build Planner (Beta): new "Duplicate Set" button** — copies a Set's full state (items, substats, enchant, Philosopher's Stone) into a new one instead of only starting empty.
+- **Skill Planner: gear-picked Skills/Traits now add +1 Level automatically** to the matching skill, stacking if picked on more than one equipped piece.
+
+## 🎨 UI Changes
+
+- **Build Planner (Beta): "Property Priority" editor reorganized** into 3 groups (Weapon/Guard, Armor, Jewelry) with a dedicated tab per real gear piece, and the Armor tab's default priority list expanded from 7 to 14 ranks for better per-slot accuracy.
+- **Build Planner (Beta): picked Substats and Skills now show in one combined list** instead of two separate tabs.
+- **About page: "Cooperation" row now shows a named, icon-labeled button per community** (Discord/Twitch icon + name) instead of a single dropdown-menu button — includes a new Twitch link (soulflaresifu) alongside the existing Discord communities.
+
+## 🐛 Bug Fixes
+
+- **Skill Planner (Beta): the Priority List (and its saved builds) wasn't saved to your profile at all** — reset every time you reopened the app. Fixed, along with an empty slot always showing German text regardless of your language setting.
+- **Build Planner (Beta): "Property Priority" editor's Bracelet list offered 6 values that can never actually be picked** — real customizable Bracelets only roll the 10 Deity stats. Its default priority list is now empty instead of pointing at unreachable values.
+- **Build Planner (Beta): equipping a full gear set (Quick Select) or switching Sets is noticeably faster and no longer flickers.**
+- **Armory (Beta): rarity item-slot backgrounds looked washed out** compared to the real game art — restored the actual per-rarity texture images.
+- **Build Planner (Beta): "Use Philosopher's Stone" had three separate bugs** — wrongly hidden on some Common/Rare items that do have real substats, silently forgotten when reopening a slot or running Quick Select, and checking the wrong internal field for its grade requirement (so it applied to the wrong items). All fixed.
+- **Build Planner (Beta): the item picker listed the same item twice** (Bound and Unbound versions) — now shown once.
+- **Build Planner (Beta): the back-arrow/"X" buttons on the "Property Priority" editor looked like plain unstyled boxes** instead of matching the app's dark card look. Fixed.
+- **About page: the "Cooperation" row and a "Useful Links" description showed raw placeholder text** instead of real text in all languages. Fixed.
 
 ---
 
@@ -48,7 +83,7 @@ Release Date: 2026-08-27
 - **Build Planner (Beta): Gear Type-Filter linked to the PvP/PvE/Neutral toggle** — picking PvE shows Crafting sets, PvP shows Abyss Gear, and Neutral shows dungeon-drop sets. Defaults to PvE + Neutral and remembers your last choice in your profile.
 - **Build Planner (Beta): PvP Abyss Gear in Quick Select** — the 5 Abyss rank sets (Decanus through High Commander) are now available in the Item-Set dropdown when PvP is active, automatically matched to your character's race (Guardian for Elyos, Archon for Asmodae).
 - **Build Planner (Beta): real enchant range per item** — the enchant slider's maximum now reflects the actually equipped item's own max enchant + exceed level instead of a flat 0–30 range.
-- **Build Planner (Beta): "Eigenschaften-Priorität" editor** — a new gear-icon button next to "Eigenschaften" lets you customize which substats get auto-picked, per role (Angreifer/Verteidiger/Support) and per Gear-Typ (PvE/PvP), across 4 equipment categories (Weapon/Guard, Armor, Jewelry, Bracelets). Your choices are saved to your profile. Still Beta — Equipment-Priority list and character skills aren't factored in yet.
+- **Build Planner (Beta): "Property Priority" editor** — a new gear-icon button next to "Properties" lets you customize which substats get auto-picked, per role (Attacker/Defender/Support) and per Gear Type (PvE/PvP), across 4 equipment categories (Weapon/Guard, Armor, Jewelry, Bracelets). Your choices are saved to your profile. Still Beta — Equipment-Priority list and character skills aren't factored in yet.
 - **Settings: "View Log" button** — opens a read-only viewer for the app's diagnostic log (which window opened when, which assets/colors loaded or failed to, etc.), useful for troubleshooting without having to find the log file manually.
 
 ## 🎨 UI Changes
@@ -59,7 +94,7 @@ Release Date: 2026-08-27
 - **App window title renamed to "Aion 2 Companion"** (was "Aion Companion").
 - **Build Planner (Beta): enchant level shown under each equipped slot** — the redundant "change item" button under each equipment slot (clicking the icon itself already lets you change the item and its enchant) was replaced with a small "+N" label showing that slot's enchant level, so you can check at a glance whether every item has actually been enhanced. Its color now follows your chosen Layout theme (Settings → Layout) instead of one fixed color.
 - **Armory (Beta) windows now follow your Layout theme** — the Item Database and Build Planner windows' background now match your chosen Layout theme (Settings → Layout: Abyss/Inferno/Emerald/Frostbite/Obsidian/Void) instead of always showing Abyss.
-- **Build Planner (Beta): role buttons color-coded** — Angreifer/Verteidiger/Support now each get their own accent color (orange/blue/green) when selected, in both "Eigenschaften" and the new priority editor.
+- **Build Planner (Beta): role buttons color-coded** — Attacker/Defender/Support now each get their own accent color (orange/blue/green) when selected, in both "Properties" and the new priority editor.
 
 ## 🐛 Bug Fixes
 
