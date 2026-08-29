@@ -5,7 +5,7 @@ These features are **not** part of an official update yet and are still under ac
 ## Armory
 
 ### Item Database
-- Searchable item database with filters for grade/rarity, category, class, and PvP/PvE/Neutral gear type.
+- Searchable item database with filters for grade/rarity, category, shop, and PvP/PvE/Neutral gear type.
 - Right-hand Categories sidebar groups the catalog into Gear, Wings, Arcana, Materials & Enhancement, Consumables, Tools & Services, Cosmetics, and Chests & Misc — pick one to narrow the list and the Category filter above it.
 - Gear further breaks down into Weapons / Armor / Accessories via the Category filter.
 - Wings get two dedicated filters (Equip Effect / Owned Effect) in place of Category/Class, matching how Wings stats actually work.
@@ -29,7 +29,32 @@ These features are **not** part of an official update yet and are still under ac
 - "Quick Select" button to auto-equip a full gear set — crafted, dungeon-drop (Expedition) or PvP Abyss Gear, matched to your race — in one click, plus a separate "Property Priority" editor to customize which substats get auto-picked per role and Gear Type.
 - Daevanion Board tab: interactive per-class/deity board (real tier art, checkable stat/skill sidebar, auto-router for the cheapest path to what you've checked), feeding its bonuses into the Skill Planner and persisting to your profile.
 - Skill Planner tab: browse/filter class skills (Active/Passive/Stigma), track Skill Points and Stigma Points separately, build a Priority List (remove/favorite/star support), and an Arcana Calculator that finds the best-case Arcana card setup for a wishlist of extra skill levels.
-- Arcana tab: an Information sub-tab to browse all card types/sets with class-specific skill previews, and a Sets sub-tab holding your 5 real equip slots for this season's cards — the Arcana Calculator can write a chosen combination straight into them, sharing the same named build as the Skill Planner.
+- Arcana tab: an Information sub-tab to browse all card types/sets — hover a card for its class skill preview, hover a Set banner for its 2-/4-piece Set bonus — and a Sets sub-tab showing your 5 real equip slots with their assigned skills for this season's cards; the Arcana Calculator can write a chosen combination straight into them, sharing the same named build as the Skill Planner.
+
+---
+
+# Version 1.6.0
+
+Release Date: 2026-08-29
+
+## ✨ New Features
+
+- **Templates: "Import from Database" now opens the real Item Database** — search, icons, and a shop-type sidebar pre-filtered to purchasable items — instead of a plain name list.
+- **Templates item picker: added a Block/Row view toggle**, matching the main Item Database's table view.
+- **Item Database: Class filter replaced with a Shop filter** (Merchant NPC / Trade Shop / Black Cloud Merchants / Shugo Festival), matching how items are actually obtained.
+
+## 🎨 UI Changes
+
+- **Build Planner (Beta): Arcana Information/Sets tabs redesigned** — wider cards with each card's 4 assigned skills shown directly on it (right-aligned levels), and a hover tooltip with the full class skill breakdown on the Information tab.
+- **Build Planner (Beta): Arcana Set selection now shows real in-game Set banner art** in place of plain buttons, and hovering a Set shows its 2-/4-piece bonus as a tooltip instead of a separate panel.
+
+## 🐛 Bug Fixes
+
+- **Templates: the "All Categories" filter listed the entire ~10,000-item catalog** instead of only items actually purchasable from a shop.
+- **Templates item picker: Grade/Rarity filter counts didn't match the shop-filtered list** shown below it.
+- **Templates item picker now opens without a noticeable delay**, fixing a slowdown while item icons were loading.
+- **Fixed a crash that could occur while item icons were still loading in the background.**
+- **Fixed several screens showing unreadable text or plain white/blank boxes when Windows itself is set to Dark Mode** — affected the ToDo list, Templates, the Build Planner's Substats panel, Quick Select dialogs, the Crafting Calculator, the Flow Map, and the in-game Overlay.
 
 ---
 

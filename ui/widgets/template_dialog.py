@@ -38,10 +38,17 @@ class TemplateDialog(QDialog):
 
     def __init__(self, templates: list, flow_maps: dict, task_templates: list = None,
                  initial_tab: str = "shopping", parent=None,
-                 language: str = "en", tr_func=None):
+                 language: str = "en", tr_func=None, item_picker_callback=None):
         super().__init__(parent)
         self._language = language
         self._tr = tr_func or (lambda _l, k, **kw: k)
+        # Opens the REAL Item Database catalog picker (icons, shop-type
+        # sidebar, real filters) for "Import from Database" -- provided by
+        # MainWindow.open_template_item_picker, since only the host app
+        # knows how to lazily load the ItemDatabase module (see
+        # MainWindow._ensure_item_database_window). None in any other
+        # embedding context just hides the import link entirely.
+        self._item_picker_callback = item_picker_callback
 
         self.setWindowTitle(self._t("templates_title"))
         self.setMinimumSize(660, 540)
@@ -131,6 +138,10 @@ class TemplateDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setObjectName("scrollArea")
+        # Viewport paints its own background separately from #scrollArea's
+        # own QSS rule -- can show up as a plain white box when Windows
+        # itself is set to dark mode (User-reported, 2026-08-29).
+        scroll.viewport().setStyleSheet("background: transparent;")
         vl.addWidget(scroll, 1)
 
         self._rebuild_shop_list()
@@ -185,6 +196,9 @@ class TemplateDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setObjectName("scrollArea")
+        # Same viewport-background fix as the shop-list scroll area above
+        # (User-reported Windows-dark-mode white box, 2026-08-29).
+        scroll.viewport().setStyleSheet("background: transparent;")
         vl.addWidget(scroll, 1)
 
         self._rebuild_task_list()
@@ -461,7 +475,8 @@ class TemplateDialog(QDialog):
 
     def _add_shop_template(self):
         dlg = _TemplateEditDialog(known_locations=self._known_shop_locations(), parent=self,
-                                  language=self._language, tr_func=self._tr)
+                                  language=self._language, tr_func=self._tr,
+                                  item_picker_callback=self._item_picker_callback)
         if dlg.exec():
             item = dlg.get_data()
             item["id"] = str(uuid4())
@@ -476,6 +491,7 @@ class TemplateDialog(QDialog):
                 parent=self,
                 language=self._language,
                 tr_func=self._tr,
+                item_picker_callback=self._item_picker_callback,
             )
             if dlg.exec():
                 data = dlg.get_data()
@@ -619,13 +635,15 @@ class _TemplateEditDialog(QDialog):
     """Edit form for shopping and task templates. Pass task_mode=True to hide currency/price."""
 
     def __init__(self, data: dict = None, known_locations: list[str] = None, parent=None,
-                 task_mode: bool = False, language: str = "en", tr_func=None):
+                 task_mode: bool = False, language: str = "en", tr_func=None,
+                 item_picker_callback=None):
         super().__init__(parent)
         data = data or {}
         known_locations = known_locations or []
         self._task_mode = task_mode
         self._tr = tr_func or (lambda _l, k, **kw: k)
         self._language = language
+        self._item_picker_callback = item_picker_callback
 
         if task_mode:
             title_key = "task_edit_title" if data.get("title") else "task_add_title"
@@ -677,6 +695,18 @@ class _TemplateEditDialog(QDialog):
         placeholder_key = "placeholder_taskname" if task_mode else "placeholder_itemname"
         self._title.setPlaceholderText(self._t(placeholder_key))
 
+        # "Import from Database" (User-Wunsch, 2026-08-29): picks a real item
+        # name from the catalog straight into the Title field -- shopping
+        # entries only, a Task isn't necessarily a real game item. Still
+        # freely editable afterward, this just pre-fills the field.
+        if not task_mode and self._item_picker_callback:
+            import_link = QPushButton(self._t("template_import_from_db"))
+            import_link.setObjectName("linkButton")
+            import_link.setCursor(Qt.PointingHandCursor)
+            import_link.setFlat(True)
+            import_link.clicked.connect(self._open_import_from_db)
+            layout.addWidget(import_link, 0, Qt.AlignLeft)
+
         self._location = QLineEdit(data.get("location", ""))
         self._location.setPlaceholderText(self._t("placeholder_location_short"))
         if known_locations:
@@ -695,8 +725,11 @@ class _TemplateEditDialog(QDialog):
         if not task_mode:
             self._kinah_btn = self._toggle("Kinah", "currencyToggleKinah")
             self._abyss_btn = self._toggle("AP",    "currencyToggleAbyss")
-            self._np_btn    = self._toggle("NP",    "currencyToggleAbyss")
+            self._np_btn    = self._toggle("NC",    "currencyToggleAbyss")
             self._sc_btn    = self._toggle("SC",    "currencyToggleAbyss")
+            self._abyss_btn.setToolTip("Abyss Points")
+            self._np_btn.setToolTip("Nightmare Coins")
+            self._sc_btn.setToolTip("Season Coins")
             cur_grp = QButtonGroup(self)
             cur_grp.setExclusive(True)
             for b in (self._kinah_btn, self._abyss_btn, self._np_btn, self._sc_btn):
@@ -742,6 +775,13 @@ class _TemplateEditDialog(QDialog):
         btn.setObjectName(obj_name)
         btn.setCheckable(True)
         return btn
+
+    def _open_import_from_db(self):
+        if not self._item_picker_callback:
+            return
+        item = self._item_picker_callback(self)
+        if item:
+            self._title.setText(item.get("name", ""))
 
     def _get_schedule(self) -> str:
         if self._weekly_btn.isChecked():

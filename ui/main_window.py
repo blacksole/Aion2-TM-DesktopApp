@@ -563,6 +563,10 @@ class MainWindow(QMainWindow):
             spec = importlib.util.spec_from_file_location("item_database_app", db_dir / "app.py")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+            # Kept (not just a local var) so other callers can reach classes
+            # from this same lazily-loaded module later without importing
+            # it a second time -- see open_template_item_picker.
+            self._item_database_module = module
 
             # No Qt parent on purpose: an owned top-level window on Windows
             # shares the owner's taskbar entry, and closing it can leave the
@@ -576,6 +580,25 @@ class MainWindow(QMainWindow):
                 self.item_database_window.set_pending_loadout_state(self._build_planner_state)
 
         return self.item_database_window
+
+    def open_template_item_picker(self, parent_widget=None) -> dict | None:
+        """Lazily loads the ItemDatabase module (same singleton pattern as
+        _ensure_item_database_window, and this call alone does NOT show
+        the full Item Database window -- just constructs/reuses it in the
+        background for its already-loaded item list + caches) and opens
+        the real catalog picker for the Templates dialog's "Import from
+        Database" link (User-Wunsch, 2026-08-29: "die Database mit allen
+        Filtern und Ansicht übergeben ... das Modell ist ja bereits
+        gebaut"). Returns the chosen item dict, or None if cancelled."""
+        window = self._ensure_item_database_window()
+        module = self._item_database_module
+        dlg = module.TemplateItemPickerDialog(
+            window._raw_items, window.icon_cache, window.detail_cache, parent=parent_widget,
+        )
+        dlg.setStyleSheet(module._load_qss_text())
+        if dlg.exec() and dlg.selected_item:
+            return dlg.selected_item
+        return None
 
     def open_item_database_window(self):
         logger.debug("Opening Item Database window")
@@ -1889,7 +1912,22 @@ class MainWindow(QMainWindow):
         if self.auto_save:
             self.save_profile(silent=True)
 
-    def save_profile(self, silent=False):
+    def save_profile(self, silent=False, explicit=False):
+        # "Default"/"Default_de"/"Default_ru" are the language-picker starter
+        # templates (see _is_lang_default), not a real ongoing profile --
+        # renaming away from "Default" already re-creates a fresh template
+        # (_create_default_profile, called from set_profile_name), but until
+        # a new user/tester actually renames it, every single interaction
+        # used to silently re-save over that same template file (User-
+        # Report, 2026-08-29: browsing the Daevanion Board while still on
+        # "Default" got saved into it). `explicit` marks a real, deliberate
+        # "Save Profile" button click (see save_profile_from_profile_page) --
+        # every other call site keeps working exactly as before for any
+        # real (non-template) profile, since this guard only ever applies
+        # while the CURRENT profile is still one of the three templates.
+        if not explicit and self._is_lang_default(self.profile_dir / f"{self.profile_name}.json"):
+            return
+
         if self.item_database_window and hasattr(self.item_database_window, "get_loadout_state"):
             self._build_planner_state = self.item_database_window.get_loadout_state()
 
@@ -2228,7 +2266,8 @@ class MainWindow(QMainWindow):
                              initial_tab=self.active_tab,
                              parent=self,
                              language=self.language,
-                             tr_func=tr)
+                             tr_func=tr,
+                             item_picker_callback=self.open_template_item_picker)
         if dlg.exec():
             old_shopping = {t.get("id"): t for t in self.item_templates}
             old_tasks = {t.get("id"): t for t in self.task_templates}
@@ -2853,7 +2892,7 @@ class MainWindow(QMainWindow):
             if profile_name:
                 self.set_profile_name(profile_name)
 
-        self.save_profile()
+        self.save_profile(explicit=True)
 
     def format_kinah_price(self, value):
         try:

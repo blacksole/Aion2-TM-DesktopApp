@@ -1,6 +1,6 @@
 # Aion2 Task Manager
 
-**v1.5.0** — Modern desktop productivity manager for Aion players.
+**v1.6.0** — Modern desktop productivity manager for Aion players.
 
 Aion2 Task Manager combines task management, shopping organization, event timers, a visual flow map planner and an in-game HUD overlay into a single lightweight desktop application — built specifically for Aion 2 players who want to stay on top of their daily and weekly goals without alt-tabbing constantly. An Armory module (item database, crafting calculator, build planner) is available as an opt-in Beta and is still under active development — see the Roadmap section below.
 
@@ -132,17 +132,23 @@ Opt-in area for gear planning, unlockable at your own risk via Settings → "Unl
 * **Skill Planner** — browse/filter class skills, track Skill Points and Stigma Points separately, build a Priority List (with remove/favorite/star), and an "Arcana Calculator" that finds the best-case Arcana card setup for a wishlist of extra skill levels
 * **Arcana tab** — an Information sub-tab to browse all card types/sets, and a Sets sub-tab holding your 5 real equip slots for this season's usable cards, which the Arcana Calculator can write straight into with one click; Sets share the same named build as the Skill Planner
 * **Full English/Deutsch/Русский localization** across all Armory windows, following your Settings → Language choice (item/recipe/skill/card/material names stay in their original form until an official in-game translation exists)
+* **Templates: pick items directly from the Item Database** — the Shopping template "Import from Database" link opens the real catalog (icons, search, a shop-type sidebar pre-filtered to purchasable items) instead of typing a name — Already implemented / Done
 
 **Planned / in progress:**
-* Templates: pick items directly from the Item Database instead of typing them in
+* Item Database: "Compare Items" — compare two catalog items side by side, in the header spot the removed "Equip Character"/"Crafting Calculator" shortcut buttons used to occupy
+* Item Database: Class filter replaced with a Shop filter (Merchant NPC / Trade Shop / Black Cloud Merchants / Shugo Festival) — Already implemented / Done
+* Templates item picker: Block/Row view toggle, matching the main Item Database's table view — Already implemented / Done
+* Settings: an opt-in "Use app offline" download (icons + item details) so a fresh install can browse fully offline without waiting on per-item network fetches
+* Template assignment to multiple characters at once via checkboxes, instead of one at a time
 * Rune slots (Clash Rune / Devotion Rune) in the Build Planner
 * Jewelry-granted skills and character passive/active skills factored into the Build Planner's numeric stat calculation (they already feed the Skill Planner's own level display, not yet GearScore/Stat Info)
 * A real "equipped Arcana cards" state feeding GearScore, the same way Gear/Daevanion already do
 * Favoriting individual stat rows for a pinned quick-glance view
-* Monthly automatic refresh of the item/skill database
+* Monthly automatic refresh of the item/skill database — Already implemented / Done (a weekly dev-side maintenance script re-fetches everything and reports what changed; not part of the shipped app itself)
 * Season-aware dungeon/material availability (once a reliable patch-notes source is available)
-* Shugo.gg character import & stat comparison (blocked until a Global-region endpoint exists)
+* Shugo.gg character import & stat comparison (blocked until a Global-region endpoint exists) — first chance to test is the Sept 17 Global test phase (2-3 days), otherwise full testing from Sept 30; would extend to the Skill Planner/Arcana too, not just the Build Planner, depending on what data is actually available
 * Skill Rotation planner (node-based sequence builder for skill casting order) — early idea, not yet scoped
+* Crafting Calculator: rename the existing Compare tab to "Transfer" (it only compares transfer chains) and add a second, independent mode to compare any two recipes freely — which comparison types to offer (e.g. item stats for Cooking, which has few enough ingredients to free up space for it) still needs deciding
 
 ### Overlay & Flow Map
 * Skills and Equipment sections in the in-game overlay, with two-way sync back to the app when checked off

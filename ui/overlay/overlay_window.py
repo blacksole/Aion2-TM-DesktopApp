@@ -254,6 +254,10 @@ class OverlayWindow(QWidget):
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._scroll.setObjectName("OverlayScroll")
+        # Viewport paints its own background separately from
+        # #OverlayScroll's own QSS rule -- shows as a plain white box when
+        # Windows itself is set to dark mode (User-reported, 2026-08-29).
+        self._scroll.viewport().setStyleSheet("background: transparent;")
 
         self._content = QWidget()
         self._content.setObjectName("OverlayContent")

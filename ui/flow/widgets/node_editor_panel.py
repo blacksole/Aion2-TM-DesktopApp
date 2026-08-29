@@ -144,6 +144,10 @@ class _NodeItemListDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Viewport paints its own background separately from the outer
+        # widget's QSS -- shows as a plain white/grey box when Windows
+        # itself is set to dark mode (User-reported, 2026-08-29).
+        scroll.viewport().setStyleSheet("background: transparent;")
 
         list_frame = QFrame()
         list_frame.setObjectName("settingsRow")
@@ -237,6 +241,9 @@ class _NodeItemListDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Same viewport-background fix as the shop-list scroll area above
+        # (User-reported Windows-dark-mode white box, 2026-08-29).
+        scroll.viewport().setStyleSheet("background: transparent;")
 
         list_frame = QFrame()
         list_frame.setObjectName("settingsRow")

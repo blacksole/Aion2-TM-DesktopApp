@@ -550,6 +550,16 @@ QPushButton:pressed {
     font-weight: 700;
 }
 
+/* One of the 4 fixed skill-slot boxes on a Sets-tab card (User-Wunsch,
+   2026-08-29, rough mockup screenshot) -- plain bordered box, blank when
+   that slot isn't filled yet. */
+#ArcanaEquipSkillSlot {
+    background-color: rgba(30, 41, 59, 0.4);
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 6px;
+    font-size: 11px;
+}
+
 #ArcanaNoneButton {
     background-color: rgba(30, 41, 59, 0.6);
     border: 2px solid rgba(100, 116, 139, 0.5);
@@ -565,54 +575,14 @@ QPushButton:pressed {
     background-color: rgba(34, 211, 238, 0.1);
 }
 
-#ArcanaSetBanner {
-    border-radius: 10px;
-    border: 2px solid rgba(255, 255, 255, 0.08);
-    color: white;
-    font-weight: 700;
-    font-size: 14px;
-    padding: 6px;
-}
-
-#ArcanaSetBanner:checked {
-    border: 2px solid white;
-}
-
-#ArcanaSetBanner[category="pve"] {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #14532d, stop:1 #4ade80);
-}
-
-#ArcanaSetBanner[category="pvp"] {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4c0519, stop:1 #fb7185);
-}
-
-#ArcanaSetBanner[category="offense"] {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #78350f, stop:1 #f59e0b);
-}
-
-#ArcanaSetBanner[category="defence"] {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0c4a6e, stop:1 #38bdf8);
-}
-
-#ArcanaSetBanner[category="cure"] {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4c1d95, stop:1 #a855f7);
-}
-
-#ArcanaBonusPanel {
-    background-color: rgba(30, 41, 59, 0.55);
-    border: 1px solid rgba(100, 116, 139, 0.35);
-    border-radius: 10px;
-}
+/* #ArcanaSetBanner is now a fully custom-painted widget (_ArcanaSetBanner
+   in app.py, Round 21) -- background photo/gradient, overlay, border and
+   text are all drawn directly in paintEvent, so no QSS rule for it
+   actually applies (paintEvent never calls the default button painting). */
 
 #ArcanaLordBar {
     background-color: rgba(30, 41, 59, 0.55);
     border: 1px solid rgba(100, 116, 139, 0.35);
-    border-radius: 12px;
-}
-
-#ArcanaSkillPopup {
-    background-color: #16213a;
-    border: 1px solid #facc15;
     border-radius: 12px;
 }
 
@@ -708,6 +678,15 @@ QPushButton:pressed {
 }
 
 #LoadoutBackground {
+    background-color: #0f172a;
+}
+
+/* Substats/Skills tab pages (ItemDetailWidget) -- explicit background
+   instead of relying on QPalette fallback, matching #LoadoutBackground's
+   pattern; without this the page widget's own unstyled background paints
+   over QTabWidget::pane's dark color, showing as a plain white/grey box
+   when Windows itself is set to dark mode (User-reported, 2026-08-29). */
+#StatsPane {
     background-color: #0f172a;
 }
 

@@ -19,13 +19,27 @@ ITEMS_PATH = DATA_DIR / "items_all.json"
 DETAILS_DIR = DATA_DIR / "details"
 OUTPUT_PATH = DATA_DIR / "stat_priority_options.json"
 
-# Same 4 groups the editor's category tabs use -- matches _STAT_PRIORITY_
+# Same groups the editor's category tabs use -- matches _STAT_PRIORITY_
 # CATEGORIES in app.py (kept independent here since this script has no
-# import from app.py, same isolation as compute_dungeon_sets.py).
+# import from app.py, same isolation as compute_dungeon_sets.py). "ring"
+# split out from "jewelry" (2026-08-27, User-Wunsch: Rings need a
+# fundamentally different priority -- Active Skill 1-6 > Attack -- from
+# Earring/Necklace's Attack > Accuracy > Critical Hit; Amulet dropped
+# entirely, its subStats are never random). Armor further split into one
+# bucket per real piece (2026-08-27, User-Wunsch: "Jedes Rüstungsteil hat
+# eine eigene Prio Liste") -- every piece happens to share the exact same
+# underlying subStat pool in practice, but each has its own dropdown to
+# keep the split visible/independent in the UI.
 CATEGORY_NAMES = {
     "weapon": {"Greatsword", "Longsword", "Dagger", "Bow", "Spellbook", "Orb", "Mace", "Staff", "Fist", "Guard"},
-    "armor": {"Helm", "Pauldrons", "Top", "Gloves", "Legs", "Shoes"},
-    "jewelry": {"Earrings", "Necklace", "Ring", "Amulet"},
+    "helmet": {"Helm"},
+    "shoulder": {"Pauldrons"},
+    "torso": {"Top"},
+    "gloves": {"Gloves"},
+    "pants": {"Legs"},
+    "boots": {"Shoes"},
+    "ring": {"Ring"},
+    "jewelry": {"Earrings", "Necklace"},
     "bracelet": {"Bracelet"},
 }
 
@@ -52,6 +66,20 @@ def main():
             try:
                 detail = json.loads(detail_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
+                continue
+            # subStatRandom=False means every listed subStat is always
+            # active on that item -- no roll, nothing to prioritize between
+            # them. Only items that actually roll N-of-M substats
+            # (subStatRandom=True) represent a real choice worth listing
+            # here. Found via a real user report (2026-08-27, "Bei den
+            # bracelets sind mehr Werte, als eigentlich möglich sind"):
+            # ~10 fixed non-Bracelet items (Ascension/Drifter/Facade/...)
+            # were leaking their always-on stats (Attack/HP/Critical Hit/...)
+            # into the same pool as the real random Deity-stat Bracelets
+            # (Justice [Nezekan] etc, subStatRandom=True) -- verified
+            # weapon/armor/jewelry have zero such contamination already,
+            # this only ever affected Bracelet.
+            if not detail.get("subStatRandom"):
                 continue
             for sub_stat in detail.get("subStats") or []:
                 name = sub_stat.get("name")

@@ -455,6 +455,14 @@ class TasksPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setObjectName("scrollArea")
+        # #scrollArea's own QSS rule (background: transparent) doesn't
+        # reach the viewport -- QAbstractScrollArea's viewport paints its
+        # own QPalette::Base background separately, which on a system with
+        # Windows set to dark mode can show up as a plain white box (User-
+        # reported, 2026-08-29) instead of picking up the app's dark theme.
+        # Same fix already applied throughout ItemDatabase/app.py and
+        # settings_page.py.
+        scroll.viewport().setStyleSheet("background: transparent;")
 
         self.list_container = QWidget()
 

@@ -118,6 +118,11 @@ else:
 BASE_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
 
 DATA_PATH = _BUNDLE_DIR / "data" / "items_all.json"
+SHOP_ITEMS_PATH = _BUNDLE_DIR / "data" / "shop_items.json"
+# The only 4 real, sources-tagged shops (see compute_shop_items.py) -- shared
+# between TemplateItemPickerDialog's sidebar and ItemDatabaseWindow's own
+# Shop filter dropdown so the two can never drift apart.
+REAL_SHOP_TYPES = ("Merchant NPC", "Trade Shop", "Black Cloud Merchants", "Shugo Festival")
 ICON_CACHE_DIR = BASE_DIR / "data" / "icons"
 DETAIL_CACHE_DIR = BASE_DIR / "data" / "details"
 DETAILS_API_URL = "https://shugo.gg/api/items/batch-details"
@@ -536,9 +541,16 @@ class IconCache(QObject):
 
     def _on_finished(self, url: str, reply, disk_path: Path):
         self._pending.discard(url)
-        network_error = reply.error()
-        data = reply.readAll()
-        reply.deleteLater()
+        try:
+            network_error = reply.error()
+            data = reply.readAll()
+            reply.deleteLater()
+        except RuntimeError:
+            # The QNetworkReply's C++ object can already be gone by the time
+            # this runs (observed live, 2026-08-29) -- nothing to recover,
+            # the request just never completes; a later request() call for
+            # the same url (not in _pending anymore) will simply retry it.
+            return
 
         if network_error != QNetworkReply.NoError:
             logger.warning("Icon fetch FAILED (network error=%s, url=%s)", network_error, url)
@@ -1157,6 +1169,7 @@ class ItemDetailWidget(QWidget):
         self.substats_tabs.setObjectName("timerModeTabWidget")
 
         stats_page = QWidget()
+        stats_page.setObjectName("StatsPane")
         self.substats_layout = QVBoxLayout(stats_page)
         self.substats_layout.setContentsMargins(0, 0, 0, 0)
         self.substats_layout.setSpacing(2)
@@ -1169,6 +1182,7 @@ class ItemDetailWidget(QWidget):
         self.substats_tabs.addTab(stats_page, _t("arm_substats_tab"))
 
         skills_page = QWidget()
+        skills_page.setObjectName("StatsPane")
         self.skills_tab_layout = QVBoxLayout(skills_page)
         self.skills_tab_layout.setContentsMargins(0, 0, 0, 0)
         self.skills_tab_layout.setSpacing(2)
@@ -2415,15 +2429,60 @@ ARCANA_THEME_CATEGORY = {
 ARCANA_CATEGORY_COLORS = {
     "pve": "#4ade80", "pvp": "#fb7185", "offense": "#f59e0b", "defence": "#38bdf8", "cure": "#a855f7",
 }
-ARCANA_CATEGORY_LABELS = {"pve": "PvE", "pvp": "PvP", "offense": "Offensiv", "defence": "Defensiv", "cure": "Heilung"}
+# Fallback gradient per category (stop, color) -- used by _ArcanaSetBanner's
+# paintEvent only for a Set that has no real background photo yet (see
+# _arcana_set_background_path). Custom-painted directly on the widget
+# rather than via QSS, both to layer cleanly with the photo+overlay and
+# because a real Qt quirk was found here (Round 20): any ancestor with its
+# OWN locally-set stylesheet (the Information tab's
+# scroll.viewport().setStyleSheet("background: transparent;") from
+# Round 14) silently blocks background-color from cascading through
+# attribute/class QSS selectors, even though border/color/text still
+# cascade fine.
+ARCANA_CATEGORY_GRADIENT_STOPS = {
+    "pve": ((0.0, "#14532d"), (1.0, "#4ade80")),
+    "pvp": ((0.0, "#4c0519"), (1.0, "#fb7185")),
+    "offense": ((0.0, "#78350f"), (1.0, "#f59e0b")),
+    "defence": ((0.0, "#0c4a6e"), (1.0, "#38bdf8")),
+    "cure": ((0.0, "#4c1d95"), (1.0, "#a855f7")),
+}
+# Browser-mockup-approved per-image crop (zoom relative to "cover", anchor_x/
+# anchor_y in 0-1, same semantics as CSS background-size/background-position
+# -- see project_arcana_planner.md Runde 21). Only Sets with a real photo
+# (see _arcana_set_background_path) need an entry; anything missing here
+# just defaults to (1.0, 0.5, 0.5) i.e. plain cover/center.
+_ARCANA_SET_BANNER_IMAGE_TRANSFORM = {
+    "Primal Vigor": (1.0, 0.5, 0.5),
+    "Magic Armor": (1.2, 0.20, 0.5),
+}
 # Fixed width for the whole left column (Keine Sets + 7 banners + bonus
 # panel) — kept constant regardless of window size or content so the
 # banners never stretch/shrink oddly next to the card grid.
 _ARCANA_SET_COLUMN_WIDTH = 220
+# ~25% wider than the original 148 (User-Wunsch, 2026-08-29: "die Karten
+# noch etwas breiter machen ... vllt von der aktuellen breite 20 oder 30%
+# breiter").
+_ARCANA_CARD_WIDTH = 185
+# Every Arcana card always has exactly 4 skill slots (see
+# [[project_arcana_planner]]) -- the Sets tab's cards show them inline.
+_ARCANA_EQUIP_SLOT_COUNT = 4
 
 ARCANA_DATA_PATH = _BUNDLE_DIR / "data" / "arcana_info.json"
 ARCANA_CLASS_SKILLS_PATH = _BUNDLE_DIR / "data" / "arcana_class_skills.json"
 ARCANA_ICON_DIR = _BUNDLE_DIR / "assets" / "arcana_icons"
+# Wide banner photos for the Set-selection sidebar (User-Wunsch, 2026-08-29,
+# with a real in-game reference screenshot from a colleague) -- filename is
+# just the real Set name (ARCANA_SET_BONUSES[theme]["setName"]) with spaces
+# turned into underscores, e.g. "Primal Vigor" -> "Primal_Vigor.png". Not
+# every Set has one yet -- _ArcanaSetBanner falls back to a flat category
+# gradient when the file doesn't exist, so images can be dropped in here
+# one at a time with no further code changes needed.
+ARCANA_SET_BACKGROUND_DIR = _BUNDLE_DIR / "assets" / "Arcana_Set_background"
+
+
+def _arcana_set_background_path(set_name: str) -> Path | None:
+    path = ARCANA_SET_BACKGROUND_DIR / f"{set_name.replace(' ', '_')}.png"
+    return path if path.exists() else None
 
 
 def _load_arcana_theme_map() -> tuple[dict, dict]:
@@ -2848,6 +2907,406 @@ class ItemPickerPopup(QWidget):
         self.search_input.setFocus()
 
 
+def _load_shop_items() -> dict[str, list[int]]:
+    """{shop_name: [item_id, ...]} for the 4 real, sources-tagged shops --
+    see compute_shop_items.py. Empty dict if the derived file hasn't been
+    generated yet (e.g. a fresh checkout before ever running that script)."""
+    if not SHOP_ITEMS_PATH.exists():
+        return {}
+    try:
+        return json.loads(SHOP_ITEMS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+# Taller than ItemPickerPopup's own _PICKER_TILE_HEIGHT (118) -- proper
+# breathing room around the icon (User-Wunsch, 2026-08-29: "brauchen wir
+# auf jedenfall das Spacing für das Icon und somit eine höhere Zeile").
+_TEMPLATE_PICKER_TILE_WIDTH = 124
+_TEMPLATE_PICKER_TILE_HEIGHT = 132
+
+
+class TemplateItemPickerDialog(QDialog):
+    """Full item-database picker for the Templates dialog's "Import from
+    Database" link -- real icons, search/grade filters (same idea as
+    ItemPickerPopup, kept as its own class rather than shared/
+    parameterized since the two have genuinely different interaction
+    models: ItemPickerPopup is an anchored Qt.Popup that picks instantly
+    on click and closes on any outside click -- fine for a quick equip-
+    slot swap, but a poor fit here, where losing all your filters to a
+    stray click while browsing the full catalog would be frustrating
+    (User-Wunsch, 2026-08-29: "eine Möglichkeit, das Item auszuwählen und
+    einen 'Apply' Button"). This is a real modal QDialog instead: click a
+    tile to SELECT it (stays open, highlighted), Apply confirms and
+    closes.
+
+    Left sidebar: "All Categories" + one button per real, sources-tagged
+    shop (see compute_shop_items.py/SHOP_ITEMS_PATH) -- Windbreeze/Season/
+    Nightmare/Abyss shops have zero backing data in the catalog at all
+    (verified 2026-08-29, checked every sources tag and every item name),
+    so User-decision: those stay hand-curated Template entries instead,
+    no picker filter for them until real Global data is available."""
+
+    def __init__(self, items: list[dict], icon_cache: "IconCache", detail_cache: "ItemDetailCache", parent=None):
+        super().__init__(parent)
+        self.setObjectName("TemplateItemPickerDialog")
+        self.setWindowTitle(_t("template_import_from_db_title"))
+        self.resize(760, 640)
+
+        self._all_items = items
+        self.icon_cache = icon_cache
+        self.detail_cache = detail_cache
+        self._shop_items = _load_shop_items()
+        # "All Categories" means "every purchasable item across the 4 real
+        # shops" (the whole point of this picker is pre-filtering Shopping
+        # templates to buyable items, User-Wunsch 2026-08-29), NOT the raw
+        # unfiltered 10k-item catalog -- that would defeat the pre-filter
+        # entirely (and made the dialog needlessly slow to render/search).
+        self._all_shop_ids: set[int] = set()
+        for ids in self._shop_items.values():
+            self._all_shop_ids.update(ids)
+        self._active_shop: str | None = None  # None == "All Categories"
+        self._icon_labels: dict[str, list[tuple[QLabel, str | None]]] = {}
+        self._row_icon_queue: list[tuple[str, str | None]] = []
+        self.selected_item: dict | None = None
+
+        icon_cache.icon_ready.connect(self._on_icon_ready)
+
+        root = QHBoxLayout(self)
+        root.setContentsMargins(14, 14, 14, 14)
+        root.setSpacing(14)
+
+        # ── Sidebar: All Categories + real shop types ───────────────────
+        sidebar = QVBoxLayout()
+        sidebar.setSpacing(6)
+        self._shop_group = QButtonGroup(self)
+        self._shop_group.setExclusive(True)
+
+        all_btn = QPushButton(f"{_t('template_import_all_categories')} ({len(self._all_shop_ids)})")
+        all_btn.setObjectName("SkillFilterButton")
+        all_btn.setCheckable(True)
+        all_btn.setChecked(True)
+        all_btn.setMinimumHeight(36)
+        all_btn.clicked.connect(lambda _c=False: self._on_shop_selected(None))
+        self._shop_group.addButton(all_btn)
+        sidebar.addWidget(all_btn)
+
+        for shop_name in REAL_SHOP_TYPES:
+            count = len(self._shop_items.get(shop_name, []))
+            btn = QPushButton(f"{shop_name} ({count})")
+            btn.setObjectName("SkillFilterButton")
+            btn.setCheckable(True)
+            btn.setMinimumHeight(36)
+            btn.setEnabled(count > 0)
+            btn.clicked.connect(lambda _c=False, s=shop_name: self._on_shop_selected(s))
+            self._shop_group.addButton(btn)
+            sidebar.addWidget(btn)
+
+        sidebar.addStretch(1)
+        sidebar_frame = QWidget()
+        sidebar_frame.setLayout(sidebar)
+        sidebar_frame.setFixedWidth(200)
+        root.addWidget(sidebar_frame)
+
+        # ── Right side: filters + tile/row view + Cancel/Apply ──────────
+        right = QVBoxLayout()
+        right.setSpacing(8)
+
+        # Block/Row view toggle (User-Wunsch, 2026-08-29: "einmal die
+        # aktuelle Block Ansicht und dann die Zeilenansicht, wie in der
+        # Haupt Database") -- both views share the same filtered item pool
+        # and the same lazy icon-loading queue; only one is ever built at a
+        # time (switching re-runs _refresh_list for the newly active view)
+        # so filtering never pays to populate both.
+        self._view_mode = "block"
+        view_group = QButtonGroup(self)
+        view_group.setExclusive(True)
+        self.block_view_btn = QPushButton(_t("template_view_block"))
+        self.block_view_btn.setObjectName("SkillFilterButton")
+        self.block_view_btn.setCheckable(True)
+        self.block_view_btn.setChecked(True)
+        self.block_view_btn.clicked.connect(lambda _c=False: self._on_view_mode_changed("block"))
+        self.row_view_btn = QPushButton(_t("template_view_row"))
+        self.row_view_btn.setObjectName("SkillFilterButton")
+        self.row_view_btn.setCheckable(True)
+        self.row_view_btn.clicked.connect(lambda _c=False: self._on_view_mode_changed("row"))
+        view_group.addButton(self.block_view_btn)
+        view_group.addButton(self.row_view_btn)
+
+        filter_row = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText(_t("arm_search_placeholder"))
+        self.search_input.textChanged.connect(self._refresh_list)
+        filter_row.addWidget(self.search_input, 1)
+
+        self.grade_combo = QComboBox()
+        self._populate_grade_combo()
+        self.grade_combo.currentIndexChanged.connect(self._refresh_list)
+        filter_row.addWidget(self.grade_combo)
+        filter_row.addWidget(self.block_view_btn)
+        filter_row.addWidget(self.row_view_btn)
+        right.addLayout(filter_row)
+
+        self.list_widget = QListWidget()
+        self.list_widget.setViewMode(QListWidget.IconMode)
+        self.list_widget.setFlow(QListWidget.LeftToRight)
+        self.list_widget.setWrapping(True)
+        self.list_widget.setResizeMode(QListWidget.Adjust)
+        self.list_widget.setMovement(QListWidget.Static)
+        self.list_widget.setUniformItemSizes(True)
+        self.list_widget.setGridSize(QSize(_TEMPLATE_PICKER_TILE_WIDTH, _TEMPLATE_PICKER_TILE_HEIGHT))
+        self.list_widget.setSpacing(0)
+        self.list_widget.itemDoubleClicked.connect(lambda _i: self._accept_selected())
+        self.list_widget.verticalScrollBar().valueChanged.connect(self._request_visible_icons)
+        right.addWidget(self.list_widget, 1)
+
+        # Row view -- same Icon/Name/Rarity table style as
+        # CraftingItemPickerDialog's own picker table.
+        self.table_widget = QTableWidget(0, 3)
+        self.table_widget.setHorizontalHeaderLabels(["", _t("arm_col_name"), _t("arm_rarity_label")])
+        self.table_widget.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table_widget.verticalHeader().setVisible(False)
+        self.table_widget.setSelectionBehavior(QTableView.SelectRows)
+        self.table_widget.setEditTriggers(QTableView.NoEditTriggers)
+        self.table_widget.setColumnWidth(0, 52)
+        self.table_widget.setIconSize(QSize(28, 28))
+        self.table_widget.verticalHeader().setDefaultSectionSize(38)
+        self.table_widget.cellDoubleClicked.connect(lambda _r, _c: self._accept_selected())
+        self.table_widget.verticalScrollBar().valueChanged.connect(self._request_visible_icons)
+        self.table_widget.setVisible(False)
+        right.addWidget(self.table_widget, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel_btn = QPushButton(_t("cancel"))
+        cancel_btn.setObjectName("secondaryButton")
+        cancel_btn.clicked.connect(self.reject)
+        apply_btn = QPushButton(_t("template_import_select_btn"))
+        apply_btn.setObjectName("primaryButton")
+        apply_btn.clicked.connect(self._accept_selected)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(apply_btn)
+        right.addLayout(btn_row)
+
+        root.addLayout(right, 1)
+
+        self._refresh_list()
+        QTimer.singleShot(0, self._request_visible_icons)
+
+    def _populate_grade_combo(self):
+        # Scoped to the currently active shop pool (User-Wunsch, 2026-08-29:
+        # "pruef einmal, dass die rechten Filterzahlen mit den Zahlen der
+        # Shops uebereinstimmen") -- counting self._all_items here instead
+        # showed "All (10000)" even while the sidebar said "All Categories
+        # (1718)", i.e. two different "All"s disagreeing in the same dialog.
+        pool = self._current_pool()
+        counts: dict[str, int] = {}
+        for i in pool:
+            g = i.get("grade")
+            if g:
+                counts[g] = counts.get(g, 0) + 1
+        model = QStandardItemModel(self.grade_combo)
+        all_item = QStandardItem(f"All ({len(pool)})")
+        all_item.setData("All", Qt.UserRole)
+        model.appendRow(all_item)
+        for grade in RARITY_ORDER:
+            count = counts.get(grade)
+            if not count:
+                continue
+            item = QStandardItem(f"{grade} ({count})")
+            item.setData(grade, Qt.UserRole)
+            item.setForeground(QColor(GRADE_COLORS[grade]))
+            model.appendRow(item)
+        self.grade_combo.setModel(model)
+
+    def _on_shop_selected(self, shop_name: str | None):
+        self._active_shop = shop_name
+        # Grade counts are scoped to the active shop pool (see
+        # _populate_grade_combo) -- must be rebuilt on every shop switch, or
+        # they'd keep showing the previous shop's (or the very first,
+        # "All Categories") counts. blockSignals so the model swap's
+        # implicit reset-to-index-0 doesn't fire a redundant _refresh_list
+        # before the explicit one below.
+        self.grade_combo.blockSignals(True)
+        self._populate_grade_combo()
+        self.grade_combo.blockSignals(False)
+        self._refresh_list()
+
+    def _current_pool(self) -> list[dict]:
+        if self._active_shop is None:
+            return [it for it in self._all_items if it.get("id") in self._all_shop_ids]
+        ids = set(self._shop_items.get(self._active_shop, []))
+        return [it for it in self._all_items if it.get("id") in ids]
+
+    def _on_view_mode_changed(self, mode: str):
+        self._view_mode = mode
+        self.list_widget.setVisible(mode == "block")
+        self.table_widget.setVisible(mode == "row")
+        self._refresh_list()
+
+    def _refresh_list(self):
+        query = self.search_input.text().strip().lower()
+        grade_filter = self.grade_combo.currentData()
+        self._icon_labels = {}
+        self._row_icon_queue = []
+
+        matched = [
+            item for item in self._current_pool()
+            if (not query or query in item.get("name", "").lower())
+            and (grade_filter in (None, "All") or item.get("grade") == grade_filter)
+        ]
+        matched.sort(key=lambda i: i.get("name", ""))
+
+        if self._view_mode == "block":
+            self._populate_block_view(matched)
+        else:
+            self._populate_row_view(matched)
+
+        self._request_visible_icons()
+
+    def _populate_block_view(self, matched: list[dict]):
+        self.list_widget.clear()
+        for item in matched:
+            list_item = QListWidgetItem()
+            list_item.setData(Qt.UserRole, item)
+
+            row_widget = QWidget()
+            row_widget.setFixedSize(_TEMPLATE_PICKER_TILE_WIDTH, _TEMPLATE_PICKER_TILE_HEIGHT)
+            row_layout = QVBoxLayout(row_widget)
+            row_layout.setContentsMargins(6, 10, 6, 10)
+            row_layout.setSpacing(6)
+            row_layout.setAlignment(Qt.AlignHCenter)
+
+            grade_color = GRADE_COLORS.get(item.get("grade"), "#94a3b8")
+
+            icon_label = QLabel()
+            icon_label.setFixedSize(44, 44)
+            icon_label.setAlignment(Qt.AlignCenter)
+            image_url = item.get("image", "")
+            item_grade = item.get("grade")
+            cached_icon = self.icon_cache.pixmap(image_url, 44, grade=item_grade)
+            if cached_icon:
+                icon_label.setPixmap(cached_icon)
+            if image_url:
+                self._icon_labels.setdefault(image_url, []).append((icon_label.setPixmap, item_grade))
+            self._row_icon_queue.append((image_url, item_grade))
+            row_layout.addWidget(icon_label, 0, Qt.AlignHCenter)
+
+            full_name = item.get("name", "")
+            name_label = QLabel(_short_skill_name(full_name, 16))
+            name_label.setStyleSheet(f"color: {grade_color}; font-weight: 600; font-size: 11px;")
+            name_label.setAlignment(Qt.AlignCenter)
+            name_label.setToolTip(full_name)
+            row_layout.addWidget(name_label)
+
+            list_item.setSizeHint(QSize(_TEMPLATE_PICKER_TILE_WIDTH, _TEMPLATE_PICKER_TILE_HEIGHT))
+            self.list_widget.addItem(list_item)
+            self.list_widget.setItemWidget(list_item, row_widget)
+
+    def _populate_row_view(self, matched: list[dict]):
+        self.table_widget.setRowCount(len(matched))
+        for row, item in enumerate(matched):
+            icon_item = QTableWidgetItem()
+            icon_item.setData(Qt.UserRole, item)
+            image_url = item.get("image", "")
+            item_grade = item.get("grade")
+            cached_icon = self.icon_cache.pixmap(image_url, 28, grade=item_grade)
+            if cached_icon:
+                icon_item.setIcon(QIcon(cached_icon))
+            if image_url:
+                apply_fn = lambda pix, it=icon_item: it.setIcon(QIcon(pix))
+                self._icon_labels.setdefault(image_url, []).append((apply_fn, item_grade))
+            self._row_icon_queue.append((image_url, item_grade))
+            self.table_widget.setItem(row, 0, icon_item)
+
+            name_item = QTableWidgetItem(item.get("name", ""))
+            self.table_widget.setItem(row, 1, name_item)
+
+            grade = item.get("grade") or ""
+            grade_item = QTableWidgetItem(grade)
+            if grade in GRADE_COLORS:
+                grade_item.setForeground(QColor(GRADE_COLORS[grade]))
+            self.table_widget.setItem(row, 2, grade_item)
+
+    def _active_view_widget(self):
+        return self.list_widget if self._view_mode == "block" else self.table_widget
+
+    def _request_visible_icons(self, *_args):
+        widget = self._active_view_widget()
+        count = len(self._row_icon_queue)
+        if count == 0 or not widget.isVisible():
+            # Before the dialog is actually shown (or while the inactive
+            # view is hidden), the viewport has no real geometry yet -- see
+            # the geometry-estimate fallback below for why this used to
+            # matter even once shown.
+            return
+
+        viewport = widget.viewport()
+        if self._view_mode == "block":
+            top_idx = widget.indexAt(viewport.rect().topLeft())
+            bottom_idx = widget.indexAt(viewport.rect().bottomRight())
+            top_row = top_idx.row() if top_idx.isValid() else 0
+            cols = max(1, viewport.width() // _TEMPLATE_PICKER_TILE_WIDTH)
+            rows_on_screen = viewport.height() // _TEMPLATE_PICKER_TILE_HEIGHT + 2
+            estimate = cols * rows_on_screen
+        else:
+            top_row = widget.rowAt(0)
+            top_row = top_row if top_row >= 0 else 0
+            bottom_idx = None
+            row_height = widget.verticalHeader().defaultSectionSize() or 38
+            estimate = viewport.height() // row_height + 2
+
+        # Real measured bottom index wins when Qt can give us one; otherwise
+        # fall back to a geometry-based ESTIMATE (never "assume the whole
+        # list"), which was the actual bug behind a ~1700-item burst of
+        # synchronous IconCache.request() calls (measured ~1.8s) whenever
+        # indexAt()/rowAt() couldn't resolve a real hit yet (both right after
+        # construction and, it turns out, briefly after the real show()
+        # too -- the flow/row layout needs a moment to settle).
+        if self._view_mode == "block" and bottom_idx is not None and bottom_idx.isValid():
+            bottom_row = bottom_idx.row()
+        else:
+            bottom_row = min(count - 1, top_row + estimate)
+
+        buffer = 12
+        start = max(0, top_row - buffer)
+        end = min(count - 1, bottom_row + buffer)
+        for row in range(start, end + 1):
+            if row >= len(self._row_icon_queue):
+                continue
+            url, grade = self._row_icon_queue[row]
+            if url and self.icon_cache.pixmap(url, 44 if self._view_mode == "block" else 28, grade=grade) is None:
+                self.icon_cache.request(url)
+
+    def _on_icon_ready(self, url: str):
+        entries = self._icon_labels.get(url)
+        if not entries:
+            return
+        for apply_fn, grade in entries:
+            size = 44 if self._view_mode == "block" else 28
+            pix = self.icon_cache.pixmap(url, size, grade=grade)
+            if not pix:
+                continue
+            try:
+                apply_fn(pix)
+            except RuntimeError:
+                # The row/tile this icon belonged to may already be gone
+                # (view switched or list re-filtered since the request went
+                # out) -- nothing to recover, just skip it.
+                pass
+
+    def _accept_selected(self):
+        if self._view_mode == "block":
+            item = self.list_widget.currentItem()
+            data = item.data(Qt.UserRole) if item else None
+        else:
+            item = self.table_widget.item(self.table_widget.currentRow(), 0)
+            data = item.data(Qt.UserRole) if item else None
+        if data:
+            self.selected_item = data
+            self.accept()
+
+
 class _ArcanaCardButton(QPushButton):
     """One of the 10 Arcana card slots. Before any Set is chosen it shows a
     neutral default icon ("Leer"); once a Set is active it either shows
@@ -2858,13 +3317,15 @@ class _ArcanaCardButton(QPushButton):
     dashed-border "Nicht verfügbar" state. Clicking only does something for
     an available Lord card (opens the real per-class skill popover)."""
 
-    def __init__(self, card_type: str, parent=None):
+    def __init__(self, card_type: str, parent=None, with_skill_slots: bool = False):
         super().__init__(parent)
         self.card_type = card_type
         self.entry: dict | None = None
         self.setObjectName("ArcanaCardButton")
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedSize(148, 200)
+        self._hover_tooltip = None
+        self._hover_data_fn = None
+        self.skill_slot_labels: list[tuple[QLabel, QLabel]] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 14, 10, 10)
@@ -2898,11 +3359,80 @@ class _ArcanaCardButton(QPushButton):
         self.grade_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.grade_label)
 
-        layout.addStretch()
+        if with_skill_slots:
+            # Every Arcana card always has exactly 4 skill slots (see
+            # [[project_arcana_planner]]) -- shown inline as part of this
+            # same bordered card (User-Wunsch, 2026-08-29, with a rough
+            # mockup screenshot: "Schau mal bitte, dass jede Karte diesen
+            # Aufbau hat im Set. In die Boxen darunter zeigen wir dann die
+            # Skills der jeweiligen Karte an"), NOT a hover tooltip -- Sets
+            # cards represent a real committed assignment (via the
+            # Calculator's Apply button, or eventually manual per-slot
+            # picking), unlike the Information tab's pure browsing
+            # reference (User: "sollen kein Hover Effekt haben").
+            layout.addSpacing(4)
+            for _ in range(_ARCANA_EQUIP_SLOT_COUNT):
+                # Name left-aligned, value right-aligned (User-Wunsch,
+                # 2026-08-29: "die Zahl rechtsbuendig machen und den Text
+                # linksbuendig, damit sollte es immer gleich aussehen") --
+                # two separate QLabels in an HBox rather than one combined
+                # rich-text string, so the value's position is independent
+                # of how long the (already truncated) name happens to be.
+                slot = QFrame()
+                slot.setObjectName("ArcanaEquipSkillSlot")
+                slot.setFixedHeight(24)
+                slot_layout = QHBoxLayout(slot)
+                slot_layout.setContentsMargins(8, 0, 8, 0)
+                slot_layout.setSpacing(4)
+                name_label = QLabel()
+                name_label.setTextFormat(Qt.RichText)
+                value_label = QLabel()
+                value_label.setTextFormat(Qt.RichText)
+                value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                slot_layout.addWidget(name_label, 1)
+                slot_layout.addWidget(value_label, 0)
+                layout.addWidget(slot)
+                self.skill_slot_labels.append((name_label, value_label))
+            self.setFixedSize(_ARCANA_CARD_WIDTH, 200 + _ARCANA_EQUIP_SLOT_COUNT * 28 + 10)
+        else:
+            layout.addStretch()
+            self.setFixedSize(_ARCANA_CARD_WIDTH, 200)
 
     def _restyle(self):
         self.style().unpolish(self)
         self.style().polish(self)
+
+    def set_skill_slots(self, assigned: dict[str, int], id_to_skill: dict[str, dict]):
+        """Fills the 4 fixed skill-slot boxes (with_skill_slots=True only)
+        from a real {skill_id: level} assignment -- up to 4 entries, in
+        whatever order they were assigned. Boxes past however many are
+        actually filled stay blank (never hidden -- a card always has
+        exactly 4 slots, filled or not)."""
+        items = list(assigned.items())
+        for i, (name_label, value_label) in enumerate(self.skill_slot_labels):
+            if i >= len(items):
+                name_label.setText("")
+                value_label.setText("")
+                continue
+            sid, level = items[i]
+            skill = id_to_skill.get(sid, {})
+            name_color = _SKILL_TYPE_COLORS.get(skill.get("type", ""), "#94a3b8")
+            # Raised from 16 (User-Wunsch, 2026-08-29, after the wider
+            # cards from the previous round: "jetzt bitte die volle Laenge
+            # fuer den Text nutzen ... Attack Preparation ist der Text
+            # abgebrochen") -- 26 comfortably covers all but the single
+            # longest real skill name in the dataset ("Lightning Strike
+            # Scattershot", 28 chars) at this box width; still elides with
+            # "…" past that (User: "wenn der Inhalt dann immernoch zu lang
+            # ist, kannst du gerne den Text weiterhin mit ... abbrechen").
+            name = _short_skill_name(skill.get("name", ""), 26)
+            # Name left-aligned, value right-aligned in its own label
+            # (User-Wunsch, 2026-08-29: "die Zahl rechtsbuendig machen und
+            # den Text linksbuendig, damit sollte es immer gleich
+            # aussehen") -- keeps the "+N" lined up on the right regardless
+            # of name length, instead of trailing right after it.
+            name_label.setText(f'<span style="color:{name_color};">{name}</span>')
+            value_label.setText(f'<span style="color:#facc15;font-weight:700;">+{level}</span>')
 
     def set_default_state(self, icon_file: str | None):
         self.entry = None
@@ -2950,73 +3480,178 @@ class _ArcanaCardButton(QPushButton):
         self.grade_label.setText(dots)
         self._restyle()
 
+    def enable_hover_tooltip(self, tooltip, data_fn):
+        """Wires this card up to a shared ArcanaCardTooltip instance, shown
+        on hover (User-Wunsch, 2026-08-29: "bitte umbauen auf Tipptool") --
+        same _hover_token/"only rebuild on an actual key change" guard
+        already proven for _ArcanaResultCardIcon's identical hover pattern
+        (fixes a real Windows flicker bug: a floating translucent window
+        sitting right over its own small source widget can trigger
+        spurious native enter/leave messages). data_fn() -> (theme, lord,
+        pool, assigned_values) or None (nothing to show, e.g. no Set
+        active) -- called fresh on every hover, never cached, so it's
+        always current."""
+        self._hover_tooltip = tooltip
+        self._hover_data_fn = data_fn
 
-class _ArcanaSkillPopup(QWidget):
-    """Anchored popover (Qt.Popup, same anchoring idea as ItemPickerPopup)
-    showing the real class-specific skill pool for one Arcana card type,
-    split Active/Passive with each skill's real level range — opened by
-    clicking an available Lord card."""
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if self._hover_tooltip is None or self._hover_data_fn is None:
+            return
+        data = self._hover_data_fn()
+        if data is None:
+            return
+        theme, lord, pool, assigned_values = data
+        self._hover_tooltip._hover_token = getattr(self._hover_tooltip, "_hover_token", 0) + 1
+        key = (self.card_type, theme)
+        if getattr(self._hover_tooltip, "_shown_for_key", None) == key:
+            return
+        self._hover_tooltip._shown_for_key = key
+        self._hover_tooltip.set_card(self.card_type, theme, lord, pool, assigned_values)
+        self._hover_tooltip.show_at(QCursor.pos())
 
-    def __init__(self, card_type: str, class_label: str, skills: list[dict], parent=None):
-        super().__init__(parent, Qt.Popup)
-        self.setObjectName("ArcanaSkillPopup")
-        self.setFixedWidth(340)
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        if self._hover_tooltip is None:
+            return
+        token = getattr(self._hover_tooltip, "_hover_token", 0)
+        tooltip = self._hover_tooltip
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(6)
+        def _maybe_hide():
+            if getattr(tooltip, "_hover_token", 0) == token:
+                tooltip._shown_for_key = None
+                tooltip.hide()
 
-        header = QLabel(_t("arm_skills_for", card=card_type, class_name=class_label))
-        header.setObjectName("DetailName")
-        header.setWordWrap(True)
-        layout.addWidget(header)
+        QTimer.singleShot(0, _maybe_hide)
 
-        source = QLabel(_t("arm_source_questlog"))
-        source.setObjectName("DetailDisclaimer")
-        layout.addWidget(source)
 
-        columns = QHBoxLayout()
-        columns.setSpacing(16)
-        active_skills = [s for s in skills if s.get("type") == "active"]
-        passive_skills = [s for s in skills if s.get("type") == "passive"]
-        columns.addLayout(self._build_column(_t("arm_active"), active_skills))
-        columns.addLayout(self._build_column(_t("arm_passive"), passive_skills))
-        layout.addLayout(columns)
+class _ArcanaSetBanner(QPushButton):
+    """One Set-selection banner in the Information tab's left sidebar
+    (User-Wunsch, 2026-08-29, real in-game reference screenshot from a
+    colleague: wide photo background + dark fade-from-left overlay +
+    small spark icon + Set name, no PvE/PvP category label anymore) --
+    replaces the old flat-gradient QPushButton (which also turned out to
+    have a real, separately-fixed Qt background-color cascade bug, see
+    [[project_arcana_planner]] Runde 20). Falls back to the previous
+    flat category gradient when no real photo exists yet for this Set
+    (see _arcana_set_background_path) -- browser-mockup-approved crop/
+    zoom per image is baked in via _ARCANA_SET_BANNER_IMAGE_TRANSFORM."""
 
-    @staticmethod
-    def _build_column(title: str, skills: list[dict]) -> QVBoxLayout:
-        col = QVBoxLayout()
-        col.setSpacing(4)
-        head = QLabel(f"{title} ({len(skills)})")
-        head.setObjectName("EquipSectionLabel")
-        col.addWidget(head)
-        if not skills:
-            empty = QLabel(_t("arm_none"))
-            empty.setObjectName("DetailDisclaimer")
-            col.addWidget(empty)
-        for skill in skills:
-            row = QLabel(
-                f'{skill["name"]} <span style="color:#facc15;font-weight:700;">'
-                f'+{skill["levelBase"]}–{skill["levelMax"]}</span>'
+    def __init__(self, theme: str, set_name: str, category: str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ArcanaSetBanner")
+        self.setCheckable(True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedWidth(_ARCANA_SET_COLUMN_WIDTH)
+        self.setMinimumHeight(68)
+        self._theme = theme
+        self._set_name = set_name
+        self._category = category
+        path = _arcana_set_background_path(set_name)
+        self._pixmap = QPixmap(str(path)) if path else None
+        transform = _ARCANA_SET_BANNER_IMAGE_TRANSFORM.get(set_name)
+        self._zoom, self._anchor_x, self._anchor_y = transform or (1.0, 0.5, 0.5)
+        self.toggled.connect(lambda _c=False: self.update())
+        self._bonus_tooltip = None
+
+    def enable_bonus_tooltip(self, tooltip: "ArcanaSetBonusTooltip"):
+        """Wires this banner up to a shared ArcanaSetBonusTooltip, shown on
+        hover (User-Wunsch, 2026-08-29: "Kannst du diese Seteffekte als
+        Hover Effekt abbilden?") -- same hover_token/shown_for_key guard as
+        _ArcanaCardButton's card-skill hover (fixes the same real Windows
+        flicker bug: a floating translucent window sitting right over its
+        own small source widget can trigger spurious native enter/leave
+        messages)."""
+        self._bonus_tooltip = tooltip
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if self._bonus_tooltip is None:
+            return
+        self._bonus_tooltip._hover_token = getattr(self._bonus_tooltip, "_hover_token", 0) + 1
+        if getattr(self._bonus_tooltip, "_shown_for_key", None) == self._theme:
+            return
+        self._bonus_tooltip._shown_for_key = self._theme
+        self._bonus_tooltip.set_bonus(self._theme)
+        self._bonus_tooltip.show_at(QCursor.pos())
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        if self._bonus_tooltip is None:
+            return
+        token = getattr(self._bonus_tooltip, "_hover_token", 0)
+        tooltip = self._bonus_tooltip
+
+        def _maybe_hide():
+            if getattr(tooltip, "_hover_token", 0) == token:
+                tooltip._shown_for_key = None
+                tooltip.hide()
+
+        QTimer.singleShot(0, _maybe_hide)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect())
+        radius = 10.0
+        clip_path = QPainterPath()
+        clip_path.addRoundedRect(rect, radius, radius)
+        painter.setClipPath(clip_path)
+
+        if self._pixmap and not self._pixmap.isNull():
+            # Approved browser mockup: image zoomed in slightly beyond
+            # "cover" and anchored per-image (_ARCANA_SET_BANNER_IMAGE_
+            # TRANSFORM), so a specific motif (e.g. Primal Vigor's wings)
+            # lands where the overlay clears rather than dead-center.
+            pw, ph = self._pixmap.width(), self._pixmap.height()
+            cover_scale = max(rect.width() / pw, rect.height() / ph)
+            scale = cover_scale * self._zoom
+            sw, sh = pw * scale, ph * scale
+            slack_x = max(0.0, sw - rect.width())
+            slack_y = max(0.0, sh - rect.height())
+            x = -slack_x * self._anchor_x
+            y = -slack_y * self._anchor_y
+            scaled = self._pixmap.scaled(
+                int(sw), int(sh), Qt.IgnoreAspectRatio, Qt.SmoothTransformation
             )
-            row.setTextFormat(Qt.RichText)
-            row.setObjectName("DetailInfo")
-            row.setWordWrap(True)
-            col.addWidget(row)
-        col.addStretch()
-        return col
+            painter.drawPixmap(QRectF(x, y, sw, sh), scaled, QRectF(scaled.rect()))
+        else:
+            grad = QLinearGradient(0, 0, rect.width(), rect.height())
+            for stop, color in ARCANA_CATEGORY_GRADIENT_STOPS[self._category]:
+                grad.setColorAt(stop, QColor(color))
+            painter.fillRect(rect, grad)
 
-    def show_anchored(self, anchor: QWidget):
-        self.adjustSize()
-        top_left = anchor.mapToGlobal(QPoint(0, 0))
-        anchor_bottom = anchor.mapToGlobal(QPoint(0, anchor.height())).y()
-        screen = anchor.screen() or QApplication.primaryScreen()
-        screen_geo = screen.availableGeometry()
-        x = min(max(top_left.x(), screen_geo.left()), screen_geo.right() - self.width())
-        space_below = screen_geo.bottom() - anchor_bottom
-        y = anchor_bottom + 8 if space_below >= self.height() + 12 else top_left.y() - self.height() - 8
-        self.move(x, y)
-        self.show()
+        # Dark fade-from-left overlay (Variant A from the browser mockup --
+        # gradual, even fade -- User: "das finde ich an sich schon gut").
+        overlay = QLinearGradient(0, 0, rect.width(), 0)
+        overlay.setColorAt(0.0, QColor(6, 10, 18, 235))
+        overlay.setColorAt(0.42, QColor(6, 10, 18, 140))
+        overlay.setColorAt(0.75, QColor(6, 10, 18, 20))
+        painter.fillRect(rect, overlay)
+        painter.setClipping(False)
+
+        border_color = QColor(255, 255, 255, 255 if self.isChecked() else 20)
+        painter.setPen(QPen(border_color, 2))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
+
+        spark_font = self.font()
+        spark_font.setPointSize(11)
+        painter.setFont(spark_font)
+        painter.setPen(QColor("#22d3ee"))
+        painter.drawText(
+            QRectF(18, 10, rect.width() - 30, 16), Qt.AlignLeft | Qt.AlignVCenter, "✦"
+        )
+
+        name_font = self.font()
+        name_font.setBold(True)
+        name_font.setPointSize(12)
+        painter.setFont(name_font)
+        painter.setPen(QColor("#fdfdfd"))
+        painter.drawText(
+            rect.adjusted(18, 0, -10, -10), Qt.AlignLeft | Qt.AlignBottom, self._set_name
+        )
+        painter.end()
 
 
 AION2_CLASSES = [
@@ -7633,16 +8268,26 @@ class SkillInfoTooltip(_TranslucentCardTooltip):
 
 class ArcanaCardTooltip(_TranslucentCardTooltip):
     """Card detail tooltip for hovering one card in the Arcana Calculator
-    results popup -- same CONTENT style as the existing Arcana tab's own
-    hover popover (_ArcanaSkillPopup: Active/Passive skill columns with
-    level ranges), plus the card's Empyrean Lord effect at its maxed
+    results popup -- same CONTENT style as the Information tab's own
+    inline skill list (Active/Passive skill columns with level ranges),
+    plus the card's Empyrean Lord effect at its maxed
     value, with whichever skill THIS combination committed to (if any)
     highlighted at its real perfect-case value instead of the generic
     range (User-Wunsch, 2026-08-29: "Das Tooltip soll similar zu dem sein,
     welches wir bereits als Hover bei den Arcanas nutzen")."""
 
     def __init__(self, parent=None):
-        super().__init__(280, parent)
+        # Wide enough that most skill names fit on one line at this font
+        # size (User-Wunsch, 2026-08-29, after a live screenshot showed
+        # ragged wrapping making rows look like they had blank lines in
+        # between: "hier scheinen leere Zeilen zu sein. Dies soll ordentlich
+        # aussehen") -- combined with eliding any name that still doesn't
+        # fit (see set_card), every row is now guaranteed exactly one line
+        # tall, so the two columns can never drift out of vertical sync.
+        # Widened again 340 -> 380 (User-Wunsch, 2026-08-29: "jetzt bitte
+        # die volle Laenge fuer den Text nutzen") to match the raised
+        # per-row character cap in set_card.
+        super().__init__(380, parent)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(14, 14, 14, 14)
@@ -7664,14 +8309,21 @@ class ArcanaCardTooltip(_TranslucentCardTooltip):
 
         columns = QHBoxLayout()
         columns.setSpacing(14)
-        self._active_container, self._active_layout = self._build_category_column("arm_active")
-        self._passive_container, self._passive_layout = self._build_category_column("arm_passive")
+        # Header colored per type (User-Wunsch, 2026-08-29: "jetzt noch
+        # farbig fuer aktiv und passiv jeweils") -- same Active/Passive
+        # colors used everywhere else in the app (_SKILL_TYPE_COLORS).
+        self._active_container, self._active_layout = self._build_category_column(
+            "arm_active", _SKILL_TYPE_COLORS["active"]
+        )
+        self._passive_container, self._passive_layout = self._build_category_column(
+            "arm_passive", _SKILL_TYPE_COLORS["passive"]
+        )
         columns.addWidget(self._active_container, 1)
         columns.addWidget(self._passive_container, 1)
         outer.addLayout(columns)
 
     @staticmethod
-    def _build_category_column(title_key: str) -> tuple[QWidget, QVBoxLayout]:
+    def _build_category_column(title_key: str, color: str) -> tuple[QWidget, QVBoxLayout]:
         container = QWidget()
         container.setStyleSheet("background: transparent;")
         col = QVBoxLayout(container)
@@ -7679,7 +8331,7 @@ class ArcanaCardTooltip(_TranslucentCardTooltip):
         col.setSpacing(4)
         head = QLabel(_t(title_key))
         head.setStyleSheet(
-            "font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #64748b; background: transparent; border: none;"
+            f"font-size: 10px; font-weight: 700; letter-spacing: 1px; color: {color}; background: transparent; border: none;"
         )
         col.addWidget(head)
         rows_layout = QVBoxLayout()
@@ -7741,15 +8393,80 @@ class ArcanaCardTooltip(_TranslucentCardTooltip):
             )
             name_color = "#f1f5f9" if is_assigned else "#94a3b8"
             value_color = "#22d3ee" if is_assigned else "#64748b"
+            full_name = skill.get("name", "")
+            # Truncated by character count, not word-wrapped (User-Wunsch,
+            # 2026-08-29, after a live screenshot: "hier scheinen leere
+            # Zeilen zu sein. Dies soll ordentlich aussehen") -- a wrapped
+            # 2-line row in one column doesn't line up with a 1-line row
+            # at the same position in the other column, which read as
+            # stray blank lines. Guaranteeing every row is exactly one
+            # line keeps both columns in tidy vertical sync regardless of
+            # name length. Same char-count approach as _short_skill_name
+            # (real stylesheet font isn't applied yet at construction time,
+            # so font-metrics-based eliding can't be trusted here either).
+            # Raised 18 -> 26 (User-Wunsch, 2026-08-29: "jetzt bitte die
+            # volle Laenge fuer den Text nutzen ... Attack Preparation ist
+            # der Text abgebrochen") -- 26 covers all but the single
+            # longest real skill name in the dataset; still elides with
+            # "…" past that (User: "wenn der Inhalt dann immernoch zu lang
+            # ist, kannst du gerne den Text weiterhin mit ... abbrechen").
+            display_name = _short_skill_name(full_name, 26)
             row = QLabel(
-                f'<span style="color:{name_color};">{skill.get("name", "")}</span> '
+                f'<span style="color:{name_color};">{display_name}</span>&nbsp;&nbsp;'
                 f'<span style="color:{value_color};font-weight:700;">{value_text}</span>'
             )
             row.setTextFormat(Qt.RichText)
-            row.setWordWrap(True)
+            row.setWordWrap(False)
             row.setStyleSheet("font-size: 11px; background: transparent; border: none;")
             target.addWidget(row)
 
+        self.adjustSize()
+
+
+class ArcanaSetBonusTooltip(_TranslucentCardTooltip):
+    """Set Bonus detail on hover over a Set-selection banner (User-Wunsch,
+    2026-08-29: "Kannst du diese Seteffekte als Hover Effekt abbilden?
+    ... statt unten die Set Effekte als Hover Effekt angezeigt werden")
+    -- replaces the old always-reserved-space panel below the sidebar,
+    same 2-piece/4-piece/source content, just shown only while actually
+    hovering instead of taking up permanent layout space."""
+
+    def __init__(self, parent=None):
+        super().__init__(260, parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 14, 14, 14)
+        outer.setSpacing(6)
+
+        self._title_label = QLabel()
+        self._title_label.setWordWrap(True)
+        self._title_label.setStyleSheet(
+            "font-size: 13px; font-weight: 700; color: #22d3ee; background: transparent; border: none;"
+        )
+        outer.addWidget(self._title_label)
+
+        self._2pc_label = QLabel()
+        self._2pc_label.setWordWrap(True)
+        self._2pc_label.setStyleSheet("font-size: 12px; color: #e5e7eb; background: transparent; border: none;")
+        outer.addWidget(self._2pc_label)
+
+        self._4pc_label = QLabel()
+        self._4pc_label.setWordWrap(True)
+        self._4pc_label.setStyleSheet("font-size: 12px; color: #e5e7eb; background: transparent; border: none;")
+        outer.addWidget(self._4pc_label)
+
+        source = QLabel(_t("arm_source_aion2hub"))
+        source.setWordWrap(True)
+        source.setStyleSheet(
+            "font-size: 10px; color: #64748b; background: transparent; border: none; margin-top: 4px;"
+        )
+        outer.addWidget(source)
+
+    def set_bonus(self, theme: str):
+        info = ARCANA_SET_BONUSES.get(theme, {})
+        self._title_label.setText(_t("arm_set_bonus", name=info.get("setName", theme)))
+        self._2pc_label.setText(_t("arm_set_bonus_2pc", text=info.get("2pc", "")))
+        self._4pc_label.setText(_t("arm_set_bonus_4pc", text=info.get("4pc", "")))
         self.adjustSize()
 
 
@@ -9404,7 +10121,14 @@ class LoadoutWindow(QMainWindow):
         build's arcana_cards -- assigned slots show the real Lord/effect/
         grade dots (same _ArcanaCardButton.set_themed_state the
         "Informationen" browser already uses), unassigned ones stay in
-        the neutral default/"Empty" state."""
+        the neutral default/"Empty" state. Also fills each card's 4 fixed
+        skill-slot boxes (User-Wunsch, 2026-08-29) straight from the real
+        per-card assignment (arcana_cards[ct]["skill_ids"], the same
+        {skill_id: level} dict the Calculator's Apply button writes and
+        ArcanaResultsDialog already renders identically) -- NOT filtered
+        by self._skill_levels like the discarded previous approach, since
+        a card's slots are their own fixed structure, independent of
+        whatever else the player has leveled in the Skill Planner."""
         class_name = self.character_class_combo.currentText().strip().lower()
         build = self._skill_builds_data.get(class_name, {}).get(self._current_build_name, {})
         arcana_cards = build.get("arcana_cards") or {}
@@ -9416,6 +10140,11 @@ class LoadoutWindow(QMainWindow):
                 card.set_themed_state(entry)
             else:
                 card.set_default_state(self._arcana_default_icon.get(ct))
+
+            assigned = assignment.get("skill_ids", {}) if assignment else {}
+            pool = self._arcana_class_skills.get(ct, {}).get(class_name, [])
+            id_to_skill = {s["id"]: s for s in pool}
+            card.set_skill_slots(assigned, id_to_skill)
 
     def _on_skill_description_card_clicked(self, skill: dict, checked: bool, check_icon: QLabel):
         skill_id = skill.get("id")
@@ -10190,13 +10919,22 @@ class LoadoutWindow(QMainWindow):
         return page
 
     def _build_arcana_information_tab(self) -> QWidget:
-        tab = QWidget()
-        root = QHBoxLayout(tab)
+        content = QWidget()
+        root = QHBoxLayout(content)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(30)
         root.addLayout(self._build_arcana_column())
         root.addStretch()
-        return tab
+
+        # Scrollable now that each of the 10 cards can carry its own full
+        # skill-pool list below it (User-Wunsch, 2026-08-29) -- same
+        # overflow reasoning as the Sets tab's own scroll area.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.setWidget(content)
+        return scroll
 
     def _build_arcana_sets_tab(self) -> QWidget:
         """"Sets" sub-tab: the 5 real Lord card slots (Chalice/Parchment/
@@ -10215,18 +10953,39 @@ class LoadoutWindow(QMainWindow):
         arcana_build_tabs_row (see _rebuild_skill_build_tabs) -- switching
         builds here is the same as switching them in the Skill Planner."""
         tab = QWidget()
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(16, 16, 16, 16)
-        outer.setSpacing(12)
+        page_layout = QVBoxLayout(tab)
+        page_layout.setContentsMargins(16, 16, 16, 16)
+        page_layout.setSpacing(12)
+        page_layout.addLayout(self.arcana_build_tabs_row)
 
-        outer.addLayout(self.arcana_build_tabs_row)
+        # Scrollable below the (fixed) build-tabs row -- a card with a large
+        # skill pool (e.g. Chalice/Time can run 20+ entries for some
+        # classes) would otherwise overflow the window with no way to
+        # reach the Cancel/Apply-less bottom, same reasoning as every other
+        # long detail panel in this window (see equip_detail_scroll etc.).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.viewport().setStyleSheet("background: transparent;")
+
+        content = QWidget()
+        outer = QVBoxLayout(content)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(12)
 
         grid = QGridLayout()
         grid.setSpacing(14)
         usable_types, _pools = self._arcana_usable_and_pools()
         self._arcana_equip_slot_widgets: dict[str, _ArcanaCardButton] = {}
+        # 4 fixed skill-slot boxes inline on the card itself, no hover
+        # (User-Wunsch, 2026-08-29, with a rough mockup screenshot: "Sets,
+        # die durch den Calc oder User angelegt wurden, sollen kein Hover
+        # Effekt haben. Dort werden ohnehin nur 4 Zeilen angezeigt ... In
+        # die Boxen darunter zeigen wir dann die Skills der jeweiligen
+        # Karte an") -- a real committed assignment, unlike the
+        # Information tab's pure browsing/hover reference.
         for col_idx, ct in enumerate(usable_types):
-            card = _ArcanaCardButton(ct)
+            card = _ArcanaCardButton(ct, with_skill_slots=True)
             card.set_default_state(self._arcana_default_icon.get(ct))
             grid.addWidget(card, 0, col_idx)
             self._arcana_equip_slot_widgets[ct] = card
@@ -10235,6 +10994,9 @@ class LoadoutWindow(QMainWindow):
         grid_row.addStretch(1)
         outer.addLayout(grid_row)
         outer.addStretch(1)
+
+        scroll.setWidget(content)
+        page_layout.addWidget(scroll, 1)
         return tab
 
     def _build_arcana_column(self) -> QHBoxLayout:
@@ -10244,15 +11006,16 @@ class LoadoutWindow(QMainWindow):
         exclusive with a "Keine Sets" neutral state) and all 10 real card
         slots on the right. Choosing a Set previews which real Empyrean
         Lord (or Main Stat, for the 4 Stat cards) and which grades each
-        card would have; clicking an available Lord card opens the real
-        class-specific skill pool in a popover, using the class already
-        selected up in the shared header (self._active_skill_class) rather
-        than a separate class picker. Replaces the old 5-slot equip-picker
-        mock-up — real player data (see project notes) confirmed all 10
-        card types and all 10 slots are actually live, not just 5.
-        This is a browsing/reference tool for now, not wired into equip
-        state, GearScore, or Stat Info — shugo.gg exposes no real numeric
-        Arcana stat values to integrate with those anyway."""
+        card would have, with the real class-specific skill pool that Lord
+        could buff shown inline below each card (see _refresh_arcana_cards),
+        using the class already selected up in the shared header
+        (self._active_skill_class) rather than a separate class picker.
+        Replaces the old 5-slot equip-picker mock-up — real player data
+        (see project notes) confirmed all 10 card types and all 10 slots
+        are actually live, not just 5. This is a browsing/reference tool
+        for now, not wired into equip state, GearScore, or Stat Info —
+        shugo.gg exposes no real numeric Arcana stat values to integrate
+        with those anyway."""
         root = QHBoxLayout()
         root.setSpacing(24)
 
@@ -10260,7 +11023,6 @@ class LoadoutWindow(QMainWindow):
         self._arcana_class_skills = _load_arcana_class_skills()
         self._arcana_active_theme: str | None = None
         self._arcana_card_widgets: dict[str, _ArcanaCardButton] = {}
-        self._active_arcana_popup: _ArcanaSkillPopup | None = None
 
         left_col = QVBoxLayout()
         left_col.setSpacing(8)
@@ -10279,42 +11041,21 @@ class LoadoutWindow(QMainWindow):
         self._arcana_set_group.addButton(none_btn)
         left_col.addWidget(none_btn)
 
+        # Set Bonus shown on hover instead of a persistent panel below the
+        # sidebar (User-Wunsch, 2026-08-29: "Kannst du diese Seteffekte als
+        # Hover Effekt abbilden? ... statt unten die Set Effekte als Hover
+        # Effekt angezeigt werden") -- same hover_token/shown_for_key guard
+        # already proven for the card hover tooltips (see
+        # _ArcanaCardButton.enterEvent).
+        self._arcana_set_bonus_tooltip = ArcanaSetBonusTooltip(self)
         for theme in ARCANA_THEME_ORDER:
             category = ARCANA_THEME_CATEGORY[theme]
-            btn = QPushButton(f"{theme}\n{ARCANA_CATEGORY_LABELS[category]}")
-            btn.setObjectName("ArcanaSetBanner")
-            btn.setProperty("category", category)
-            btn.setCheckable(True)
-            btn.setFixedWidth(_ARCANA_SET_COLUMN_WIDTH)
-            btn.setMinimumHeight(68)
-            btn.setCursor(Qt.PointingHandCursor)
+            set_name = ARCANA_SET_BONUSES.get(theme, {}).get("setName", theme)
+            btn = _ArcanaSetBanner(theme, set_name, category)
             btn.clicked.connect(lambda _c=False, t=theme: self._on_arcana_set_selected(t))
+            btn.enable_bonus_tooltip(self._arcana_set_bonus_tooltip)
             self._arcana_set_group.addButton(btn)
             left_col.addWidget(btn)
-
-        self._arcana_bonus_panel = QFrame()
-        self._arcana_bonus_panel.setObjectName("ArcanaBonusPanel")
-        self._arcana_bonus_panel.setFixedWidth(_ARCANA_SET_COLUMN_WIDTH)
-        self._arcana_bonus_panel.setVisible(False)
-        bonus_layout = QVBoxLayout(self._arcana_bonus_panel)
-        bonus_layout.setContentsMargins(14, 12, 14, 12)
-        bonus_layout.setSpacing(4)
-        self._arcana_bonus_title = QLabel("")
-        self._arcana_bonus_title.setObjectName("EquipSectionLabel")
-        self._arcana_bonus_title.setWordWrap(True)
-        bonus_layout.addWidget(self._arcana_bonus_title)
-        self._arcana_bonus_2pc = QLabel("")
-        self._arcana_bonus_2pc.setObjectName("DetailInfo")
-        self._arcana_bonus_2pc.setWordWrap(True)
-        bonus_layout.addWidget(self._arcana_bonus_2pc)
-        self._arcana_bonus_4pc = QLabel("")
-        self._arcana_bonus_4pc.setObjectName("DetailInfo")
-        self._arcana_bonus_4pc.setWordWrap(True)
-        bonus_layout.addWidget(self._arcana_bonus_4pc)
-        bonus_source = QLabel(_t("arm_source_aion2hub"))
-        bonus_source.setObjectName("DetailDisclaimer")
-        bonus_layout.addWidget(bonus_source)
-        left_col.addWidget(self._arcana_bonus_panel)
 
         left_col.addStretch()
         root.addLayout(left_col)
@@ -10322,10 +11063,22 @@ class LoadoutWindow(QMainWindow):
         right_col = QVBoxLayout()
         grid = QGridLayout()
         grid.setSpacing(14)
+        grid.setAlignment(Qt.AlignTop)
+        # Possible skills, shown via a real hover tooltip (User-Wunsch,
+        # 2026-08-29, after the click/dropdown-overlay attempt didn't work
+        # out: "bitte umbauen auf Tipptool") -- reuses ArcanaCardTooltip
+        # as-is (already built for the Calculator results' card hover, same
+        # title/lord-effect/Active-Passive-columns content this needed),
+        # instead of a second bespoke widget. 2-column Active+Passive only
+        # for the 2 card types whose pool genuinely mixes both (Chalice,
+        # Scales per real data); every other card type is Active-only or
+        # Passive-only and ArcanaCardTooltip.set_card() already collapses
+        # to a single column for those on its own.
+        self._arcana_info_tooltip = ArcanaCardTooltip(self)
         for i, card_type in enumerate(ARCANA_CARD_TYPES):
             row, col_idx = divmod(i, 5)
             card = _ArcanaCardButton(card_type)
-            card.clicked.connect(lambda _c=False, ct=card_type: self._on_arcana_card_clicked(ct))
+            card.enable_hover_tooltip(self._arcana_info_tooltip, lambda ct=card_type: self._arcana_info_hover_data(ct))
             grid.addWidget(card, row, col_idx)
             self._arcana_card_widgets[card_type] = card
         right_col.addLayout(grid)
@@ -10334,6 +11087,18 @@ class LoadoutWindow(QMainWindow):
 
         self._refresh_arcana_cards()
         return root
+
+    def _arcana_info_hover_data(self, card_type: str):
+        """Callback for _ArcanaCardButton.enable_hover_tooltip -- computed
+        fresh on every hover (not pre-rendered) so it's always current for
+        whatever Set/class is active right now."""
+        card = self._arcana_card_widgets.get(card_type)
+        if card is None or not card.entry:
+            return None
+        theme = self._arcana_active_theme or ""
+        lord = card.entry.get("lord")
+        pool = self._arcana_class_skills.get(card_type, {}).get(self._active_skill_class, [])
+        return theme, lord, pool, {}
 
     def _build_arcana_lord_bar(self) -> QFrame:
         """Compact permanent footer for the whole "Arcana" tab (User-
@@ -10370,38 +11135,27 @@ class LoadoutWindow(QMainWindow):
         self._arcana_active_theme = theme
         self._refresh_arcana_cards()
 
-        if theme is None:
-            self._arcana_bonus_panel.setVisible(False)
-            return
-        info = ARCANA_SET_BONUSES.get(theme, {})
-        self._arcana_bonus_title.setText(_t("arm_set_bonus", name=info.get('setName', theme)))
-        self._arcana_bonus_2pc.setText(_t("arm_set_bonus_2pc", text=info.get('2pc', '')))
-        self._arcana_bonus_4pc.setText(_t("arm_set_bonus_4pc", text=info.get('4pc', '')))
-        self._arcana_bonus_panel.setVisible(True)
-
     def _refresh_arcana_cards(self):
         theme = self._arcana_active_theme
+        # A Set/class change can invalidate whatever the hover tooltip is
+        # currently showing (it caches "_shown_for_key" to skip redundant
+        # rebuilds on repeated enter events, see _ArcanaCardButton) --
+        # clearing that key + hiding forces a fresh set_card() call next
+        # time the user actually hovers a card.
+        tooltip = getattr(self, "_arcana_info_tooltip", None)
+        if tooltip is not None:
+            tooltip._shown_for_key = None
+            tooltip.hide()
+
         for card_type, card in self._arcana_card_widgets.items():
             if theme is None:
                 card.set_default_state(self._arcana_default_icon.get(card_type))
-                continue
-            entry = self._arcana_theme_map.get(theme, {}).get(card_type)
-            if entry is None:
-                card.set_unavailable_state()
             else:
-                card.set_themed_state(entry)
-
-    def _on_arcana_card_clicked(self, card_type: str):
-        card = self._arcana_card_widgets[card_type]
-        if not card.entry or not card.entry.get("lord"):
-            return  # unavailable in this Set, or one of the 4 Stat cards (no skills)
-        class_name = self._active_skill_class
-        pool = self._arcana_class_skills.get(card_type, {}).get(class_name, [])
-        popup = _ArcanaSkillPopup(card_type, class_name.capitalize() if class_name else "?", pool, self)
-        popup.show_anchored(card)
-        # Kept alive via this reference — a Qt.Popup with no other owner
-        # would otherwise get garbage-collected before it can show.
-        self._active_arcana_popup = popup
+                entry = self._arcana_theme_map.get(theme, {}).get(card_type)
+                if entry is None:
+                    card.set_unavailable_state()
+                else:
+                    card.set_themed_state(entry)
 
     # ── Middle column: aggregated Stat Info by default, per-slot editor
     # (dropdown + clear, icon + title, enchant slider, item stats) once a
@@ -11101,6 +11855,11 @@ class LoadoutWindow(QMainWindow):
         self._refresh_skill_description_view()
         self._rebuild_skill_build_tabs()
         self._load_current_build_state()
+        # Information tab's inline skill lists are class-specific too (see
+        # _refresh_arcana_cards) -- _load_current_build_state above already
+        # refreshes the Sets tab's own equivalent (_refresh_arcana_equip_
+        # slots), but not this one.
+        self._refresh_arcana_cards()
         # Switching class while Build Vergleich is open would otherwise keep
         # showing it with the OLD class's build names still selected.
         self._close_build_compare()
@@ -12195,7 +12954,13 @@ class ItemFilterProxyModel(QSortFilterProxyModel):
         super().__init__(parent)
         self.search_text = ""
         self.grade_filter = "All"
-        self.class_filter = "All"
+        # Shop filter (User-Wunsch, 2026-08-29: "Class Auswahl brauchen wir
+        # da nicht mehr") replaces the old Class dropdown/filter entirely --
+        # classNames are still shown as their own table column, just no
+        # longer filterable here. shop_items maps shop name -> item id set
+        # (see compute_shop_items.py/REAL_SHOP_TYPES).
+        self.shop_filter = "All"
+        self.shop_items: dict[str, set[int]] = {k: set(v) for k, v in _load_shop_items().items()}
         self.gear_type_filter: set[str] = set()
         # Two-level category scoping (sidebar + Category dropdown, see
         # _ITEM_TOP_CATEGORIES/_GEAR_SUBGROUPS): group_categories narrows to
@@ -12232,8 +12997,8 @@ class ItemFilterProxyModel(QSortFilterProxyModel):
         self.subcategory_categories = categories
         self.invalidateFilter()
 
-    def set_class(self, class_name: str):
-        self.class_filter = class_name
+    def set_shop(self, shop_name: str):
+        self.shop_filter = shop_name
         self.invalidateFilter()
 
     def set_gear_types(self, types: set):
@@ -12268,9 +13033,9 @@ class ItemFilterProxyModel(QSortFilterProxyModel):
             if self.subcategory_categories is not None and category not in self.subcategory_categories:
                 return False
 
-        if self.class_filter != "All":
-            classes = model.index(source_row, 5, source_parent).data(Qt.DisplayRole) or ""
-            if self.class_filter not in [c.strip() for c in classes.split(",")]:
+        if self.shop_filter != "All":
+            item_id = model.index(source_row, ID_COLUMN, source_parent).data(Qt.EditRole)
+            if item_id not in self.shop_items.get(self.shop_filter, set()):
                 return False
 
         if self.gear_type_filter:
@@ -12339,14 +13104,6 @@ class ItemDatabaseWindow(QMainWindow):
         header_row.addLayout(title_col)
         header_row.addStretch()
 
-        self.loadout_btn = QPushButton(_t("arm_equip_character_btn"))
-        self.loadout_btn.clicked.connect(self._open_loadout_window)
-        header_row.addWidget(self.loadout_btn, 0, Qt.AlignTop)
-
-        self.crafting_calc_btn = QPushButton(_t("arm_crafting_calculator_title"))
-        self.crafting_calc_btn.clicked.connect(self._open_crafting_calculator)
-        header_row.addWidget(self.crafting_calc_btn, 0, Qt.AlignTop)
-
         outer.addLayout(header_row)
 
         top_bar = QFrame()
@@ -12368,14 +13125,14 @@ class ItemDatabaseWindow(QMainWindow):
         # (overridden) displayed text, so the label swap never leaks into
         # the actual filtering logic.
         self.category_combo = self._make_label_combo(_t("arm_filter_category"), self._on_category_changed)
-        self.class_combo = self._make_label_combo(_t("arm_filter_class"), self._on_class_changed)
+        self.shop_combo = self._make_label_combo(_t("arm_filter_shop"), self._on_shop_changed)
 
-        # Wings-only replacements for Category/Class (User-Wunsch) -- Wings
-        # items have no Category/Class distinction that matters (all share
-        # the same 2 raw categories, no classNames), but DO have real
+        # Wings-only replacements for Category/Shop (User-Wunsch) -- Wings
+        # items have no Category/Shop distinction that matters (all share
+        # the same 2 raw categories, no shop-sources tags), but DO have real
         # per-item stats only ever expressed as free text (see
         # _parse_wing_effects). These sit in the exact same two layout
-        # slots as category_combo/class_combo and swap in only while the
+        # slots as category_combo/shop_combo and swap in only while the
         # sidebar's "Wings" group is active (see _on_sidebar_group_selected).
         self.wing_equip_combo = self._make_label_combo(_t("arm_filter_equip_effect"), self._on_wing_equip_changed)
         self.wing_owned_combo = self._make_label_combo(_t("arm_filter_owned_effect"), self._on_wing_owned_changed)
@@ -12384,7 +13141,7 @@ class ItemDatabaseWindow(QMainWindow):
 
         top_layout.addWidget(self.search_input, 2)
         top_layout.addWidget(self.category_combo, 1)
-        top_layout.addWidget(self.class_combo, 1)
+        top_layout.addWidget(self.shop_combo, 1)
         top_layout.addWidget(self.wing_equip_combo, 1)
         top_layout.addWidget(self.wing_owned_combo, 1)
         outer.addWidget(top_bar)
@@ -12586,9 +13343,6 @@ class ItemDatabaseWindow(QMainWindow):
         dialog.load_item(item_id, name_item.text(), image_url)
         dialog.show()
 
-    def _open_loadout_window(self):
-        self.open_loadout_window()
-
     def open_loadout_window(self):
         """Public entry point so a host app can jump straight to the Build
         Planner (the loadout/equip window) without showing the full item
@@ -12663,8 +13417,6 @@ class ItemDatabaseWindow(QMainWindow):
         up-to-date language throughout, same caveat as LoadoutWindow's own
         update_language()."""
         self.setWindowTitle(_t("arm_item_database_title"))
-        self.loadout_btn.setText(_t("arm_equip_character_btn"))
-        self.crafting_calc_btn.setText(_t("arm_crafting_calculator_title"))
         self.search_input.setPlaceholderText(_t("arm_search_by_name_placeholder"))
         self.show_id_check.setText(_t("arm_show_item_id"))
         self._update_result_label()
@@ -12679,14 +13431,15 @@ class ItemDatabaseWindow(QMainWindow):
             return self._loadout_window.get_persistable_state()
         return self._pending_loadout_state
 
-    def _open_crafting_calculator(self):
-        self.open_crafting_calculator()
-
     def open_crafting_calculator(self):
-        """Public entry point so a host app (or the Armory page's own
-        'Crafting Calculator' Open button) can jump straight to the
-        Crafting Guide — same singleton-window pattern as
-        open_loadout_window."""
+        """Public entry point so a host app can jump straight to the
+        Crafting Guide without showing the full item table first — same
+        singleton-window pattern as open_loadout_window. The Item
+        Database window itself used to have its own "Crafting
+        Calculator"/"Equip Character" shortcut buttons in its header,
+        removed (User-Wunsch, 2026-08-29) since MainWindow's own sidebar
+        already opens both directly -- this method is still the real
+        entry point both paths share."""
         if self._crafting_window is None:
             self._crafting_window = CraftingCalculatorWindow(self._raw_items, self.icon_cache, self.detail_cache, None)
             self._crafting_window.setStyleSheet(_load_qss_text())
@@ -12711,8 +13464,8 @@ class ItemDatabaseWindow(QMainWindow):
             self.proxy.set_subcategory_categories({text})
         self._update_result_label()
 
-    def _on_class_changed(self, text):
-        self.proxy.set_class(text)
+    def _on_shop_changed(self, text):
+        self.proxy.set_shop(text)
         self._update_result_label()
 
     def _on_wing_equip_changed(self, text):
@@ -12732,39 +13485,32 @@ class ItemDatabaseWindow(QMainWindow):
         stays a dropdown per the user's explicit instruction; only its
         CONTENTS and MEANING change with the sidebar selection.
 
-        "Wings" is a special case (User-Wunsch): instead of Category/Class
-        (neither means anything for Wings -- no classNames, only 2 near-
-        identical raw categories), it swaps in two dedicated stat filters
-        (Equip Effect / Owned Effect, see _parse_wing_effects) in the exact
-        same layout slots.
+        "Wings" is a special case (User-Wunsch): instead of Category/Shop
+        (neither means anything for Wings -- no classNames/shop tags, only
+        2 near-identical raw categories), it swaps in two dedicated stat
+        filters (Equip Effect / Owned Effect, see _parse_wing_effects) in
+        the exact same layout slots.
 
-        Class is ALSO hidden for every group besides "Gear" (and "All
-        Categories") -- confirmed against the real catalog that classNames
-        only ever varies within the 10 Weapons categories (Guard included,
-        though it turns out never actually class-gated either); every other
-        raw categoryName (Materials & Enhancement, Arcana, Consumables,
-        ...) always has an empty classNames, so the Class dropdown was
-        pure noise there (User: "Bei Material and enhancement kannst du
-        den Class filter rausnehmen")."""
+        Unlike the old Class filter (which only ever varied within Gear's
+        Weapons categories), the Shop filter applies across every category
+        -- a shop can sell materials, consumables, etc, not just gear -- so
+        it stays visible for every group except Wings, matching Category's
+        own visibility rule."""
         self._current_sidebar_group = group_label
         is_wings = group_label == "Wings"
-        class_relevant = group_label in (None, "Gear")
 
         self.category_combo.setVisible(not is_wings)
-        self.class_combo.setVisible(not is_wings and class_relevant)
+        self.shop_combo.setVisible(not is_wings)
         self.wing_equip_combo.setVisible(is_wings)
         self.wing_owned_combo.setVisible(is_wings)
 
-        if not is_wings and not class_relevant:
-            # Hiding the control must not leave a stale Class filter
-            # silently narrowing rows in a group where it's not shown.
-            self.class_combo.setCurrentIndex(0)
-            self.proxy.set_class("All")
-
         if is_wings:
+            # Hiding the control must not leave a stale Shop filter
+            # silently narrowing rows while it's not shown.
+            self.shop_combo.setCurrentIndex(0)
+            self.proxy.set_shop("All")
             self.proxy.set_group_categories(dict(_ITEM_TOP_CATEGORIES)["Wings"])
             self.proxy.set_subcategory_categories(None)
-            self.proxy.set_class("All")
         else:
             # Leaving (or never entering) Wings -- clear any leftover
             # Wings-specific filter so it can't silently hide rows in every
@@ -12895,7 +13641,7 @@ class ItemDatabaseWindow(QMainWindow):
         # shugo.gg's own item database, see _SKILLS_DATA_CLASS_ALIASES).
         self._raw_items = items
 
-        categories, classes = set(), set()
+        categories = set()
         wing_equip_names, wing_owned_names = set(), set()
 
         for item in items:
@@ -12944,13 +13690,6 @@ class ItemDatabaseWindow(QMainWindow):
 
             class_names = item.get("classNames") or []
             row.append(QStandardItem(", ".join(class_names)))
-            for c in class_names:
-                # Brawler is real in the raw data (Fist/Gauntlet items) but
-                # not live at launch -- excluded from the Class FILTER same
-                # as every other class picker in the app (AION2_ACTIVE_CLASSES),
-                # while the table's own Classes column still shows it as-is.
-                if c in AION2_ACTIVE_CLASSES:
-                    classes.add(c)
 
             row.append(QStandardItem("Yes" if item.get("tradable") else "No"))
 
@@ -12968,7 +13707,7 @@ class ItemDatabaseWindow(QMainWindow):
         self._wing_owned_names = wing_owned_names
 
         self._populate_filter_combo(self.category_combo, categories)
-        self._populate_filter_combo(self.class_combo, classes)
+        self._populate_filter_combo(self.shop_combo, set(REAL_SHOP_TYPES))
         self._populate_filter_combo(self.wing_equip_combo, wing_equip_names)
         self._populate_filter_combo(self.wing_owned_combo, wing_owned_names)
 

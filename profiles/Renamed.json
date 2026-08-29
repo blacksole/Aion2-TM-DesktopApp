@@ -1,6 +1,6 @@
 {
     "profile_name": "Renamed",
-    "theme": "abyss",
+    "theme": "inferno",
     "language": "en",
     "settings": {
         "daily_reset_time": "09:00",
@@ -26,9 +26,21 @@
         "timer_categories": [
             "Custom Timer"
         ],
-        "custom_timers": [],
-        "last_daily_reset_date": "2026-08-21",
-        "last_weekly_reset_date": "2026-08-17"
+        "custom_timers": [
+            {
+                "enabled": true,
+                "name": "Boss 1",
+                "color": "#3b82f6",
+                "timer_mode": "custom",
+                "category": "Custom Timer",
+                "notification_sound": "C:\\Windows\\Media\\Ring07.wav",
+                "notification_warn_minutes": 10,
+                "interval_seconds": 345600,
+                "start_time": "16:00"
+            }
+        ],
+        "last_daily_reset_date": "2026-08-29",
+        "last_weekly_reset_date": "2026-08-24"
     },
     "tasks": {
         "tasks": [
@@ -39,21 +51,9 @@
                 "description": "",
                 "event": false,
                 "schedule": "daily",
-                "character": "Main Character",
-                "template_id": "",
-                "location": "",
-                "completed": false
-            },
-            {
-                "type": "task",
-                "priority": "high",
-                "title": "Ascension Trial",
-                "description": "",
-                "event": false,
-                "schedule": "weekly",
-                "character": "",
-                "template_id": "",
-                "location": "",
+                "character": "Cleric",
+                "template_id": "d0000102-e5f6-7890-abcd-ef1234567800",
+                "location": "Journal",
                 "completed": false
             },
             {
@@ -66,6 +66,42 @@
                 "character": "",
                 "template_id": "",
                 "location": "",
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "Daily Commands",
+                "description": "",
+                "event": false,
+                "schedule": "daily",
+                "character": "Main Character",
+                "template_id": "",
+                "location": "",
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "Ascension Trial",
+                "description": "",
+                "event": false,
+                "schedule": "weekly",
+                "character": "",
+                "template_id": "",
+                "location": "",
+                "completed": true
+            },
+            {
+                "type": "task",
+                "priority": "high",
+                "title": "Sanctum (2700gs+)",
+                "description": "",
+                "event": false,
+                "schedule": "weekly",
+                "character": "",
+                "template_id": "d0000101-e5f6-7890-abcd-ef1234567800",
+                "location": "Raid",
                 "completed": false
             }
         ],
@@ -81,7 +117,7 @@
                 "currency": "kinah",
                 "character": "",
                 "template_id": "d0000001-e5f6-7890-abcd-ef1234567800",
-                "completed": false
+                "completed": true
             }
         ]
     },
@@ -93,12 +129,13 @@
                     "title": "Map 1",
                     "description": "",
                     "icon": "level",
-                    "status": "active",
-                    "completed": false,
+                    "status": "completed",
+                    "completed": true,
                     "x": 3780.0,
                     "y": 4000.0,
                     "children": [
-                        "57c7f788-0fc7-41a7-b40a-c5b8acf215b5"
+                        "57c7f788-0fc7-41a7-b40a-c5b8acf215b5",
+                        "5b4a592a-b612-4791-b725-c7bf21a825c3"
                     ]
                 },
                 "57c7f788-0fc7-41a7-b40a-c5b8acf215b5": {
@@ -106,12 +143,13 @@
                     "title": "Main Character",
                     "description": "Add a description.",
                     "icon": "character",
-                    "status": "locked",
-                    "completed": false,
+                    "status": "completed",
+                    "completed": true,
                     "x": 3780.0,
                     "y": 4206.0,
                     "children": [
-                        "645f1d7e-a3a8-4db8-95fd-f532b8eaf1ce"
+                        "645f1d7e-a3a8-4db8-95fd-f532b8eaf1ce",
+                        "e6874b3e-cfef-4a8c-a1e8-a0665cab8f09"
                     ],
                     "character_items": []
                 },
@@ -120,18 +158,98 @@
                     "title": "New Node",
                     "description": "Add a description.",
                     "icon": "dungeon",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3775.0,
+                    "y": 4408.666666666667,
+                    "children": [
+                        "b37eb77c-242b-4948-a8f5-512d187f4c3f"
+                    ]
+                },
+                "e6874b3e-cfef-4a8c-a1e8-a0665cab8f09": {
+                    "id": "e6874b3e-cfef-4a8c-a1e8-a0665cab8f09",
+                    "title": "New Branch",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3250.0,
+                    "y": 4412.0,
+                    "children": [
+                        "4ede0e2e-d267-475c-aaf0-e4906f4096ed"
+                    ]
+                },
+                "4ede0e2e-d267-475c-aaf0-e4906f4096ed": {
+                    "id": "4ede0e2e-d267-475c-aaf0-e4906f4096ed",
+                    "title": "New Branch",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "locked",
+                    "completed": false,
+                    "x": 3250.0,
+                    "y": 4618.0,
+                    "children": []
+                },
+                "b37eb77c-242b-4948-a8f5-512d187f4c3f": {
+                    "id": "b37eb77c-242b-4948-a8f5-512d187f4c3f",
+                    "title": "New Branch",
+                    "description": "Add a description.",
+                    "icon": "level",
                     "status": "locked",
                     "completed": false,
                     "x": 3780.0,
-                    "y": 4412.0,
+                    "y": 4618.0,
                     "children": []
+                },
+                "5b4a592a-b612-4791-b725-c7bf21a825c3": {
+                    "id": "5b4a592a-b612-4791-b725-c7bf21a825c3",
+                    "title": "Cleric",
+                    "description": "Add a description.",
+                    "icon": "character",
+                    "status": "locked",
+                    "completed": false,
+                    "x": 3250.0,
+                    "y": 4206.0,
+                    "children": [],
+                    "character_items": []
                 }
             },
             "root_node_id": "69ada103-cad1-45f2-a0d0-fcbf6791e377",
             "show_in_overlay": false
+        },
+        "Streamer Test": {
+            "nodes": {
+                "20060811-eda6-4edc-83ee-acfc79df8c0e": {
+                    "id": "20060811-eda6-4edc-83ee-acfc79df8c0e",
+                    "title": "Streamer Test",
+                    "description": "",
+                    "icon": "character",
+                    "status": "active",
+                    "completed": false,
+                    "x": 3753.75,
+                    "y": 3955.0,
+                    "children": [
+                        "69b10224-7b07-4f86-9703-e0d1bab127d1"
+                    ],
+                    "character_items": []
+                },
+                "69b10224-7b07-4f86-9703-e0d1bab127d1": {
+                    "id": "69b10224-7b07-4f86-9703-e0d1bab127d1",
+                    "title": "New Node",
+                    "description": "Add a description.",
+                    "icon": "level",
+                    "status": "locked",
+                    "completed": false,
+                    "x": 3752.0,
+                    "y": 4388.75,
+                    "children": []
+                }
+            },
+            "root_node_id": "20060811-eda6-4edc-83ee-acfc79df8c0e",
+            "show_in_overlay": false
         }
     },
-    "active_flow_map": "Map 1",
+    "active_flow_map": "Streamer Test",
     "item_templates": [
         {
             "title": "Commands (Green)",
@@ -574,7 +692,7 @@
             "location": "Raid",
             "schedule": "weekly",
             "priority": "high",
-            "is_general": false,
+            "is_general": true,
             "id": "d0000101-e5f6-7890-abcd-ef1234567800"
         },
         {
@@ -609,5 +727,2857 @@
             "is_general": false,
             "id": "0941c47c-e9c2-404f-9458-1a56d21fa046"
         }
-    ]
+    ],
+    "build_planner": {
+        "character_class": "Chanter",
+        "character_race": "Asmodae",
+        "current_build_name": "Chanter PvP",
+        "active_gear_types": [
+            "Neutral",
+            "PvP"
+        ],
+        "stat_priority_profiles": {
+            "PvE": {
+                "Angreifer": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal",
+                        "Attack Preparation",
+                        "Wind's Promise"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit",
+                        "Attack Preparation"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit",
+                        "Attack Preparation"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit",
+                        "Attack Preparation"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance",
+                        "Attack Preparation",
+                        "Wind's Promise"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit",
+                        "Attack Preparation"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit",
+                        "Attack Preparation",
+                        "Wind's Promise",
+                        "Impact Hit",
+                        "Inspiring Spell"
+                    ],
+                    "ring": [
+                        "Dark Crush",
+                        "Onslaught",
+                        "Spinning Strike",
+                        "Incandescent Blow",
+                        "Recuperation",
+                        "Impactful Crush",
+                        "Rushing Smash"
+                    ],
+                    "bracelet": [
+                        "Wisdom [Lumiel]",
+                        "Time [Siel]",
+                        "Illusion [Kaisinel]",
+                        "Destruction [Zikel]",
+                        "Death [Triniel]",
+                        "Freedom [Vaizel]",
+                        "Justice [Nezekan]"
+                    ]
+                },
+                "Verteidiger": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": [
+                        "Attack",
+                        "Critical Hit",
+                        "HP"
+                    ]
+                },
+                "Support": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": [
+                        "Attack",
+                        "Critical Hit",
+                        "HP"
+                    ]
+                }
+            },
+            "PvP": {
+                "Angreifer": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": [
+                        "Attack",
+                        "Critical Hit",
+                        "HP"
+                    ]
+                },
+                "Verteidiger": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": [
+                        "Attack",
+                        "Critical Hit",
+                        "HP"
+                    ]
+                },
+                "Support": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": [
+                        "Attack",
+                        "Critical Hit",
+                        "HP"
+                    ]
+                }
+            }
+        },
+        "monolith_level": 30,
+        "skill_levels": {
+            "18100000": 10,
+            "18700000": 0,
+            "18190000": 20,
+            "18200000": 10,
+            "18090000": 10,
+            "18120000": 10,
+            "18010000": 10,
+            "18040000": 10,
+            "18290000": 10,
+            "18060000": 10
+        },
+        "skill_arcana_wish": {
+            "18100000": 4,
+            "18060000": 2,
+            "18040000": 0,
+            "18290000": 4,
+            "18090000": 2,
+            "18010000": 4,
+            "18120000": 4
+        },
+        "current_skill_build_name": "Default",
+        "skill_builds_data": {
+            "gladiator": {
+                "Default": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
+                }
+            },
+            "chanter": {
+                "Default": {
+                    "priority": {
+                        "active": [
+                            "18100000",
+                            "18010000",
+                            "18290000",
+                            "18040000",
+                            "18120000",
+                            "18060000",
+                            "18090000"
+                        ],
+                        "passive": [
+                            "18750000",
+                            "18800000",
+                            "18760000",
+                            "18740000",
+                            "18710000",
+                            "18780000"
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {
+                        "Bell": {
+                            "theme": "Magic",
+                            "skill_ids": {
+                                "18710000": 3,
+                                "18730000": 1,
+                                "18750000": 4,
+                                "18770000": 1
+                            }
+                        },
+                        "Chalice": {
+                            "theme": "Vigor",
+                            "skill_ids": {
+                                "18010000": 2,
+                                "18100000": 3,
+                                "18120000": 2,
+                                "18290000": 2
+                            }
+                        },
+                        "Compass": {
+                            "theme": "Vigor",
+                            "skill_ids": {
+                                "18040000": 4,
+                                "18060000": 2,
+                                "18120000": 2,
+                                "18200000": 1
+                            }
+                        },
+                        "Mirror": {
+                            "theme": "Vigor",
+                            "skill_ids": {
+                                "18740000": 1,
+                                "18760000": 3,
+                                "18780000": 1,
+                                "18800000": 4
+                            }
+                        },
+                        "Parchment": {
+                            "theme": "Vigor",
+                            "skill_ids": {
+                                "18010000": 2,
+                                "18090000": 2,
+                                "18100000": 3,
+                                "18290000": 2
+                            }
+                        }
+                    }
+                },
+                "Test": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
+                }
+            }
+        },
+        "equip_builds_data": {
+            "gladiator": {
+                "Test Build": {
+                    "equipped": {
+                        "MainHand": {
+                            "categoryName": "Greatsword",
+                            "classNames": [
+                                "Gladiator"
+                            ],
+                            "favorite": false,
+                            "grade": "Epic",
+                            "id": 110120003,
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WP_GS_0108_T06.png",
+                            "name": "Ludra's Blade of Extinction",
+                            "options": [
+                                "Critical Hit 150",
+                                "Block 150",
+                                "Accuracy 100",
+                                "Attack 421 ~ 569"
+                            ],
+                            "tradable": false
+                        },
+                        "SubHand": {
+                            "categoryName": "Guard",
+                            "favorite": false,
+                            "grade": "Epic",
+                            "id": 115020003,
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Weapon_Guarder_U_010.png",
+                            "name": "Ludra's Heart",
+                            "options": [
+                                "Attack 124",
+                                "Critical Hit 50",
+                                "Accuracy 50"
+                            ],
+                            "tradable": false
+                        },
+                        "Helmet": {
+                            "id": 210320016,
+                            "name": "Faded Shadow Helm",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_Zikel_01_Helmet.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 191",
+                                "Defense 334"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Helm"
+                        },
+                        "Shoulder": {
+                            "id": 210420016,
+                            "name": "Faded Shadow Pauldrons",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_Zikel_01_Shoulder.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 191",
+                                "Defense 334"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Pauldrons"
+                        },
+                        "Torso": {
+                            "id": 210120016,
+                            "name": "Faded Shadow Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_Zikel_01_Torso.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 305",
+                                "Defense 534"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Top"
+                        },
+                        "Gloves": {
+                            "id": 210520016,
+                            "name": "Faded Shadow Gloves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_Zikel_01_Gloves.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 153",
+                                "Defense 267"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Gloves"
+                        },
+                        "Pants": {
+                            "id": 210220016,
+                            "name": "Faded Shadow Greaves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_Zikel_01_Pants.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 229",
+                                "Defense 401"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Legs"
+                        },
+                        "Boots": {
+                            "id": 210620016,
+                            "name": "Faded Shadow Boots",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_Zikel_01_Boots.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 153",
+                                "Defense 267"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Shoes"
+                        },
+                        "Earring1": {
+                            "id": 310220018,
+                            "name": "Faded Shadow Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0015.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Earring2": {
+                            "id": 310220018,
+                            "name": "Faded Shadow Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0015.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Necklace": {
+                            "id": 310120018,
+                            "name": "Faded Shadow Necklace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_NL_0015.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 382",
+                                "Attack 109"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Necklace"
+                        },
+                        "Ring1": {
+                            "id": 310320018,
+                            "name": "Faded Shadow Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0015.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 191",
+                                "Attack 55"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Ring2": {
+                            "id": 310320018,
+                            "name": "Faded Shadow Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0015.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 191",
+                                "Attack 55"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Bracelet1": {
+                            "id": 310420016,
+                            "name": "Faded Shadow Bracelet",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Bracelet_ErosionPurifier.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286",
+                                "Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Bracelet"
+                        },
+                        "Bracelet2": {
+                            "id": 310420016,
+                            "name": "Faded Shadow Bracelet",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Bracelet_ErosionPurifier.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286",
+                                "Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Bracelet"
+                        }
+                    },
+                    "substats": {
+                        "MainHand": [],
+                        "SubHand": []
+                    },
+                    "enchant": {
+                        "Helmet": 25,
+                        "Shoulder": 25,
+                        "Torso": 25,
+                        "Gloves": 25,
+                        "Pants": 25,
+                        "Boots": 25,
+                        "Earring1": 25,
+                        "Earring2": 25,
+                        "Necklace": 25,
+                        "Ring1": 25,
+                        "Ring2": 25,
+                        "Bracelet1": 25,
+                        "Bracelet2": 25,
+                        "MainHand": 25,
+                        "SubHand": 25
+                    },
+                    "philosopher_stone": {
+                        "MainHand": false,
+                        "SubHand": false
+                    }
+                },
+                "T1 PvP": {
+                    "equipped": {
+                        "SubHand": {
+                            "id": 115030026,
+                            "name": "Guardian Decanus Guard",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Weapon_Guarder_R_025.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 85",
+                                "Critical Hit 50",
+                                "Accuracy 50",
+                                "PvP Damage Boost 10%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Guard"
+                        },
+                        "Helmet": {
+                            "id": 210330026,
+                            "name": "Guardian Decanus Helm",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Helmet.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 119",
+                                "Defense 208"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Helm"
+                        },
+                        "Shoulder": {
+                            "id": 210430026,
+                            "name": "Guardian Decanus Pauldrons",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Shoulder.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 119",
+                                "Defense 208"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Pauldrons"
+                        },
+                        "Torso": {
+                            "id": 210130026,
+                            "name": "Guardian Decanus Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Torso.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 190",
+                                "Defense 333"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Top"
+                        },
+                        "Gloves": {
+                            "id": 210530026,
+                            "name": "Guardian Decanus Gloves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Gloves.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "Defense 167",
+                                "HP 95"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Gloves"
+                        },
+                        "Pants": {
+                            "id": 210230026,
+                            "name": "Guardian Decanus Greaves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Pants.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 250",
+                                "PvP Damage Tolerance 5%",
+                                "HP 143"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Legs"
+                        },
+                        "Boots": {
+                            "id": 210630026,
+                            "name": "Guardian Decanus Boots",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Boots.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "Defense 167",
+                                "HP 95"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Shoes"
+                        },
+                        "Earring1": {
+                            "id": 310230026,
+                            "name": "Guardian Decanus Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 51",
+                                "PvP Damage Boost 5%",
+                                "Defense 179"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Earring2": {
+                            "id": 310230026,
+                            "name": "Guardian Decanus Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 51",
+                                "PvP Damage Boost 5%",
+                                "Defense 179"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Necklace": {
+                            "id": 310130026,
+                            "name": "Guardian Decanus Necklace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_NL_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 238",
+                                "Attack 68"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Necklace"
+                        },
+                        "Ring1": {
+                            "id": 310330026,
+                            "name": "Guardian Decanus Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 119",
+                                "Attack 34"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Ring2": {
+                            "id": 310330026,
+                            "name": "Guardian Decanus Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 119",
+                                "Attack 34"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Bracelet1": {
+                            "id": 310420016,
+                            "name": "Faded Shadow Bracelet",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Bracelet_ErosionPurifier.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286",
+                                "Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Bracelet"
+                        },
+                        "Bracelet2": {
+                            "id": 310420016,
+                            "name": "Faded Shadow Bracelet",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Bracelet_ErosionPurifier.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286",
+                                "Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Bracelet"
+                        }
+                    },
+                    "substats": {
+                        "Bracelet1": [
+                            2,
+                            4,
+                            5,
+                            6,
+                            7
+                        ],
+                        "Bracelet2": [
+                            2,
+                            4,
+                            5,
+                            6,
+                            7
+                        ],
+                        "Boots": [
+                            11,
+                            21,
+                            3,
+                            13
+                        ],
+                        "Necklace": [
+                            1,
+                            5,
+                            3,
+                            13
+                        ],
+                        "SubHand": [
+                            0,
+                            15,
+                            14,
+                            7
+                        ],
+                        "Torso": [
+                            3,
+                            19,
+                            20,
+                            12
+                        ],
+                        "Shoulder": [
+                            3,
+                            20,
+                            12,
+                            22
+                        ],
+                        "Earring1": [
+                            1,
+                            5,
+                            3,
+                            13
+                        ],
+                        "Gloves": [
+                            11,
+                            3,
+                            13,
+                            22
+                        ],
+                        "Helmet": [
+                            3,
+                            12,
+                            20,
+                            22
+                        ],
+                        "Earring2": [
+                            1,
+                            5,
+                            3,
+                            13
+                        ],
+                        "Pants": [
+                            20,
+                            3,
+                            12,
+                            21
+                        ]
+                    },
+                    "enchant": {
+                        "Bracelet1": 25,
+                        "Bracelet2": 25,
+                        "MainHand": 20,
+                        "SubHand": 20,
+                        "Helmet": 20,
+                        "Shoulder": 20,
+                        "Torso": 20,
+                        "Gloves": 20,
+                        "Pants": 20,
+                        "Boots": 20,
+                        "Earring1": 20,
+                        "Earring2": 20,
+                        "Necklace": 20,
+                        "Ring1": 20,
+                        "Ring2": 20
+                    },
+                    "philosopher_stone": {
+                        "SubHand": false
+                    }
+                },
+                "T2 PvP": {
+                    "equipped": {
+                        "MainHand": {
+                            "id": 110130027,
+                            "name": "Guardian Centurion Greatsword",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WP_GS_0054_T05.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 332 ~ 449",
+                                "Critical Hit 150",
+                                "Block 150",
+                                "Accuracy 100",
+                                "PvP Damage Boost 10%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Greatsword",
+                            "classNames": [
+                                "Gladiator"
+                            ]
+                        },
+                        "SubHand": {
+                            "id": 115030027,
+                            "name": "Guardian Centurion Guard",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Weapon_Guarder_U_002.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 98",
+                                "Critical Hit 50",
+                                "Accuracy 50",
+                                "PvP Damage Boost 10%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Guard"
+                        },
+                        "Helmet": {
+                            "id": 210330027,
+                            "name": "Guardian Centurion Helm",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_0020_T05_Helmet.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "Defense 239",
+                                "HP 137"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Helm"
+                        },
+                        "Shoulder": {
+                            "id": 210430027,
+                            "name": "Guardian Centurion Pauldrons",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_0020_T05_Shoulder.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "Defense 239",
+                                "HP 137"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Pauldrons"
+                        },
+                        "Torso": {
+                            "id": 210130027,
+                            "name": "Guardian Centurion Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_0020_T05_Torso.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 382",
+                                "PvP Damage Tolerance 5%",
+                                "HP 218"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Top"
+                        },
+                        "Gloves": {
+                            "id": 210530027,
+                            "name": "Guardian Centurion Gloves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_0020_T05_Gloves.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 109",
+                                "Defense 191"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Gloves"
+                        },
+                        "Pants": {
+                            "id": 210230027,
+                            "name": "Guardian Centurion Greaves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_0020_T05_Pants.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 164",
+                                "Defense 287"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Legs"
+                        },
+                        "Boots": {
+                            "id": 210630027,
+                            "name": "Guardian Centurion Boots",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_AR_L_0020_T05_Boots.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 109",
+                                "Defense 191"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Shoes"
+                        },
+                        "Earring1": {
+                            "id": 310230027,
+                            "name": "Guardian Centurion Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0083.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Attack 59",
+                                "Defense 205"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Earring2": {
+                            "id": 310230027,
+                            "name": "Guardian Centurion Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0083.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Attack 59",
+                                "Defense 205"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Necklace": {
+                            "id": 310130027,
+                            "name": "Guardian Centurion Necklace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_NL_0083.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 273",
+                                "Attack 78"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Necklace"
+                        },
+                        "Ring1": {
+                            "id": 310330027,
+                            "name": "Guardian Centurion Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0083.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 137",
+                                "Attack 39"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Ring2": {
+                            "id": 310330027,
+                            "name": "Guardian Centurion Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0083.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 137",
+                                "Attack 39"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        }
+                    },
+                    "substats": {},
+                    "enchant": {
+                        "MainHand": 20,
+                        "SubHand": 20,
+                        "Helmet": 20,
+                        "Shoulder": 20,
+                        "Torso": 20,
+                        "Gloves": 20,
+                        "Pants": 20,
+                        "Boots": 20,
+                        "Earring1": 20,
+                        "Earring2": 20,
+                        "Necklace": 20,
+                        "Ring1": 20,
+                        "Ring2": 20
+                    },
+                    "philosopher_stone": {}
+                },
+                "T1 new pvP": {
+                    "equipped": {
+                        "MainHand": {
+                            "id": 110130026,
+                            "name": "Guardian Decanus Greatsword",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_WP_L_GS_0009_T04.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Critical Hit 150",
+                                "Block 150",
+                                "Attack 289 ~ 391",
+                                "Accuracy 100",
+                                "PvP Damage Boost 10%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Greatsword",
+                            "classNames": [
+                                "Gladiator"
+                            ]
+                        },
+                        "SubHand": {
+                            "id": 115030026,
+                            "name": "Guardian Decanus Guard",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Weapon_Guarder_R_025.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 85",
+                                "Critical Hit 50",
+                                "Accuracy 50",
+                                "PvP Damage Boost 10%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Guard"
+                        },
+                        "Helmet": {
+                            "id": 210330026,
+                            "name": "Guardian Decanus Helm",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Helmet.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 119",
+                                "Defense 208"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Helm"
+                        },
+                        "Shoulder": {
+                            "id": 210430026,
+                            "name": "Guardian Decanus Pauldrons",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Shoulder.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 119",
+                                "Defense 208"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Pauldrons"
+                        },
+                        "Torso": {
+                            "id": 210130026,
+                            "name": "Guardian Decanus Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Torso.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 190",
+                                "Defense 333"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Top"
+                        },
+                        "Gloves": {
+                            "id": 210530026,
+                            "name": "Guardian Decanus Gloves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Gloves.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "Defense 167",
+                                "HP 95"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Gloves"
+                        },
+                        "Pants": {
+                            "id": 210230026,
+                            "name": "Guardian Decanus Greaves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Pants.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 250",
+                                "PvP Damage Tolerance 5%",
+                                "HP 143"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Legs"
+                        },
+                        "Boots": {
+                            "id": 210630026,
+                            "name": "Guardian Decanus Boots",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0181_T05_Boots.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "Defense 167",
+                                "HP 95"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Shoes"
+                        },
+                        "Earring1": {
+                            "id": 310230026,
+                            "name": "Guardian Decanus Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 51",
+                                "PvP Damage Boost 5%",
+                                "Defense 179"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Earring2": {
+                            "id": 310230026,
+                            "name": "Guardian Decanus Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 51",
+                                "PvP Damage Boost 5%",
+                                "Defense 179"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Necklace": {
+                            "id": 310130026,
+                            "name": "Guardian Decanus Necklace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_NL_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 238",
+                                "Attack 68"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Necklace"
+                        },
+                        "Ring1": {
+                            "id": 310330026,
+                            "name": "Guardian Decanus Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 119",
+                                "Attack 34"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Ring2": {
+                            "id": 310330026,
+                            "name": "Guardian Decanus Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0026.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 119",
+                                "Attack 34"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        }
+                    },
+                    "substats": {},
+                    "enchant": {
+                        "MainHand": 20,
+                        "SubHand": 20,
+                        "Helmet": 20,
+                        "Shoulder": 20,
+                        "Torso": 20,
+                        "Gloves": 20,
+                        "Pants": 20,
+                        "Boots": 20,
+                        "Earring1": 20,
+                        "Earring2": 20,
+                        "Necklace": 20,
+                        "Ring1": 20,
+                        "Ring2": 20
+                    },
+                    "philosopher_stone": {}
+                },
+                "T1 pvE": {
+                    "equipped": {
+                        "MainHand": {
+                            "id": 110130094,
+                            "name": "True Dragon Lord Greatsword",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Equip_WP_L_GS_0036_T05.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Critical Hit 150",
+                                "PvE Damage Boost 5%",
+                                "Block 150",
+                                "Attack 302 ~ 408",
+                                "Accuracy 100"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Greatsword",
+                            "classNames": [
+                                "Gladiator"
+                            ]
+                        },
+                        "SubHand": {
+                            "id": 115030092,
+                            "name": "True Dragon Lord Guard",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Weapon_Guarder_R_032.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvE Damage Boost 5%",
+                                "Critical Hit 50",
+                                "Attack 89",
+                                "Accuracy 50"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Guard"
+                        },
+                        "Helmet": {
+                            "id": 210330107,
+                            "name": "True Dragon Lord Helm",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0061_T05_Helmet.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 218",
+                                "HP 124",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Helm"
+                        },
+                        "Shoulder": {
+                            "id": 210430107,
+                            "name": "True Dragon Lord Pauldrons",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0061_T05_Shoulder.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 218",
+                                "HP 124",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Pauldrons"
+                        },
+                        "Torso": {
+                            "id": 210130108,
+                            "name": "True Dragon Lord Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0061_T05_Torso.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 348",
+                                "HP 199",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Top"
+                        },
+                        "Gloves": {
+                            "id": 210530107,
+                            "name": "True Dragon Lord Gloves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0061_T05_Gloves.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 174",
+                                "HP 99",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Gloves"
+                        },
+                        "Pants": {
+                            "id": 210230107,
+                            "name": "True Dragon Lord Greaves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0061_T05_Pants.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 261",
+                                "HP 149",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Legs"
+                        },
+                        "Boots": {
+                            "id": 210630107,
+                            "name": "True Dragon Lord Boots",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0061_T05_Boots.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 174",
+                                "HP 99",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Shoes"
+                        },
+                        "Earring1": {
+                            "id": 310230111,
+                            "name": "True Dragon Lord Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0036.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 186",
+                                "Attack 53",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Earring2": {
+                            "id": 310230111,
+                            "name": "True Dragon Lord Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0036.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Defense 186",
+                                "Attack 53",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Necklace": {
+                            "id": 310130109,
+                            "name": "True Dragon Lord Necklace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_NL_0036.png",
+                            "grade": "Unique",
+                            "options": [
+                                "Attack 71",
+                                "Defense 249",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Necklace"
+                        },
+                        "Ring1": {
+                            "id": 310330111,
+                            "name": "True Dragon Lord Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0036.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvE Damage Boost 2.5%",
+                                "Attack 36",
+                                "Defense 124"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Ring2": {
+                            "id": 310330111,
+                            "name": "True Dragon Lord Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0036.png",
+                            "grade": "Unique",
+                            "options": [
+                                "PvE Damage Boost 2.5%",
+                                "Attack 36",
+                                "Defense 124"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        }
+                    },
+                    "substats": {},
+                    "enchant": {
+                        "MainHand": 20,
+                        "SubHand": 20,
+                        "Helmet": 20,
+                        "Shoulder": 20,
+                        "Torso": 20,
+                        "Gloves": 20,
+                        "Pants": 20,
+                        "Boots": 20,
+                        "Earring1": 20,
+                        "Earring2": 20,
+                        "Necklace": 20,
+                        "Ring1": 20,
+                        "Ring2": 20
+                    },
+                    "philosopher_stone": {}
+                }
+            },
+            "chanter": {
+                "Default": {
+                    "equipped": {},
+                    "substats": {},
+                    "enchant": {},
+                    "philosopher_stone": {}
+                },
+                "Chanter Global": {
+                    "equipped": {
+                        "MainHand": {
+                            "id": 110820023,
+                            "name": "Splendent Noble Dragon Lord Staff",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WP_ST_0110_T05.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvE Damage Boost 5%",
+                                "Attack 460 ~ 633",
+                                "Accuracy 75",
+                                "Block 125",
+                                "Critical Hit 100"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Staff",
+                            "classNames": [
+                                "Chanter"
+                            ]
+                        },
+                        "SubHand": {
+                            "id": 115020023,
+                            "name": "Splendent Noble Dragon Lord Guard",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Weapon_Guarder_U_011.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvE Damage Boost 5%",
+                                "Attack 144",
+                                "Critical Hit 50",
+                                "Accuracy 50"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Guard"
+                        },
+                        "Helmet": {
+                            "id": 210320023,
+                            "name": "Splendent Noble Dragon Lord Helm",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Helmet.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 201",
+                                "Defense 352",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Helm"
+                        },
+                        "Shoulder": {
+                            "id": 210420023,
+                            "name": "Splendent Noble Dragon Lord Pauldrons",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Shoulder.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 201",
+                                "Defense 352",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Pauldrons"
+                        },
+                        "Torso": {
+                            "id": 210120023,
+                            "name": "Splendent Noble Dragon Lord Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Torso.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 322",
+                                "Defense 564",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Top"
+                        },
+                        "Gloves": {
+                            "id": 210520023,
+                            "name": "Splendent Noble Dragon Lord Gloves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Gloves.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 282",
+                                "HP 161",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Gloves"
+                        },
+                        "Pants": {
+                            "id": 210220023,
+                            "name": "Splendent Noble Dragon Lord Greaves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Pants.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 423",
+                                "HP 242",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Legs"
+                        },
+                        "Boots": {
+                            "id": 210620023,
+                            "name": "Splendent Noble Dragon Lord Boots",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Boots.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 282",
+                                "HP 161",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Shoes"
+                        },
+                        "Earring1": {
+                            "id": 310220025,
+                            "name": "Splendent Noble Dragon Lord Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 86",
+                                "Defense 302",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Earring2": {
+                            "id": 310220025,
+                            "name": "Splendent Noble Dragon Lord Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 86",
+                                "Defense 302",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Necklace": {
+                            "id": 310120025,
+                            "name": "Splendent Noble Dragon Lord Necklace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_NL_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 115",
+                                "Defense 403",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Necklace"
+                        },
+                        "Ring1": {
+                            "id": 310320025,
+                            "name": "Splendent Noble Dragon Lord Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvE Damage Boost 2.5%",
+                                "Attack 58",
+                                "Defense 201"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Ring2": {
+                            "id": 310320025,
+                            "name": "Splendent Noble Dragon Lord Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvE Damage Boost 2.5%",
+                                "Attack 58",
+                                "Defense 201"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Bracelet1": {
+                            "categoryName": "Bracelet",
+                            "favorite": false,
+                            "grade": "Epic",
+                            "id": 310420014,
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Acc_Bracelet_R_026.png",
+                            "name": "Ludra's Bracelet",
+                            "options": [
+                                "Attack 74",
+                                "Defense 260"
+                            ],
+                            "tradable": true
+                        },
+                        "Bracelet2": {
+                            "categoryName": "Bracelet",
+                            "favorite": false,
+                            "grade": "Epic",
+                            "id": 310420015,
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Bracelet_ErosionPurifier.png",
+                            "name": "Faded Shadow Bracelet",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286",
+                                "Damage Boost 2.5%"
+                            ],
+                            "tradable": false
+                        }
+                    },
+                    "substats": {
+                        "Ring1": [
+                            13,
+                            17,
+                            18,
+                            19,
+                            20,
+                            22
+                        ],
+                        "Bracelet1": [
+                            1,
+                            2,
+                            4,
+                            5,
+                            6
+                        ],
+                        "Bracelet2": [
+                            1,
+                            2,
+                            4,
+                            5,
+                            6,
+                            7
+                        ],
+                        "Ring2": [
+                            13,
+                            17,
+                            18,
+                            19,
+                            20,
+                            22
+                        ],
+                        "MainHand": [
+                            0,
+                            1,
+                            2,
+                            7,
+                            9,
+                            14,
+                            15
+                        ],
+                        "Pants": [
+                            3,
+                            12,
+                            19,
+                            20,
+                            21,
+                            23
+                        ],
+                        "Gloves": [
+                            3,
+                            5,
+                            7,
+                            11,
+                            13,
+                            22
+                        ],
+                        "Necklace": [
+                            1,
+                            3,
+                            5,
+                            13,
+                            17,
+                            22
+                        ],
+                        "SubHand": [
+                            0,
+                            1,
+                            2,
+                            7,
+                            14,
+                            15
+                        ],
+                        "Shoulder": [
+                            3,
+                            5,
+                            7,
+                            12,
+                            20,
+                            22,
+                            23
+                        ],
+                        "Torso": [
+                            3,
+                            5,
+                            7,
+                            12,
+                            19,
+                            20
+                        ],
+                        "Boots": [
+                            3,
+                            5,
+                            7,
+                            11,
+                            13,
+                            21
+                        ],
+                        "Earring1": [
+                            1,
+                            3,
+                            5,
+                            13,
+                            17,
+                            22
+                        ],
+                        "Helmet": [
+                            32,
+                            3,
+                            12,
+                            17,
+                            20,
+                            22,
+                            23
+                        ],
+                        "Earring2": [
+                            1,
+                            3,
+                            5,
+                            13,
+                            17,
+                            22
+                        ]
+                    },
+                    "enchant": {
+                        "MainHand": 25,
+                        "SubHand": 25,
+                        "Helmet": 25,
+                        "Shoulder": 25,
+                        "Torso": 25,
+                        "Gloves": 25,
+                        "Pants": 25,
+                        "Boots": 25,
+                        "Earring1": 25,
+                        "Earring2": 25,
+                        "Necklace": 25,
+                        "Ring1": 25,
+                        "Ring2": 25,
+                        "Bracelet1": 0,
+                        "Bracelet2": 0
+                    },
+                    "philosopher_stone": {
+                        "Helmet": true,
+                        "Shoulder": true,
+                        "MainHand": true,
+                        "SubHand": false,
+                        "Ring1": false,
+                        "Bracelet1": true,
+                        "Bracelet2": true
+                    }
+                },
+                "Chanter PvP": {
+                    "equipped": {
+                        "MainHand": {
+                            "id": 110820004,
+                            "name": "Guardian High Commander Staff",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WP_ST_Moon_01.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Accuracy 75",
+                                "Block 125",
+                                "Attack 436 ~ 600",
+                                "Critical Hit 100",
+                                "PvP Damage Boost 10%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Staff",
+                            "classNames": [
+                                "Chanter"
+                            ]
+                        },
+                        "SubHand": {
+                            "id": 115020004,
+                            "name": "Guardian High Commander Guard",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Weapon_Guarder_U_008.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 136",
+                                "Critical Hit 50",
+                                "Accuracy 50",
+                                "PvP Damage Boost 10%"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Guard"
+                        },
+                        "Helmet": {
+                            "id": 210320004,
+                            "name": "Guardian High Commander Helm",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0057_T06_Helmet.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 191",
+                                "Defense 334"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Helm"
+                        },
+                        "Shoulder": {
+                            "id": 210420004,
+                            "name": "Guardian High Commander Pauldrons",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0057_T06_Shoulder.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 191",
+                                "Defense 334"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Pauldrons"
+                        },
+                        "Torso": {
+                            "id": 210120004,
+                            "name": "Guardian High Commander Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0057_T06_Torso.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 305",
+                                "Defense 534"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Top"
+                        },
+                        "Gloves": {
+                            "id": 210520004,
+                            "name": "Guardian High Commander Gloves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0057_T06_Gloves.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 153",
+                                "Defense 267"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Gloves"
+                        },
+                        "Pants": {
+                            "id": 210220004,
+                            "name": "Guardian High Commander Greaves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0057_T06_Pants.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 229",
+                                "Defense 401"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Legs"
+                        },
+                        "Boots": {
+                            "id": 210620004,
+                            "name": "Guardian High Commander Boots",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0057_T06_Boots.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Tolerance 5%",
+                                "HP 153",
+                                "Defense 267"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Shoes"
+                        },
+                        "Earring1": {
+                            "id": 310220004,
+                            "name": "Guardian High Commander Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0098.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Attack 82",
+                                "Defense 286"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Earring2": {
+                            "id": 310220004,
+                            "name": "Guardian High Commander Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0098.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Attack 82",
+                                "Defense 286"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Earrings"
+                        },
+                        "Necklace": {
+                            "id": 310120004,
+                            "name": "Guardian High Commander Necklace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_NL_0098.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 382",
+                                "PvP Damage Boost 5%",
+                                "Attack 109"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Necklace"
+                        },
+                        "Ring1": {
+                            "id": 310320004,
+                            "name": "Guardian High Commander Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0098.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 191",
+                                "Attack 55"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Ring2": {
+                            "id": 310320004,
+                            "name": "Guardian High Commander Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0098.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvP Damage Boost 5%",
+                                "Defense 191",
+                                "Attack 55"
+                            ],
+                            "favorite": false,
+                            "tradable": false,
+                            "categoryName": "Ring"
+                        },
+                        "Bracelet1": {
+                            "categoryName": "Bracelet",
+                            "favorite": false,
+                            "grade": "Epic",
+                            "id": 310420015,
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Bracelet_ErosionPurifier.png",
+                            "name": "Faded Shadow Bracelet",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286",
+                                "Damage Boost 2.5%"
+                            ],
+                            "tradable": false
+                        },
+                        "Bracelet2": {
+                            "categoryName": "Bracelet",
+                            "favorite": false,
+                            "grade": "Epic",
+                            "id": 310420015,
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Bracelet_ErosionPurifier.png",
+                            "name": "Faded Shadow Bracelet",
+                            "options": [
+                                "Attack 82",
+                                "Defense 286",
+                                "Damage Boost 2.5%"
+                            ],
+                            "tradable": false
+                        }
+                    },
+                    "substats": {
+                        "Bracelet1": [
+                            2,
+                            4,
+                            5,
+                            6,
+                            7
+                        ],
+                        "Bracelet2": [
+                            2,
+                            4,
+                            5,
+                            6,
+                            7
+                        ],
+                        "Ring1": [
+                            18,
+                            19,
+                            20,
+                            22,
+                            13
+                        ],
+                        "MainHand": [
+                            0,
+                            1,
+                            7,
+                            14,
+                            15
+                        ],
+                        "Necklace": [
+                            1,
+                            3,
+                            5,
+                            22,
+                            13
+                        ],
+                        "Ring2": [
+                            18,
+                            19,
+                            20,
+                            22,
+                            13
+                        ],
+                        "Pants": [
+                            3,
+                            19,
+                            20,
+                            21,
+                            12
+                        ],
+                        "Boots": [
+                            3,
+                            5,
+                            21,
+                            11,
+                            13
+                        ],
+                        "Shoulder": [
+                            3,
+                            20,
+                            5,
+                            22,
+                            12
+                        ],
+                        "Earring2": [
+                            1,
+                            3,
+                            5,
+                            22,
+                            13
+                        ],
+                        "Gloves": [
+                            3,
+                            5,
+                            22,
+                            11,
+                            13
+                        ],
+                        "Earring1": [
+                            1,
+                            3,
+                            5,
+                            22,
+                            13
+                        ],
+                        "Torso": [
+                            3,
+                            19,
+                            5,
+                            20,
+                            12
+                        ],
+                        "SubHand": [
+                            0,
+                            1,
+                            7,
+                            14,
+                            15
+                        ],
+                        "Helmet": [
+                            17,
+                            3,
+                            20,
+                            22,
+                            12
+                        ]
+                    },
+                    "enchant": {
+                        "MainHand": 25,
+                        "SubHand": 25,
+                        "Helmet": 25,
+                        "Shoulder": 25,
+                        "Torso": 25,
+                        "Gloves": 25,
+                        "Pants": 25,
+                        "Boots": 25,
+                        "Earring1": 25,
+                        "Earring2": 25,
+                        "Necklace": 25,
+                        "Ring1": 25,
+                        "Ring2": 25,
+                        "Bracelet1": 25,
+                        "Bracelet2": 25
+                    },
+                    "philosopher_stone": {
+                        "Bracelet1": false,
+                        "Bracelet2": false,
+                        "Helmet": false,
+                        "MainHand": false,
+                        "Shoulder": false,
+                        "Necklace": false,
+                        "SubHand": false
+                    }
+                }
+            }
+        },
+        "daevanion_active": {
+            "s:11": [
+                "110113"
+            ],
+            "s:81": [
+                "810033",
+                "810034",
+                "810035",
+                "810043",
+                "810050",
+                "810051",
+                "810052",
+                "810058",
+                "810063",
+                "810064",
+                "810065",
+                "810067",
+                "810068",
+                "810071",
+                "810072",
+                "810073",
+                "810079",
+                "810086",
+                "810093",
+                "810094",
+                "810095",
+                "810098",
+                "810100",
+                "810101",
+                "810108",
+                "810113",
+                "810115",
+                "810123",
+                "810124",
+                "810125",
+                "810126",
+                "810127",
+                "810128",
+                "810129",
+                "810130",
+                "810131",
+                "810132",
+                "810138",
+                "810142",
+                "810144",
+                "810147",
+                "810153",
+                "810157",
+                "810158",
+                "810159",
+                "810162",
+                "810163",
+                "810168",
+                "810171",
+                "810172",
+                "810174",
+                "810178",
+                "810183",
+                "810187",
+                "810189",
+                "810193"
+            ],
+            "s:82": [
+                "820033",
+                "820039",
+                "820040",
+                "820041",
+                "820042",
+                "820043",
+                "820048",
+                "820050",
+                "820055",
+                "820063",
+                "820064",
+                "820065",
+                "820067",
+                "820068",
+                "820069",
+                "820070",
+                "820071",
+                "820073",
+                "820080",
+                "820081",
+                "820082",
+                "820086",
+                "820088",
+                "820094",
+                "820095",
+                "820097",
+                "820101",
+                "820102",
+                "820103",
+                "820109",
+                "820112",
+                "820113",
+                "820114",
+                "820117",
+                "820123",
+                "820124",
+                "820129",
+                "820132",
+                "820133",
+                "820144",
+                "820145",
+                "820146",
+                "820159",
+                "820161",
+                "820174",
+                "820176",
+                "820183",
+                "820184",
+                "820185",
+                "820186",
+                "820187",
+                "820188",
+                "820189",
+                "820191",
+                "820192",
+                "820193"
+            ],
+            "s:83": [
+                "830033",
+                "830034",
+                "830035",
+                "830039",
+                "830050",
+                "830054",
+                "830064",
+                "830065",
+                "830069",
+                "830070",
+                "830071",
+                "830072",
+                "830073",
+                "830079",
+                "830084",
+                "830093",
+                "830094",
+                "830095",
+                "830096",
+                "830097",
+                "830098",
+                "830099",
+                "830100",
+                "830101",
+                "830102",
+                "830103",
+                "830113",
+                "830118",
+                "830125",
+                "830126",
+                "830127",
+                "830128",
+                "830129",
+                "830130",
+                "830131",
+                "830132",
+                "830142",
+                "830144",
+                "830147",
+                "830155",
+                "830157",
+                "830159",
+                "830162",
+                "830163",
+                "830170",
+                "830172",
+                "830178",
+                "830185",
+                "830186",
+                "830187",
+                "830193"
+            ],
+            "s:84": [
+                "840017",
+                "840018",
+                "840019",
+                "840022",
+                "840023",
+                "840024",
+                "840032",
+                "840034",
+                "840035",
+                "840036",
+                "840037",
+                "840039",
+                "840040",
+                "840041",
+                "840042",
+                "840044",
+                "840047",
+                "840052",
+                "840057",
+                "840059",
+                "840066",
+                "840067",
+                "840071",
+                "840072",
+                "840073",
+                "840074",
+                "840081",
+                "840093",
+                "840094",
+                "840095",
+                "840096",
+                "840100",
+                "840101",
+                "840109",
+                "840113",
+                "840115",
+                "840117",
+                "840119",
+                "840123",
+                "840124",
+                "840125",
+                "840126",
+                "840127",
+                "840128",
+                "840129",
+                "840130",
+                "840132",
+                "840133",
+                "840134",
+                "840138",
+                "840145",
+                "840147",
+                "840152",
+                "840153",
+                "840154",
+                "840157",
+                "840159",
+                "840160",
+                "840161",
+                "840162",
+                "840163",
+                "840167",
+                "840169",
+                "840172",
+                "840173",
+                "840174",
+                "840177",
+                "840182",
+                "840184",
+                "840187",
+                "840192",
+                "840197",
+                "840199",
+                "840202",
+                "840207",
+                "840208",
+                "840209"
+            ],
+            "s:85": [
+                "850001",
+                "850002",
+                "850003",
+                "850007",
+                "850008",
+                "850013",
+                "850014",
+                "850015",
+                "850018",
+                "850019",
+                "850020",
+                "850021",
+                "850022",
+                "850024",
+                "850026",
+                "850028",
+                "850030",
+                "850032",
+                "850034",
+                "850037",
+                "850038",
+                "850039",
+                "850040",
+                "850041",
+                "850042",
+                "850043",
+                "850044",
+                "850045",
+                "850047",
+                "850049",
+                "850050",
+                "850055",
+                "850057",
+                "850062",
+                "850063",
+                "850064",
+                "850072",
+                "850074",
+                "850081",
+                "850083",
+                "850084",
+                "850085",
+                "850087",
+                "850089",
+                "850092",
+                "850093",
+                "850094",
+                "850095",
+                "850096",
+                "850098",
+                "850100",
+                "850101",
+                "850102",
+                "850103",
+                "850104",
+                "850105",
+                "850106",
+                "850108",
+                "850111",
+                "850112",
+                "850113",
+                "850115",
+                "850120",
+                "850121",
+                "850122",
+                "850123",
+                "850124",
+                "850125",
+                "850128",
+                "850130",
+                "850131",
+                "850132",
+                "850133",
+                "850134",
+                "850137",
+                "850139",
+                "850141",
+                "850142",
+                "850143",
+                "850145",
+                "850147",
+                "850152",
+                "850154",
+                "850156",
+                "850162",
+                "850163",
+                "850164",
+                "850169",
+                "850171",
+                "850176",
+                "850177",
+                "850179",
+                "850181",
+                "850182",
+                "850183",
+                "850184",
+                "850185",
+                "850186",
+                "850187",
+                "850189",
+                "850192",
+                "850194",
+                "850196",
+                "850198",
+                "850200",
+                "850202",
+                "850204",
+                "850205",
+                "850206",
+                "850207",
+                "850208",
+                "850211",
+                "850212",
+                "850213",
+                "850217",
+                "850218",
+                "850223",
+                "850224",
+                "850225"
+            ],
+            "s:86": [
+                "860113"
+            ]
+        }
+    }
 }
