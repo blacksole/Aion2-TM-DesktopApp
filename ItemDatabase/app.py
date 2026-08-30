@@ -60,8 +60,8 @@ def _t(key: str, **kwargs) -> str:
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, QSize, Qt, QSortFilterProxyModel, QTimer, Signal
 from PySide6.QtGui import (
-    QBrush, QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap,
-    QPolygonF, QStandardItem, QStandardItemModel,
+    QBrush, QColor, QCursor, QFont, QFontMetrics, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette,
+    QPen, QPixmap, QPolygonF, QStandardItem, QStandardItemModel,
 )
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
@@ -71,6 +71,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
     QDialog,
+    QDoubleSpinBox,
     QFrame,
     QGraphicsDropShadowEffect,
     QGridLayout,
@@ -748,9 +749,62 @@ def format_tooltip(detail: dict) -> str:
     return "<br>".join(lines)
 
 
-def _format_number(value: float) -> str:
+def _format_number(value: float, decimals: int = 0) -> str:
+    if decimals:
+        return f"{value:.{decimals}f}"
     return str(int(round(value)))
 
+
+# Real per-item substat ids that don't match the id this file otherwise
+# uses for the SAME real stat (confirmed 2026-08-30 via an audit of every
+# distinct stat id across ~2200 cached item detail responses against
+# _STAT_ID_DISPLAY_NAME/_MAIN_STAT_ROWS etc. -- User-Wunsch: "prüfen, ob
+# alle Werte des gesamten Gears in die Stats mit einfließen"). Without
+# this, gear rolling any of these ids was silently summed under the raw
+# id and never shown anywhere or counted toward the row it clearly means
+# (e.g. real gear uses "BackAttackDamage", but the "Back Attack" row
+# expects "BackAttack" -- same stat, so any gear piece rolling it was
+# invisible). Normalized here, at gear-collection time, rather than
+# renaming the established row ids themselves, since those same ids are
+# also targeted by Genius/Daevanion/Arcana/Attribute mappings elsewhere.
+_GEAR_STAT_ID_ALIASES = {
+    "Accuracy": "AccuracyBonus",
+    "Evasion": "EvasionBonus",
+    "Perfect": "PerfectChance",
+    "Defense": "DefenseBonus",
+    "FixingDamage": "AttackBonus",
+    "WeaponDamage": "MaxAttack",
+    "CriticalAddDamage": "CriticalAttack",
+    "BackAttackDamage": "BackAttack",
+    "FrontAttackDamage": "FrontAttack",
+    "BackAttackCritical": "BackAttackCriticalHit",
+    "FrontAttackCritical": "FrontAttackCriticalHit",
+    "BackAttackDefense": "BackDefense",
+    "FrontAttackDefense": "FrontDefense",
+    "BackAttackCriticalResist": "BackAttackCriticalHitResist",
+    "FrontAttackCriticalResist": "FrontAttackCriticalHitResist",
+    "DecreaseBackAttack": "BackAttackDamageTolerance",
+    "DecreaseFrontAttack": "FrontAttackDamageTolerance",
+    "DecreaseWeaponDamage": "WeaponDamageTolerance",
+    "DecreaseDamage": "DamageTolerance",
+    "DecreaseCriticalDamage": "CriticalDamageTolerance",
+    "IgnoreIronWall": "EndurancePenetration",
+    "IgnoreRestoration": "RegenerationPenetration",
+    "PvEAddDamage": "PvEAttack",
+    "PvEDamageDefense": "PvEDefense",
+    "BossNpcAddDamage": "BossAttack",
+    # Real Bracelets ("Ludra's Bracelet", "Abyssal Bracelet", etc.) can
+    # roll a raw Empyrean Lord stat directly as a substat -- completely
+    # independent of Arcana cards (User-reported, 2026-08-30). Aliased
+    # straight to the same "XxxLordPoints" id Arcana card contributions
+    # use, so both sources land in the same total/tooltip automatically;
+    # see _arcana_lord_stat_totals_detailed for how the derived %-stats
+    # (Combat Speed etc.) then combine both sources' points.
+    "Time": "TimeLordPoints", "Space": "SpaceLordPoints", "Justice": "JusticeLordPoints",
+    "Freedom": "FreedomLordPoints", "Illusion": "IllusionLordPoints", "Life": "LifeLordPoints",
+    "Destiny": "DestinyLordPoints", "Wisdom": "WisdomLordPoints", "Death": "DeathLordPoints",
+    "Destruction": "DestructionLordPoints",
+}
 
 # The one main stat that scales with enchant — identified by id, not by
 # whether the item happens to display it as a range or a flat number
@@ -2180,6 +2234,25 @@ def _arcana_card_grade(card_data: dict | None) -> str:
     if not card_data:
         return _ARCANA_DEFAULT_GRADE
     return card_data.get("grade", _ARCANA_DEFAULT_GRADE)
+
+
+def _arcana_card_level(card_data: dict | None) -> int:
+    """The card's overall Level (0 to its grade's max, see
+    _ARCANA_GRADE_MAX_LEVEL) -- User-Wunsch, 2026-08-30: derive it from the
+    already-assigned skill slots instead of a separate input ("wir
+    berechnen das Level der Karten anhand der vergebenen Punkte. ... fuegt
+    man eine Karte mit +3 und einem +4 hinzu ist sie +5"). Every point a
+    slot sits above baseline (_ARCANA_SKILL_BASELINE) came out of the same
+    shared per-card budget, so summing those points back up gives the
+    exact Level that was spent to reach this slot assignment -- same math
+    already used for the live wish-ceiling (see ArcanaSkillSlotDialog)."""
+    slots = _arcana_card_slot_list(card_data)
+    spent = sum(
+        max(0, slot.get("level", _ARCANA_SKILL_BASELINE) - _ARCANA_SKILL_BASELINE)
+        for slot in slots if slot
+    )
+    grade = _arcana_card_grade(card_data)
+    return min(spent, _ARCANA_GRADE_MAX_LEVEL.get(grade, _ARCANA_MAX_CARD_LEVEL))
 
 
 def _arcana_eligible_skills_for_type(
@@ -3864,7 +3937,7 @@ class _ArcanaCardButton(QPushButton):
         self.grade_label.setText("")
         self._restyle()
 
-    def set_themed_state(self, entry: dict):
+    def set_themed_state(self, entry: dict, lord_points: int | None = None):
         self.entry = entry
         self.setProperty("state", "themed")
         pix = _arcana_icon(entry["iconFile"], 56)
@@ -3872,8 +3945,18 @@ class _ArcanaCardButton(QPushButton):
         self.name_label.setVisible(True)
         if entry.get("lord"):
             effect = ARCANA_LORD_EFFECTS.get(entry["lord"], "")
+            # Real Lord value (User-Wunsch, 2026-08-30: "bei den Sets noch
+            # die jeweiligen Lord Werte anzeigen") -- only known for a real
+            # equipped Sets-tab card (its Level is derived from the actual
+            # assigned skills, see _arcana_card_level); the generic
+            # Informationen catalog browser has no such context, so it
+            # keeps showing just the Lord name with no value there.
+            value_html = (
+                f' <span style="color:#e5e7eb;font-weight:700;">{lord_points}</span>'
+                if lord_points is not None else ""
+            )
             self.info_label.setText(
-                f'<span style="color:#facc15;font-weight:700;">{entry["lord"]}</span><br>'
+                f'<span style="color:#facc15;font-weight:700;">{entry["lord"]}</span>{value_html}<br>'
                 f'<span style="font-size:10px;color:#64748b;">{effect}</span>'
             )
         else:
@@ -4173,6 +4256,481 @@ _DMG_STAT_BACK_DAMAGE_BOOST = "AmplifyBackAttack"       # Back/Rear Attack Damag
 # Crit/Damage Resistance (opponent-side or class-passive specific).
 
 
+# ── "Genius Insight" (Pet Genus board) real data ────────────────────────────
+# Read directly off in-game "{Board} Genus Insight Acquirable Properties"
+# screenshots (Heroic grade, Lv.10 -- the rarest/best grade, 5% roll chance;
+# lower grades exist but aren't modelled here yet). User folder:
+# ItemDatabase/data/Genius_Screenshots/. Every board has 9 "Lines"; which
+# properties a Line can roll depends only on which of 4 pool "shapes" that
+# Line index has -- 1/4/7, 2/5/8, 3/9, and 6 -- not on the board itself,
+# EXCEPT one self-referencing entry on Lines 3/9/6 that's always named after
+# the board it's rolled on (e.g. "Cogni Damage Boost" only on Cogni's own
+# board) and the Special board's 1/2/4/5/7/8 pool, which is a distinct,
+# much smaller set (Penetration/Power Shard Damage Bonus instead of
+# Defense/Crit-Resist/Evasion clutter).
+#
+# Each tuple is (stat_key, display_label, min, max, is_percent). "__SELF__"
+# in _GENIUS_DMG_EXTRA/_GENIUS_TOL_EXTRA is resolved to the board's own name
+# by _genius_pool_for_line() below, never used directly.
+_GENIUS_BOARDS = ["Cogni", "Fera", "Natura", "Varian", "Special"]
+_GENIUS_BOARD_COLORS = {
+    "Cogni": "#3ba7f2", "Fera": "#ef4444", "Natura": "#22c55e",
+    "Varian": "#f2b90c", "Special": "#2dd4bf",
+}
+
+# Shared by all four "general board" pool shapes (1/4/7, 2/5/8, 3/9, 6).
+# NOTE: "Accuracy Bonus" on the 2/5/8 shape was reconstructed from a
+# partially cut-off screenshot row (same 20-40 range as everywhere else it
+# appears) -- very likely correct, but not pixel-confirmed like the rest.
+_GENIUS_COMMON = [
+    ("AccuracyBonus", "Accuracy Bonus", 20, 40, False),
+    ("CriticalHit", "Critical Hit", 15, 30, False),
+    ("BossAttack", "Boss Attack", 10, 20, False),
+    ("EvasionBonus", "Evasion Bonus", 20, 40, False),
+    ("CriticalHitResist", "Critical Hit Resist", 15, 30, False),
+    ("Block", "Block", 25, 50, False),
+    ("BackAttackCriticalHit", "Back Attack Critical Hit", 25, 50, False),
+    ("FrontAttackCriticalHit", "Front Attack Critical Hit", 25, 50, False),
+    ("BackAttackCriticalHitResist", "Back Attack Critical Hit Resist", 20, 40, False),
+    ("FrontAttackCriticalHitResist", "Front Attack Critical Hit Resist", 20, 40, False),
+    ("HP", "HP", 100, 200, False),
+    ("MP", "MP", 50, 100, False),
+]
+_GENIUS_DEF_EXTRA = [  # Lines 1 / 4 / 7
+    ("DefenseBonus", "Defense Bonus", 80, 160, False),
+    ("CriticalDamageDefense", "Critical Damage Defense", 100, 200, False),
+    ("BackDefense", "Back Defense", 100, 200, False),
+    ("FrontDefense", "Front Defense", 100, 200, False),
+    ("PvEDefense", "PvE Defense", 100, 200, False),
+]
+_GENIUS_ATK_EXTRA = [  # Lines 2 / 5 / 8
+    ("AttackBonus", "Attack Bonus", 8, 16, False),
+    ("MaxAttack", "Max Attack", 10, 20, False),
+    ("CriticalAttack", "Critical Attack", 10, 20, False),
+    ("BackAttack", "Back Attack", 10, 20, False),
+    ("FrontAttack", "Front Attack", 10, 20, False),
+    ("PvEAttack", "PvE Attack", 10, 20, False),
+]
+_GENIUS_DMG_EXTRA = [  # Lines 3 / 9
+    ("DamageBoost", "Damage Boost", 1.2, 2.4, True),
+    ("Smite", "Smite", 1.2, 2.4, True),
+    ("PerfectChance", "Perfect Chance", 1.2, 2.4, True),
+    ("__SELF__", "{board} Damage Boost", 2.4, 4.8, True),
+    ("WeaponDamageBoost", "Weapon Damage Boost", 1.2, 2.4, True),
+    ("CriticalDamageBoost", "Critical Damage Boost", 1.5, 3.0, True),
+    ("BackAttackDamageBoost", "Back Attack Damage Boost", 1.5, 3.0, True),
+    ("FrontAttackDamageBoost", "Front Attack Damage Boost", 1.5, 3.0, True),
+    ("PvEDamageBoost", "PvE Damage Boost", 1.5, 3.0, True),
+]
+_GENIUS_TOL_EXTRA = [  # Line 6
+    ("DamageTolerance", "Damage Tolerance", 1.2, 2.4, True),
+    ("Endurance", "Endurance", 1.2, 2.4, True),
+    ("Regeneration", "Regeneration", 1.2, 2.4, True),
+    ("__SELF__", "{board} Damage Tolerance", 2.4, 4.8, True),
+    ("WeaponDamageTolerance", "Weapon Damage Tolerance", 1.2, 2.4, True),
+    ("CriticalDamageTolerance", "Critical Damage Tolerance", 1.3, 2.6, True),
+    ("BackAttackDamageTolerance", "Back Attack Damage Tolerance", 1.3, 2.6, True),
+    ("FrontAttackDamageTolerance", "Front Attack Damage Tolerance", 1.3, 2.6, True),
+    ("PvEDamageTolerance", "PvE Damage Tolerance", 1.5, 3.0, True),
+]
+# Special board's own 1/2/4/5/7/8 shape -- confirmed distinct/smaller pool.
+_GENIUS_SPECIAL_ATK = [
+    ("AttackBonus", "Attack Bonus", 8, 16, False),
+    ("MaxAttack", "Max Attack", 10, 20, False),
+    ("Penetration", "Penetration", 80, 160, False),
+    ("PowerShardDamageBonus", "Power Shard Damage Bonus", 8, 16, False),
+    ("CriticalAttack", "Critical Attack", 10, 20, False),
+    ("BackAttack", "Back Attack", 10, 20, False),
+    ("FrontAttack", "Front Attack", 10, 20, False),
+    ("PvEAttack", "PvE Attack", 10, 20, False),
+    ("HP", "HP", 100, 200, False),
+    ("MP", "MP", 50, 100, False),
+]
+
+
+def _genius_pool_for_line(board: str, line: int) -> list[tuple[str, str, float, float, bool]]:
+    """Every (key, label, min, max, is_percent) a given board's Line can
+    roll. Special's own Line 3/9/6 shape hasn't been screenshotted yet
+    (User, 2026-08-30: still pending) -- reuses the general Damage Boost/
+    Tolerance shape below as a placeholder rather than guessing something
+    entirely new, clearly worth re-checking once real data arrives."""
+    def resolve(entries):
+        out = []
+        for key, label, lo, hi, pct in entries:
+            if key == "__SELF__":
+                key = f"{board}DamageBoost" if "Boost" in label else f"{board}DamageTolerance"
+                label = label.format(board=board)
+            out.append((key, label, lo, hi, pct))
+        return out
+
+    if board == "Special" and line in (1, 2, 4, 5, 7, 8):
+        return list(_GENIUS_SPECIAL_ATK)
+    if line in (1, 4, 7):
+        return resolve(_GENIUS_DEF_EXTRA + _GENIUS_COMMON)
+    if line in (2, 5, 8):
+        return resolve(_GENIUS_ATK_EXTRA + _GENIUS_COMMON)
+    if line in (3, 9):
+        return resolve(_GENIUS_DMG_EXTRA + _GENIUS_COMMON)
+    if line == 6:
+        return resolve(_GENIUS_TOL_EXTRA + _GENIUS_COMMON)
+    return []
+
+
+def _genius_default_state() -> dict[str, dict[str, dict]]:
+    """Fresh Genius Insight state: every board's Lines default to their
+    pool's first stat option, at that stat's max (editable down from
+    there) -- matches the "aim for best" mental model without pretending
+    any value is actually confirmed until the user changes it."""
+    state = {}
+    for board in _GENIUS_BOARDS:
+        lines = {}
+        for line in range(1, 10):
+            pool = _genius_pool_for_line(board, line)
+            if not pool:
+                continue
+            key, _label, _lo, hi, _pct = pool[0]
+            lines[str(line)] = {"stat": key, "value": hi, "locked": False}
+        state[board] = lines
+    return state
+
+
+def _genius_format_range(lo: float, hi: float, pct: bool) -> str:
+    """"10 - 20" / "1.2% - 2.4%" -- same "Value" column data as the real
+    in-game Acquirable Properties screenshots this was read from, spaced
+    out around the dash for readability (User-Wunsch, 2026-08-30)."""
+    if pct:
+        return f"{lo:g}% - {hi:g}%"
+    return f"{lo:g} - {hi:g}"
+
+
+# "Owned Effect" pet examples -- a separate, purely informational passive-
+# bonus system (leveling/owning a board's pets grants these automatically,
+# no rolling). Reference values only, not persisted/tracked per user; see
+# project_genius_insight.md memory for the full research writeup. Special
+# is deliberately absent -- its pets are bought pre-leveled (Lv.5) and have
+# no Owned Effect section at all (User-confirmed via screenshot).
+# Grouped 4 ways (User-Wunsch, 2026-08-30: "in 4 gute Gruppen unterteilen")
+# so the sidebar can show them as a 2-column tile grid instead of one long
+# scrolling list -- (translation_key, [(label, value), ...]) per group.
+_GENIUS_OWNED_TOTAL_GROUPS = [
+    ("arm_genius_owned_group_attributes", [
+        ("Might", "56"), ("Dexterity", "92"), ("Intelligence", "147"),
+        ("Constitution", "49"), ("Willpower", "105"), ("Precision", "56"),
+    ]),
+    ("arm_genius_owned_group_combat", [
+        ("Accuracy Bonus", "432"), ("Evasion Bonus", "242"),
+        ("Critical Hit", "266"), ("Critical Hit Resist", "273"),
+    ]),
+    ("arm_genius_owned_group_vitals", [
+        ("HP", "3220"), ("MP", "1645"),
+        ("Mount Ground Move Speed", "524"), ("Mount Sprint Stamina Cost Reduction Rate", "29.1%"),
+    ]),
+    ("arm_genius_owned_group_boosts", [
+        ("Cogni Damage Boost", "4.2%"), ("Fera Damage Boost", "6.6%"),
+        ("Natura Damage Boost", "4.9%"), ("Varian Damage Boost", "4.6%"),
+    ]),
+]
+_GENIUS_OWNED_PETS_EXAMPLE = {
+    "Cogni": ("Krall Laborer", [
+        ("HP", "60"), ("Critical Hit", "5"), ("Might", "1"),
+        ("Intelligence", "1"), ("Cogni Damage Boost", "0.1%"),
+    ]),
+    "Fera": ("Fossa", [
+        ("Mount Ground Move Speed", "6"), ("Accuracy Bonus", "5"), ("Dexterity", "1"),
+        ("Intelligence", "1"), ("Fera Damage Boost", "0.1%"),
+    ]),
+    "Natura": ("Forest Specter", [
+        ("MP", "30"), ("Critical Hit Resist", "5"), ("Precision", "1"),
+        ("Willpower", "1"), ("Natura Damage Boost", "0.1%"),
+    ]),
+    "Varian": ("Swarm", [
+        ("Mount Sprint Stamina Cost Reduction Rate", "0.6%"), ("Evasion Bonus", "5"),
+        ("Constitution", "1"), ("Willpower", "1"), ("Varian Damage Boost", "0.1%"),
+    ]),
+}
+
+# Genius Insight stat_key -> real item stat id, wherever a verified real id
+# already exists in this file (_MAIN_STAT_ROWS etc. / the damage-estimate
+# _DMG_STAT_* constants) -- Genius contributes into the SAME bucket gear
+# does, so it feeds GearScore/Stat Info AND the Bible damage-estimate
+# multiplier identically (User-Wunsch, 2026-08-30: "die Berechnungsformel
+# der Skills greift ... der Schaden sich angleicht"). A key with no entry
+# here just keeps its own Genius-only key -- Owned Effects (the pet
+# examples above) are deliberately NOT included anywhere in this mapping/
+# the totals it feeds (User: "die einzelnen Petwerte ... lassen wir raus").
+_GENIUS_STAT_ID_MAP = {
+    "CriticalHit": "Critical",
+    "CriticalHitResist": "CriticalResist",
+    "Block": "Block",
+    "HP": "HPMax",
+    "MP": "MPMax",
+    "DamageBoost": "AmplifyAllDamage",
+    "WeaponDamageBoost": "AmplifyWeaponDamage",
+    "CriticalDamageBoost": "AmplifyCriticalDamage",
+    "BackAttackDamageBoost": "AmplifyBackAttack",
+    "FrontAttackDamageBoost": "AmplifyFrontAttack",
+    "Smite": "HardHit",
+    "PvEDamageBoost": "PvEAmplifyDamage",
+    "PvEDamageTolerance": "PvEDecreaseDamage",
+    "Endurance": "IronWall",
+    "Regeneration": "Restoration",
+    "Penetration": "DefensePierce",
+    "PowerShardDamageBonus": "SealStoneAddDamage",
+}
+
+
+# ── Core attribute -> derived "increase" stat formulas ─────────────────────
+# User-supplied, 2026-08-30, from real in-game attribute detail popups: every
+# one of the 6 core attributes gives 1% of its derived stat(s) per 10 points
+# ("10 Might = 1% Attack increase" etc.), several boosting more than one stat
+# at once at the SAME rate. See project_character_stat_formulas.md memory
+# for the full verification table (all 6 confirmed, no exceptions found).
+_ATTRIBUTE_RATE = 0.1  # % per attribute point (10 points = 1%)
+_ATTRIBUTE_STAT_IDS = {
+    "STR": ["DamageRatio"],  # Might -> Attack increase
+    "DEX": ["EvasionIncrease", "BlockIncrease", "CriticalHitResistIncrease"],  # Dexterity
+    "AGI": ["AccuracyIncrease", "CriticalHitIncrease"],  # Precision
+    "WIS": ["AbnormalResistance"],  # Willpower -> Status Effect Resist
+    "INT": ["AbnormalAccuracy"],  # Intelligence -> Status Effect Chance
+    "CON": ["HPIncrease"],  # Constitution -> HP increase
+}
+
+# ── Empyrean Lord (Arcana card) -> derived stat formulas ───────────────────
+# User-supplied, 2026-08-30, from real in-game Lord detail popups: every one
+# of the 10 Lords gives 1% of its 2 derived stats per 5 points ("155 Time =
+# 31% Combat Speed / Smite Resist" etc, i.e. value * 0.2). All 10 confirmed,
+# no exceptions -- see project_arcana_planner.md Runde 13 Nachtraege 3+4.
+_ARCANA_LORD_RATE = 0.2  # % per Lord point (5 points = 1%)
+_ARCANA_LORD_STAT_IDS = {
+    "Time": ["CombatSpeed", "HardHitResist"],
+    "Space": ["MoveSpeed", "BlockIncrease"],
+    "Justice": ["DefenseRatio", "PerfectChance"],
+    "Freedom": ["AccuracyIncrease", "EvasionIncrease"],
+    "Illusion": ["CooldownReduction", "EndurancePenetration"],
+    "Life": ["HPIncrease", "Restoration"],
+    "Destiny": ["MPIncrease", "IronWall"],
+    "Wisdom": ["MPCostReduction", "HardHit"],
+    "Death": ["CriticalHitIncrease", "RegenerationPenetration"],
+    "Destruction": ["DamageRatio", "PerfectResist"],
+}
+# Illusion/Wisdom's in-game effect text reads "Cooldown -5%"/"MP Cost -5%",
+# which previously got modeled as a literal negative sign here -- WRONG
+# (User-corrected, 2026-08-30): the Stat Info id these feed is
+# "CooldownReduction"/"MPCostReduction", a stat that's ALREADY named for
+# the beneficial direction (higher = more reduction = better), so a Lord
+# that reduces cooldown/MP cost should ADD a positive amount to it, not
+# subtract. Kept as an explicit (now-empty-in-effect) sign map rather than
+# removed outright, so a future stat that genuinely needs flipping has an
+# obvious place to go.
+_ARCANA_LORD_STAT_SIGN: dict[str, int] = {}
+
+# Which Lord a Chalice-of-{theme} grants (User screenshots, 2026-08-30,
+# Runde 13 -- only Time/Space seen across all 7 themes so far, never
+# confirmed for a different theme-lord pairing; treated as fixed until a
+# counterexample turns up). Only individually screenshotted for the
+# "Chalice" slot type (Key/Hourglass/Dice/Lantern stay out of scope per
+# User-Wunsch, 2026-08-30: "ignoriere erstmal die 4 Slot-Typen ... diese
+# kommen erst seeeehr spaet im Game") -- but the Lord mechanic is
+# theme-driven, not slot-type-specific (a card's Set Effect text is
+# already confirmed identical across slot types for the same theme), so
+# this same base/rate is applied to ALL 5 real card slots (Chalice/
+# Parchment/Compass/Bell/Mirror), not just Chalice -- not individually
+# re-confirmed for the other 4, worth revisiting if a counterexample shows up.
+#
+# NOTE: which Lord a card grants is NOT theme-alone -- it's per (theme,
+# cardType), and the real catalog (_load_arcana_theme_map, theme_map[theme]
+# [cardType]["lord"]) already has the correct value for every card type
+# (confirmed 2026-08-30: e.g. Vigor+Chalice -> Time, but Vigor+Parchment ->
+# Life, Vigor+Compass -> Freedom -- a theme does NOT grant the same Lord
+# across card types). So _arcana_card_lord_points reads the catalog's own
+# "lord" field directly instead of guessing from theme alone; no static
+# theme->lord dict is kept here anymore.
+# 20 base points at Enhance +0 for every theme. Per-level rate differs by
+# item-level tier (User-confirmed, 2026-08-30): the 80-item-level themes
+# (Vigor/Magic/Frenzy/Purity, Level cap 25) rise +1/level; the 90-item-level
+# themes (Punishment/Protection/Indomitability, Level cap 30) rise +2/level.
+_ARCANA_CHALICE_LORD_BASE = 20
+_ARCANA_CHALICE_LORD_PER_LEVEL = {
+    "Vigor": 1, "Magic": 1, "Frenzy": 1, "Purity": 1,
+    "Punishment": 2, "Protection": 2, "Indomitability": 2,
+}
+
+
+def _arcana_card_lord_points(
+    card_data: dict | None, theme_map: dict, card_type: str
+) -> tuple[str, int] | None:
+    """(lord_name, points) this specific card assignment currently grants
+    at its own derived Level (see _arcana_card_level), or None if it has
+    no theme set / the (theme, card_type) combo has no known Lord. Shared
+    by the Stat Info feed (_arcana_lord_stat_totals) and the card widgets'
+    own display (User-Wunsch, 2026-08-30: "bei den Sets noch die
+    jeweiligen Lord Werte anzeigen"). The Lord identity comes straight from
+    the real catalog entry for this exact (theme, card_type) pair -- it
+    is NOT the same Lord for every card type of a given theme (fixed
+    2026-08-30, see the note above _ARCANA_CHALICE_LORD_BASE)."""
+    if not card_data:
+        return None
+    theme = card_data.get("theme")
+    if not theme:
+        return None
+    entry = theme_map.get(theme, {}).get(card_type)
+    lord = entry.get("lord") if entry else None
+    if not lord:
+        return None
+    level = _arcana_card_level(card_data)
+    per_level = _ARCANA_CHALICE_LORD_PER_LEVEL.get(theme, 0)
+    points = _ARCANA_CHALICE_LORD_BASE + per_level * level
+    return lord, points
+
+
+def _genius_owned_tile_content_width() -> int:
+    """Pixel width of the widest (name + value) pair across every Owned
+    Effects row (both the Total groups and the per-board pet examples) --
+    measured via QFontMetrics against the exact font/size the QSS gives
+    #GeniusOwnedName/#GeniusOwnedValue, so the 2-column tile grid can show
+    "name   value" on ONE line instead of wrapping (User-Wunsch, 2026-08-30:
+    "Beschreibung und Wert in eine Zeile")."""
+    name_font = QFont()
+    name_font.setPixelSize(11)
+    name_font.setWeight(QFont.Weight.DemiBold)
+    value_font = QFont()
+    value_font.setPixelSize(13)
+    value_font.setWeight(QFont.Weight.Bold)
+    name_metrics = QFontMetrics(name_font)
+    value_metrics = QFontMetrics(value_font)
+
+    pairs = [(label, value) for _key, entries in _GENIUS_OWNED_TOTAL_GROUPS for label, value in entries]
+    for _pet_name, rows in _GENIUS_OWNED_PETS_EXAMPLE.values():
+        pairs.extend(rows)
+
+    widest = 0
+    for label, value in pairs:
+        w = name_metrics.horizontalAdvance(label) + value_metrics.horizontalAdvance(value)
+        widest = max(widest, w)
+    return widest
+
+
+class _GeniusLinePickerButton(QFrame):
+    """A QPushButton-like clickable field for a Genius Insight Line: the
+    property name left-aligned, and the real min-max range right-aligned
+    in the same field/color (User-Wunsch, 2026-08-30 -- reverted a prior
+    right-aligned-name + neutral-caret attempt the user didn't like; the
+    value input itself stays a separate field after this one). Exposes
+    .setText()/.text()/.clicked/.property()/.setProperty() so it's a
+    drop-in replacement everywhere a QPushButton was used for this."""
+
+    clicked = Signal()
+
+    def __init__(self, text: str = "", range_text: str = "", parent=None):
+        super().__init__(parent)
+        self.setObjectName("GeniusLineCombo")
+        self.setCursor(Qt.PointingHandCursor)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(6)
+        self._name_lbl = QLabel(text)
+        self._name_lbl.setObjectName("GeniusLineComboText")
+        self._range_lbl = QLabel(range_text)
+        self._range_lbl.setObjectName("GeniusLineComboRange")
+        self._range_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        layout.addWidget(self._name_lbl, 1)
+        layout.addWidget(self._range_lbl, 0)
+
+    def setText(self, text: str):
+        self._name_lbl.setText(text)
+
+    def text(self) -> str:
+        return self._name_lbl.text()
+
+    def setRangeText(self, text: str):
+        self._range_lbl.setText(text)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            event.accept()
+            self.clicked.emit()
+        else:
+            super().mousePressEvent(event)
+
+
+class _GeniusStatPickerPopup(QFrame):
+    """Searchable replacement for a plain QComboBox on a Genius Insight
+    Line. A native QComboBox has no search field, and Qt can flip its
+    popup upward when there isn't enough room below (User-reported,
+    2026-08-30: Special's Line 8 combo opened UPWARD, covering Lines
+    1-7). This is a lightweight Qt.Popup positioned explicitly below the
+    triggering button instead -- closes on outside click/Escape like a
+    real combo popup would, but always opens where expected and lets you
+    filter a long property list by typing."""
+
+    def __init__(self, options: list[tuple[str, str, float, float, bool]], current_key: str, on_select, parent=None):
+        super().__init__(parent, Qt.Popup)
+        self.setObjectName("GeniusStatPopup")
+        self._on_select = on_select
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(6, 6, 6, 6)
+        outer.setSpacing(4)
+
+        self._search = QLineEdit()
+        self._search.setObjectName("GeniusStatPopupSearch")
+        self._search.setPlaceholderText(_t("arm_genius_stat_search_placeholder"))
+        self._search.textChanged.connect(self._apply_filter)
+        outer.addWidget(self._search)
+
+        self._list = QListWidget()
+        self._list.setObjectName("GeniusStatPopupList")
+        self._list.setFocusPolicy(Qt.NoFocus)
+        for key, label, lo, hi, pct in options:
+            item = QListWidgetItem()
+            item.setData(Qt.UserRole, key)
+            item.setData(Qt.UserRole + 1, label)
+
+            # Name + real min-max range, same layout as the in-game
+            # "Properties | Value" reference screenshots this data came
+            # from (User-Wunsch, 2026-08-30: "hinter die Zahl im Dropdown
+            # die min und max werte setzen, ähnlich wie auf den
+            # screenshots") -- a plain QListWidgetItem can't right-align a
+            # second column on its own, so this uses an embedded row widget.
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(8, 4, 8, 4)
+            row_layout.setSpacing(10)
+            name_lbl = QLabel(label)
+            name_lbl.setObjectName("GeniusStatPopupItemName")
+            range_lbl = QLabel(_genius_format_range(lo, hi, pct))
+            range_lbl.setObjectName("GeniusStatPopupItemRange")
+            row_layout.addWidget(name_lbl, 1)
+            row_layout.addWidget(range_lbl, 0)
+
+            self._list.addItem(item)
+            item.setSizeHint(row_widget.sizeHint())
+            self._list.setItemWidget(item, row_widget)
+            if key == current_key:
+                self._list.setCurrentItem(item)
+        self._list.itemClicked.connect(self._on_item_clicked)
+        outer.addWidget(self._list)
+
+        # Exactly 8 rows tall (User-Wunsch, 2026-08-30: "maximal 8 Werte
+        # anzeigen, rest mit scrollbar") -- QListWidget scrolls the rest
+        # on its own once its content outgrows this fixed height.
+        row_h = self._list.sizeHintForRow(0) if self._list.count() else 28
+        self._list.setFixedHeight(row_h * 8 + 4)
+
+        self._search.setFocus()
+
+    def _apply_filter(self, text: str):
+        text = text.strip().lower()
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            label = item.data(Qt.UserRole + 1) or ""
+            item.setHidden(bool(text) and text not in label.lower())
+
+    def _on_item_clicked(self, item: QListWidgetItem):
+        self._on_select(item.data(Qt.UserRole))
+        self.close()
+
+
 def _skill_damage_level_index(skill: dict, level: int) -> dict | None:
     """The skills_all.json levels[] entry matching `level` (1-based, same
     counting as the Skill Planner's own manual+bonus level), clamped to
@@ -4207,11 +4765,23 @@ def _skill_damage_estimate_multiplier(stat_totals: dict[str, float]) -> float:
     stats -- see the module comment above this constants block for exactly
     what this does and does NOT model. Same multiplier applies to both a
     skill's min and max tooltip value (User-Wunsch, 2026-08-29: show both
-    estimated min AND max, not just max)."""
+    estimated min AND max, not just max).
+
+    Max Attack / Attack Bonus (User-supplied, 2026-08-30, Kanon's Bible
+    CH11): both are added to the formula BEFORE the Attack Increase %
+    multiplication -- "((Pure Attack × Weapon Damage Boost) × Multi-Hit ×
+    Power Shard) + Attack Bonus) × Attack Increase%", with Max Attack
+    itself "directly impacting Pure Attack". We don't know the player's
+    real Pure Attack, so can't apply either exactly -- instead using the
+    Bible's own per-point damage-% equivalence (10 Max Attack = 0.1325%,
+    10 Attack Bonus = 0.1%) as a stand-in, same "estimate, don't pretend
+    to fully recompute" approach as the rest of this function."""
     def pct(stat_id: str) -> float:
         return stat_totals.get(stat_id, 0.0) / 100.0
 
     multiplier = 1 + pct(_DMG_STAT_WEAPON_DAMAGE_BOOST)
+    multiplier *= 1 + stat_totals.get("MaxAttack", 0.0) * 0.0001325
+    multiplier *= 1 + stat_totals.get("AttackBonus", 0.0) * 0.0001
     multiplier *= 1 + pct(_DMG_STAT_ATTACK_INCREASE)
     multiplier *= 1 + pct(_DMG_STAT_DAMAGE_BOOST) + pct(_DMG_STAT_PVE_DAMAGE_BOOST) + pct(_DMG_STAT_BOSS_DAMAGE_BOOST)
     multiplier *= 1 + pct(_DMG_STAT_CRIT_DAMAGE_BOOST)
@@ -5104,10 +5674,11 @@ class CreateCharacterDialog(QDialog):
 
 
 # Aggregated Stat Info panel rows: (display label, stat id or None). Only
-# ids verified against real per-item API responses are summed across
-# equipped slots — everything else shows "—" rather than a fabricated
-# number. No source exists yet for "Boss"-specific damage boost/tolerance
-# or Move Speed/Evasion/Critical Hit Resist, so those stay None.
+# ids verified against real per-item API responses (or, since 2026-08-30,
+# real Genius Insight Line data -- see _GENIUS_STAT_ID_MAP) are summed
+# across equipped slots — everything else shows "—" rather than a
+# fabricated number. No source exists yet for "Boss"-specific damage
+# boost/tolerance or Move Speed/Critical Hit Resist, so those stay None.
 _MAIN_STAT_ROWS = [
     ("Attack", "WeaponFixingDamage"),
     ("Attack increase", "DamageRatio"),
@@ -5115,13 +5686,13 @@ _MAIN_STAT_ROWS = [
     ("Critical Hit", "Critical"),
     ("HP", "HPMax"),
     ("Combat Speed", "CombatSpeed"),
-    ("Cooldown", None),
+    ("Cooldown", "CooldownReduction"),
     ("Smite", "HardHit"),
-    ("Perfect Chance", None),
+    ("Perfect Chance", "PerfectChance"),
     ("Multi-hit Chance", "AdditionalHitRate"),
 ]
 _MOVEMENT_STAT_ROWS = [
-    ("Move Speed", None),
+    ("Move Speed", "MoveSpeed"),
     ("Stamina", None),
     ("Flight Power", "FPMax"),
 ]
@@ -5132,66 +5703,110 @@ _SUB_STAT_ROWS = [
     ("MP", "MPMax"),
 ]
 _OFFENSE_STAT_ROWS = [
-    ("Attack Bonus", None),
+    # "Max Attack" isn't its own real in-game stat yet, but Genius Insight
+    # already rolls it -- shown here anyway per User-Wunsch, 2026-08-30
+    # ("wir fügen den allerdings in unsere Stat Info ein. Am besten direkt
+    # vor Attack Bonus"), right before Attack Bonus since Kanon's Bible
+    # CH11 ranks it as the 2nd-most valuable Attack stat (directly boosts
+    # Pure Attack, vs. Attack Bonus which is added afterward).
+    ("Max Attack", "MaxAttack"),
+    ("Attack Bonus", "AttackBonus"),
+    ("Critical Attack", "CriticalAttack"),
+    ("Back Attack", "BackAttack"),
+    ("Front Attack", "FrontAttack"),
+    ("Back Attack Critical Hit", "BackAttackCriticalHit"),
+    ("Front Attack Critical Hit", "FrontAttackCriticalHit"),
     ("Damage Boost", "AmplifyAllDamage"),
     ("Weapon Damage Boost", "AmplifyWeaponDamage"),
-    ("Accuracy Bonus", None),
-    ("Accuracy increase", None),
-    ("Critical Hit increase", None),
+    ("Critical Damage Boost", "AmplifyCriticalDamage"),
+    ("Back Attack Damage Boost", "AmplifyBackAttack"),
+    ("Front Attack Damage Boost", "AmplifyFrontAttack"),
+    ("Accuracy Bonus", "AccuracyBonus"),
+    ("Accuracy increase", "AccuracyIncrease"),
+    ("Critical Hit increase", "CriticalHitIncrease"),
 ]
 _DEFENSE_STAT_ROWS = [
-    ("Defense Bonus", None),
-    ("Evasion Bonus", None),
+    ("Defense Bonus", "DefenseBonus"),
+    ("Critical Damage Defense", "CriticalDamageDefense"),
+    ("Back Defense", "BackDefense"),
+    ("Front Defense", "FrontDefense"),
+    ("Evasion Bonus", "EvasionBonus"),
+    ("Evasion increase", "EvasionIncrease"),
+    ("Critical Hit Resist increase", "CriticalHitResistIncrease"),
+    ("Back Attack Critical Hit Resist", "BackAttackCriticalHitResist"),
+    ("Front Attack Critical Hit Resist", "FrontAttackCriticalHitResist"),
     ("Block", "Block"),
-    ("Block increase", None),
+    ("Block increase", "BlockIncrease"),
+    ("Block Penetration", "BlockPierce"),
+    ("Multi-hit Resist", "AdditionalHitResistRate"),
     ("Parry Damage Reduction Amount", None),
     ("Parry Damage Reduction Rate", None),
     ("Defense increase", "DefenseRatio"),
     ("Endurance", "IronWall"),
     ("Regeneration", "Restoration"),
+    ("Damage Tolerance", "DamageTolerance"),
+    ("Weapon Damage Tolerance", "WeaponDamageTolerance"),
+    ("Critical Damage Tolerance", "CriticalDamageTolerance"),
+    ("Back Attack Damage Tolerance", "BackAttackDamageTolerance"),
+    ("Front Attack Damage Tolerance", "FrontAttackDamageTolerance"),
 ]
 _UTILITY_RECOVERY_STAT_ROWS = [
     ("Natural HP Regen", "HPRegen"),
     ("Natural MP Regen", "MPRegen"),
-    ("HP Potion Recovery increase", None),
+    ("Natural Flight Power Regen", "FPRegen"),
+    ("Natural Stamina Regen", "SPRegen"),
+    ("HP Potion Recovery increase", "HpPotionRate"),
     ("Incoming Heal", "AmplifyHpHealGet"),
-    ("HP increase", None),
-    ("MP increase", None),
-    ("MP Cost Reduction", None),
-    ("MP Cost", None),
+    ("HP increase", "HPIncrease"),
+    ("MP increase", "MPIncrease"),
+    ("MP Cost", "MPCostReduction"),
     ("Power Shard Damage Bonus", "SealStoneAddDamage"),
+]
+# Pet Genus board self-boosts (Lines 3/9/6's "{Board} Damage Boost/
+# Tolerance" -- User-Wunsch, 2026-08-30: every Genius value should already
+# show up somewhere in the Build Planner). No natural home in the rows
+# above since this is a Genius-only mechanic, not a real gear stat.
+_GENIUS_BOARD_STAT_ROWS = [
+    ("Cogni Damage Boost", "CogniDamageBoost"),
+    ("Fera Damage Boost", "FeraDamageBoost"),
+    ("Natura Damage Boost", "NaturaDamageBoost"),
+    ("Varian Damage Boost", "VarianDamageBoost"),
+    ("Cogni Damage Tolerance", "CogniDamageTolerance"),
+    ("Fera Damage Tolerance", "FeraDamageTolerance"),
+    ("Natura Damage Tolerance", "NaturaDamageTolerance"),
+    ("Varian Damage Tolerance", "VarianDamageTolerance"),
 ]
 
 # Rows shown in the Main Stats tab's mode section, switched by the PvE/PvP
 # toggle — folds what used to be separate "PvP"/"PvE" tabs into Main Stats.
 _PVE_MODE_STAT_ROWS = [
-    ("PvE Attack", None),
-    ("PvE Defense", None),
-    ("PvE Accuracy", None),
-    ("PvE Evasion", None),
+    ("PvE Attack", "PvEAttack"),
+    ("PvE Defense", "PvEDefense"),
+    ("PvE Accuracy", "PvEAccuracy"),
+    ("PvE Evasion", "PvEEvasion"),
     ("PvE Damage Boost", "PvEAmplifyDamage"),
     ("PvE Damage Tolerance", "PvEDecreaseDamage"),
-    ("Boss Attack", None),
-    ("Boss Defense", None),
-    ("Boss Damage Boost", None),
-    ("Boss Damage Tolerance", None),
+    ("Boss Attack", "BossAttack"),
+    ("Boss Defense", "BossNpcDefense"),
+    ("Boss Damage Boost", "BossNpcAmplifyDamage"),
+    ("Boss Damage Tolerance", "BossNpcDecreaseDamage"),
 ]
 _PVP_MODE_STAT_ROWS = [
-    ("PvP Attack", None),
-    ("PvP Defense", None),
-    ("PvP Accuracy", None),
-    ("PvP Evasion", None),
-    ("PvP Critical Hit", None),
-    ("PvP Critical Hit Resist", None),
+    ("PvP Attack", "PvPAddDamage"),
+    ("PvP Defense", "PvPDamageDefense"),
+    ("PvP Accuracy", "PvPAccuracy"),
+    ("PvP Evasion", "PvPEvasion"),
+    ("PvP Critical Hit", "PvPCritical"),
+    ("PvP Critical Hit Resist", "PvPCriticalResist"),
     ("PvP Damage Boost", "PvPAmplifyDamage"),
     ("PvP Damage Tolerance", "PvPDecreaseDamage"),
-    ("PvP Block", None),
-    ("PvP Block Penetration", None),
+    ("PvP Block", "PvPBlock"),
+    ("PvP Block Penetration", "PvPBlockPierce"),
     ("Penetration", "DefensePierce"),
-    ("Regeneration Penetration", None),
-    ("Endurance Penetration", None),
+    ("Regeneration Penetration", "RegenerationPenetration"),
+    ("Endurance Penetration", "EndurancePenetration"),
     ("Smite Resist", "HardHitResist"),
-    ("Perfect Resist", None),
+    ("Perfect Resist", "PerfectResist"),
 ]
 
 # Status-effect rows, only shown under Main Stats in PvP mode (folds the old
@@ -5199,6 +5814,9 @@ _PVP_MODE_STAT_ROWS = [
 # effect key) — effect key "general" means the row is never class-filtered.
 _STATUS_CHANCE_STAT_ROWS = [
     ("Status Effect Chance", "AbnormalAccuracy", "general"),
+    ("Ailment-type Chance", "BodyPropertyAccuracy", "general"),
+    ("Mental-type Chance", "MentalPropertyAccuracy", "general"),
+    ("Impact-type Chance", "ShockPropertyAccuracy", "general"),
     ("Stun Chance", None, "Stun"),
     ("Knockdown Chance", None, "Knockdown"),
     ("Airborne Chance", None, "Airborne"),
@@ -5219,7 +5837,9 @@ _STATUS_CHANCE_STAT_ROWS = [
 ]
 _STATUS_RESIST_STAT_ROWS = [
     ("Status Effect Resist", "AbnormalResistance", "general"),
-    ("Impact-type Resist", None, "general"),
+    ("Ailment-type Resist", "BodyPropertyResist", "general"),
+    ("Mental-type Resist", "MentalPropertyResist", "general"),
+    ("Impact-type Resist", "ShockPropertyResist", "general"),
     ("Stun Resist", None, "Stun"),
     ("Knockdown Resist", None, "Knockdown"),
     ("Airborne Resist", None, "Airborne"),
@@ -5238,6 +5858,39 @@ _STATUS_RESIST_STAT_ROWS = [
     ("Poison Resist", None, "Poison"),
     ("Bleed Resist", None, "Bleed"),
 ]
+
+
+def _build_stat_id_display_names() -> dict[str, str]:
+    """Reverse lookup: stat id -> its Stat Info display label, built from
+    every *_STAT_ROWS list above -- used by the core-attribute/Lord icon
+    tooltips (User-Wunsch, 2026-08-30: hovering Might/Time/etc. should show
+    exactly which derived stat(s) it feeds, e.g. "Attack increase: 5%",
+    instead of leaving the reader to cross-reference _ATTRIBUTE_STAT_IDS/
+    _ARCANA_LORD_STAT_IDS by hand). First row wins on a duplicate id."""
+    names: dict[str, str] = {}
+    for rows in (
+        _MAIN_STAT_ROWS, _MOVEMENT_STAT_ROWS, _SUB_STAT_ROWS, _OFFENSE_STAT_ROWS,
+        _DEFENSE_STAT_ROWS, _UTILITY_RECOVERY_STAT_ROWS, _GENIUS_BOARD_STAT_ROWS,
+        _PVE_MODE_STAT_ROWS, _PVP_MODE_STAT_ROWS,
+    ):
+        for name, sid in rows:
+            if sid and sid not in names:
+                names[sid] = name
+    for rows in (_STATUS_CHANCE_STAT_ROWS, _STATUS_RESIST_STAT_ROWS):
+        for name, sid, _effect in rows:
+            if sid and sid not in names:
+                names[sid] = name
+    return names
+
+
+_STAT_ID_DISPLAY_NAME = _build_stat_id_display_names()
+
+# Which core-attribute id (from _STAT_ICON_ROWS row 0) each display name
+# corresponds to, for the reverse "what does this icon feed" tooltip.
+_ATTRIBUTE_ID_DISPLAY_NAME = {
+    "STR": "Might", "DEX": "Dexterity", "AGI": "Precision",
+    "WIS": "Willpower", "INT": "Intelligence", "CON": "Constitution",
+}
 
 # Which Chance effects each class actually inflicts, per a clause-level scan
 # of all 295 skills in skills_all.json (descriptions + specializations),
@@ -5258,29 +5911,74 @@ _CLASS_RELEVANT_CHANCE_EFFECTS: dict[str, set[str]] = {
 _PERCENT_STAT_IDS = {
     "CombatSpeed", "PvEAmplifyDamage", "PvPAmplifyDamage", "PvEDecreaseDamage", "PvPDecreaseDamage",
     "AmplifyAllDamage", "AbnormalAccuracy", "AdditionalHitRate", "AmplifyWeaponDamage", "AbnormalResistance",
+    # Same "% Amplify <built-in damage type>" family as AmplifyAllDamage/
+    # AmplifyWeaponDamage above -- was missing here even though those two
+    # siblings were already included; had no visible effect since no
+    # Stat Info row shows this id on its own (only used internally for the
+    # damage-estimate multiplier), but the new Daevanion Board integration
+    # (2026-08-30) DOES display "Critical Damage Boost" directly, where the
+    # gap would have shown a flat "+800" instead of the correct "+8%".
+    "AmplifyCriticalDamage",
+    # Smite/Smite Resist are %-based (User-corrected, 2026-08-30: "Smite
+    # ist in % angegeben") -- were missing here, so the Main Stats row
+    # showed a bare "7" instead of "7%".
+    "HardHit", "HardHitResist",
+    # Newly-wired real gear ids (2026-08-30 completeness audit) -- same
+    # "% Amplify/Boost/Tolerance/Penetration/Chance" families as their
+    # already-percent siblings above.
+    "AmplifyBackAttack", "AmplifyFrontAttack", "AdditionalHitResistRate",
+    "BlockPierce", "PvPBlockPierce", "HpPotionRate",
+    "BodyPropertyAccuracy", "MentalPropertyAccuracy", "ShockPropertyAccuracy",
+    "BodyPropertyResist", "MentalPropertyResist", "ShockPropertyResist",
+    "BossNpcAmplifyDamage", "BossNpcDecreaseDamage",
     "DamageRatio", "DefenseRatio",
+    # New as of the Genius Insight integration (2026-08-30) -- these only
+    # have a real data source via Genius Insight Lines now.
+    "PerfectChance", "DamageTolerance", "WeaponDamageTolerance", "CriticalDamageTolerance",
+    "BackAttackDamageTolerance", "FrontAttackDamageTolerance",
+    "CogniDamageBoost", "FeraDamageBoost", "NaturaDamageBoost", "VarianDamageBoost",
+    "CogniDamageTolerance", "FeraDamageTolerance", "NaturaDamageTolerance", "VarianDamageTolerance",
+    # New as of the attribute/Lord formula integration (2026-08-30) -- see
+    # _ATTRIBUTE_STAT_IDS / _ARCANA_LORD_STAT_IDS.
+    "AccuracyIncrease", "CriticalHitIncrease", "EvasionIncrease", "CriticalHitResistIncrease",
+    "BlockIncrease", "CooldownReduction", "MPCostReduction", "RegenerationPenetration",
+    "EndurancePenetration", "PerfectResist", "HPIncrease", "MPIncrease", "MoveSpeed",
 }
 
 # Rows shown above Main/Sub Stats in the aggregated Stat Info panel — the 6
 # core attributes, then the 10 "Lords" divinity stats (real icons exist for
-# both groups at aion2planner.com/images/stats/, but the Lords values have
-# no known data source anywhere in the item API, so they always show "—").
-# Each entry is (display name, icon key, value stat id or None). The Lords
-# stats have a real icon but no known data source anywhere in the item API
-# (unlike the 6 attributes, which are real substat ids), so their value
-# stat id is None — same "—" convention as _MAIN_STAT_ROWS/_SUB_STAT_ROWS.
+# both groups at aion2planner.com/images/stats/). Each entry is (display
+# name, icon key, value stat id or None). The 6 attributes are real gear
+# substat ids; the 10 Lords have TWO real sources -- equipped Arcana cards
+# (2026-08-30, see _arcana_lord_point_totals/_LORD_POINTS_STAT_ID) AND real
+# gear (some Bracelets can roll a raw Lord stat directly, aliased onto the
+# same id via _GEAR_STAT_ID_ALIASES, found 2026-08-30) -- shows the
+# combined raw point total, separate from the derived %-stat rows those
+# points also feed (_ARCANA_LORD_STAT_IDS).
+_LORD_POINTS_STAT_ID = {
+    "Death": "DeathLordPoints", "Destiny": "DestinyLordPoints", "Destruction": "DestructionLordPoints",
+    "Freedom": "FreedomLordPoints", "Illusion": "IllusionLordPoints", "Justice": "JusticeLordPoints",
+    "Life": "LifeLordPoints", "Space": "SpaceLordPoints", "Time": "TimeLordPoints", "Wisdom": "WisdomLordPoints",
+}
+_LORD_POINTS_ID_TO_LORD = {v: k for k, v in _LORD_POINTS_STAT_ID.items()}
 _STAT_ICON_ROWS = [
     [
         ("Might", "STR", "STR"), ("Dexterity", "DEX", "DEX"), ("Precision", "AGI", "AGI"),
         ("Willpower", "WIS", "WIS"), ("Intelligence", "INT", "INT"), ("Constitution", "CON", "CON"),
     ],
     [
-        ("Death", "lords_death", None), ("Destiny", "lords_destiny", None), ("Destruction", "lords_destruction", None),
-        ("Freedom", "lords_freedom", None), ("Illusion", "lords_illusion", None), ("Justice", "lords_justice", None),
+        ("Death", "lords_death", _LORD_POINTS_STAT_ID["Death"]),
+        ("Destiny", "lords_destiny", _LORD_POINTS_STAT_ID["Destiny"]),
+        ("Destruction", "lords_destruction", _LORD_POINTS_STAT_ID["Destruction"]),
+        ("Freedom", "lords_freedom", _LORD_POINTS_STAT_ID["Freedom"]),
+        ("Illusion", "lords_illusion", _LORD_POINTS_STAT_ID["Illusion"]),
+        ("Justice", "lords_justice", _LORD_POINTS_STAT_ID["Justice"]),
     ],
     [
-        ("Life", "lords_life", None), ("Space", "lords_space", None),
-        ("Time", "lords_time", None), ("Wisdom", "lords_wisdom", None),
+        ("Life", "lords_life", _LORD_POINTS_STAT_ID["Life"]),
+        ("Space", "lords_space", _LORD_POINTS_STAT_ID["Space"]),
+        ("Time", "lords_time", _LORD_POINTS_STAT_ID["Time"]),
+        ("Wisdom", "lords_wisdom", _LORD_POINTS_STAT_ID["Wisdom"]),
     ],
 ]
 
@@ -7146,6 +7844,22 @@ _STAT_PRIORITY_GROUPS: list[tuple[str, str, list[str]]] = [
     ("armor", "arm_category_armor", ["helmet", "shoulder", "torso", "gloves", "pants", "boots"]),
     ("jewelry", "arm_category_jewelry", ["ring", "jewelry", "bracelet"]),
 ]
+# slot_id -> the same "Waffe/Guard"/"Rüstung"/"Schmuck" 3-way grouping the
+# Stat Priority Editor already uses (User-Wunsch, 2026-08-30: the Stat Info
+# tooltip's per-slot equipment breakdown was "20 Zeilen" -- collapse it to
+# these 3 familiar groups instead, reusing the exact same translation keys
+# so it reads as the same concept the user already knows from that editor).
+def _build_slot_to_equipment_group_label_key() -> dict[str, str]:
+    fine_cat_to_label_key = {
+        fine_cat: label_key for _, label_key, fine_cats in _STAT_PRIORITY_GROUPS for fine_cat in fine_cats
+    }
+    return {
+        slot_id: fine_cat_to_label_key.get(fine_cat, fine_cat)
+        for slot_id, fine_cat in _SLOT_TO_STAT_CATEGORY.items()
+    }
+
+
+_SLOT_TO_EQUIPMENT_GROUP_LABEL_KEY = _build_slot_to_equipment_group_label_key()
 # Which skill-option type (see _ACTIVE_SUBSKILL_SLOT_CATEGORIES) applies to
 # each Stat-Priority-Editor category tab -- unambiguous now that Ring has
 # its own tab, split from "jewelry" (Earring/Necklace). Bracelet has none at
@@ -8571,9 +9285,13 @@ _DAEVANION_STAT_LABELS: dict[str, str] = {
     "abnormalaccuracy": "Abnormal Accuracy", "abnormalresistance": "Abnormal Resistance",
     "damageboost": "Damage Boost", "damagetolerance": "Damage Tolerance",
     "criticaldamageboost": "Critical Damage Boost", "criticaldamagetolerance": "Critical Damage Tolerance",
-    "bossattack": "Boss Damage", "bossnpcadddamage": "Boss Damage",
+    # Renamed 2026-08-30 to match the canonical Boss-stat names already
+    # used elsewhere (_PVE_MODE_STAT_ROWS) -- User-confirmed 2026-08-29,
+    # deferred until "nach dem Upload" (see [[project_daevanion_board_
+    # port]]), now applied.
+    "bossattack": "Boss Attack", "bossnpcadddamage": "Boss Attack",
     "bossdefense": "Boss Defense", "bossnpcdefense": "Boss Defense",
-    "bossnpcamplifydamage": "Boss Amplify Damage", "bossnpcdecreasedamage": "Boss Decrease Damage",
+    "bossnpcamplifydamage": "Boss Damage Boost", "bossnpcdecreasedamage": "Boss Damage Tolerance",
     "pvpaccuracy": "PvP Accuracy", "pveaccuracy": "PvE Accuracy",
     "pvpevasion": "PvP Evasion", "pveevasion": "PvE Evasion",
     "pvpcritical": "PvP Critical Hit", "pvpcriticalresist": "PvP Critical Resist",
@@ -8583,6 +9301,92 @@ _DAEVANION_STAT_LABELS: dict[str, str] = {
     "pvedamagedefense": "PvE Damage Defense", "pvedefense": "PvE Damage Defense",
     "pvedecreasedamage": "PvE Decrease Damage", "pveamplifydamage": "PvE Amplify Damage",
     "pvedamageboost": "PvE Damage Boost", "pvedamagetolerance": "PvE Damage Tolerance",
+}
+
+# Which canonical Daevanion stat keys are %-type (raw "v" stored x100,
+# needs dividing back down) vs FLAT/absolute (shown as-is). For any key
+# that has a confirmed _DAEVANION_STAT_ID_MAP target, _PERCENT_STAT_IDS
+# is authoritative (already vetted against real screenshots elsewhere
+# this session) -- audited 2026-08-30 across every board in both variants
+# and initially assumed almost everything except Attack/Defense/HP/MP was
+# %-type, which turned out WRONG for several: Critical Hit/Resist,
+# Accuracy, Evasion, Block, Iron Wall, Restoration, Boss Attack, and PvE
+# Attack/Defense are all FLAT point stats in this game's own convention
+# (matching e.g. a real "Critical Hit 235" seen in Stat Info, not
+# "235%"), same as Attack/Defense/HP/MP. Kept as an explicit (now-empty)
+# fallback set rather than removed outright -- every key that needed it
+# (additionalhitresistrate, blockpierce, multihitresist,
+# bossnpcamplifydamage, bossnpcdecreasedamage) got a confirmed real
+# _DAEVANION_STAT_ID_MAP target once the wider gear-stat-id audit found
+# real ids for them (2026-08-30), so _PERCENT_STAT_IDS settles all of
+# them now -- but a future unconfirmed key would need this again.
+_DAEVANION_UNMAPPED_PERCENT_KEYS: set[str] = set()
+
+
+def _daevanion_effect_display_value(stat_key: str, raw_value) -> tuple[float, bool]:
+    """(display_value, is_percent) for a node effect's raw "v" -- divides
+    by 100 for every %-type stat (User-confirmed, 2026-08-30, from a live
+    Smite/Illusion tooltip: "die 250 sind 2,5% und nicht 250%"), shared by
+    the node hover tooltip, the Stats Gained summary, and the Stat Info
+    feed so all three agree."""
+    value = raw_value or 0
+    stat_id = _DAEVANION_STAT_ID_MAP.get(stat_key)
+    is_percent = stat_id in _PERCENT_STAT_IDS if stat_id else stat_key in _DAEVANION_UNMAPPED_PERCENT_KEYS
+    if not is_percent:
+        return value, False
+    return value / 100.0, True
+
+
+# Daevanion node stat effects -> real Stat Info stat id, wherever a
+# confirmed id already exists elsewhere in this file (Main/Sub/Offense/
+# Defense/PvE/PvP rows, or the same ids Genius Insight already uses) --
+# canonical _daevanion_stat_key() form on the left, same convention as
+# _GENIUS_STAT_ID_MAP (User-reported gap, 2026-08-30: the new per-source
+# Attack tooltip revealed the Daeva Board contributes NOTHING to Stat
+# Info/the damage estimate at all -- this closes that for every node
+# effect with a confirmed real id). A follow-up gear-stat-id audit
+# (2026-08-30) found real ids for Boss Defense/Damage Boost/Tolerance,
+# PvE/PvP Accuracy/Evasion/Attack/Defense/Critical, Block Penetration, and
+# Multi-hit Resist, so all of those now have a confirmed mapping too.
+_DAEVANION_STAT_ID_MAP: dict[str, str] = {
+    "hpmax": "HPMax", "hp": "HPMax", "maxhp": "HPMax",
+    "mpmax": "MPMax", "mp": "MPMax", "maxmp": "MPMax",
+    "fixingdamage": "WeaponFixingDamage", "attackbonus": "WeaponFixingDamage",
+    "defense": "ArmorDefense", "defensebonus": "ArmorDefense",
+    "critical": "Critical", "criticalhit": "Critical",
+    "criticalresist": "CriticalResist", "criticalhitresist": "CriticalResist",
+    "accuracy": "WeaponAccuracy",
+    "block": "Block",
+    "evasion": "ArmorEvasion",
+    "perfect": "PerfectChance", "perfectresist": "PerfectResist",
+    "combatspeed": "CombatSpeed",
+    "restoration": "Restoration", "ignorerestoration": "RegenerationPenetration",
+    "ironwall": "IronWall", "ignoreironwall": "EndurancePenetration",
+    "damageratio": "DamageRatio", "defenseratio": "DefenseRatio",
+    "maxhpratio": "HPIncrease",
+    "cooltimedecrease": "CooldownReduction", "cooldowndecrease": "CooldownReduction",
+    "amplifyalldamage": "AmplifyAllDamage", "damageboost": "AmplifyAllDamage",
+    "amplifycriticaldamage": "AmplifyCriticalDamage", "criticaldamageboost": "AmplifyCriticalDamage",
+    "decreasecriticaldamage": "CriticalDamageTolerance", "criticaldamagetolerance": "CriticalDamageTolerance",
+    "amplifyweapondamage": "AmplifyWeaponDamage",
+    "decreaseweapondamage": "WeaponDamageTolerance",
+    "decreasedamage": "DamageTolerance", "damagetolerance": "DamageTolerance",
+    "additionalhitrate": "AdditionalHitRate", "multihitchance": "AdditionalHitRate",
+    "abnormalaccuracy": "AbnormalAccuracy", "abnormalresistance": "AbnormalResistance",
+    "bossattack": "BossAttack", "bossnpcadddamage": "BossAttack",
+    "bossdefense": "BossNpcDefense", "bossnpcdefense": "BossNpcDefense",
+    "bossnpcamplifydamage": "BossNpcAmplifyDamage", "bossnpcdecreasedamage": "BossNpcDecreaseDamage",
+    "additionalhitresistrate": "AdditionalHitResistRate", "multihitresist": "AdditionalHitResistRate",
+    "blockpierce": "BlockPierce",
+    "pvpaccuracy": "PvPAccuracy", "pveaccuracy": "PvEAccuracy",
+    "pvpevasion": "PvPEvasion", "pveevasion": "PvEEvasion",
+    "pvpcritical": "PvPCritical", "pvpcriticalresist": "PvPCriticalResist",
+    "pvpadddamage": "PvPAddDamage", "pvpdamagedefense": "PvPDamageDefense", "pvpdefense": "PvPDamageDefense",
+    "pvpdecreasedamage": "PvPDecreaseDamage", "pvpamplifydamage": "PvPAmplifyDamage",
+    "pveattack": "PvEAttack", "pveadddamage": "PvEAttack",
+    "pvedamagedefense": "PvEDefense", "pvedefense": "PvEDefense",
+    "pvedecreasedamage": "PvEDecreaseDamage", "pvedamagetolerance": "PvEDecreaseDamage",
+    "pveamplifydamage": "PvEAmplifyDamage", "pvedamageboost": "PvEAmplifyDamage",
 }
 
 # Backward-compat alias -- _daevanion_effect_lines/_daevanion_build_node_icons
@@ -8606,8 +9410,17 @@ def _daevanion_effect_lines(node: dict, class_skills_by_id: dict) -> list[tuple[
         if e.get("t") == "s":
             name = e.get("n") or ""
             label = _daevanion_stat_label(name)
-            value = e.get("v")
-            lines.append((label, f"{'+' if value and value > 0 else ''}{value}"))
+            # Real bug, live since this tooltip shipped (2026-08-28): the
+            # raw "v" is stored x100 for every %-type stat (User-confirmed,
+            # 2026-08-30: "die 250 sind 2,5% und nicht 250%") -- was shown
+            # completely unscaled here.
+            value, is_percent = _daevanion_effect_display_value(_daevanion_stat_key(name), e.get("v"))
+            # 1 decimal for %-type stats (User-Wunsch, 2026-08-30) -- these
+            # are frequently fractional (e.g. 2.5%), unlike the flat point
+            # stats which are always whole numbers.
+            suffix = "%" if is_percent else ""
+            decimals = 1 if is_percent else 0
+            lines.append((label, f"{'+' if value > 0 else ''}{_format_number(value, decimals)}{suffix}"))
         elif e.get("t") == "k":
             skill_id = str(e.get("skill_id") or "")
             skill = class_skills_by_id.get(skill_id)
@@ -8936,11 +9749,12 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         self._title_label.setText(name)
         self._meta_label.setText(f"Cost: {cost} pt{'s' if cost != 1 else ''} · Required level: {level}")
 
-        while self._effects_layout.count():
-            item = self._effects_layout.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
+        # setParent(None) before deleteLater() (see _clear_layout's own
+        # docstring) -- this used to skip that step, so a fast re-hover
+        # could show the old effect rows ghosted behind the new ones
+        # (User-reported, 2026-08-30: "hinter dem Effekt eine 2te
+        # Schrift").
+        _clear_layout(self._effects_layout)
         for label, value in effect_rows:
             row = QFrame()
             row.setStyleSheet(
@@ -9804,7 +10618,11 @@ class LoadoutWindow(QMainWindow):
         # EQ Priority: "können wir diese Leiste ausblenden? ... spart Platz
         # und man braucht nicht scrollen").
         self.equip_top_bar = QWidget()
-        self.equip_top_bar.setLayout(equip_header_row)
+        equip_top_bar_layout = QVBoxLayout(self.equip_top_bar)
+        equip_top_bar_layout.setContentsMargins(0, 0, 0, 0)
+        equip_top_bar_layout.setSpacing(4)
+        equip_top_bar_layout.addLayout(equip_header_row)
+        equip_top_bar_layout.addLayout(self._build_build_planner_settings_row())
         equipment_outer.addWidget(self.equip_top_bar)
 
         equip_normal_page = QWidget()
@@ -9846,6 +10664,8 @@ class LoadoutWindow(QMainWindow):
         self.main_tabs.addTab(self._build_arcana_tab(), _t("arm_arcana_tab"))
 
         self.main_tabs.addTab(skill_planner_widget, _t("arm_skill_planner_tab"))
+
+        self.main_tabs.addTab(self._build_genius_insight_tab(), _t("arm_genius_insight_tab"))
 
         icon_cache.icon_ready.connect(self._on_icon_ready)
         detail_cache.detail_ready.connect(self._on_detail_ready)
@@ -10430,6 +11250,7 @@ class LoadoutWindow(QMainWindow):
 
         self._skill_build_tab_group = self._populate_build_tabs_row(self.skill_build_tabs_row, builds)
         self._arcana_build_tab_group = self._populate_build_tabs_row(self.arcana_build_tabs_row, builds)
+        self._refresh_build_planner_settings_row()
 
     def _populate_build_tabs_row(self, row: QHBoxLayout, builds: dict) -> QButtonGroup:
         _clear_layout(row)
@@ -11079,7 +11900,9 @@ class LoadoutWindow(QMainWindow):
             theme = assignment.get("theme") if assignment else None
             entry = self._arcana_theme_map.get(theme, {}).get(ct) if theme else None
             if entry:
-                card.set_themed_state(entry)
+                lord_result = _arcana_card_lord_points(assignment, self._arcana_theme_map, ct)
+                lord_points = lord_result[1] if lord_result else None
+                card.set_themed_state(entry, lord_points)
             else:
                 card.set_default_state(self._arcana_default_icon.get(ct))
             card.set_grade(_arcana_card_grade(assignment))
@@ -11258,6 +12081,24 @@ class LoadoutWindow(QMainWindow):
         estimate_multiplier = None
         if self.skill_estimated_damage_btn.isChecked() and skill.get("type") == "active":
             totals = self._compute_stat_totals(self._equipped, self._equipped_substats, self._equipped_enchant)
+            # Genius Insight's Damage Boost/Weapon/Crit/PvE/Front/Back
+            # Attack Damage Boost picks feed this estimate too (User-
+            # Wunsch, 2026-08-30), same bucket Gear/Daevanion/Arcana use.
+            for stat_id, value in self._genius_stat_totals().items():
+                totals[stat_id] = totals.get(stat_id, 0.0) + value
+            # Might -> Attack increase (DamageRatio) and a Destruction-
+            # themed Chalice -> Attack increase too both feed the formula's
+            # existing Attack Increase % term the same way (User-Wunsch,
+            # 2026-08-30).
+            for stat_id, value in self._attribute_derived_stat_totals(totals).items():
+                totals[stat_id] = totals.get(stat_id, 0.0) + value
+            for stat_id, value in self._arcana_lord_stat_totals(totals).items():
+                totals[stat_id] = totals.get(stat_id, 0.0) + value
+            # Daevanion Board node stat effects -- the comment above already
+            # claimed this bucket covered Daevanion, but it never actually
+            # did until now (User-reported gap, 2026-08-30).
+            for stat_id, value in self._daevanion_stat_totals().items():
+                totals[stat_id] = totals.get(stat_id, 0.0) + value
             estimate_multiplier = _skill_damage_estimate_multiplier(totals)
         self.skill_desc_text_label.setText(
             _render_skill_description(skill.get("description", ""), skill.get("levels"), effective_level, estimate_multiplier)
@@ -11370,6 +12211,17 @@ class LoadoutWindow(QMainWindow):
         self._daevanion_route_status_label.setWordWrap(True)
         sidebar_layout.addWidget(self._daevanion_route_status_label)
 
+        # Board-wide stat summary, directly under "Find best route" (User-
+        # Wunsch, 2026-08-30: "ein Accordion ... wo dann die gesamten
+        # Werte (bis auf Skills und passive) angezeigt werden, die durch
+        # das Daeva Board erhalten werden") -- expanded by default since
+        # it's meant as an always-visible at-a-glance summary, unlike the
+        # filter accordions below (only the first of those starts open).
+        stat_summary_section, self._daevanion_stat_summary_layout = self._daevanion_build_collapsible(
+            _t("arm_daevanion_stat_summary_title"), expanded=True
+        )
+        sidebar_layout.addWidget(stat_summary_section)
+
         sidebar_scroll = QScrollArea()
         sidebar_scroll.setWidgetResizable(True)
         sidebar_scroll.setFrameShape(QFrame.NoFrame)
@@ -11408,6 +12260,103 @@ class LoadoutWindow(QMainWindow):
             start_id = next((n["id"] for n in grid.values() if n["g"] == "start"), None)
             self._daevanion_active[key] = {start_id} if start_id else set()
         return self._daevanion_active[key]
+
+    def _daevanion_stat_totals(self) -> dict[str, float]:
+        """Every currently-active node's flat stat effects (type "s" in the
+        node's own e[] list) for the CURRENT class + deity order's board,
+        summed by real Stat Info stat id wherever _DAEVANION_STAT_ID_MAP
+        has a confirmed mapping -- feeds Stat Info/the damage estimate the
+        same way Genius/Attribute/Arcana-Lord already do (User-reported
+        gap, 2026-08-30: the new per-source Attack tooltip showed the
+        Daeva Board wasn't contributing anything at all)."""
+        board = self._daevanion_current_board()
+        if not board:
+            return {}
+        variant = _daevanion_variant(self._daevanion_variant)
+        grid = variant["nodes_by_board"].get(board["id"], {})
+        active = self._daevanion_active_set(board, grid)
+        node_by_id = variant["node_by_id"]
+        totals: dict[str, float] = {}
+        for node_id in active:
+            # node_by_id, NOT grid -- grid is keyed by (row, col) canvas
+            # coordinates, active holds each node's own string "id" (same
+            # convention _daevanion_spent_cost/_daevanion_prune_unreachable
+            # already use). Using grid.get(node_id) here always missed
+            # (returned None for every real id), so this silently produced
+            # {} for every actually-active node (User-reported, 2026-08-30:
+            # "trotz aktiver nodes, werden keine Werte angezeigt").
+            node = node_by_id.get(node_id)
+            if not node:
+                continue
+            for e in node.get("e") or []:
+                if e.get("t") != "s":
+                    continue
+                stat_key = _daevanion_stat_key(e.get("n") or "")
+                stat_id = _DAEVANION_STAT_ID_MAP.get(stat_key)
+                if not stat_id:
+                    continue
+                value, _is_percent = _daevanion_effect_display_value(stat_key, e.get("v"))
+                totals[stat_id] = totals.get(stat_id, 0.0) + value
+        return totals
+
+    def _daevanion_active_stat_summary(self) -> list[tuple[str, float, bool]]:
+        """[(display_label, total_value, is_percent)] for every stat-type
+        ("s") node effect across the CURRENTLY VIEWED board's active
+        nodes, summed by display label (_daevanion_stat_label) --
+        skill_level ("k") effects excluded on purpose (User-Wunsch,
+        2026-08-30: "die gesamten Werte (bis auf Skills und passive)",
+        those already show in the Skill Planner via
+        _compute_daevanion_skill_bonus). Unlike _daevanion_stat_totals,
+        this is NOT filtered by _DAEVANION_STAT_ID_MAP -- shows every real
+        stat the board grants, even ones with no confirmed Stat Info id
+        yet, since this panel's whole point is a complete, at-a-glance
+        list for THIS board."""
+        board = self._daevanion_current_board()
+        if not board:
+            return []
+        variant = _daevanion_variant(self._daevanion_variant)
+        grid = variant["nodes_by_board"].get(board["id"], {})
+        active = self._daevanion_active_set(board, grid)
+        node_by_id = variant["node_by_id"]
+        totals: dict[str, tuple[float, bool]] = {}
+        for node_id in active:
+            # node_by_id, NOT grid -- see the identical note in
+            # _daevanion_stat_totals just above.
+            node = node_by_id.get(node_id)
+            if not node:
+                continue
+            for e in node.get("e") or []:
+                if e.get("t") != "s":
+                    continue
+                stat_key = _daevanion_stat_key(e.get("n") or "")
+                label = _daevanion_stat_label(e.get("n") or "")
+                value, is_percent = _daevanion_effect_display_value(stat_key, e.get("v"))
+                prev_value, _ = totals.get(label, (0.0, is_percent))
+                totals[label] = (prev_value + value, is_percent)
+        return sorted((label, value, is_percent) for label, (value, is_percent) in totals.items())
+
+    def _daevanion_refresh_stat_summary(self):
+        _clear_layout(self._daevanion_stat_summary_layout)
+        entries = self._daevanion_active_stat_summary()
+        if not entries:
+            empty_label = QLabel(_t("arm_daevanion_stat_summary_empty"))
+            empty_label.setObjectName("DetailDisclaimer")
+            empty_label.setWordWrap(True)
+            self._daevanion_stat_summary_layout.addWidget(empty_label)
+            return
+        for label, value, is_percent in entries:
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            name_lbl = QLabel(label)
+            name_lbl.setObjectName("GeniusOwnedName")
+            suffix = "%" if is_percent else ""
+            value_lbl = QLabel(f"+{_format_number(value, 1 if is_percent else 0)}{suffix}")
+            value_lbl.setObjectName("GeniusOwnedValue")
+            row.addWidget(name_lbl, 1)
+            row.addWidget(value_lbl, 0)
+            row_widget = QWidget()
+            row_widget.setLayout(row)
+            self._daevanion_stat_summary_layout.addWidget(row_widget)
 
     def _daevanion_filter_set(self) -> set[str]:
         """Shared across every board/deity of the CURRENT class within the
@@ -11474,6 +12423,7 @@ class LoadoutWindow(QMainWindow):
             self._daevanion_budget_label.setText(_t("arm_daevanion_no_board_for_class"))
             _clear_layout(self._daevanion_sidebar_layout)
             self._daevanion_sidebar_layout.addStretch(1)
+            self._daevanion_refresh_stat_summary()
             return
         variant = _daevanion_variant(self._daevanion_variant)
         grid = variant["nodes_by_board"].get(board["id"], {})
@@ -11494,6 +12444,7 @@ class LoadoutWindow(QMainWindow):
                 btn.setChecked(order == self._daevanion_order)
 
         self._daevanion_rebuild_sidebar(board, grid)
+        self._daevanion_refresh_stat_summary()
 
     def _daevanion_build_node_icons(self, grid: dict, class_skills_by_id: dict) -> dict[str, "QPixmap"]:
         """Real skill icon (same assets the Skill Description cards use)
@@ -12007,6 +12958,769 @@ class LoadoutWindow(QMainWindow):
         self.equip_top_bar.setVisible(True)
         self.equip_view_stack.setCurrentIndex(0)
 
+    # ── "Genius Insight" tab (Pet Genus board planner) ──────────────────────
+
+    def _build_genius_insight_tab(self) -> QWidget:
+        """Plans the Pet Genus system's 5 boards (Cogni/Fera/Natura/Varian/
+        Special), each with 9 "Lines" that roll a real property + value --
+        see the _GENIUS_* module-level constants for the verified pool/
+        value-range data this reads from. Persisted account-wide, NOT per
+        Class/Skill-Build (Pet Genus isn't class-specific) -- but CAN now
+        have multiple named profiles of its own (User-Wunsch, 2026-08-30:
+        "hier fehlen dann noch Profile, die man einstellen kann -- gleiches
+        wie gehabt"), same idea as the Skill/Arcana build system, just its
+        own separate flat (non-per-class) name-list. Which one actually
+        counts toward Stat Info/the damage estimate is picked per Equip
+        Build via the Build Planner Settings row (see
+        _build_build_planner_settings_row/_linked_genius_build_name),
+        completely independent from whichever one is being VIEWED here."""
+        self._genius_builds_data: dict[str, dict] = {"Default": _genius_default_state()}
+        self._current_genius_build_name = "Default"
+        self._genius_active_board = "Cogni"
+        self._genius_owned_mode = "total"
+        self._genius_line_widgets: dict[int, dict] = {}
+
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(10)
+
+        title = QLabel(_t("arm_genius_insight_tab"))
+        title.setObjectName("DetailHeader")
+        outer.addWidget(title)
+
+        self.genius_build_tabs_row = QHBoxLayout()
+        self.genius_build_tabs_row.setContentsMargins(0, 0, 0, 0)
+        self.genius_build_tabs_row.setSpacing(6)
+        self.genius_build_tabs_row.setAlignment(Qt.AlignLeft)
+        outer.addLayout(self.genius_build_tabs_row)
+        self._rebuild_genius_build_tabs()
+
+        content = QHBoxLayout()
+        content.setSpacing(16)
+        outer.addLayout(content, 1)
+
+        content.addWidget(self._build_genius_owned_sidebar(), 0)
+
+        main_col = QVBoxLayout()
+        main_col.setSpacing(16)
+        main_col.addWidget(self._build_genius_board_panel(), 0)
+        main_col.addWidget(self._build_genius_total_panel(), 0)
+        main_col.addStretch(1)
+        content.addLayout(main_col, 1)
+
+        self._refresh_genius_board_panel()
+        self._refresh_genius_total_panel()
+        self._refresh_genius_owned_sidebar()
+        return page
+
+    def _current_genius_state(self) -> dict:
+        """The currently-VIEWED Genius profile's board->line data -- mutated
+        directly and immediately by every stat/value/lock edit (unlike the
+        Skill/Arcana builds, Genius has no separate live working-copy that
+        needs an explicit "save" step before switching)."""
+        return self._genius_builds_data.setdefault(self._current_genius_build_name, _genius_default_state())
+
+    def _rebuild_genius_build_tabs(self):
+        row = self.genius_build_tabs_row
+        _clear_layout(row)
+        if self._current_genius_build_name not in self._genius_builds_data:
+            self._current_genius_build_name = next(iter(self._genius_builds_data))
+
+        group = QButtonGroup(self)
+        group.setExclusive(True)
+        for build_name in self._genius_builds_data:
+            btn = _BuildTabButton(build_name)
+            btn.setObjectName("SkillFilterButton")
+            btn.setCheckable(True)
+            btn.setChecked(build_name == self._current_genius_build_name)
+            btn.setMinimumHeight(32)
+            btn.clicked.connect(lambda checked=False, bn=build_name: self._on_switch_genius_build(bn))
+            btn.doubleClicked.connect(lambda bn=build_name: self._on_rename_genius_build(bn))
+            btn.setToolTip(_t("arm_rename_hint"))
+            group.addButton(btn)
+            row.addWidget(btn)
+        self._genius_build_tab_group = group
+
+        add_btn = QPushButton()
+        add_btn.setIcon(_make_plus_icon())
+        add_btn.setIconSize(QSize(20, 20))
+        add_btn.setFixedSize(40, 32)
+        add_btn.setToolTip(_t("arm_add_new_build"))
+        add_btn.clicked.connect(self._on_add_genius_build)
+        row.addWidget(add_btn)
+
+        duplicate_btn = QPushButton()
+        duplicate_btn.setIcon(_make_duplicate_icon())
+        duplicate_btn.setIconSize(QSize(20, 20))
+        duplicate_btn.setFixedSize(40, 32)
+        duplicate_btn.setToolTip(_t("arm_duplicate_current_build"))
+        duplicate_btn.clicked.connect(self._on_duplicate_genius_build)
+        row.addWidget(duplicate_btn)
+
+        rename_btn = QPushButton()
+        rename_btn.setIcon(_make_edit_icon())
+        rename_btn.setIconSize(QSize(20, 20))
+        rename_btn.setFixedSize(40, 32)
+        rename_btn.setToolTip(_t("arm_rename_current_build"))
+        rename_btn.clicked.connect(lambda checked=False: self._on_rename_genius_build(self._current_genius_build_name))
+        row.addWidget(rename_btn)
+
+        self._refresh_build_planner_settings_row()
+
+    def _on_switch_genius_build(self, build_name: str):
+        if build_name == self._current_genius_build_name:
+            return
+        self._current_genius_build_name = build_name
+        self._rebuild_genius_build_tabs()
+        self._refresh_genius_board_panel()
+        self._refresh_genius_total_panel()
+        self._refresh_genius_owned_sidebar()
+
+    def _on_add_genius_build(self):
+        name, ok = QInputDialog.getText(self, _t("arm_new_build_title"), _t("arm_name_colon"))
+        name = name.strip()
+        if not ok or not name or name in self._genius_builds_data:
+            return
+        self._genius_builds_data[name] = _genius_default_state()
+        self._current_genius_build_name = name
+        self._rebuild_genius_build_tabs()
+        self._refresh_genius_board_panel()
+        self._refresh_genius_total_panel()
+        self._refresh_genius_owned_sidebar()
+
+    def _on_duplicate_genius_build(self):
+        source_name = self._current_genius_build_name
+        default_name = _t("arm_duplicate_default_name", name=source_name)
+        name, ok = QInputDialog.getText(self, _t("arm_duplicate_build_title"), _t("arm_name_colon"), text=default_name)
+        name = name.strip()
+        if not ok or not name or name in self._genius_builds_data:
+            return
+        source = self._genius_builds_data[source_name]
+        self._genius_builds_data[name] = {
+            board: {line: dict(entry) for line, entry in lines.items()}
+            for board, lines in source.items()
+        }
+        self._current_genius_build_name = name
+        self._rebuild_genius_build_tabs()
+        self._refresh_genius_board_panel()
+        self._refresh_genius_total_panel()
+        self._refresh_genius_owned_sidebar()
+
+    def _on_rename_genius_build(self, old_name: str):
+        new_name, ok = QInputDialog.getText(self, _t("arm_rename_build_title"), _t("arm_name_colon"), text=old_name)
+        new_name = new_name.strip()
+        if not ok or not new_name or new_name == old_name or new_name in self._genius_builds_data:
+            return
+        self._genius_builds_data[new_name] = self._genius_builds_data.pop(old_name)
+        if self._current_genius_build_name == old_name:
+            self._current_genius_build_name = new_name
+        self._rebuild_genius_build_tabs()
+
+    def _build_genius_owned_sidebar(self) -> QFrame:
+        box = QFrame()
+        box.setObjectName("ChainSidePanel")
+        # Wide enough that every tile's "name   value" fits on one line
+        # (User-Wunsch, 2026-08-30) -- driven by the actual widest pair
+        # (see _genius_owned_tile_content_width), not a guessed constant.
+        # Tile padding 8px*2, name<->value gap 8px, grid h-spacing 6px,
+        # panel margins 14px*2, times 2 columns.
+        tile_w = _genius_owned_tile_content_width() + 16 + 8
+        box.setFixedWidth(2 * tile_w + 6 + 28)
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(8)
+
+        title = QLabel(_t("arm_genius_owned_effects_title"))
+        title.setObjectName("GeniusSectionTitle")
+        layout.addWidget(title)
+        self._genius_owned_title_lbl = title
+
+        hint = QLabel(_t("arm_genius_owned_hint"))
+        hint.setObjectName("GeniusHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self._genius_owned_hint_lbl = hint
+
+        seg_row = QHBoxLayout()
+        seg_row.setSpacing(3)
+        seg_group = QButtonGroup(box)
+        seg_group.setExclusive(True)
+        total_btn = QPushButton(_t("arm_genius_owned_total_toggle"))
+        total_btn.setObjectName("GeniusSegBtn")
+        total_btn.setCheckable(True)
+        total_btn.setChecked(True)
+        indiv_btn = QPushButton(_t("arm_genius_owned_individual_toggle"))
+        indiv_btn.setObjectName("GeniusSegBtn")
+        indiv_btn.setCheckable(True)
+        self._genius_owned_total_btn = total_btn
+        self._genius_owned_individual_btn = indiv_btn
+        seg_group.addButton(total_btn)
+        seg_group.addButton(indiv_btn)
+        total_btn.clicked.connect(lambda: self._on_genius_owned_mode_changed("total"))
+        indiv_btn.clicked.connect(lambda: self._on_genius_owned_mode_changed("individual"))
+        seg_row.addWidget(total_btn)
+        seg_row.addWidget(indiv_btn)
+        layout.addLayout(seg_row)
+        self._genius_owned_seg_group = seg_group
+
+        self._genius_owned_body = QWidget()
+        self._genius_owned_body_layout = QVBoxLayout(self._genius_owned_body)
+        self._genius_owned_body_layout.setContentsMargins(0, 6, 0, 0)
+        self._genius_owned_body_layout.setSpacing(6)
+        layout.addWidget(self._genius_owned_body, 1)
+
+        return box
+
+    def _on_genius_owned_mode_changed(self, mode: str):
+        self._genius_owned_mode = mode
+        self._refresh_genius_owned_sidebar()
+
+    def _refresh_genius_owned_sidebar(self):
+        layout = self._genius_owned_body_layout
+        _clear_layout(layout)
+
+        if self._genius_owned_mode == "total":
+            # Only the board-specific "X Damage Boost" group keeps the
+            # orange highlight -- everything else is a generic stat, so it
+            # gets the app's normal light-text color instead (User-Wunsch,
+            # 2026-08-30: "allgemeine Werte ... weiß oder helleres Grau",
+            # orange stays only for the Damage Boost group).
+            is_boost_group = "arm_genius_owned_group_boosts"
+            for group_key, entries in _GENIUS_OWNED_TOTAL_GROUPS:
+                group_lbl = QLabel(_t(group_key))
+                group_lbl.setObjectName("GeniusOwnedGroupTitle")
+                layout.addWidget(group_lbl)
+
+                grid = QGridLayout()
+                grid.setHorizontalSpacing(6)
+                grid.setVerticalSpacing(6)
+                grid.setColumnStretch(0, 1)
+                grid.setColumnStretch(1, 1)
+                for i, (label, value) in enumerate(entries):
+                    row, col = divmod(i, 2)
+                    tile = QFrame()
+                    tile.setObjectName("GeniusOwnedTile")
+                    tile_layout = QHBoxLayout(tile)
+                    tile_layout.setContentsMargins(8, 6, 8, 6)
+                    tile_layout.setSpacing(8)
+                    name_lbl = QLabel(label)
+                    name_lbl.setObjectName("GeniusOwnedName")
+                    if group_key != is_boost_group:
+                        name_lbl.setStyleSheet("color: #e5e7eb;")
+                    value_lbl = QLabel(value)
+                    value_lbl.setObjectName("GeniusOwnedValue")
+                    tile_layout.addWidget(name_lbl, 1)
+                    tile_layout.addWidget(value_lbl)
+                    grid.addWidget(tile, row, col)
+                layout.addLayout(grid)
+
+            note = QLabel(_t("arm_genius_owned_total_note"))
+            note.setObjectName("GeniusOwnedTotalNote")
+            note.setWordWrap(True)
+            layout.addWidget(note)
+
+            # Where this example data actually comes from (User-Wunsch,
+            # 2026-08-30) -- colored like the app's other disclaimers
+            # (#DetailDisclaimer, amber) so it's actually legible instead
+            # of blending into the muted hint text above.
+            provenance = QLabel(_t("arm_genius_owned_provenance_note"))
+            provenance.setObjectName("DetailDisclaimer")
+            provenance.setWordWrap(True)
+            layout.addWidget(provenance)
+        else:
+            # All 4 boards with a captured example pet shown at once, each
+            # its own group with a 2-column tile grid (User-Wunsch,
+            # 2026-08-30: "in 4 gute Gruppen unterteilen" -- these 4 groups
+            # ARE the 4 non-Special boards) instead of one-at-a-time
+            # prev/next cycling. Special is skipped entirely (still no
+            # Owned Effect at all, see _GENIUS_OWNED_PETS_EXAMPLE docstring)
+            # but gets one explanatory line at the end so it isn't just
+            # silently missing.
+            active_board = self._genius_active_board
+            for board, (pet_name, rows) in _GENIUS_OWNED_PETS_EXAMPLE.items():
+                color = _GENIUS_BOARD_COLORS.get(board, "#8b96ac")
+
+                header = QLabel(_t("arm_genius_pet_per_board_title", board=board))
+                header.setObjectName("GeniusPetTitle")
+                weight = "700" if board == active_board else "600"
+                header.setStyleSheet(f"color: {color}; font-weight: {weight};")
+                layout.addWidget(header)
+
+                grid = QGridLayout()
+                grid.setHorizontalSpacing(6)
+                grid.setVerticalSpacing(6)
+                grid.setColumnStretch(0, 1)
+                grid.setColumnStretch(1, 1)
+                for i, (name, value) in enumerate(rows):
+                    row_i, col_i = divmod(i, 2)
+                    is_last = i == len(rows) - 1
+                    tile = QFrame()
+                    tile.setObjectName("GeniusOwnedTile")
+                    tile_layout = QHBoxLayout(tile)
+                    tile_layout.setContentsMargins(8, 6, 8, 6)
+                    tile_layout.setSpacing(8)
+                    name_lbl = QLabel(name)
+                    name_lbl.setObjectName("GeniusOwnedName")
+                    value_lbl = QLabel(value)
+                    value_lbl.setObjectName("GeniusOwnedValue")
+                    if is_last:
+                        name_lbl.setStyleSheet(f"color: {color};")
+                        value_lbl.setStyleSheet(f"color: {color};")
+                    tile_layout.addWidget(name_lbl, 1)
+                    tile_layout.addWidget(value_lbl)
+                    grid.addWidget(tile, row_i, col_i)
+                layout.addLayout(grid)
+
+            special_note = QLabel(_t("arm_genius_special_note"))
+            special_note.setObjectName("GeniusHint")
+            special_note.setWordWrap(True)
+            layout.addWidget(special_note)
+
+            note = QLabel(_t("arm_genius_pet_example_note_generic"))
+            note.setObjectName("GeniusHint")
+            note.setWordWrap(True)
+            layout.addWidget(note)
+
+    def _build_genius_board_panel(self) -> QFrame:
+        box = QFrame()
+        box.setObjectName("ChainSidePanel")
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(16, 14, 16, 16)
+        layout.setSpacing(10)
+
+        tabs_row = QHBoxLayout()
+        tabs_row.setSpacing(4)
+        board_group = QButtonGroup(box)
+        board_group.setExclusive(True)
+        self._genius_board_tab_buttons: dict[str, QPushButton] = {}
+        for board in _GENIUS_BOARDS:
+            btn = QPushButton(board)
+            btn.setObjectName("GeniusBoardTabBtn")
+            btn.setCheckable(True)
+            btn.setChecked(board == self._genius_active_board)
+            btn.clicked.connect(lambda _checked, b=board: self._on_genius_board_tab_clicked(b))
+            board_group.addButton(btn)
+            self._genius_board_tab_buttons[board] = btn
+            tabs_row.addWidget(btn)
+        layout.addLayout(tabs_row)
+        self._genius_board_tab_group = board_group
+
+        head_row = QHBoxLayout()
+        self._genius_board_title_lbl = QLabel()
+        self._genius_board_title_lbl.setObjectName("GeniusBoardTitle")
+        head_row.addWidget(self._genius_board_title_lbl)
+        head_row.addStretch(1)
+        lvl_lbl = QLabel("Lv. 10 (MAX)")
+        lvl_lbl.setObjectName("GeniusLvlBadge")
+        head_row.addWidget(lvl_lbl)
+        layout.addLayout(head_row)
+
+        section_lbl = QLabel(_t("arm_genius_analysis_effect"))
+        section_lbl.setObjectName("GeniusSectionTitle")
+        layout.addWidget(section_lbl)
+        self._genius_analysis_effect_lbl = section_lbl
+
+        self._genius_line_list_layout = QVBoxLayout()
+        self._genius_line_list_layout.setSpacing(6)
+        layout.addLayout(self._genius_line_list_layout)
+
+        footnote = QLabel(_t("arm_genius_board_footnote"))
+        footnote.setObjectName("GeniusHint")
+        footnote.setWordWrap(True)
+        layout.addWidget(footnote)
+        self._genius_board_footnote_lbl = footnote
+
+        return box
+
+    def _on_genius_board_tab_clicked(self, board: str):
+        self._genius_active_board = board
+        self._refresh_genius_board_panel()
+        if self._genius_owned_mode == "individual":
+            self._refresh_genius_owned_sidebar()
+
+    def _refresh_genius_board_panel(self):
+        board = self._genius_active_board
+        self._genius_board_title_lbl.setText(f"{board} Insight")
+        for b, btn in self._genius_board_tab_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(b == board)
+            btn.blockSignals(False)
+
+        layout = self._genius_line_list_layout
+        _clear_layout(layout)
+        self._genius_line_widgets = {}
+
+        board_state = self._current_genius_state().setdefault(board, {})
+        for line in range(1, 10):
+            pool = _genius_pool_for_line(board, line)
+            if not pool:
+                continue
+            entry = board_state.setdefault(
+                str(line), {"stat": pool[0][0], "value": pool[0][3], "locked": False}
+            )
+            locked = entry.get("locked", False)
+
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            idx_lbl = QLabel(str(line))
+            idx_lbl.setObjectName("GeniusLineIndex")
+            idx_lbl.setFixedWidth(16)
+            row.addWidget(idx_lbl)
+
+            # Real in-game "lock this Line" toggle (Kanon's Bible CH8:
+            # "you may lock a Line by clicking on the lock icon to the
+            # left of the stat") -- here it just protects the row from
+            # accidental edits, since we don't simulate the actual reroll.
+            lock_btn = QToolButton()
+            lock_btn.setObjectName("GeniusLockToggle")
+            lock_btn.setCheckable(True)
+            lock_btn.setChecked(locked)
+            lock_btn.setText("🔒" if locked else "🔓")
+            lock_btn.setCursor(Qt.PointingHandCursor)
+            lock_btn.setToolTip(_t("arm_genius_lock_tooltip"))
+            lock_btn.toggled.connect(lambda checked, ln=line: self._on_genius_line_lock_toggled(ln, checked))
+            row.addWidget(lock_btn)
+
+            widgets = {"pool": pool, "combo": None, "lock_btn": lock_btn}
+            if len(pool) == 1:
+                name_lbl = QLabel(pool[0][1])
+                name_lbl.setObjectName("GeniusLineName")
+                row.addWidget(name_lbl, 1)
+            else:
+                current_key = entry.get("stat", pool[0][0])
+                current_label = next((p[1] for p in pool if p[0] == current_key), pool[0][1])
+                btn = _GeniusLinePickerButton(current_label)
+                btn.setProperty("stat_key", current_key)
+                btn.setEnabled(not locked)
+                btn.clicked.connect(lambda ln=line: self._open_genius_stat_picker(ln))
+                row.addWidget(btn, 1)
+                widgets["combo"] = btn
+
+            spin = QDoubleSpinBox()
+            spin.setObjectName("GeniusLineValue")
+            spin.setFixedWidth(90)
+            spin.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            spin.setEnabled(not locked)
+            row.addWidget(spin, 0)
+            widgets["spin"] = spin
+
+            self._genius_line_widgets[line] = widgets
+            self._genius_apply_stat_bounds(line, entry.get("stat", pool[0][0]), initial_value=entry.get("value"))
+            spin.valueChanged.connect(lambda val, ln=line: self._on_genius_line_value_changed(ln, val))
+
+            layout.addLayout(row)
+
+    def _on_genius_line_lock_toggled(self, line: int, locked: bool):
+        board = self._genius_active_board
+        entry = self._current_genius_state()[board].get(str(line))
+        if entry is None:
+            return
+        entry["locked"] = locked
+        widgets = self._genius_line_widgets.get(line)
+        if not widgets:
+            return
+        widgets["lock_btn"].setText("🔒" if locked else "🔓")
+        if widgets["combo"] is not None:
+            widgets["combo"].setEnabled(not locked)
+        widgets["spin"].setEnabled(not locked)
+
+    def _genius_apply_stat_bounds(self, line: int, stat_key: str, initial_value=None):
+        widgets = self._genius_line_widgets[line]
+        pool = widgets["pool"]
+        match = next((p for p in pool if p[0] == stat_key), pool[0])
+        _, _, lo, hi, pct = match
+        spin = widgets["spin"]
+        spin.blockSignals(True)
+        spin.setDecimals(1 if pct else 0)
+        spin.setSuffix("%" if pct else "")
+        spin.setRange(lo, hi)
+        spin.setSingleStep(0.1 if pct else 1)
+        value = hi if initial_value is None else initial_value
+        value = max(lo, min(hi, value))
+        spin.setValue(value)
+        spin.blockSignals(False)
+
+        if widgets["combo"] is not None:
+            widgets["combo"].setRangeText(_genius_format_range(lo, hi, pct))
+
+    def _open_genius_stat_picker(self, line: int):
+        widgets = self._genius_line_widgets.get(line)
+        if not widgets or widgets["combo"] is None:
+            return
+        btn = widgets["combo"]
+        current_key = btn.property("stat_key")
+
+        popup = _GeniusStatPickerPopup(
+            widgets["pool"], current_key,
+            on_select=lambda key, ln=line: self._apply_genius_line_stat(ln, key),
+            parent=self,
+        )
+        popup.setFixedWidth(max(btn.width(), 300))
+        popup.move(btn.mapToGlobal(QPoint(0, btn.height())))
+        popup.show()
+
+    def _apply_genius_line_stat(self, line: int, stat_key: str):
+        widgets = self._genius_line_widgets.get(line)
+        if not widgets:
+            return
+        board = self._genius_active_board
+        entry = self._current_genius_state()[board][str(line)]
+        entry["stat"] = stat_key
+        self._genius_apply_stat_bounds(line, stat_key)
+        entry["value"] = widgets["spin"].value()
+        label = next((p[1] for p in widgets["pool"] if p[0] == stat_key), stat_key)
+        widgets["combo"].setText(label)
+        widgets["combo"].setProperty("stat_key", stat_key)
+        self._refresh_genius_total_panel()
+        self._on_genius_stats_changed()
+
+    def _on_genius_line_value_changed(self, line: int, value: float):
+        board = self._genius_active_board
+        entry = self._current_genius_state().get(board, {}).get(str(line))
+        if entry is None:
+            return
+        entry["value"] = value
+        self._refresh_genius_total_panel()
+        self._on_genius_stats_changed()
+
+    def _on_genius_stats_changed(self):
+        """Genius Insight now feeds the Build Planner's Stat Info AND the
+        Skill Planner's damage estimate (User-Wunsch, 2026-08-30) -- keep
+        both live in sync with every Line edit, the same way a gear/
+        Daevanion/Arcana change already does."""
+        self._refresh_stat_info()
+        if self._skill_desc_selected_id:
+            skill = self._skill_id_to_skill.get(self._skill_desc_selected_id)
+            if skill:
+                self._render_selected_skill_description(skill)
+
+    def _build_genius_total_panel(self) -> QFrame:
+        box = QFrame()
+        box.setObjectName("ChainSidePanel")
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(16, 14, 16, 16)
+        layout.setSpacing(8)
+
+        title = QLabel(_t("arm_genius_total_title"))
+        title.setObjectName("GeniusSectionTitle")
+        layout.addWidget(title)
+        self._genius_total_title_lbl = title
+
+        hint = QLabel(_t("arm_genius_total_hint"))
+        hint.setObjectName("GeniusHint")
+        layout.addWidget(hint)
+        self._genius_total_hint_lbl = hint
+
+        self._genius_total_grid = QGridLayout()
+        self._genius_total_grid.setHorizontalSpacing(10)
+        self._genius_total_grid.setVerticalSpacing(6)
+        layout.addLayout(self._genius_total_grid)
+
+        footnote = QLabel(_t("arm_genius_total_footnote"))
+        footnote.setObjectName("GeniusHint")
+        footnote.setWordWrap(True)
+        layout.addWidget(footnote)
+        self._genius_total_footnote_lbl = footnote
+
+        return box
+
+    def _refresh_genius_total_panel(self):
+        grid = self._genius_total_grid
+        while grid.count():
+            item = grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        sums: dict[str, list] = {}
+        for board, lines in self._current_genius_state().items():
+            for line_str, entry in lines.items():
+                try:
+                    line_num = int(line_str)
+                except ValueError:
+                    continue
+                pool = _genius_pool_for_line(board, line_num)
+                match = next((p for p in pool if p[0] == entry.get("stat")), None)
+                if not match:
+                    continue
+                _, label, _, _, pct = match
+                total = sums.setdefault(label, [0.0, pct])
+                total[0] += entry.get("value", 0) or 0
+
+        cols = 3
+        for i, (label, (total, pct)) in enumerate(sums.items()):
+            row, col = divmod(i, cols)
+            wrap = QWidget()
+            pair = QHBoxLayout(wrap)
+            pair.setContentsMargins(0, 0, 0, 0)
+            name_lbl = QLabel(label)
+            name_lbl.setObjectName("GeniusOwnedName")
+            value_text = f"{total:.1f}%" if pct else f"{int(round(total))}"
+            value_lbl = QLabel(value_text)
+            value_lbl.setObjectName("GeniusOwnedValue")
+            pair.addWidget(name_lbl, 1)
+            pair.addWidget(value_lbl, 0)
+            self._genius_total_grid.addWidget(wrap, row, col)
+
+    def _linked_genius_build_name(self) -> str:
+        """Which Genius profile counts toward THIS Equip Build's
+        calculation (see _build_build_planner_settings_row) -- falls back
+        to whichever profile is currently being viewed if nothing was
+        explicitly linked yet (older profile / fresh Equip Build), same
+        pattern as _linked_skill_build_name."""
+        genius_builds = getattr(self, "_genius_builds_data", None)
+        if not genius_builds:
+            return "Default"
+        class_name = self.character_class_combo.currentText().strip().lower()
+        equip_build = self._equip_builds_data.get(class_name, {}).get(self._current_equip_build_name, {})
+        linked = equip_build.get("linked_genius_build")
+        if linked in genius_builds:
+            return linked
+        return self._current_genius_build_name if self._current_genius_build_name in genius_builds else next(iter(genius_builds))
+
+    def _genius_stat_totals(self) -> dict[str, float]:
+        """Sums every board's 9 Line picks, keyed by real item stat id
+        wherever one exists (_GENIUS_STAT_ID_MAP) so it can be merged
+        straight into _compute_stat_totals' own dict (User-Wunsch,
+        2026-08-30: Genius should feed the Build Planner's Stat Info and
+        the Skill Planner's damage-estimate formula, same as Gear/
+        Daevanion/Arcana already do). Owned Effects deliberately excluded
+        -- User: "die einzelnen Petwerte ... lassen wir raus", only the
+        Insight roll picks count here. Reads the LINKED Genius profile
+        (User-Wunsch, 2026-08-30), not whichever one is just being viewed."""
+        # Defensive: the Genius Insight tab is built LAST in __init__ (see
+        # _build_genius_insight_tab), but _refresh_stat_info already runs
+        # once during the Equipment tab's own setup, before
+        # self._genius_builds_data exists yet -- getattr keeps that first
+        # call a no-op instead of an AttributeError.
+        genius_builds = getattr(self, "_genius_builds_data", None)
+        if not genius_builds:
+            return {}
+        genius_insight = genius_builds.get(self._linked_genius_build_name()) or {}
+        if not genius_insight:
+            return {}
+        totals: dict[str, float] = {}
+        for board, lines in genius_insight.items():
+            for line_str, entry in lines.items():
+                try:
+                    line_num = int(line_str)
+                except ValueError:
+                    continue
+                pool = _genius_pool_for_line(board, line_num)
+                match = next((p for p in pool if p[0] == entry.get("stat")), None)
+                if not match:
+                    continue
+                stat_key = match[0]
+                stat_id = _GENIUS_STAT_ID_MAP.get(stat_key, stat_key)
+                totals[stat_id] = totals.get(stat_id, 0.0) + (entry.get("value", 0) or 0)
+        return totals
+
+    def _arcana_lord_stat_totals(self, equipment_totals: dict[str, float]) -> dict[str, float]:
+        totals, _by_lord = self._arcana_lord_stat_totals_detailed(equipment_totals)
+        return totals
+
+    def _arcana_lord_stat_totals_detailed(
+        self, equipment_totals: dict[str, float]
+    ) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+        """Every equipped card's Lord contribution, summed across all 5
+        real slots (Chalice/Parchment/Compass/Bell/Mirror -- User-Wunsch,
+        2026-08-30: "bei den Sets noch die jeweiligen Lord Werte anzeigen",
+        extending this from Chalice-only to all 5). Each card's Level
+        (derived from its already-assigned skill slots, see
+        _arcana_card_level) -> Lord points (_ARCANA_CHALICE_LORD_BASE +
+        per-theme rate * level) -> that Lord's 2 stats at _ARCANA_LORD_RATE%
+        per point (see _arcana_card_lord_points). Key/Hourglass/Dice/
+        Lantern explicitly stay out of scope (User: "kommen erst seeeehr
+        spaet im Game"). Also returns by_lord[stat_id][lord_name] = value
+        so the Stat Info tooltip can name the exact Lord responsible
+        instead of a generic "Arcana" lump (User-reported, 2026-08-30:
+        the lump label wrongly implied every attribute/Lord always
+        contributes to every stat it's shown on).
+
+        `equipment_totals` (the SAME dict _refresh_stat_info/the damage
+        estimate already computed from real gear) is needed because some
+        real Bracelets can roll a raw Lord stat directly (e.g. "Time"),
+        aliased onto the same "XxxLordPoints" id Arcana cards use (see
+        _GEAR_STAT_ID_ALIASES) -- so it's already IN equipment_totals by
+        the time this runs, but the derived %-stats (Combat Speed etc.)
+        must be computed from the COMBINED gear+Arcana point total per
+        Lord, not just the Arcana portion alone (User-reported gap,
+        2026-08-30: a Bracelet's Lord points were silently not feeding
+        Combat Speed/etc. at all)."""
+        class_name = self.character_class_combo.currentText().strip().lower()
+        build = self._skill_builds_data.get(class_name, {}).get(self._linked_skill_build_name(), {})
+        arcana_cards = build.get("arcana_cards") or {}
+        totals: dict[str, float] = {}
+        by_lord: dict[str, dict[str, float]] = {}
+
+        def add(stat_id: str, source: str, value: float):
+            if not value:
+                return
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+            source_totals = by_lord.setdefault(stat_id, {})
+            source_totals[source] = source_totals.get(source, 0.0) + value
+
+        arcana_points_by_lord: dict[str, float] = {}
+        for ct, card_data in arcana_cards.items():
+            result = _arcana_card_lord_points(card_data, self._arcana_theme_map, ct)
+            if not result:
+                continue
+            lord, points = result
+            # Raw point total (User-reported, 2026-08-30: the Lord icon
+            # rows in "Stat Values" still showed 0) -- shown alongside the
+            # derived %-stats below, not instead of them. Source-broken-
+            # down by CARD TYPE here (not the Lord itself, User-reported,
+            # 2026-08-30: hovering the Illusion icon showed a useless
+            # self-referential "Illusion: 25" instead of "which Arcana
+            # card gave me this") -- e.g. "Mirror: 25".
+            points_id = _LORD_POINTS_STAT_ID.get(lord)
+            if points_id:
+                add(points_id, ct, points)
+            arcana_points_by_lord[lord] = arcana_points_by_lord.get(lord, 0.0) + points
+
+        # Derived %-stats, computed per Lord from gear points (already in
+        # equipment_totals via the alias) PLUS Arcana points combined --
+        # broken down by LORD name, not card/slot: "Illusion: 5%" on the
+        # Cooldown Reduction row is the more useful answer (which Lord is
+        # responsible), one less mental hop than naming the card/bracelet.
+        for lord, points_id in _LORD_POINTS_STAT_ID.items():
+            gear_points = equipment_totals.get(points_id, 0.0)
+            arcana_points = arcana_points_by_lord.get(lord, 0.0)
+            total_points = gear_points + arcana_points
+            if not total_points:
+                continue
+            pct = total_points * _ARCANA_LORD_RATE
+            for stat_id in _ARCANA_LORD_STAT_IDS.get(lord, []):
+                sign = _ARCANA_LORD_STAT_SIGN.get(stat_id, 1)
+                add(stat_id, lord, pct * sign)
+        return totals, by_lord
+
+    def _attribute_derived_stat_totals(self, base_totals: dict[str, float]) -> dict[str, float]:
+        totals, _by_attr = self._attribute_derived_stat_totals_detailed(base_totals)
+        return totals
+
+    def _attribute_derived_stat_totals_detailed(
+        self, base_totals: dict[str, float]
+    ) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+        """The 6 core-attribute -> "increase" stat contributions (User-
+        Wunsch, 2026-08-30), computed from the character's own attribute
+        totals (already summed from real gear substats in base_totals).
+        Also returns by_attr[stat_id][attribute_name] = value, same reason
+        as _arcana_lord_stat_totals_detailed's by_lord."""
+        derived: dict[str, float] = {}
+        by_attr: dict[str, dict[str, float]] = {}
+        for attr_id, stat_ids in _ATTRIBUTE_STAT_IDS.items():
+            value = base_totals.get(attr_id, 0.0)
+            if not value:
+                continue
+            pct = value * _ATTRIBUTE_RATE
+            attr_name = _ATTRIBUTE_ID_DISPLAY_NAME.get(attr_id, attr_id)
+            for stat_id in stat_ids:
+                derived[stat_id] = derived.get(stat_id, 0.0) + pct
+                attr_totals = by_attr.setdefault(stat_id, {})
+                attr_totals[attr_name] = attr_totals.get(attr_name, 0.0) + pct
+        return derived, by_attr
+
     # ── "Arcana & Titel" tab ────────────────────────────────────────────────
 
     def _build_arcana_tab(self) -> QWidget:
@@ -12500,10 +14214,13 @@ class LoadoutWindow(QMainWindow):
         # fewer columns for tabs with long names (e.g. "Parry Damage
         # Reduction Amount") so cells stay readable instead of cramming.
         extra_tab_defs = [
-            ("Utility & Recovery", _UTILITY_RECOVERY_STAT_ROWS, 2),
+            ("Utility & Recovery", _UTILITY_RECOVERY_STAT_ROWS, 2, "arm_tab_utility_recovery"),
+            # Reuses the same key as the main "Genius Insight" tab title --
+            # same feature, no need for a second translation entry.
+            ("Genius Insight", _GENIUS_BOARD_STAT_ROWS, 2, "arm_genius_insight_tab"),
         ]
         self._extra_stat_labels: dict[str, dict] = {}
-        for tab_label, rows, columns in extra_tab_defs:
+        for tab_label, rows, columns, tab_key in extra_tab_defs:
             tab_widget = QWidget()
             tab_layout = QVBoxLayout(tab_widget)
             self._extra_stat_labels[tab_label] = self._build_stat_rows(tab_layout, rows, columns=columns)
@@ -12513,7 +14230,7 @@ class LoadoutWindow(QMainWindow):
             # (User-Screenshot) instead of "Utility & Recovery". Escaping
             # only the DISPLAYED tab text as "&&"; the dict key above stays
             # the real, un-escaped tab_label for lookups elsewhere.
-            tabs.addTab(tab_widget, _t("arm_tab_utility_recovery").replace("&", "&&"))
+            tabs.addTab(tab_widget, _t(tab_key).replace("&", "&&"))
 
         col.addWidget(tabs)
 
@@ -12679,21 +14396,41 @@ class LoadoutWindow(QMainWindow):
         """Shared with the Build Vergleich tab (see _open_build_compare) so
         both a live-equipped build and an arbitrary saved build compute
         totals the exact same way, instead of duplicating this logic."""
+        totals, _by_slot = self._compute_stat_totals_detailed(equipped, substats, enchant)
+        return totals
+
+    def _compute_stat_totals_detailed(
+        self, equipped: dict, substats: dict, enchant: dict
+    ) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+        """Same totals as _compute_stat_totals, plus a per-slot breakdown
+        (by_slot[stat_id][slot_id] = contribution) so the Stat Info
+        tooltip can show exactly which equipped piece a value came from
+        (User-Wunsch, 2026-08-30: "auf die 3000+ attack hovern und sehen,
+        woher diese attack stammen ... 50 atk Waffe / 100 atk Guard")."""
         totals: dict[str, float] = {}
+        by_slot: dict[str, dict[str, float]] = {}
+
+        def add(slot_id: str, stat_id: str | None, value: float):
+            if not stat_id or not value:
+                return
+            # Real gear can use a different id than this file's own
+            # convention for the same stat (see _GEAR_STAT_ID_ALIASES) --
+            # normalize before it ever reaches totals/by_slot.
+            stat_id = _GEAR_STAT_ID_ALIASES.get(stat_id, stat_id)
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+            slot_totals = by_slot.setdefault(stat_id, {})
+            slot_totals[slot_id] = slot_totals.get(slot_id, 0.0) + value
+
         for slot_id, item in equipped.items():
             detail = self.detail_cache.get(item.get("id"))
             if not detail:
                 continue
             for stat in detail.get("mainStats") or []:
-                sid = stat.get("id")
-                if sid:
-                    totals[sid] = totals.get(sid, 0.0) + _parse_stat_value(stat.get("value"))
+                add(slot_id, stat.get("id"), _parse_stat_value(stat.get("value")))
             sub_stats = detail.get("subStats") or []
             for i in substats.get(slot_id, set()):
                 if i < len(sub_stats):
-                    sid = sub_stats[i].get("id")
-                    if sid:
-                        totals[sid] = totals.get(sid, 0.0) + _parse_stat_value(sub_stats[i].get("value"))
+                    add(slot_id, sub_stats[i].get("id"), _parse_stat_value(sub_stats[i].get("value")))
 
             # Enchant bonus — same estimate formulas the item's own detail
             # panel uses for its "(+N)" line, so Stat Info stays consistent
@@ -12706,23 +14443,23 @@ class LoadoutWindow(QMainWindow):
                 is_armor = category_name in _ARMOR_CATEGORIES or category_name == _BELT_CATEGORY
                 if is_armor:
                     def_bonus, hp_bonus = estimate_armor_bonus(level, grade_name, normal_max, category_name)
-                    totals[_DEFENSE_STAT_ID] = totals.get(_DEFENSE_STAT_ID, 0.0) + def_bonus
-                    totals[_HP_STAT_ID] = totals.get(_HP_STAT_ID, 0.0) + hp_bonus
+                    add(slot_id, _DEFENSE_STAT_ID, def_bonus)
+                    add(slot_id, _HP_STAT_ID, hp_bonus)
                     exceed = estimate_armor_exceed_bonus(level, normal_max)
-                    totals[_DEFENSE_STAT_ID] = totals.get(_DEFENSE_STAT_ID, 0.0) + exceed["defense"]
-                    totals[_HP_STAT_ID] = totals.get(_HP_STAT_ID, 0.0) + exceed["hp"]
+                    add(slot_id, _DEFENSE_STAT_ID, exceed["defense"])
+                    add(slot_id, _HP_STAT_ID, exceed["hp"])
                     if exceed["defense_pct"]:
-                        totals["DefenseRatio"] = totals.get("DefenseRatio", 0.0) + exceed["defense_pct"]
+                        add(slot_id, "DefenseRatio", exceed["defense_pct"])
                 else:
                     bonus = estimate_enchant_bonus(level, grade_name, normal_max, category_name)
-                    totals[_SCALING_STAT_ID] = totals.get(_SCALING_STAT_ID, 0.0) + bonus
+                    add(slot_id, _SCALING_STAT_ID, bonus)
                     exceed = estimate_exceed_bonus(level, normal_max, category_name)
-                    totals[_SCALING_STAT_ID] = totals.get(_SCALING_STAT_ID, 0.0) + exceed["attack"]
+                    add(slot_id, _SCALING_STAT_ID, exceed["attack"])
                     if exceed["attack_pct"]:
-                        totals["DamageRatio"] = totals.get("DamageRatio", 0.0) + exceed["attack_pct"]
+                        add(slot_id, "DamageRatio", exceed["attack_pct"])
                     if exceed["defense"]:
-                        totals[_DEFENSE_STAT_ID] = totals.get(_DEFENSE_STAT_ID, 0.0) + exceed["defense"]
-        return totals
+                        add(slot_id, _DEFENSE_STAT_ID, exceed["defense"])
+        return totals, by_slot
 
     def _compute_gearscore(self, equipped: dict, enchant: dict) -> float:
         """Shared with the Build Vergleich tab -- see _compute_stat_totals."""
@@ -12740,7 +14477,38 @@ class LoadoutWindow(QMainWindow):
         return total
 
     def _refresh_stat_info(self):
-        totals = self._compute_stat_totals(self._equipped, self._equipped_substats, self._equipped_enchant)
+        # Kept as separate per-source dicts (not just summed straight into
+        # one `totals`) so each Stat Info value's tooltip can show exactly
+        # which tab/build contributed how much (User-Wunsch, 2026-08-30:
+        # "ein Tooltip, welches zeigt, aus welchem Build oder Reiter welcher
+        # gesamt wert herkommt").
+        equipment_totals, equipment_by_slot = self._compute_stat_totals_detailed(
+            self._equipped, self._equipped_substats, self._equipped_enchant
+        )
+        genius_totals = self._genius_stat_totals()
+        # Attribute-derived stats read from the equipment totals (Might/
+        # Dexterity/etc. only ever come from gear), so this has to be
+        # computed after equipment_totals, before the merge below. The
+        # detailed variants also break down WHICH attribute/Lord (not just
+        # a generic "Attributes"/"Arcana" lump) so the tooltip below can't
+        # imply e.g. Dexterity contributes to a stat only Might actually
+        # feeds (User-reported, 2026-08-30).
+        attribute_totals, attribute_by_attr = self._attribute_derived_stat_totals_detailed(equipment_totals)
+        arcana_totals, arcana_by_lord = self._arcana_lord_stat_totals_detailed(equipment_totals)
+        # Daevanion Board node stat effects (User-reported gap, 2026-08-30:
+        # the per-source Attack tooltip made it visible that the Daeva
+        # Board wasn't contributing anything at all).
+        daevanion_totals = self._daevanion_stat_totals()
+
+        totals: dict[str, float] = dict(equipment_totals)
+        for stat_id, value in genius_totals.items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+        for stat_id, value in attribute_totals.items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+        for stat_id, value in arcana_totals.items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+        for stat_id, value in daevanion_totals.items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
 
         label_groups = [
             (self._main_stat_labels, "—"),
@@ -12755,13 +14523,97 @@ class LoadoutWindow(QMainWindow):
         label_groups.extend((labels, "—") for labels in self._extra_stat_labels.values())
 
         for labels, none_text in label_groups:
+            is_icon_group = labels is self._icon_stat_labels
             for name, (value_label, stat_id) in labels.items():
                 if stat_id is None:
                     value_label.setText(none_text)
+                    value_label.setToolTip("")
                     continue
                 value = totals.get(stat_id, 0.0)
                 suffix = "%" if stat_id in _PERCENT_STAT_IDS else ""
                 value_label.setText(f"{_format_number(value)}{suffix}")
+
+                # Where this value's OWN total came from -- equipment is
+                # collapsed into the 3 familiar Weapon/Armor/Jewelry groups
+                # the Stat Priority Editor already uses (User-Wunsch,
+                # 2026-08-30: a per-slot breakdown ran to "20 Zeilen"; the 3
+                # groups keep it readable and reuse a concept the user
+                # already knows), so a hover can still pinpoint roughly
+                # where a value came from -- or that something (e.g. a
+                # Daeva Board bonus) is missing entirely (User-Wunsch,
+                # 2026-08-30: "erkennen, wo welche Werte herkommen und ob
+                # dort etwas fehlt").
+                equipment_by_group: dict[str, float] = {}
+                for slot_id, slot_value in equipment_by_slot.get(stat_id, {}).items():
+                    if not slot_value:
+                        continue
+                    group_key = _SLOT_TO_EQUIPMENT_GROUP_LABEL_KEY.get(slot_id, slot_id)
+                    equipment_by_group[group_key] = equipment_by_group.get(group_key, 0.0) + slot_value
+
+                source_lines = [
+                    f"{_t(group_key)}: {_format_number(group_value)}{suffix}"
+                    for group_key, group_value in equipment_by_group.items()
+                    if group_value
+                ]
+                if genius_totals.get(stat_id, 0.0):
+                    source_lines.append(f"{_t('arm_stat_source_genius')}: {_format_number(genius_totals[stat_id])}{suffix}")
+                if daevanion_totals.get(stat_id, 0.0):
+                    source_lines.append(f"{_t('arm_stat_source_daevanion')}: {_format_number(daevanion_totals[stat_id])}{suffix}")
+                source_lines.extend(
+                    f"{attr_name}: {_format_number(attr_value)}{suffix}"
+                    for attr_name, attr_value in attribute_by_attr.get(stat_id, {}).items()
+                    if attr_value
+                )
+                source_lines.extend(
+                    f"{lord_name}: {_format_number(lord_value)}{suffix}"
+                    for lord_name, lord_value in arcana_by_lord.get(stat_id, {}).items()
+                    if lord_value
+                )
+                if len(source_lines) > 1:
+                    source_lines.append(f"{_t('arm_stat_source_total')}: {_format_number(value)}{suffix}")
+
+                # Reverse direction, only for the core-attribute/Lord icon
+                # rows themselves: what does THIS value feed, and by how
+                # much (User-Wunsch, 2026-08-30: "Might: 'Attack Increase
+                # [Value]'") -- shown even at 0 (User-Wunsch, 2026-08-30:
+                # "auch wenn '0' an Wert vorhanden ist, der User sieht,
+                # welcher Wert davon betroffen ist"), since the point is
+                # showing what CAN be affected, not just what currently is.
+                effect_lines: list[str] = []
+                if is_icon_group:
+                    feeds: list[tuple[str, float]] = []
+                    if stat_id in _ATTRIBUTE_STAT_IDS:
+                        pct = value * _ATTRIBUTE_RATE
+                        feeds = [(sid, pct) for sid in _ATTRIBUTE_STAT_IDS[stat_id]]
+                    elif stat_id in _LORD_POINTS_ID_TO_LORD:
+                        lord = _LORD_POINTS_ID_TO_LORD[stat_id]
+                        pct = value * _ARCANA_LORD_RATE
+                        feeds = [
+                            (sid, pct * _ARCANA_LORD_STAT_SIGN.get(sid, 1))
+                            for sid in _ARCANA_LORD_STAT_IDS.get(lord, [])
+                        ]
+                    effect_lines = [
+                        f"{_STAT_ID_DISPLAY_NAME.get(sid, sid)}: {_format_number(feed_value)}%"
+                        for sid, feed_value in feeds
+                    ]
+
+                # Rich-text tooltip (Qt auto-detects HTML) with colored
+                # section headers (User-Wunsch, 2026-08-30: "Titel rein
+                # 'Source' und 'Auswirkung'", "dann farblich noch
+                # anpassen") -- reuses the app's existing "defence"/
+                # "offense" accent colors rather than inventing new ones.
+                html_parts: list[str] = []
+                if source_lines:
+                    html_parts.append(
+                        f"<b style='color:#38bdf8;'>{_t('arm_stat_tooltip_source')}</b><br>"
+                        + "<br>".join(source_lines)
+                    )
+                if effect_lines:
+                    html_parts.append(
+                        f"<b style='color:#f59e0b;'>{_t('arm_stat_tooltip_effect')}</b><br>"
+                        + "<br>".join(effect_lines)
+                    )
+                value_label.setToolTip("<br><br>".join(html_parts))
 
         self._recompute_skill_bonus()
 
@@ -12843,7 +14695,7 @@ class LoadoutWindow(QMainWindow):
         WISH counter, which stays a separate hypothetical planning target
         and deliberately does NOT feed into this)."""
         class_name = self.character_class_combo.currentText().strip().lower()
-        build = self._skill_builds_data.get(class_name, {}).get(self._current_build_name, {})
+        build = self._skill_builds_data.get(class_name, {}).get(self._linked_skill_build_name(), {})
         arcana_cards = build.get("arcana_cards") or {}
         bonus: dict[str, int] = {}
         for card_data in arcana_cards.values():
@@ -13086,6 +14938,20 @@ class LoadoutWindow(QMainWindow):
         self.main_tabs.setTabText(1, _t("arm_daevanion_board_tab"))
         self.main_tabs.setTabText(2, _t("arm_arcana_tab"))
         self.main_tabs.setTabText(3, _t("arm_skill_planner_tab"))
+        self.main_tabs.setTabText(4, _t("arm_genius_insight_tab"))
+        self._genius_owned_title_lbl.setText(_t("arm_genius_owned_effects_title"))
+        self._genius_owned_hint_lbl.setText(_t("arm_genius_owned_hint"))
+        self._genius_owned_total_btn.setText(_t("arm_genius_owned_total_toggle"))
+        self._genius_owned_individual_btn.setText(_t("arm_genius_owned_individual_toggle"))
+        self._genius_analysis_effect_lbl.setText(_t("arm_genius_analysis_effect"))
+        self._genius_board_footnote_lbl.setText(_t("arm_genius_board_footnote"))
+        self._genius_total_title_lbl.setText(_t("arm_genius_total_title"))
+        self._genius_total_hint_lbl.setText(_t("arm_genius_total_hint"))
+        self._genius_total_footnote_lbl.setText(_t("arm_genius_total_footnote"))
+        self._refresh_genius_owned_sidebar()
+        self._refresh_genius_board_panel()
+        self._refresh_genius_total_panel()
+        self._rebuild_genius_build_tabs()
         self.skillpoints_title_lbl.setText(_t("arm_skillpoints_free_label"))
         self.monolith_level_title_lbl.setText(_t("arm_monolith_level_label"))
         self.stigma_points_title_lbl.setText(_t("arm_stigma_points_label"))
@@ -13117,12 +14983,147 @@ class LoadoutWindow(QMainWindow):
         if self._current_equip_build_name not in builds:
             return
         self._capture_current_substats()
+        # Preserve "linked_skill_build"/"linked_genius_build" (User-Wunsch,
+        # 2026-08-30, see _build_build_planner_settings_row) -- neither has
+        # a live in-memory mirror like _equipped/_equipped_substats do, so a
+        # plain dict-replace here would otherwise silently drop them on
+        # every save.
+        existing = builds[self._current_equip_build_name]
         builds[self._current_equip_build_name] = {
             "equipped": dict(self._equipped),
             "substats": {k: set(v) for k, v in self._equipped_substats.items()},
             "enchant": dict(self._equipped_enchant),
             "philosopher_stone": dict(self._equipped_philosopher_stone),
+            "linked_skill_build": existing.get("linked_skill_build"),
+            "linked_genius_build": existing.get("linked_genius_build"),
         }
+
+    def _build_build_planner_settings_row(self) -> QHBoxLayout:
+        """Per-Equip-Build link to a Skill/Arcana build (User-Wunsch,
+        2026-08-30: "beim Buildplanner Settings hinzufuegen, in denen man
+        das jeweilige Profil auswaehlt ... Build 'Chanter' / Arcana /
+        Skillplaner: [Profil waehlen] / Genius Insight: [Profil waehlen]").
+        Equip Builds and Skill/Arcana Builds are two independent named-build
+        systems (see _equip_builds_data vs _skill_builds_data) -- without
+        this, Stat Info/the skill damage estimate just used whichever
+        Skill/Arcana build happened to be selected for VIEWING, with no
+        guarantee it was the one meant to go with the active Equip Build.
+        This makes that pairing explicit per Equip Build instead.
+
+        Genius Insight now has its own separate named-profile system too
+        (User-Wunsch, 2026-08-30, see _genius_builds_data) -- the Genius
+        dropdown here works the same way as the Skill one, just against
+        that flat (non-per-class) name-list instead."""
+        row = QHBoxLayout()
+        row.setContentsMargins(16, 0, 16, 4)
+        row.setSpacing(8)
+
+        self._bp_settings_title_lbl = QLabel()
+        self._bp_settings_title_lbl.setObjectName("EquipSectionLabel")
+        row.addWidget(self._bp_settings_title_lbl)
+
+        row.addSpacing(12)
+        skill_label = QLabel(_t("arm_bp_settings_arcana_skill_label"))
+        skill_label.setObjectName("EquipSectionLabel")
+        row.addWidget(skill_label)
+        self._bp_settings_skill_combo = QComboBox()
+        self._bp_settings_skill_combo.setMinimumWidth(140)
+        self._bp_settings_skill_combo.currentIndexChanged.connect(self._on_bp_settings_skill_changed)
+        row.addWidget(self._bp_settings_skill_combo)
+
+        row.addSpacing(12)
+        genius_label = QLabel(_t("arm_bp_settings_genius_label"))
+        genius_label.setObjectName("EquipSectionLabel")
+        row.addWidget(genius_label)
+        self._bp_settings_genius_combo = QComboBox()
+        self._bp_settings_genius_combo.setMinimumWidth(100)
+        self._bp_settings_genius_combo.currentIndexChanged.connect(self._on_bp_settings_genius_changed)
+        row.addWidget(self._bp_settings_genius_combo)
+
+        row.addStretch(1)
+        return row
+
+    def _refresh_build_planner_settings_row(self):
+        if not hasattr(self, "_bp_settings_title_lbl"):
+            return
+        equip_name = self._current_equip_build_name
+        self._bp_settings_title_lbl.setText(_t("arm_bp_settings_title", name=equip_name))
+
+        class_name = self.character_class_combo.currentText().strip().lower()
+        self._ensure_class_builds(class_name)
+        skill_builds = self._skill_builds_data.get(class_name, {})
+        self._ensure_class_equip_builds(class_name)
+        equip_build = self._equip_builds_data.get(class_name, {}).get(equip_name, {})
+        linked = equip_build.get("linked_skill_build")
+        if linked not in skill_builds:
+            # No explicit link saved yet (older profile, or a brand new
+            # Equip Build) -- default to whichever Skill/Arcana build is
+            # currently being VIEWED, same as before this feature existed.
+            linked = self._current_build_name if self._current_build_name in skill_builds else next(iter(skill_builds), "Default")
+
+        combo = self._bp_settings_skill_combo
+        combo.blockSignals(True)
+        combo.clear()
+        for build_name in skill_builds:
+            combo.addItem(build_name, build_name)
+        idx = combo.findData(linked)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
+
+        genius_builds = getattr(self, "_genius_builds_data", None) or {}
+        genius_linked = equip_build.get("linked_genius_build")
+        if genius_linked not in genius_builds:
+            genius_linked = (
+                self._current_genius_build_name
+                if getattr(self, "_current_genius_build_name", None) in genius_builds
+                else next(iter(genius_builds), "Default")
+            )
+        genius_combo = self._bp_settings_genius_combo
+        genius_combo.blockSignals(True)
+        genius_combo.clear()
+        for build_name in genius_builds:
+            genius_combo.addItem(build_name, build_name)
+        gidx = genius_combo.findData(genius_linked)
+        genius_combo.setCurrentIndex(gidx if gidx >= 0 else 0)
+        genius_combo.blockSignals(False)
+
+    def _on_bp_settings_skill_changed(self, _index: int):
+        build_name = self._bp_settings_skill_combo.currentData()
+        if not build_name:
+            return
+        class_name = self.character_class_combo.currentText().strip().lower()
+        self._ensure_class_equip_builds(class_name)
+        equip_build = self._equip_builds_data[class_name].get(self._current_equip_build_name)
+        if equip_build is None:
+            return
+        equip_build["linked_skill_build"] = build_name
+        self._refresh_stat_info()
+        self._recompute_skill_bonus()
+
+    def _on_bp_settings_genius_changed(self, _index: int):
+        build_name = self._bp_settings_genius_combo.currentData()
+        if not build_name:
+            return
+        class_name = self.character_class_combo.currentText().strip().lower()
+        self._ensure_class_equip_builds(class_name)
+        equip_build = self._equip_builds_data[class_name].get(self._current_equip_build_name)
+        if equip_build is None:
+            return
+        equip_build["linked_genius_build"] = build_name
+        self._refresh_stat_info()
+
+    def _linked_skill_build_name(self) -> str:
+        """Which Skill/Arcana build counts toward THIS Equip Build's
+        calculation (see _build_build_planner_settings_row) -- falls back
+        to whichever build is currently being viewed if nothing was
+        explicitly linked yet (older profile / fresh Equip Build)."""
+        class_name = self.character_class_combo.currentText().strip().lower()
+        skill_builds = self._skill_builds_data.get(class_name, {})
+        equip_build = self._equip_builds_data.get(class_name, {}).get(self._current_equip_build_name, {})
+        linked = equip_build.get("linked_skill_build")
+        if linked in skill_builds:
+            return linked
+        return self._current_build_name
 
     def _load_current_equip_build_state(self):
         class_name = self.character_class_combo.currentText().strip().lower()
@@ -13151,6 +15152,7 @@ class LoadoutWindow(QMainWindow):
             self.equip_center_stack.setCurrentIndex(0)
             self._refresh_all_equip_slot_icons()
             self._update_gearscore()
+            self._refresh_build_planner_settings_row()
             self._refresh_stat_info()
             self._update_quick_stat_btn_visibility()
         finally:
@@ -13216,6 +15218,12 @@ class LoadoutWindow(QMainWindow):
                         "substats": {k: list(v) for k, v in build["substats"].items()},
                         "enchant": build["enchant"],
                         "philosopher_stone": build.get("philosopher_stone", {}),
+                        # Which Skill/Arcana build AND which Genius profile
+                        # count toward THIS Equip Build's Stat Info/damage
+                        # estimate (User-Wunsch, 2026-08-30, see
+                        # _build_build_planner_settings_row).
+                        "linked_skill_build": build.get("linked_skill_build"),
+                        "linked_genius_build": build.get("linked_genius_build"),
                     }
                     for build_name, build in builds.items()
                 }
@@ -13231,6 +15239,21 @@ class LoadoutWindow(QMainWindow):
             "daevanion_active": {
                 key: sorted(ids) for key, ids in self._daevanion_active.items()
             },
+            # Genius Insight (User-Wunsch, 2026-08-30) -- account-wide like
+            # daevanion_active above, not per Class/Skill-Build (Pet Genus
+            # isn't class-specific), but now its own named-profile system
+            # (User-Wunsch, 2026-08-30: "hier fehlen dann noch Profile ...
+            # gleiches wie gehabt"). Each board's 9 Lines already store
+            # plain JSON-safe {"stat": str, "value": number} dicts, no
+            # conversion needed either direction.
+            "genius_builds_data": {
+                build_name: {
+                    board: {line: dict(entry) for line, entry in lines.items()}
+                    for board, lines in build.items()
+                }
+                for build_name, build in self._genius_builds_data.items()
+            },
+            "current_genius_build_name": self._current_genius_build_name,
         }
 
     def apply_persisted_state(self, state: dict):
@@ -13241,6 +15264,8 @@ class LoadoutWindow(QMainWindow):
                     "substats": {k: set(v) for k, v in build.get("substats", {}).items()},
                     "enchant": build.get("enchant", {}),
                     "philosopher_stone": build.get("philosopher_stone", {}),
+                    "linked_skill_build": build.get("linked_skill_build"),
+                    "linked_genius_build": build.get("linked_genius_build"),
                 }
                 for build_name, build in builds.items()
             }
@@ -13286,6 +15311,53 @@ class LoadoutWindow(QMainWindow):
         self._daevanion_rebuild_deity_tabs()
         self._daevanion_refresh()
 
+        def _merge_genius_build(saved: dict) -> dict:
+            """Merged onto a fresh default rather than trusting the saved
+            dict outright, so a stat key that no longer exists (pool data
+            changed later) can't leave a Line pointing at nothing."""
+            merged = _genius_default_state()
+            for board, lines in saved.items():
+                if board not in merged:
+                    continue
+                for line_str, entry in lines.items():
+                    if (
+                        line_str in merged[board]
+                        and isinstance(entry, dict)
+                        and "stat" in entry
+                        and "value" in entry
+                    ):
+                        merged[board][line_str] = {
+                            "stat": entry["stat"],
+                            "value": entry["value"],
+                            "locked": bool(entry.get("locked", False)),
+                        }
+            return merged
+
+        # "genius_builds_data" is the current shape (multiple named Genius
+        # profiles, User-Wunsch, 2026-08-30). Older profiles only have the
+        # flat single-instance "genius_insight" key from before that --
+        # migrated into a lone "Default" entry so they still load cleanly.
+        # Neither key existing at all just keeps the fresh default state
+        # this window was constructed with.
+        if "genius_builds_data" in state:
+            self._genius_builds_data = {
+                build_name: _merge_genius_build(saved)
+                for build_name, saved in state["genius_builds_data"].items()
+            } or {"Default": _genius_default_state()}
+            self._current_genius_build_name = state.get("current_genius_build_name", "Default")
+            if self._current_genius_build_name not in self._genius_builds_data:
+                self._current_genius_build_name = next(iter(self._genius_builds_data))
+        elif "genius_insight" in state:
+            self._genius_builds_data = {"Default": _merge_genius_build(state["genius_insight"])}
+            self._current_genius_build_name = "Default"
+        if hasattr(self, "genius_build_tabs_row"):
+            self._rebuild_genius_build_tabs()
+            self._refresh_genius_board_panel()
+            self._refresh_genius_total_panel()
+            self._refresh_genius_owned_sidebar()
+            self._refresh_genius_board_panel()
+            self._refresh_genius_total_panel()
+
         self._active_skill_class = self.character_class_combo.currentText().strip().lower()
         self._rebuild_equip_build_tabs()
         self._load_current_equip_build_state()
@@ -13308,6 +15380,17 @@ class LoadoutWindow(QMainWindow):
             self._current_build_name = state.get("current_skill_build_name", "Default")
             self._rebuild_skill_build_tabs()
             self._load_current_build_state()
+            # _load_current_equip_build_state() above already ran
+            # _refresh_stat_info() once, but BEFORE self._skill_builds_data
+            # (the real Arcana card assignments, incl. Lord/theme) was
+            # restored -- that first pass always saw the fresh/empty
+            # default build, so Genius/Attribute/Arcana-Lord-derived values
+            # (e.g. the Lord icon rows) showed 0 until something unrelated
+            # happened to trigger another refresh later (User-reported,
+            # 2026-08-30: "Time wird nicht direkt beim Öffnen angezeigt,
+            # aber wenn man bissl wartet, wirds angezeigt"). Re-run now that
+            # the real data is in place.
+            self._refresh_stat_info()
 
         # "active_gear_types" only exists in profiles saved after this
         # feature was added -- an older/missing key keeps the PvE+Neutral
@@ -13478,6 +15561,8 @@ class LoadoutWindow(QMainWindow):
             "substats": {k: set(v) for k, v in source["substats"].items()},
             "enchant": dict(source["enchant"]),
             "philosopher_stone": dict(source.get("philosopher_stone", {})),
+            "linked_skill_build": source.get("linked_skill_build"),
+            "linked_genius_build": source.get("linked_genius_build"),
         }
         self._current_equip_build_name = name
         self._rebuild_equip_build_tabs()

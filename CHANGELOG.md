@@ -28,9 +28,38 @@ These features are **not** part of an official update yet and are still under ac
 - EQ Priority list: set an acquisition/upgrade order per equipment slot; items already on it show as a gold-star favorite (with an "Only favorites" filter) when picking gear normally.
 - Consolidated stat panel (Main Stats, Sub Stats, Offense, Defense, Utility & Recovery, PvE Stats, PvP Stats).
 - "Quick Select" button to auto-equip a full gear set — crafted, dungeon-drop (Expedition) or PvP Abyss Gear, matched to your race — in one click, plus a separate "Property Priority" editor to customize which substats get auto-picked per role and Gear Type.
-- Daevanion Board tab: interactive per-class/deity board (real tier art, checkable stat/skill sidebar, auto-router for the cheapest path to what you've checked), feeding its bonuses into the Skill Planner and persisting to your profile.
+- Daevanion Board tab: interactive per-class/deity board (real tier art, checkable stat/skill sidebar, auto-router for the cheapest path to what you've checked), with a "Stats Gained" summary of every stat the board currently grants. Feeds its skill-level bonuses into the Skill Planner and its stat bonuses into the stat panel/GearScore/damage estimate, and persists to your profile.
 - Skill Planner tab: browse/filter class skills (Active/Passive/Stigma), track Skill Points and Stigma Points separately, build a Priority List (remove/favorite/star support), and an Arcana Calculator that finds the best-case Arcana card setup for a wishlist of extra skill levels. Each active skill shows its real per-level damage range, with an optional "Estimated Damage" toggle that scales it by your own current stats.
-- Arcana tab: an Information sub-tab to browse all card types/sets — hover a card for its class skill preview, hover a Set banner for its 2-/4-piece Set bonus — and a Sets sub-tab showing your 5 real equip slots; each card's Set, rarity, and individual skill/level assignments can now be set manually as well as via the Arcana Calculator, which also lets you pick which named build to apply a result into (or create a new one). Shares the same named build as the Skill Planner.
+- Arcana tab: an Information sub-tab to browse all card types/sets — hover a card for its class skill preview, hover a Set banner for its 2-/4-piece Set bonus — and a Sets sub-tab showing your 5 real equip slots, including each assigned card's Empyrean Lord value; each card's Set, rarity, and individual skill/level assignments can now be set manually as well as via the Arcana Calculator, which also lets you pick which named build to apply a result into (or create a new one). Shares the same named build as the Skill Planner.
+- Genius Insight tab: pick a stat for each of the 9 Lines on all 5 pet boards (with min/max ranges shown per pick and a lock toggle to protect a Line), save multiple named profiles, and see every board's picks totaled — feeding the stat panel and damage estimate the same way gear does.
+- Your core attributes (Might, Dexterity, etc.) and equipped Arcana cards' Empyrean Lord values now feed their real derived bonuses (Attack increase, Evasion increase, Combat Speed, and more) into the stat panel and damage estimate — previously shown but not actually calculated.
+- Each Equip Build can now be linked to a specific Arcana/Skill Planner build and Genius Insight profile, so only that combination counts toward its stat panel/GearScore/damage estimate — useful once you're keeping more than one of each around.
+- Stat panel values now show a hover tooltip breaking down exactly where the number comes from (equipment, grouped into Weapon/Armor/Jewelry, plus Genius Insight, attributes, Arcana Lords, and the Daevanion Board); hovering a core-attribute/Lord value also shows what it feeds into, even at 0.
+
+---
+
+# Version 1.8.0
+
+Release Date: 2026-08-31
+
+## ✨ New Features
+
+- **Build Planner (Beta): new Genius Insight tab** — pick a stat for each of the 9 Lines across all 5 pet boards (with the real min/max range shown per pick and a lock toggle to protect a Line), save multiple named profiles, and see every board's picks totaled. Feeds the stat panel and damage estimate the same way equipped gear does.
+- **Build Planner (Beta): core attributes and Arcana Lord values are now actually calculated** — Might, Dexterity, and the rest of your attributes, plus each equipped Arcana card's Empyrean Lord value, now feed their real derived bonuses (Attack increase, Evasion increase, Combat Speed, Cooldown Reduction, and more) into the stat panel and damage estimate. These were shown before but never actually counted.
+- **Build Planner (Beta): the Daevanion Board now feeds the stat panel, GearScore, and damage estimate**, not just the Skill Planner as before. A new "Stats Gained" summary on the board itself lists every stat currently granted (skills and passives excluded, since those already show in the Skill Planner).
+- **Build Planner (Beta): Bracelets that roll a raw Empyrean Lord stat now count too**, on top of Arcana cards — both sources combine into the same total and the same derived bonuses.
+- **Build Planner (Beta): a large batch of previously-missing equipment stats now feed the stat panel** — PvE/PvP Accuracy, Evasion, Attack, and Defense breakdowns; the full Boss Attack/Defense/Damage Boost/Damage Tolerance set; Block Penetration; Natural Flight Power and Stamina Regen; and per-damage-type resist/chance (Ailment-, Mental-, and Impact-type).
+- **Build Planner (Beta): each Equip Build can now be linked to a specific Arcana/Skill Planner build and Genius Insight profile**, so only that exact combination counts toward its stat panel/GearScore/damage estimate — useful once you're keeping more than one of each around.
+- **Build Planner (Beta): stat panel values show a hover tooltip breaking down exactly where the number comes from** — equipment (grouped into Weapon/Armor/Jewelry), Genius Insight, attributes, Arcana Lords, and the Daevanion Board. Hovering a core-attribute or Lord value also shows what it feeds into, even while it's still at 0.
+- **Build Planner (Beta): Arcana Sets cards now show their Empyrean Lord value directly on the card.**
+
+## 🐛 Bug Fixes
+
+- **Build Planner (Beta): several real equipment stats weren't being counted at all** if your gear happened to roll them — Back/Front Attack, Accuracy Bonus, Evasion Bonus, Defense Bonus, Attack Bonus, Max Attack, Critical Attack, Endurance/Regeneration Penetration, PvE Attack/Defense, and Boss Attack were silently dropped due to a naming mismatch. Now counted correctly.
+- **Build Planner (Beta): the Daevanion Board's node tooltip showed percentage-based bonuses (e.g. Combat Speed) as a much larger raw number** instead of the correct percentage (e.g. "250" instead of "2.5%").
+- **Build Planner (Beta): quickly hovering between two Daevanion Board nodes could briefly show the previous node's bonus list rendered behind the new one.**
+- **Build Planner (Beta): three Boss-related Daevanion stat names were corrected** to match their names everywhere else in the app (Boss Attack, Boss Damage Boost, Boss Damage Tolerance).
+- **Build Planner (Beta): Smite and Smite Resist were shown as a plain number instead of a percentage.**
 
 ---
 
