@@ -24,12 +24,43 @@ These features are **not** part of an official update yet and are still under ac
 - Assemble a virtual gear loadout slot by slot, with real item stats.
 - Save multiple named gear sets per class (e.g. "Default", "PvP") and switch between them instantly; a Build Compare tab shows two sets side by side, including GearScore and every stat category.
 - GearScore calculated from real item data, including enchant and exceed bonuses.
-- PvP / PvE / Neutral gear filter, linked to a matching toggle on the stat panel.
+- PvP / PvE / Neutral gear filter, linked to a matching toggle on the stat panel — PvP and PvE can now be active at the same time, for building a mixed set.
+- EQ Priority list: set an acquisition/upgrade order per equipment slot; items already on it show as a gold-star favorite (with an "Only favorites" filter) when picking gear normally.
 - Consolidated stat panel (Main Stats, Sub Stats, Offense, Defense, Utility & Recovery, PvE Stats, PvP Stats).
 - "Quick Select" button to auto-equip a full gear set — crafted, dungeon-drop (Expedition) or PvP Abyss Gear, matched to your race — in one click, plus a separate "Property Priority" editor to customize which substats get auto-picked per role and Gear Type.
 - Daevanion Board tab: interactive per-class/deity board (real tier art, checkable stat/skill sidebar, auto-router for the cheapest path to what you've checked), feeding its bonuses into the Skill Planner and persisting to your profile.
-- Skill Planner tab: browse/filter class skills (Active/Passive/Stigma), track Skill Points and Stigma Points separately, build a Priority List (remove/favorite/star support), and an Arcana Calculator that finds the best-case Arcana card setup for a wishlist of extra skill levels.
-- Arcana tab: an Information sub-tab to browse all card types/sets — hover a card for its class skill preview, hover a Set banner for its 2-/4-piece Set bonus — and a Sets sub-tab showing your 5 real equip slots with their assigned skills for this season's cards; the Arcana Calculator can write a chosen combination straight into them, sharing the same named build as the Skill Planner.
+- Skill Planner tab: browse/filter class skills (Active/Passive/Stigma), track Skill Points and Stigma Points separately, build a Priority List (remove/favorite/star support), and an Arcana Calculator that finds the best-case Arcana card setup for a wishlist of extra skill levels. Each active skill shows its real per-level damage range, with an optional "Estimated Damage" toggle that scales it by your own current stats.
+- Arcana tab: an Information sub-tab to browse all card types/sets — hover a card for its class skill preview, hover a Set banner for its 2-/4-piece Set bonus — and a Sets sub-tab showing your 5 real equip slots; each card's Set, rarity, and individual skill/level assignments can now be set manually as well as via the Arcana Calculator, which also lets you pick which named build to apply a result into (or create a new one). Shares the same named build as the Skill Planner.
+
+---
+
+# Version 1.7.0
+
+Release Date: 2026-08-30
+
+## ✨ New Features
+
+- **Build Planner (Beta): manual Arcana card assignment** — each Sets-tab card now lets you pick its Set/rarity and the skill+level in each of its 4 slots directly, without needing the Calculator.
+- **Build Planner (Beta): Arcana Calculator's Apply now asks which build to write into** — the currently active one, any other existing build, or a brand-new one — instead of always silently targeting whatever build happened to be active.
+- **Build Planner (Beta): EQ Priority items now show as a favorite** (gold star) when picking gear normally, with a new "Only favorites" filter in the item picker.
+- **Build Planner (Beta): PvP and PvE gear filters can be active together**, for building a mixed PvP/PvE set at once.
+- **Skill Planner (Beta): shows each active skill's real per-level damage range**, plus an "Estimated Damage" toggle that scales it by your own current stats (an approximation — the game's own base stats aren't publicly known).
+- **Skill Planner (Beta): the Priority List picker's hover tooltip now also shows a skill's specialization level bonuses** (e.g. "Lv 10: Removes all debuffs").
+- **About page: new "Sources" section** crediting the external data/research sources the app's item, skill, recipe, and board data (and the new damage-formula estimate) come from.
+
+## 🎨 UI Changes
+
+- **Skill Planner (Beta): removed the separate manual "checked" bookmark** on skill cards — the existing Priority List favorite star already covers the same purpose.
+- **Build Planner (Beta): Arcana Set Bonus hover tooltip no longer shows a source attribution line.**
+
+## 🐛 Bug Fixes
+
+- **Item Database: duplicate catalog rows (e.g. Wings) no longer show twice** — some items existed as exact duplicates under two different IDs; the same dedup already used for item pickers now also applies to the main table.
+- **Build Planner (Beta): the equip item picker could flicker and immediately close instead of opening**, specifically on multi-monitor setups with mixed display scaling.
+- **Build Planner (Beta): opening the item picker's own Grade/Rarity dropdown could close the whole picker.**
+- **Item Database/Build Planner: Grade/Rarity dropdown items showed in plain white instead of their rarity color.**
+- **Skill Planner (Beta): a skill's shown damage numbers didn't update when its level changed** while its detail panel was already open.
+- **Build Planner (Beta): the Skill Planner and Arcana tabs' build-selection tabs could fall out of sync** after switching builds from one of the two.
 
 ---
 

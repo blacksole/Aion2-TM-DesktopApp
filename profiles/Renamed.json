@@ -734,6 +734,7 @@
         "current_build_name": "Chanter PvP",
         "active_gear_types": [
             "Neutral",
+            "PvE",
             "PvP"
         ],
         "stat_priority_profiles": {
@@ -1195,18 +1196,14 @@
             "18010000": 10,
             "18040000": 10,
             "18290000": 10,
-            "18060000": 10
+            "18060000": 10,
+            "18330000": 20,
+            "18130000": 20,
+            "18170000": 20,
+            "18140000": 20
         },
-        "skill_arcana_wish": {
-            "18100000": 4,
-            "18060000": 2,
-            "18040000": 0,
-            "18290000": 4,
-            "18090000": 2,
-            "18010000": 4,
-            "18120000": 4
-        },
-        "current_skill_build_name": "Default",
+        "skill_arcana_wish": {},
+        "current_skill_build_name": "Testbuild Chanter",
         "skill_builds_data": {
             "gladiator": {
                 "Default": {
@@ -1225,7 +1222,132 @@
                 }
             },
             "chanter": {
-                "Default": {
+                "Test": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {
+                        "Bell": {
+                            "theme": "Magic",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18710000",
+                                    "level": 3
+                                },
+                                {
+                                    "skill_id": "18730000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18750000",
+                                    "level": 4
+                                },
+                                {
+                                    "skill_id": "18770000",
+                                    "level": 1
+                                }
+                            ]
+                        },
+                        "Chalice": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18040000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18090000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18100000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18200000",
+                                    "level": 4
+                                }
+                            ]
+                        },
+                        "Compass": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18040000",
+                                    "level": 4
+                                },
+                                {
+                                    "skill_id": "18060000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18120000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18200000",
+                                    "level": 3
+                                }
+                            ]
+                        },
+                        "Mirror": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18740000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18760000",
+                                    "level": 3
+                                },
+                                {
+                                    "skill_id": "18780000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18800000",
+                                    "level": 4
+                                }
+                            ]
+                        },
+                        "Parchment": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18010000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18090000",
+                                    "level": 3
+                                },
+                                {
+                                    "skill_id": "18100000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18150000",
+                                    "level": 3
+                                }
+                            ]
+                        }
+                    }
+                },
+                "Testbuild Chanter": {
                     "priority": {
                         "active": [
                             "18100000",
@@ -1245,7 +1367,12 @@
                             "18780000"
                         ],
                         "stigma": [
-                            null
+                            "18190000",
+                            "18250000",
+                            "18330000",
+                            "18140000",
+                            "18170000",
+                            "18160000"
                         ]
                     },
                     "arcana_cards": {
@@ -1295,20 +1422,6 @@
                             }
                         }
                     }
-                },
-                "Test": {
-                    "priority": {
-                        "active": [
-                            null
-                        ],
-                        "passive": [
-                            null
-                        ],
-                        "stigma": [
-                            null
-                        ]
-                    },
-                    "arcana_cards": {}
                 }
             }
         },
@@ -1762,26 +1875,26 @@
                             7
                         ],
                         "Boots": [
-                            11,
-                            21,
                             3,
-                            13
+                            13,
+                            11,
+                            21
                         ],
                         "Necklace": [
                             1,
-                            5,
+                            13,
                             3,
-                            13
+                            5
                         ],
                         "SubHand": [
                             0,
-                            15,
+                            7,
                             14,
-                            7
+                            15
                         ],
                         "Torso": [
-                            3,
                             19,
+                            3,
                             20,
                             12
                         ],
@@ -1793,13 +1906,13 @@
                         ],
                         "Earring1": [
                             1,
-                            5,
+                            13,
                             3,
-                            13
+                            5
                         ],
                         "Gloves": [
-                            11,
                             3,
+                            11,
                             13,
                             22
                         ],
@@ -1811,15 +1924,15 @@
                         ],
                         "Earring2": [
                             1,
-                            5,
+                            13,
                             3,
-                            13
+                            5
                         ],
                         "Pants": [
-                            20,
+                            21,
                             3,
                             12,
-                            21
+                            20
                         ]
                     },
                     "enchant": {
@@ -2850,23 +2963,23 @@
                 "Chanter PvP": {
                     "equipped": {
                         "MainHand": {
-                            "id": 110820004,
-                            "name": "Guardian High Commander Staff",
-                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WP_ST_Moon_01.png",
-                            "grade": "Epic",
-                            "options": [
-                                "Accuracy 75",
-                                "Block 125",
-                                "Attack 436 ~ 600",
-                                "Critical Hit 100",
-                                "PvP Damage Boost 10%"
-                            ],
-                            "favorite": false,
-                            "tradable": false,
                             "categoryName": "Staff",
                             "classNames": [
                                 "Chanter"
-                            ]
+                            ],
+                            "favorite": false,
+                            "grade": "Epic",
+                            "id": 110820002,
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WP_ST_0110_T05.png",
+                            "name": "Horned Dragon Lord Staff",
+                            "options": [
+                                "PvE Damage Boost 5%",
+                                "Accuracy 75",
+                                "Block 125",
+                                "Attack 436 ~ 600",
+                                "Critical Hit 100"
+                            ],
+                            "tradable": true
                         },
                         "SubHand": {
                             "id": 115020004,
@@ -3088,13 +3201,6 @@
                             22,
                             13
                         ],
-                        "MainHand": [
-                            0,
-                            1,
-                            7,
-                            14,
-                            15
-                        ],
                         "Necklace": [
                             1,
                             3,
@@ -3171,10 +3277,17 @@
                             20,
                             22,
                             12
+                        ],
+                        "MainHand": [
+                            0,
+                            1,
+                            2,
+                            7,
+                            14,
+                            15
                         ]
                     },
                     "enchant": {
-                        "MainHand": 25,
                         "SubHand": 25,
                         "Helmet": 25,
                         "Shoulder": 25,
@@ -3188,7 +3301,8 @@
                         "Ring1": 25,
                         "Ring2": 25,
                         "Bracelet1": 25,
-                        "Bracelet2": 25
+                        "Bracelet2": 25,
+                        "MainHand": 25
                     },
                     "philosopher_stone": {
                         "Bracelet1": false,
@@ -3197,7 +3311,8 @@
                         "MainHand": false,
                         "Shoulder": false,
                         "Necklace": false,
-                        "SubHand": false
+                        "SubHand": false,
+                        "Earring2": false
                     }
                 }
             }

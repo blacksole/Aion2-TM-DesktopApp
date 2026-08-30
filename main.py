@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
-from PySide6.QtGui import QColor, QIcon, QPalette
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPalette
 from PySide6.QtWidgets import QApplication
 
 from core.app_logger import get_logger
@@ -50,6 +51,17 @@ def _dark_palette() -> QPalette:
     palette.setColor(QPalette.Disabled, QPalette.ButtonText, disabled_text)
     return palette
 
+
+# Multi-monitor setups with mixed per-monitor scaling (e.g. 100% + 150%)
+# are a known Qt/Windows trigger for Qt.Popup windows self-closing the
+# instant they're shown (User-reported, 2026-08-29: EQ-Priority item
+# picker -- correct geometry/isActiveWindow=True in the log, then
+# closeEvent fires in the very same tick, on a multi-monitor setup with
+# mixed scaling, confirmed by the user). PassThrough keeps each monitor's
+# own scale factor exact instead of rounding it, which is what Qt's docs
+# call out as the fix for exactly this class of cross-monitor geometry/
+# activation glitch. Must be set before QApplication() is constructed.
+QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
 app = QApplication(sys.argv)
 # Fusion is a pure-software Qt style that fully honors QSS custom

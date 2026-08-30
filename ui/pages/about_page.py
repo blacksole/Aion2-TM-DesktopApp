@@ -73,6 +73,11 @@ _DISCORD_SERVERS = [
 # Each entry: (name, url, description translation key).
 _USEFUL_LINKS = [
     ("Guildnest", "https://guildnest.app", "useful_link_guildnest_desc"),
+    (
+        "Kanon's Aion 2 Bible",
+        "https://docs.google.com/document/d/11u4wLCG1WfL-xSka2Aze0rI9vYRa7mq3N3Gp1bt0AWY/edit?tab=t.0",
+        "useful_link_bible_desc",
+    ),
 ]
 
 
@@ -284,10 +289,32 @@ class AboutPage(QWidget):
             entry_row.addWidget(open_btn, 0, Qt.AlignVCenter)
             links_layout.addLayout(entry_row)
 
+        # ===== SOURCES ROW =====
+        # Plain reference listing, no buttons (User-Wunsch, 2026-08-29:
+        # "Hier brauchen wir keinen Button. Wir machen eine Auflistung in
+        # 2-3 Zeilen mit Komma-Auflistung, welche Seiten oder Quellen wir
+        # als Referenz genommen haben") -- every real external data/
+        # research source the app's own item/skill/recipe/board/formula
+        # data was scraped or researched from, credited here once instead
+        # of scattered only in code comments.
+        sources_row = QFrame()
+        sources_row.setObjectName("settingsRow")
+        sources_layout = QVBoxLayout(sources_row)
+        sources_layout.setContentsMargins(24, 16, 24, 16)
+        sources_layout.setSpacing(4)
+        self.sources_title_lbl = QLabel()
+        self.sources_title_lbl.setObjectName("aboutH2")
+        self.sources_desc_lbl = QLabel()
+        self.sources_desc_lbl.setObjectName("settingsDescription")
+        self.sources_desc_lbl.setWordWrap(True)
+        sources_layout.addWidget(self.sources_title_lbl)
+        sources_layout.addWidget(self.sources_desc_lbl)
+
         layout.addWidget(about_row)
         layout.addWidget(coop_row)
         layout.addWidget(donate_row)
         layout.addWidget(links_row)
+        layout.addWidget(sources_row)
         layout.addStretch()
 
     def update_language(self, language: str, tr_func):
@@ -311,6 +338,8 @@ class AboutPage(QWidget):
             btn.setText(tr_func(language, "useful_links_open"))
         for desc_lbl, desc_key in self._link_desc_lbls:
             desc_lbl.setText(tr_func(language, desc_key))
+        self.sources_title_lbl.setText(tr_func(language, "sources_title"))
+        self.sources_desc_lbl.setText(tr_func(language, "sources_desc"))
 
     def _copy_version(self):
         QApplication.clipboard().setText(f"Aion2 TM v{APP_VERSION}")

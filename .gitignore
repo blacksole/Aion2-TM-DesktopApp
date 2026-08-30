@@ -16,3 +16,6 @@ test_*.py
 
 # ItemDatabase — cached API data/icons, not source
 ItemDatabase/data/
+
+# Discord announcement draft — internal, not part of the repo
+DISCORD.md

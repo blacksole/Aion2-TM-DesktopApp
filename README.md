@@ -1,6 +1,6 @@
 # Aion2 Task Manager
 
-**v1.6.0** — Modern desktop productivity manager for Aion players.
+**v1.7.0** — Modern desktop productivity manager for Aion players.
 
 Aion2 Task Manager combines task management, shopping organization, event timers, a visual flow map planner and an in-game HUD overlay into a single lightweight desktop application — built specifically for Aion 2 players who want to stay on top of their daily and weekly goals without alt-tabbing constantly. An Armory module (item database, crafting calculator, build planner) is available as an opt-in Beta and is still under active development — see the Roadmap section below.
 
