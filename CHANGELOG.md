@@ -34,6 +34,16 @@ These features are **not** part of an official update yet and are still under ac
 
 ---
 
+# Version 1.7.1
+
+Release Date: 2026-08-30
+
+## 🐛 Bug Fixes
+
+- **Item Database (Beta): clicking "Wings" then immediately the "Equip Effect" filter could do nothing** — clicking it again a moment later worked. The filter dropdown wasn't done updating its own layout yet right after appearing.
+
+---
+
 # Version 1.7.0
 
 Release Date: 2026-08-30

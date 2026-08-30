@@ -14662,6 +14662,17 @@ class ItemDatabaseWindow(QMainWindow):
         self.shop_combo.setVisible(not is_wings)
         self.wing_equip_combo.setVisible(is_wings)
         self.wing_owned_combo.setVisible(is_wings)
+        # A combo box that JUST became visible via setVisible() hasn't had
+        # its layout/geometry pass run yet -- Qt schedules that for the
+        # next event-loop iteration, not synchronously. Clicking it before
+        # that catch-up finishes computes the dropdown's own position from
+        # stale (pre-show) geometry, so the popup can render off-screen or
+        # zero-size -- effectively "nothing happens" on that first click
+        # (User-reported, 2026-08-30: clicking Wings then immediately
+        # Equip Effect did nothing; clicking Equip Effect again a moment
+        # later worked correctly). Forcing the pending events through now,
+        # before returning control to the user, closes that window.
+        QApplication.processEvents()
 
         if is_wings:
             # Hiding the control must not leave a stale Shop filter
