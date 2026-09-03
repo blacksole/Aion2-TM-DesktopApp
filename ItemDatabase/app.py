@@ -1240,7 +1240,30 @@ class _DownwardComboBox(QComboBox):
     def showPopup(self):
         super().showPopup()
         popup = self.view().window()
-        popup.move(self.mapToGlobal(self.rect().bottomLeft()))
+
+        # Qt already picked a height for wherever it ORIGINALLY meant to
+        # place the popup (possibly upward, clipped to the space above the
+        # widget) before we force it downward below -- can leave a
+        # needlessly short, internally-scrollable list even though all
+        # items would easily fit on screen (User-screenshot, 2026-09-03:
+        # an 8-class list showing only 5 with a scroll arrow). Resize to
+        # fit every item without scrolling.
+        row_height = self.view().sizeHintForRow(0)
+        if row_height > 0:
+            chrome = popup.height() - self.view().height()
+            popup.resize(popup.width(), row_height * self.count() + max(chrome, 0))
+
+        anchor = self.mapToGlobal(self.rect().bottomLeft())
+        screen = self.screen() if hasattr(self, "screen") else None
+        available = screen.availableGeometry() if screen else QApplication.primaryScreen().availableGeometry()
+        # Prefer opening right below the widget (still never above it --
+        # that was the original upward-flip complaint this class fixes),
+        # but if the resized popup would run off the bottom of the screen,
+        # shift it up just enough to stay fully visible instead of letting
+        # it clip/scroll.
+        y = min(anchor.y(), available.bottom() - popup.height() + 1)
+        y = max(y, available.top())
+        popup.move(anchor.x(), y)
 
 
 class _RoleColorDelegate(QStyledItemDelegate):

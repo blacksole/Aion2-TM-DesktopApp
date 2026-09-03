@@ -38,6 +38,16 @@ These features are **not** part of an official update yet and are still under ac
 
 ---
 
+# Version 1.9.1
+
+Release Date: 2026-09-03
+
+## 🐛 Bug Fixes
+
+- **Build Planner (Beta): the class selection dropdown could open upward inconsistently (sometimes with a stray arrow), or — after an earlier fix for that — get clipped to show only some classes with a scrollbar instead of all of them.** Now always opens fully below the field, showing every class at once.
+
+---
+
 # Version 1.9.0
 
 Release Date: 2026-09-03
