@@ -132,9 +132,10 @@ class _AccordionSection(QWidget):
     (Tasks/Guide keep their own "all done" placeholder row).
     """
 
-    def __init__(self, title: str, count: int, open_by_default: bool, parent=None):
+    def __init__(self, title: str, count: int, open_by_default: bool, parent=None, on_toggle=None):
         super().__init__(parent)
         self._open = open_by_default
+        self._on_toggle = on_toggle
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -182,6 +183,8 @@ class _AccordionSection(QWidget):
     def _toggle(self):
         self._open = not self._open
         self._apply_open_state()
+        if self._on_toggle:
+            self._on_toggle(self._open)
 
     def _apply_open_state(self):
         self._chevron.setText("▾" if self._open else "▸")
@@ -195,6 +198,12 @@ class OverlayWindow(QWidget):
         self._drag_pos = None
         self._resize_pos = None
         self._resize_start_h = None
+        # Accordion open/closed state survives refresh() (each refresh
+        # rebuilds the sections from scratch, e.g. after checking off a
+        # Guide step) -- without this it always snapped back to
+        # open_by_default (User-reported, 2026-08-30: checking a Guide item
+        # closed the section again every time).
+        self._section_open = {"Tasks": True, "Guide": False}
 
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -355,7 +364,11 @@ class OverlayWindow(QWidget):
                 )
                 rows.append(row)
 
-        section = _AccordionSection("Tasks", len(rows), open_by_default=True)
+        section = _AccordionSection(
+            "Tasks", len(rows),
+            open_by_default=self._section_open["Tasks"],
+            on_toggle=lambda is_open: self._section_open.__setitem__("Tasks", is_open),
+        )
         for row in rows:
             section.add_row(row)
         if not rows:
@@ -392,7 +405,11 @@ class OverlayWindow(QWidget):
                             )
                         rows.append(row)
 
-        section = _AccordionSection("Guide", len(rows), open_by_default=False)
+        section = _AccordionSection(
+            "Guide", len(rows),
+            open_by_default=self._section_open["Guide"],
+            on_toggle=lambda is_open: self._section_open.__setitem__("Guide", is_open),
+        )
         for row in rows:
             section.add_row(row)
         if not rows:

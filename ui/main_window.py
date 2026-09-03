@@ -1482,15 +1482,74 @@ class MainWindow(QMainWindow):
             self._start_dps_meter(self.dps_meter_path)
 
     def _start_dps_meter(self, path: str):
-        import os
+        """Launches the user's configured external DPS Meter tool. Uses
+        ShellExecuteEx directly (not the simpler os.startfile) with
+        SEE_MASK_FLAG_NO_UI (User-reported, 2026-08-30: declining the UAC
+        elevation prompt for a DPS Meter that requires admin rights also
+        popped up a SECOND "elevation failed" error dialog, carrying OUR
+        app's own taskbar icon since we're the process that requested the
+        launch). SEE_MASK_FLAG_NO_UI only suppresses the SHELL's own
+        follow-up error UI (missing file, access denied, elevation
+        cancelled, ...) -- it does NOT and cannot suppress the actual UAC
+        consent prompt itself (that's a Windows security boundary no
+        application can bypass, by design, and shouldn't want to). The
+        user still sees the normal "Do you want to allow..." prompt every
+        time; declining it just no longer also throws up a confusing
+        second popup -- a failure is instead reported back to us as a
+        plain error code, which we log instead of displaying."""
+        import ctypes
+        from ctypes import wintypes
+
         if not path:
             return
         if not os.path.isfile(path):
             logger.warning("DPS Meter file not found: %s", path)
             return
+
+        class _SHELLEXECUTEINFO(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("fMask", ctypes.c_ulong),
+                ("hwnd", wintypes.HWND),
+                ("lpVerb", wintypes.LPCWSTR),
+                ("lpFile", wintypes.LPCWSTR),
+                ("lpParameters", wintypes.LPCWSTR),
+                ("lpDirectory", wintypes.LPCWSTR),
+                ("nShow", ctypes.c_int),
+                ("hInstApp", wintypes.HINSTANCE),
+                ("lpIDList", ctypes.c_void_p),
+                ("lpClass", wintypes.LPCWSTR),
+                ("hKeyClass", wintypes.HKEY),
+                ("dwHotKey", wintypes.DWORD),
+                ("hIcon", wintypes.HANDLE),
+                ("hProcess", wintypes.HANDLE),
+            ]
+
+        SEE_MASK_NOCLOSEPROCESS = 0x00000040
+        SEE_MASK_FLAG_NO_UI = 0x00000400
+        SW_SHOWNORMAL = 1
+
+        sei = _SHELLEXECUTEINFO()
+        sei.cbSize = ctypes.sizeof(sei)
+        sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI
+        sei.hwnd = None
+        sei.lpVerb = "open"
+        sei.lpFile = path
+        sei.lpParameters = None
+        sei.lpDirectory = os.path.dirname(path) or None
+        sei.nShow = SW_SHOWNORMAL
+        sei.hInstApp = None
+
         try:
-            os.startfile(path)
-            logger.info("DPS Meter started: %s", path)
+            ok = ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei))
+            if not ok:
+                error = ctypes.get_last_error()
+                logger.warning(
+                    "DPS Meter did not start (error=%s, e.g. UAC elevation was declined) -- "
+                    "no popup shown, see SEE_MASK_FLAG_NO_UI note above", error,
+                )
+            else:
+                logger.info("DPS Meter started: %s", path)
         except Exception as e:
             logger.error("DPS Meter failed to start: %s", e)
 
@@ -2267,7 +2326,8 @@ class MainWindow(QMainWindow):
                              parent=self,
                              language=self.language,
                              tr_func=tr,
-                             item_picker_callback=self.open_template_item_picker)
+                             item_picker_callback=self.open_template_item_picker,
+                             characters=self.characters)
         if dlg.exec():
             old_shopping = {t.get("id"): t for t in self.item_templates}
             old_tasks = {t.get("id"): t for t in self.task_templates}
@@ -2306,6 +2366,7 @@ class MainWindow(QMainWindow):
                     price=tmpl.get("price", "0"),
                     schedule=tmpl.get("schedule", "daily"),
                     currency=tmpl.get("currency", "kinah"),
+                    character=tmpl.get("character", ""),
                     template_id=tid,
                 )
                 self._wire_card(card)
@@ -2344,6 +2405,7 @@ class MainWindow(QMainWindow):
                     schedule=tmpl.get("schedule", "daily"),
                     template_id=tid,
                     location=tmpl.get("location", ""),
+                    character=tmpl.get("character", ""),
                 )
                 self._wire_card(card)
                 self.task_lists.setdefault("tasks", []).append(card)

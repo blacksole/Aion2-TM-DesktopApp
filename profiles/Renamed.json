@@ -39,8 +39,8 @@
                 "start_time": "16:00"
             }
         ],
-        "last_daily_reset_date": "2026-08-29",
-        "last_weekly_reset_date": "2026-08-24"
+        "last_daily_reset_date": "2026-09-02",
+        "last_weekly_reset_date": "2026-08-31"
     },
     "tasks": {
         "tasks": [
@@ -66,7 +66,7 @@
                 "character": "",
                 "template_id": "",
                 "location": "",
-                "completed": true
+                "completed": false
             },
             {
                 "type": "task",
@@ -78,7 +78,7 @@
                 "character": "Main Character",
                 "template_id": "",
                 "location": "",
-                "completed": true
+                "completed": false
             },
             {
                 "type": "task",
@@ -731,7 +731,7 @@
     "build_planner": {
         "character_class": "Chanter",
         "character_race": "Asmodae",
-        "current_build_name": "Chanter PvP",
+        "current_build_name": "Chanter Global",
         "active_gear_types": [
             "Neutral",
             "PvE",
@@ -1188,7 +1188,7 @@
         "monolith_level": 30,
         "skill_levels": {
             "18100000": 10,
-            "18700000": 0,
+            "18700000": 20,
             "18190000": 20,
             "18200000": 10,
             "18090000": 10,
@@ -1200,9 +1200,59 @@
             "18330000": 20,
             "18130000": 20,
             "18170000": 20,
-            "18140000": 20
+            "18140000": 20,
+            "18750000": 10,
+            "18780000": 9,
+            "18710000": 10,
+            "18720000": 5,
+            "18760000": 9,
+            "18740000": 10,
+            "18730000": 6,
+            "18770000": 10,
+            "18790000": 4,
+            "18800000": 10,
+            "18250000": 20,
+            "18420000": 9,
+            "18160000": 20,
+            "18230000": 20,
+            "17060000": 10,
+            "17350000": 10,
+            "17780000": 10,
+            "17800000": 6,
+            "17120000": 10,
+            "14330000": 9,
+            "14170000": 4,
+            "14340000": 6,
+            "14720000": 10,
+            "14770000": 5,
+            "14800000": 6,
+            "14740000": 10,
+            "14060000": 20,
+            "14380000": 15,
+            "12300000": 10,
+            "12200000": 20,
+            "12450000": 20
         },
-        "skill_arcana_wish": {},
+        "skill_arcana_wish": {
+            "18740000": 1
+        },
+        "skill_active_specs": {
+            "18100000": [
+                "18100020",
+                "18100040",
+                "18100050"
+            ],
+            "18040000": [
+                "18040010",
+                "18040030",
+                "18040040"
+            ],
+            "18010000": [
+                "18010030",
+                "18010040",
+                "18010050"
+            ]
+        },
         "current_skill_build_name": "Testbuild Chanter",
         "skill_builds_data": {
             "gladiator": {
@@ -1222,131 +1272,6 @@
                 }
             },
             "chanter": {
-                "Test": {
-                    "priority": {
-                        "active": [
-                            null
-                        ],
-                        "passive": [
-                            null
-                        ],
-                        "stigma": [
-                            null
-                        ]
-                    },
-                    "arcana_cards": {
-                        "Bell": {
-                            "theme": "Magic",
-                            "grade": "Unique",
-                            "slots": [
-                                {
-                                    "skill_id": "18710000",
-                                    "level": 3
-                                },
-                                {
-                                    "skill_id": "18730000",
-                                    "level": 1
-                                },
-                                {
-                                    "skill_id": "18750000",
-                                    "level": 4
-                                },
-                                {
-                                    "skill_id": "18770000",
-                                    "level": 1
-                                }
-                            ]
-                        },
-                        "Chalice": {
-                            "theme": "Vigor",
-                            "grade": "Unique",
-                            "slots": [
-                                {
-                                    "skill_id": "18040000",
-                                    "level": 2
-                                },
-                                {
-                                    "skill_id": "18090000",
-                                    "level": 1
-                                },
-                                {
-                                    "skill_id": "18100000",
-                                    "level": 2
-                                },
-                                {
-                                    "skill_id": "18200000",
-                                    "level": 4
-                                }
-                            ]
-                        },
-                        "Compass": {
-                            "theme": "Vigor",
-                            "grade": "Unique",
-                            "slots": [
-                                {
-                                    "skill_id": "18040000",
-                                    "level": 4
-                                },
-                                {
-                                    "skill_id": "18060000",
-                                    "level": 1
-                                },
-                                {
-                                    "skill_id": "18120000",
-                                    "level": 1
-                                },
-                                {
-                                    "skill_id": "18200000",
-                                    "level": 3
-                                }
-                            ]
-                        },
-                        "Mirror": {
-                            "theme": "Vigor",
-                            "grade": "Unique",
-                            "slots": [
-                                {
-                                    "skill_id": "18740000",
-                                    "level": 1
-                                },
-                                {
-                                    "skill_id": "18760000",
-                                    "level": 3
-                                },
-                                {
-                                    "skill_id": "18780000",
-                                    "level": 1
-                                },
-                                {
-                                    "skill_id": "18800000",
-                                    "level": 4
-                                }
-                            ]
-                        },
-                        "Parchment": {
-                            "theme": "Vigor",
-                            "grade": "Unique",
-                            "slots": [
-                                {
-                                    "skill_id": "18010000",
-                                    "level": 1
-                                },
-                                {
-                                    "skill_id": "18090000",
-                                    "level": 3
-                                },
-                                {
-                                    "skill_id": "18100000",
-                                    "level": 2
-                                },
-                                {
-                                    "skill_id": "18150000",
-                                    "level": 3
-                                }
-                            ]
-                        }
-                    }
-                },
                 "Testbuild Chanter": {
                     "priority": {
                         "active": [
@@ -1422,6 +1347,179 @@
                             }
                         }
                     }
+                },
+                "Test Cleric": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {
+                        "Bell": {
+                            "theme": "Magic",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18710000",
+                                    "level": 4
+                                },
+                                {
+                                    "skill_id": "18730000",
+                                    "level": 3
+                                },
+                                {
+                                    "skill_id": "18750000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18770000",
+                                    "level": 1
+                                }
+                            ]
+                        },
+                        "Chalice": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18010000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18040000",
+                                    "level": 3
+                                },
+                                {
+                                    "skill_id": "18100000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18290000",
+                                    "level": 2
+                                }
+                            ]
+                        },
+                        "Compass": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18040000",
+                                    "level": 4
+                                },
+                                {
+                                    "skill_id": "18060000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18120000",
+                                    "level": 3
+                                },
+                                {
+                                    "skill_id": "18200000",
+                                    "level": 1
+                                }
+                            ]
+                        },
+                        "Mirror": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18720000",
+                                    "level": 4
+                                },
+                                {
+                                    "skill_id": "18740000",
+                                    "level": 3
+                                },
+                                {
+                                    "skill_id": "18760000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18780000",
+                                    "level": 1
+                                }
+                            ]
+                        },
+                        "Parchment": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18010000",
+                                    "level": 4
+                                },
+                                {
+                                    "skill_id": "18080000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18100000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18290000",
+                                    "level": 2
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "cleric": {
+                "Default": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
+                }
+            },
+            "ranger": {
+                "Default": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
+                }
+            },
+            "templar": {
+                "Default": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
                 }
             }
         },
@@ -1657,7 +1755,9 @@
                     "philosopher_stone": {
                         "MainHand": false,
                         "SubHand": false
-                    }
+                    },
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
                 },
                 "T1 PvP": {
                     "equipped": {
@@ -1875,26 +1975,26 @@
                             7
                         ],
                         "Boots": [
-                            3,
-                            13,
                             11,
-                            21
+                            21,
+                            3,
+                            13
                         ],
                         "Necklace": [
                             1,
-                            13,
+                            5,
                             3,
-                            5
+                            13
                         ],
                         "SubHand": [
                             0,
-                            7,
+                            15,
                             14,
-                            15
+                            7
                         ],
                         "Torso": [
-                            19,
                             3,
+                            19,
                             20,
                             12
                         ],
@@ -1906,13 +2006,13 @@
                         ],
                         "Earring1": [
                             1,
-                            13,
+                            5,
                             3,
-                            5
+                            13
                         ],
                         "Gloves": [
-                            3,
                             11,
+                            3,
                             13,
                             22
                         ],
@@ -1924,15 +2024,15 @@
                         ],
                         "Earring2": [
                             1,
-                            13,
+                            5,
                             3,
-                            5
+                            13
                         ],
                         "Pants": [
-                            21,
-                            3,
                             12,
-                            20
+                            3,
+                            20,
+                            21
                         ]
                     },
                     "enchant": {
@@ -1954,7 +2054,9 @@
                     },
                     "philosopher_stone": {
                         "SubHand": false
-                    }
+                    },
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
                 },
                 "T2 PvP": {
                     "equipped": {
@@ -2163,7 +2265,9 @@
                         "Ring1": 20,
                         "Ring2": 20
                     },
-                    "philosopher_stone": {}
+                    "philosopher_stone": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
                 },
                 "T1 new pvP": {
                     "equipped": {
@@ -2372,7 +2476,9 @@
                         "Ring1": 20,
                         "Ring2": 20
                     },
-                    "philosopher_stone": {}
+                    "philosopher_stone": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
                 },
                 "T1 pvE": {
                     "equipped": {
@@ -2581,7 +2687,9 @@
                         "Ring1": 20,
                         "Ring2": 20
                     },
-                    "philosopher_stone": {}
+                    "philosopher_stone": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
                 }
             },
             "chanter": {
@@ -2589,7 +2697,9 @@
                     "equipped": {},
                     "substats": {},
                     "enchant": {},
-                    "philosopher_stone": {}
+                    "philosopher_stone": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
                 },
                 "Chanter Global": {
                     "equipped": {
@@ -2811,12 +2921,12 @@
                     },
                     "substats": {
                         "Ring1": [
-                            13,
                             17,
                             18,
                             19,
                             20,
-                            22
+                            22,
+                            13
                         ],
                         "Bracelet1": [
                             1,
@@ -2834,12 +2944,12 @@
                             7
                         ],
                         "Ring2": [
-                            13,
                             17,
                             18,
                             19,
                             20,
-                            22
+                            22,
+                            13
                         ],
                         "MainHand": [
                             0,
@@ -2852,27 +2962,27 @@
                         ],
                         "Pants": [
                             3,
-                            12,
                             19,
                             20,
                             21,
-                            23
+                            23,
+                            12
                         ],
                         "Gloves": [
                             3,
                             5,
+                            22,
                             7,
                             11,
-                            13,
-                            22
+                            13
                         ],
                         "Necklace": [
                             1,
+                            17,
                             3,
                             5,
-                            13,
-                            17,
-                            22
+                            22,
+                            13
                         ],
                         "SubHand": [
                             0,
@@ -2884,53 +2994,53 @@
                         ],
                         "Shoulder": [
                             3,
-                            5,
-                            7,
-                            12,
                             20,
+                            5,
                             22,
-                            23
+                            7,
+                            23,
+                            12
                         ],
                         "Torso": [
                             3,
-                            5,
-                            7,
-                            12,
                             19,
-                            20
+                            5,
+                            20,
+                            7,
+                            12
                         ],
                         "Boots": [
                             3,
                             5,
+                            21,
                             7,
                             11,
-                            13,
-                            21
+                            13
                         ],
                         "Earring1": [
                             1,
+                            17,
                             3,
                             5,
-                            13,
-                            17,
-                            22
+                            22,
+                            13
                         ],
                         "Helmet": [
                             32,
-                            3,
-                            12,
                             17,
+                            3,
                             20,
                             22,
-                            23
+                            23,
+                            12
                         ],
                         "Earring2": [
                             1,
+                            17,
                             3,
                             5,
-                            13,
-                            17,
-                            22
+                            22,
+                            13
                         ]
                     },
                     "enchant": {
@@ -2947,8 +3057,8 @@
                         "Necklace": 25,
                         "Ring1": 25,
                         "Ring2": 25,
-                        "Bracelet1": 0,
-                        "Bracelet2": 0
+                        "Bracelet1": 25,
+                        "Bracelet2": 25
                     },
                     "philosopher_stone": {
                         "Helmet": true,
@@ -2957,8 +3067,11 @@
                         "SubHand": false,
                         "Ring1": false,
                         "Bracelet1": true,
-                        "Bracelet2": true
-                    }
+                        "Bracelet2": true,
+                        "Earring2": false
+                    },
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
                 },
                 "Chanter PvP": {
                     "equipped": {
@@ -3195,74 +3308,74 @@
                             7
                         ],
                         "Ring1": [
+                            13,
                             18,
                             19,
                             20,
-                            22,
-                            13
+                            22
                         ],
                         "Necklace": [
                             1,
                             3,
                             5,
-                            22,
-                            13
+                            13,
+                            22
                         ],
                         "Ring2": [
+                            13,
                             18,
                             19,
                             20,
-                            22,
-                            13
+                            22
                         ],
                         "Pants": [
                             3,
+                            12,
                             19,
                             20,
-                            21,
-                            12
+                            21
                         ],
                         "Boots": [
                             3,
                             5,
-                            21,
                             11,
-                            13
+                            13,
+                            21
                         ],
                         "Shoulder": [
                             3,
-                            20,
                             5,
-                            22,
-                            12
+                            12,
+                            20,
+                            22
                         ],
                         "Earring2": [
                             1,
                             3,
                             5,
-                            22,
-                            13
+                            13,
+                            22
                         ],
                         "Gloves": [
                             3,
                             5,
-                            22,
                             11,
-                            13
+                            13,
+                            22
                         ],
                         "Earring1": [
                             1,
                             3,
                             5,
-                            22,
-                            13
+                            13,
+                            22
                         ],
                         "Torso": [
                             3,
-                            19,
                             5,
-                            20,
-                            12
+                            12,
+                            19,
+                            20
                         ],
                         "SubHand": [
                             0,
@@ -3272,11 +3385,11 @@
                             15
                         ],
                         "Helmet": [
-                            17,
                             3,
+                            12,
+                            17,
                             20,
-                            22,
-                            12
+                            22
                         ],
                         "MainHand": [
                             0,
@@ -3312,8 +3425,330 @@
                         "Shoulder": false,
                         "Necklace": false,
                         "SubHand": false,
-                        "Earring2": false
-                    }
+                        "Earring2": false,
+                        "Gloves": false
+                    },
+                    "linked_skill_build": "Testbuild Chanter",
+                    "linked_genius_build": null
+                }
+            },
+            "cleric": {
+                "Default": {
+                    "equipped": {
+                        "MainHand": {
+                            "id": 110720007,
+                            "name": "Splendent Horned Dragon Lord Mace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WP_MA_0110_T05.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 403 ~ 518",
+                                "PvE Damage Boost 5%",
+                                "Block 50",
+                                "Critical Hit 50",
+                                "Accuracy 100"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Mace",
+                            "classNames": [
+                                "Cleric"
+                            ]
+                        },
+                        "SubHand": {
+                            "id": 115020007,
+                            "name": "Splendent Horned Dragon Lord Guard",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Weapon_Guarder_U_011.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvE Damage Boost 5%",
+                                "Attack 144",
+                                "Critical Hit 50",
+                                "Accuracy 50"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Guard"
+                        },
+                        "Helmet": {
+                            "id": 210320007,
+                            "name": "Splendent Horned Dragon Lord Helm",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Helmet.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 201",
+                                "Defense 352",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Helm"
+                        },
+                        "Shoulder": {
+                            "id": 210420007,
+                            "name": "Splendent Horned Dragon Lord Pauldrons",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Shoulder.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 201",
+                                "Defense 352",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Pauldrons"
+                        },
+                        "Torso": {
+                            "id": 210120007,
+                            "name": "Splendent Horned Dragon Lord Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Torso.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 322",
+                                "Defense 564",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Top"
+                        },
+                        "Gloves": {
+                            "id": 210520007,
+                            "name": "Splendent Horned Dragon Lord Gloves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Gloves.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 282",
+                                "HP 161",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Gloves"
+                        },
+                        "Pants": {
+                            "id": 210220007,
+                            "name": "Splendent Horned Dragon Lord Greaves",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Pants.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 423",
+                                "HP 242",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Legs"
+                        },
+                        "Boots": {
+                            "id": 210620007,
+                            "name": "Splendent Horned Dragon Lord Boots",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Boots.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Defense 282",
+                                "HP 161",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Shoes"
+                        },
+                        "Earring1": {
+                            "id": 310220007,
+                            "name": "Splendent Horned Dragon Lord Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 86",
+                                "Defense 302",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Earrings"
+                        },
+                        "Earring2": {
+                            "id": 310220007,
+                            "name": "Splendent Horned Dragon Lord Earrings",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_ER_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 86",
+                                "Defense 302",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Earrings"
+                        },
+                        "Necklace": {
+                            "id": 310120007,
+                            "name": "Splendent Horned Dragon Lord Necklace",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_NL_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "Attack 115",
+                                "Defense 403",
+                                "PvE Damage Boost 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Necklace"
+                        },
+                        "Ring1": {
+                            "id": 310320007,
+                            "name": "Splendent Horned Dragon Lord Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvE Damage Boost 2.5%",
+                                "Attack 58",
+                                "Defense 201"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Ring"
+                        },
+                        "Ring2": {
+                            "id": 310320007,
+                            "name": "Splendent Horned Dragon Lord Ring",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_ACC_Ring_0025.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvE Damage Boost 2.5%",
+                                "Attack 58",
+                                "Defense 201"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Ring"
+                        }
+                    },
+                    "substats": {
+                        "MainHand": [
+                            0,
+                            1,
+                            2,
+                            7,
+                            14,
+                            15
+                        ],
+                        "Pants": [
+                            3,
+                            12,
+                            19,
+                            20,
+                            21
+                        ],
+                        "Ring1": [
+                            1
+                        ],
+                        "Gloves": [
+                            3,
+                            5,
+                            7,
+                            11,
+                            13,
+                            22
+                        ],
+                        "Earring2": [
+                            1,
+                            3,
+                            5
+                        ],
+                        "Necklace": [
+                            1,
+                            3,
+                            5
+                        ],
+                        "Boots": [
+                            3,
+                            5,
+                            7,
+                            11,
+                            13,
+                            21
+                        ],
+                        "Earring1": [
+                            1,
+                            3,
+                            5
+                        ],
+                        "Ring2": [
+                            1
+                        ],
+                        "Torso": [
+                            3,
+                            5,
+                            7,
+                            12,
+                            19,
+                            20
+                        ],
+                        "SubHand": [
+                            0,
+                            1,
+                            2,
+                            7,
+                            14,
+                            15
+                        ],
+                        "Shoulder": [
+                            3,
+                            5,
+                            7,
+                            12,
+                            20,
+                            22
+                        ],
+                        "Helmet": [
+                            3,
+                            12,
+                            17,
+                            20,
+                            22
+                        ]
+                    },
+                    "enchant": {
+                        "MainHand": 25,
+                        "SubHand": 25,
+                        "Helmet": 25,
+                        "Shoulder": 25,
+                        "Torso": 25,
+                        "Gloves": 25,
+                        "Pants": 25,
+                        "Boots": 25,
+                        "Earring1": 25,
+                        "Earring2": 25,
+                        "Necklace": 25,
+                        "Ring1": 25,
+                        "Ring2": 25
+                    },
+                    "philosopher_stone": {
+                        "MainHand": false
+                    },
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
+                }
+            },
+            "ranger": {
+                "Default": {
+                    "equipped": {},
+                    "substats": {},
+                    "enchant": {},
+                    "philosopher_stone": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
+                }
+            },
+            "templar": {
+                "Default": {
+                    "equipped": {},
+                    "substats": {},
+                    "enchant": {},
+                    "philosopher_stone": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
                 }
             }
         },
@@ -3692,7 +4127,493 @@
             ],
             "s:86": [
                 "860113"
+            ],
+            "s:71": [
+                "710113"
+            ],
+            "s:31": [
+                "310113"
+            ],
+            "s:21": [
+                "210113"
             ]
-        }
+        },
+        "genius_builds_data": {
+            "Test": {
+                "Cogni": {
+                    "1": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "2": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                },
+                "Fera": {
+                    "1": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                },
+                "Natura": {
+                    "1": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                },
+                "Varian": {
+                    "1": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                },
+                "Special": {
+                    "1": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                }
+            },
+            "PvE Max Attack": {
+                "Cogni": {
+                    "1": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "2": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "3": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "4": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "5": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "7": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "8": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "9": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    }
+                },
+                "Fera": {
+                    "1": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "2": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "3": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "4": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "5": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "7": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "8": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "9": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    }
+                },
+                "Natura": {
+                    "1": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "2": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "3": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "4": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "5": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "7": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "8": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "9": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    }
+                },
+                "Varian": {
+                    "1": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "2": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "3": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "4": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "5": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "7": {
+                        "stat": "BossAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "8": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "9": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    }
+                },
+                "Special": {
+                    "1": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "2": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "3": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "4": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "5": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": true
+                    },
+                    "7": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "8": {
+                        "stat": "MaxAttack",
+                        "value": 20.0,
+                        "locked": true
+                    },
+                    "9": {
+                        "stat": "Smite",
+                        "value": 2.4,
+                        "locked": true
+                    }
+                }
+            }
+        },
+        "current_genius_build_name": "PvE Max Attack"
     }
 }

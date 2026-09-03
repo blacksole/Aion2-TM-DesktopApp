@@ -38,6 +38,33 @@ These features are **not** part of an official update yet and are still under ac
 
 ---
 
+# Version 1.9.0
+
+Release Date: 2026-09-03
+
+## ✨ New Features
+
+- **Templates: CSV Import/Export for Shopping and Task templates.** Export any list to a spreadsheet file, or import one back in — the required/optional columns and valid values are shown before you pick a file. Importing again offers a choice between adding to your list or replacing only what an earlier import added (your own manually-created entries are never touched), automatically skips duplicate titles, and can optionally insert the imported entries directly into your active list right away — for Shopping, optionally assigned to one specific character.
+- **Crafting Calculator: the "Choose Item" picker now shows a Gear Level column**, so same-rarity items (e.g. several "Dragon Lord" pieces) can be told apart by strength at a glance.
+
+## 🎨 UI Changes
+
+- **Build Planner (Beta): Equip Sets, Skill/Arcana Builds, and Genius Insight profiles now use a dropdown** instead of a row of buttons, with a new delete button for removing one (disabled once only one remains).
+- **Build Planner (Beta): removed the manual "Save" buttons** on Equip Sets and Skill/Arcana Builds — your current state already saves automatically every time you switch, so these were redundant.
+- **Item Database: "Ancient Spirit Gear" items are hidden** — not actually available yet on the current server data.
+- **Item Database: the catalog now loads progressively** instead of the whole ~7000-item list blocking the window on open; a counter shows load progress, and the Category/Shop/Wing filters stay disabled until it's done.
+- **About page: fixed the Support section's text visually overlapping on shorter windows** — the page scrolls when its content doesn't fit instead of squeezing everything together.
+
+## 🐛 Bug Fixes
+
+- **Skill Planner (Beta): corrected several skills' per-level damage numbers across multiple classes** that were showing incorrect or placeholder-like values instead of their real scaling.
+- **Build Planner (Beta): several PvP/PvE stat names on Daevanion Board node tooltips didn't match the names used everywhere else in the app** — now consistent (e.g. "PvP Amplify Damage" → "PvP Damage Boost").
+- **Genius Insight (Beta): profile name fields (new/duplicate/rename) now enforce a maximum length** instead of accepting unlimited text.
+- **Item Database: removed a tiny, non-functional horizontal scrollbar** in the main table that couldn't actually scroll anything.
+- **Crafting Calculator: the new Gear Level column could get stuck showing "…" forever** for items whose data was already cached, instead of the real value.
+
+---
+
 # Version 1.8.0
 
 Release Date: 2026-08-31

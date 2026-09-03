@@ -118,6 +118,16 @@ QComboBox QAbstractItemView {
     padding: 4px;
 }
 
+/* Popup list item padding only -- the hover HIGHLIGHT itself is painted in
+   Python (_ComboHoverDelegate in app.py), not here: a "::item:hover" QSS
+   rule was tried first (User-reported, 2026-09-02) but never took visible
+   effect, the same class of "app-wide stylesheet overrides native per-item
+   painting" issue _RoleColorDelegate's own docstring already documents for
+   per-item text color. */
+QComboBox QAbstractItemView::item {
+    padding: 4px 8px;
+}
+
 
 #ResultLabel {
     color: #94a3b8;
@@ -864,4 +874,220 @@ QListWidget::item:selected {
 
 #DaevanionAccordionBody {
     background: transparent;
+}
+
+/* ── "Genius Insight" tab ─────────────────────────────────────────────── */
+
+#GeniusSectionTitle {
+    color: white;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#GeniusHint {
+    color: #8b96ac;
+    font-size: 11px;
+}
+
+#GeniusOwnedTotalNote {
+    color: #22d3ee;
+    font-size: 11px;
+}
+
+#GeniusSegBtn {
+    background-color: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 6px;
+    color: #8b96ac;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 0;
+}
+
+#GeniusSegBtn:hover {
+    color: #e7ebf3;
+}
+
+#GeniusSegBtn:checked {
+    background-color: rgba(148, 163, 184, 0.16);
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    color: #e7ebf3;
+}
+
+#GeniusOwnedGroupTitle {
+    color: #57637c;
+    font-size: 10px;
+    font-weight: 700;
+    padding-top: 4px;
+}
+
+#GeniusOwnedTile {
+    background-color: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(100, 116, 139, 0.25);
+    border-radius: 6px;
+}
+
+#GeniusOwnedName {
+    color: #f2a33e;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+#GeniusOwnedValue {
+    color: #e7ebf3;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#GeniusPetTitle {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#GeniusBoardTabBtn {
+    background-color: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 6px;
+    color: #8b96ac;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+}
+
+#GeniusBoardTabBtn:hover {
+    color: #e7ebf3;
+}
+
+#GeniusBoardTabBtn:checked {
+    background-color: rgba(34, 211, 238, 0.12);
+    border: 1px solid rgba(34, 211, 238, 0.55);
+    color: #22d3ee;
+}
+
+#GeniusBoardTitle {
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+#GeniusLvlBadge {
+    color: #22d3ee;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#GeniusLineIndex {
+    color: #57637c;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+#GeniusLockToggle {
+    background: transparent;
+    border: none;
+    font-size: 12px;
+    padding: 0;
+}
+
+#GeniusLineName {
+    color: #f2a33e;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#GeniusLineCombo {
+    background-color: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 6px;
+}
+
+#GeniusLineComboText {
+    color: #f2a33e;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#GeniusLineComboRange {
+    color: #f2a33e;
+    font-size: 11px;
+}
+
+#GeniusLineCombo:hover {
+    border: 1px solid rgba(148, 163, 184, 0.55);
+}
+
+#GeniusLineCombo:disabled {
+    border: 1px dashed rgba(100, 116, 139, 0.25);
+}
+
+#GeniusLineComboText:disabled {
+    color: #57637c;
+}
+
+#GeniusLineComboRange:disabled {
+    color: #3d465a;
+}
+
+#GeniusStatPopup {
+    background-color: #17233a;
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    border-radius: 8px;
+}
+
+#GeniusStatPopupSearch {
+    background-color: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 6px;
+    color: #e7ebf3;
+    font-size: 12px;
+    padding: 5px 8px;
+}
+
+#GeniusStatPopupList {
+    background-color: transparent;
+    border: none;
+    color: #e7ebf3;
+    font-size: 12px;
+    outline: none;
+}
+
+#GeniusStatPopupList::item {
+    padding: 0;
+    border-radius: 5px;
+}
+
+#GeniusStatPopupList::item:hover {
+    background-color: rgba(34, 211, 238, 0.1);
+}
+
+#GeniusStatPopupList::item:selected {
+    background-color: rgba(34, 211, 238, 0.18);
+}
+
+#GeniusStatPopupItemName {
+    color: #f2a33e;
+    font-size: 12px;
+    font-weight: 600;
+    background: transparent;
+}
+
+#GeniusStatPopupItemRange {
+    color: #8b96ac;
+    font-size: 11px;
+    background: transparent;
+}
+
+#GeniusLineValue {
+    background-color: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 6px;
+    color: #e7ebf3;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 6px;
+}
+
+#GeniusLineValue:disabled {
+    color: #57637c;
+    border: 1px dashed rgba(100, 116, 139, 0.25);
 }

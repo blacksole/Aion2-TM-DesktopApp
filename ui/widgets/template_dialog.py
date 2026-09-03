@@ -1,3 +1,5 @@
+import csv
+from pathlib import Path
 from uuid import uuid4
 
 from PySide6.QtCore import Qt
@@ -8,10 +10,13 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QCompleter,
     QDialog,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -24,6 +29,14 @@ _SCHEDULE_TEXTS = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
 _PRIO_NAMES = {"low": "priorityLow", "middle": "priorityMiddle", "high": "priorityHigh"}
 _PRIO_TEXTS = {"low": "LOW", "middle": "MID", "high": "HIGH"}
 _SORT_LABELS = {"name": "Name", "priority": "Prio", "schedule": "Schedule", "location": "Location"}
+
+_VALID_SCHEDULES = {"daily", "weekly", "season"}
+_VALID_PRIORITIES = {"low", "middle", "high"}
+_VALID_CURRENCIES = {"kinah", "abyss", "nightmare", "shugo"}
+# Column order for both export and the import prerequisite hint -- kept as
+# one shared list per mode so both stay in sync automatically.
+_SHOP_CSV_COLUMNS = ["title", "location", "schedule", "priority", "price", "currency"]
+_TASK_CSV_COLUMNS = ["title", "location", "schedule", "priority"]
 
 
 def _h_separator() -> QFrame:
@@ -38,8 +51,13 @@ class TemplateDialog(QDialog):
 
     def __init__(self, templates: list, flow_maps: dict, task_templates: list = None,
                  initial_tab: str = "shopping", parent=None,
-                 language: str = "en", tr_func=None, item_picker_callback=None):
+                 language: str = "en", tr_func=None, item_picker_callback=None,
+                 characters: list = None):
         super().__init__(parent)
+        # For the post-CSV-import "which character does this apply to"
+        # question -- same names MainWindow's own Shopping "Add" form
+        # already offers via its Character dropdown.
+        self._characters = list(characters or [])
         self._language = language
         self._tr = tr_func or (lambda _l, k, **kw: k)
         # Opens the REAL Item Database catalog picker (icons, shop-type
@@ -100,11 +118,21 @@ class TemplateDialog(QDialog):
         header = QHBoxLayout()
         info = QLabel(self._t("shop_tab_info"))
         info.setObjectName("subtitle")
+        import_btn = QPushButton(self._t("template_import_btn"))
+        import_btn.setObjectName("secondaryButton")
+        import_btn.setCursor(Qt.PointingHandCursor)
+        import_btn.clicked.connect(lambda: self._import_csv(is_shop=True))
+        export_btn = QPushButton(self._t("template_export_btn"))
+        export_btn.setObjectName("secondaryButton")
+        export_btn.setCursor(Qt.PointingHandCursor)
+        export_btn.clicked.connect(lambda: self._export_csv(is_shop=True))
         self._shop_add_btn = QPushButton(self._t("template_add_btn"))
         self._shop_add_btn.setObjectName("primaryButton")
         self._shop_add_btn.clicked.connect(self._handle_shop_add_btn)
         header.addWidget(info)
         header.addStretch()
+        header.addWidget(import_btn)
+        header.addWidget(export_btn)
         header.addWidget(self._shop_add_btn)
         vl.addLayout(header)
 
@@ -158,11 +186,21 @@ class TemplateDialog(QDialog):
         header = QHBoxLayout()
         info = QLabel(self._t("task_tab_info"))
         info.setObjectName("subtitle")
+        import_btn = QPushButton(self._t("template_import_btn"))
+        import_btn.setObjectName("secondaryButton")
+        import_btn.setCursor(Qt.PointingHandCursor)
+        import_btn.clicked.connect(lambda: self._import_csv(is_shop=False))
+        export_btn = QPushButton(self._t("template_export_btn"))
+        export_btn.setObjectName("secondaryButton")
+        export_btn.setCursor(Qt.PointingHandCursor)
+        export_btn.clicked.connect(lambda: self._export_csv(is_shop=False))
         self._task_add_btn = QPushButton(self._t("task_add_btn"))
         self._task_add_btn.setObjectName("primaryButton")
         self._task_add_btn.clicked.connect(self._handle_task_add_btn)
         header.addWidget(info)
         header.addStretch()
+        header.addWidget(import_btn)
+        header.addWidget(export_btn)
         header.addWidget(self._task_add_btn)
         vl.addLayout(header)
 
@@ -498,6 +536,8 @@ class TemplateDialog(QDialog):
                 data["id"] = self.templates[index].get("id", str(uuid4()))
                 data["is_general"] = self.templates[index].get("is_general", False)
                 data["amount"] = self.templates[index].get("amount", "1")
+                data["character"] = self.templates[index].get("character", "")
+                data["_from_import"] = self.templates[index].get("_from_import", False)
                 self.templates[index] = data
                 self._selected_shop_index = None
                 self._update_shop_add_btn()
@@ -607,6 +647,8 @@ class TemplateDialog(QDialog):
                 data = dlg.get_data()
                 data["id"] = self.task_templates[index].get("id", str(uuid4()))
                 data["is_general"] = self.task_templates[index].get("is_general", False)
+                data["character"] = self.task_templates[index].get("character", "")
+                data["_from_import"] = self.task_templates[index].get("_from_import", False)
                 self.task_templates[index] = data
                 self._selected_task_index = None
                 self._update_task_add_btn()
@@ -621,6 +663,170 @@ class TemplateDialog(QDialog):
             elif self._selected_task_index is not None and self._selected_task_index > index:
                 self._selected_task_index -= 1
             self._rebuild_task_list()
+
+    # ── CSV import/export ────────────────────────────────────────────────────
+    # User-Wunsch, 2026-09-02: bulk-editing many Shopping/Task templates one
+    # row at a time via _TemplateEditDialog doesn't scale -- CSV round-trips
+    # through any spreadsheet tool instead. Shopping and Task templates
+    # share the same core columns (title/location/schedule/priority);
+    # Shopping additionally has price/currency, so both directions are
+    # written as ONE generic pair of methods parameterized by is_shop
+    # rather than duplicated per tab.
+
+    def _export_csv(self, is_shop: bool):
+        templates = self.templates if is_shop else self.task_templates
+        columns = _SHOP_CSV_COLUMNS if is_shop else _TASK_CSV_COLUMNS
+        default_name = "shopping_templates.csv" if is_shop else "task_templates.csv"
+        dest, _ = QFileDialog.getSaveFileName(
+            self, self._t("template_export_btn"), str(Path.home() / default_name), "CSV (*.csv)",
+        )
+        if not dest:
+            return
+        try:
+            with open(dest, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.DictWriter(f, fieldnames=columns)
+                writer.writeheader()
+                for tmpl in templates:
+                    writer.writerow({col: tmpl.get(col, "") for col in columns})
+        except OSError as exc:
+            QMessageBox.warning(self, self._t("template_export_btn"), self._t("template_export_error", error=str(exc)))
+            return
+        QMessageBox.information(
+            self, self._t("template_export_btn"), self._t("template_export_done", count=len(templates)),
+        )
+
+    def _import_csv(self, is_shop: bool):
+        columns = _SHOP_CSV_COLUMNS if is_shop else _TASK_CSV_COLUMNS
+        # Prerequisites shown BEFORE the file picker opens, not just as a
+        # tooltip the user might never hover (User-Wunsch: "sollte man den
+        # User informieren") -- lists the exact header row expected and
+        # which columns are optional/defaulted vs. required.
+        hint_key = "template_import_hint_shop" if is_shop else "template_import_hint_task"
+        proceed = QMessageBox.information(
+            self, self._t("template_import_btn"), self._t(hint_key, columns=", ".join(columns)),
+            QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Ok,
+        )
+        if proceed != QMessageBox.Ok:
+            return
+
+        src, _ = QFileDialog.getOpenFileName(self, self._t("template_import_btn"), str(Path.home()), "CSV (*.csv)")
+        if not src:
+            return
+
+        try:
+            with open(src, "r", newline="", encoding="utf-8-sig") as f:
+                rows = list(csv.DictReader(f))
+        except (OSError, csv.Error) as exc:
+            QMessageBox.warning(self, self._t("template_import_btn"), self._t("template_import_error", error=str(exc)))
+            return
+
+        # "Overwrite" only ever replaces entries from an EARLIER import
+        # (marked "_from_import" below), never manually-created ones and
+        # never the whole list -- User-Wunsch, 2026-09-03: "nur die eigens
+        # hinzugefügte Liste, falls vorher bereits was importiert wurde".
+        box = QMessageBox(self)
+        box.setWindowTitle(self._t("template_import_overwrite_title"))
+        box.setText(self._t("template_import_overwrite_body"))
+        overwrite_btn = box.addButton(self._t("template_import_overwrite_btn"), QMessageBox.DestructiveRole)
+        box.addButton(self._t("template_import_append_btn"), QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is None or box.buttonRole(clicked) == QMessageBox.RejectRole:
+            return
+        overwrite = clicked is overwrite_btn
+
+        target = self.templates if is_shop else self.task_templates
+        if overwrite:
+            target[:] = [t for t in target if not t.get("_from_import")]
+
+        # Duplicate check (User-Wunsch, 2026-09-03) -- by title,
+        # case-insensitive, against BOTH what's already in the list
+        # (manually created or from an earlier import) and other rows
+        # within this same CSV, so a re-imported or copy-pasted-twice row
+        # never creates a second entry.
+        seen_titles = {t.get("title", "").strip().lower() for t in target if t.get("title")}
+
+        new_items = []
+        skipped_no_title = 0
+        skipped_duplicate = 0
+        for row in rows:
+            title = (row.get("title") or "").strip()
+            if not title:
+                skipped_no_title += 1
+                continue
+            title_key = title.lower()
+            if title_key in seen_titles:
+                skipped_duplicate += 1
+                continue
+            seen_titles.add(title_key)
+            schedule = (row.get("schedule") or "daily").strip().lower()
+            if schedule not in _VALID_SCHEDULES:
+                schedule = "daily"
+            priority = (row.get("priority") or "middle").strip().lower()
+            if priority not in _VALID_PRIORITIES:
+                priority = "middle"
+            item = {
+                "id": str(uuid4()),
+                "title": title,
+                "location": (row.get("location") or "").strip(),
+                "schedule": schedule,
+                "priority": priority,
+                "is_general": False,
+                "_from_import": True,
+            }
+            if is_shop:
+                currency = (row.get("currency") or "kinah").strip().lower()
+                if currency not in _VALID_CURRENCIES:
+                    currency = "kinah"
+                item["price"] = (row.get("price") or "0").strip() or "0"
+                item["currency"] = currency
+            target.append(item)
+            new_items.append(item)
+
+        imported = len(new_items)
+
+        # Post-import: offer to make the just-imported batch immediately
+        # live (is_general=True, exactly like a manually-created general
+        # entry), optionally scoped to one character (User-Wunsch,
+        # 2026-09-03) -- applies to Shopping AND Tasks. Skipped entirely if
+        # every row was skipped, since there'd be nothing to insert.
+        if new_items and QMessageBox.question(
+            self, self._t("template_import_insert_title"),
+            self._t("template_import_insert_body", imported=imported),
+        ) == QMessageBox.Yes:
+            character = ""
+            if self._characters:
+                choices = [self._t("template_import_scope_all")] + self._characters
+                choice, ok = QInputDialog.getItem(
+                    self, self._t("template_import_scope_title"),
+                    self._t("template_import_scope_label"), choices, 0, False,
+                )
+                if ok and choice in self._characters:
+                    character = choice
+            for item in new_items:
+                item["is_general"] = True
+                item["character"] = character
+
+        if is_shop:
+            self._rebuild_shop_list()
+        else:
+            self._rebuild_task_list()
+
+        details = []
+        if skipped_no_title:
+            details.append(self._t("template_import_skip_no_title", count=skipped_no_title))
+        if skipped_duplicate:
+            details.append(self._t("template_import_skip_duplicate", count=skipped_duplicate))
+        if details:
+            QMessageBox.information(
+                self, self._t("template_import_btn"),
+                self._t("template_import_done_with_details", imported=imported, details=", ".join(details)),
+            )
+        else:
+            QMessageBox.information(
+                self, self._t("template_import_btn"), self._t("template_import_done", imported=imported),
+            )
 
     # ── Public API ────────────────────────────────────────────────────────────
 

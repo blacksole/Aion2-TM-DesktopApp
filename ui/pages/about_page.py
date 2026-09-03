@@ -2,7 +2,7 @@ import webbrowser
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QDialog, QApplication,
+    QFrame, QDialog, QApplication, QScrollArea,
 )
 from PySide6.QtGui import QPixmap, QIcon, QPainter
 from PySide6.QtCore import Qt, QByteArray
@@ -87,7 +87,29 @@ class AboutPage(QWidget):
         self._setup_ui()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
+        # AboutPage used to put everything directly on `self` with no
+        # scroll wrapper -- added straight to MainWindow's page_stack (see
+        # main_window.py), so on any window/screen too short to fit every
+        # row (About/Coop/Support/Links/Sources), Qt squeezed each row
+        # BELOW its own sizeHint instead of scrolling, most visibly
+        # mangling the Support row's two-line text into an overlapping
+        # mess (User-reported, 2026-09-03, screenshot). Same scroll-wrapper
+        # pattern as settings_page.py.
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("scrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.viewport().setStyleSheet("background: transparent;")
+        root_layout.addWidget(scroll_area)
+
+        content = QWidget()
+        scroll_area.setWidget(content)
+
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(20)
 
@@ -228,6 +250,7 @@ class AboutPage(QWidget):
         self.donate_title_lbl.setObjectName("aboutH2")
         self.donate_desc_lbl = QLabel()
         self.donate_desc_lbl.setObjectName("settingsDescription")
+        self.donate_desc_lbl.setWordWrap(True)
         donate_text.addWidget(self.donate_title_lbl)
         donate_text.addWidget(self.donate_desc_lbl)
 

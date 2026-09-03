@@ -58,6 +58,28 @@ def _t(key: str, **kwargs) -> str:
     translation]])."""
     return _tr(_ARMORY_LANGUAGE, key, **kwargs)
 
+
+_PROFILE_NAME_MAX_LENGTH = 40
+
+
+def _get_bounded_text_input(parent, title: str, label: str, initial_text: str = "", max_length: int = _PROFILE_NAME_MAX_LENGTH) -> tuple[str, bool]:
+    """Same (text, ok) contract as QInputDialog.getText's static
+    convenience method, but with a hard character limit on the input field
+    itself (User-reported, 2026-09-02: the Genius profile name field was
+    "aktuell offenbar unbegrenzt, kann UI sprengen" -- an unbounded name
+    can overflow the profile switcher's dropdown/pill layout). The static
+    getText() has no max-length parameter at all, so this builds the
+    QInputDialog instance directly and reaches into its own QLineEdit."""
+    dlg = QInputDialog(parent)
+    dlg.setWindowTitle(title)
+    dlg.setLabelText(label)
+    dlg.setTextValue(initial_text)
+    line_edit = dlg.findChild(QLineEdit)
+    if line_edit:
+        line_edit.setMaxLength(max_length)
+    ok = dlg.exec() == QDialog.Accepted
+    return dlg.textValue(), ok
+
 from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, QSize, Qt, QSortFilterProxyModel, QTimer, Signal
 from PySide6.QtGui import (
     QBrush, QColor, QCursor, QFont, QFontMetrics, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette,
@@ -94,6 +116,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyledItemDelegate,
     QStyleOptionSlider,
+    QStyleOptionViewItem,
     QTableView,
     QTableWidget,
     QTableWidgetItem,
@@ -103,6 +126,76 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+# Every QComboBox popup in the app rendered with NO hover feedback at all
+# (User-reported, 2026-09-02, across multiple unrelated combos -- the new
+# Build-switcher dropdowns, the Skill Planner/Genius Insight settings
+# combos) -- only the current/keyboard-selected row was ever highlighted
+# (via the existing "QComboBox QAbstractItemView { selection-background-
+# color: ... }" rule in styles.qss), never whichever row the mouse was
+# actually over. A QSS "::item:hover" rule alone did NOT fix it (confirmed
+# by the same user report after that attempt), and mouse tracking on the
+# popup view turned out to already be on by default (verified directly) --
+# so the state Qt tracks isn't the problem, it's that the app-wide
+# stylesheet overrides native per-item painting once active at all (same
+# root cause _RoleColorDelegate's own docstring already documented for
+# per-item TEXT color -- here it's the hover BACKGROUND instead). Painting
+# the overlay directly in a delegate sidesteps Qt/QSS entirely, so it
+# can't be silently defeated the same way again. Installed once, globally,
+# by monkey-patching QComboBox.showPopup, rather than at each of the 20+
+# QComboBox() call sites in this file -- every combo without an already-
+# customized delegate (e.g. tier_combo's own _RoleColorDelegate for
+# rarity text colors, left untouched) gets it automatically, present and
+# future.
+class _ComboHoverDelegate(QStyledItemDelegate):
+    """Paints a translucent turquoise overlay over whichever row the mouse
+    is currently over in a QComboBox popup (User-Wunsch, 2026-09-02: "eine
+    leicht transparente Flaeche in Tuerkis drueberlegen, wenn man mit der
+    Maus durch die Dropdown Eintraege geht") -- drawn AFTER the normal
+    paint so it visually sits "over" the text, matching that request
+    literally rather than tinting the background underneath it."""
+
+    def paint(self, painter, option, index):
+        # Copy, not mutate, the incoming option -- it may be shared/reused
+        # by the caller. Clearing State_HasFocus stops Qt's own default
+        # paint from drawing its dotted/solid focus-rect border around the
+        # current (= hovered, since the popup view tracks the mouse as
+        # "current") row underneath our overlay (User-Wunsch, 2026-09-02:
+        # liked the translucent fill, wanted that inner border gone).
+        option = QStyleOptionViewItem(option)
+        option.state &= ~QStyle.State_HasFocus
+        super().paint(painter, option, index)
+        if option.state & QStyle.State_MouseOver:
+            painter.save()
+            painter.fillRect(option.rect, QColor(34, 211, 238, 46))
+            painter.restore()
+
+
+_QComboBox_showPopup = QComboBox.showPopup
+
+
+def _QComboBox_showPopup_with_hover(self):
+    _QComboBox_showPopup(self)
+    view = self.view()
+    view.setMouseTracking(True)
+    view.viewport().setMouseTracking(True)
+    # A bare, un-customized QComboBox's OWN default delegate is Qt's
+    # internal private class, not literally QStyledItemDelegate (confirmed
+    # by testing -- it reports as plain QAbstractItemDelegate through
+    # PySide6), so checking "is QStyledItemDelegate" never matched anything
+    # and silently skipped every combo, including the ones this was meant
+    # to fix. Whitelisting the few delegates known to already do their own
+    # custom per-item painting (currently just _RoleColorDelegate, tier_
+    # combo's rarity-text-color delegate) and installing the hover overlay
+    # on everything else is the safer direction -- a newly added custom
+    # delegate that also needs to keep its own painting untouched must be
+    # added here explicitly.
+    current_delegate = self.itemDelegate()
+    if not isinstance(current_delegate, (_ComboHoverDelegate, _RoleColorDelegate)):
+        self.setItemDelegate(_ComboHoverDelegate(self))
+
+
+QComboBox.showPopup = _QComboBox_showPopup_with_hover
 
 # Two different directories, since PyInstaller (onedir) unpacks read-only
 # bundled files under _internal/ next to the exe, separate from the exe's own
@@ -209,6 +302,29 @@ def _monolith_skillpoints(level: int) -> int:
 # ab Level 20").
 _SKILL_LEVEL_BASE_CAP = 10
 _STIGMA_LEVEL_BASE_CAP = 20
+
+# Active skills' specializations are player-picked CHOICES, capped by how
+# many total picks the invested level allows (User-Wunsch, 2026-09-02:
+# "bei Stufe 8 kann man einen Skill aktivieren, bei Level 12 2 Bonus und
+# bei Level 20 3") -- distinct from Stigma's "everything up to your level
+# is automatically active" model.
+_ACTIVE_SKILL_SPEC_CAP_THRESHOLDS = [(20, 3), (12, 2), (8, 1)]
+
+
+def _active_skill_spec_cap(effective_level: int) -> int:
+    for threshold, cap in _ACTIVE_SKILL_SPEC_CAP_THRESHOLDS:
+        if effective_level >= threshold:
+            return cap
+    return 0
+
+
+_ACTIVE_SPEC_AVAILABLE_COLOR = "rgba(94, 234, 212, 0.35)"  # muted turquoise -- unlocked, not yet picked
+# (User-corrected, 2026-09-02: the earlier solid "#5eead4" read as if every
+# unlocked option was already active. "30% Tuerkis, 70% schwarz, 50%
+# Transparenz" -- let Qt's own alpha compositing do the darkening against
+# the panel's real background instead of pre-mixing a flat hex, so it
+# still reads correctly regardless of the exact background shade.)
+_ACTIVE_SPEC_CHOSEN_COLOR = "#0d9488"  # dark turquoise -- actively picked
 
 
 _ARCANA_WISH_COLOR = "#c084fc"
@@ -2688,6 +2804,22 @@ def _skills_data_class_key(display_name: str) -> str:
     return _SKILLS_DATA_CLASS_ALIASES.get(key, key)
 
 
+# "Ancient Spirit" gear (Helm/Pauldrons/Breastplate/Gloves/Greaves/Boots/
+# Cloak/Necklace/Earrings/Ring, 10 pieces x Bound/Unbound = 20 catalog
+# rows) isn't live on Global yet (User-Wunsch, 2026-09-02: "fuer Global
+# das gesamte Ancient Spirit Gear auszublenden") -- same "not live yet"
+# treatment as Brawler/Brooch elsewhere in this file. Matched by name
+# prefix rather than a hardcoded id list so it keeps working if the
+# catalog's ids ever shift. Permanently excluded (no toggle) since the
+# item catalog has no other region-specific split to hook a condition
+# into, unlike Daevanion's Global/KR-TW board variants.
+_EXCLUDED_ITEM_NAME_PREFIXES = ("Ancient Spirit ",)
+
+
+def _is_excluded_item(item: dict) -> bool:
+    return (item.get("name") or "").startswith(_EXCLUDED_ITEM_NAME_PREFIXES)
+
+
 def _dedupe_bound_unbound(items) -> list[dict]:
     """Collapses Bound/Unbound catalog duplicates -- same name, grade and
     substat options, just a different tradable flag and item id (User-
@@ -2702,6 +2834,8 @@ def _dedupe_bound_unbound(items) -> list[dict]:
     seen: set[tuple] = set()
     result = []
     for item in items:
+        if _is_excluded_item(item):
+            continue
         key = (item.get("name"), item.get("grade"), tuple(item.get("options") or []))
         if key in seen:
             continue
@@ -4524,6 +4658,738 @@ _ARCANA_LORD_STAT_IDS = {
 # obvious place to go.
 _ARCANA_LORD_STAT_SIGN: dict[str, int] = {}
 
+# Real Lv.1 -> Lv.10 passive skill stat scaling (User-gathered, 2026-08-30/
+# 31, via questlog.gg's skill-builder level slider -- see
+# ItemDatabase/data/Passive_Skill_Level_Research/lv1_lv10_examples.json
+# for the full ~45-skill research dataset/notes this was drawn from).
+# Confirmed linear between Lv.1 and Lv.10 (passives cap at 10, NOT 40 like
+# skills_all.json's own levels[] array wrongly implies) across every
+# example checked. Keyed by skill id (skills_all.json's own "id"), each
+# entry only lists stat lines that (a) buff the CASTER's own stats --
+# debuffs applied to enemies (e.g. Earth's Promise's Damage Tolerance
+# reduction on the target) are deliberately excluded, those aren't the
+# player's own stat -- and (b) have a confirmed real Stat Info id. Effects
+# with no clean home (a proc like "restore X HP on Block", not a standing
+# stat) or a non-linear formula (Cleric's Healing Enhancement scales off
+# the caster's own Attack) are left out rather than guessed. Chanter-only
+# so far -- User-Wunsch 2026-08-31: "mach eine Klasse nach der naechsten"
+# if the full set can't be done at once; the other 7 classes' data is
+# already gathered in the JSON file above, just not wired in yet.
+_PASSIVE_SKILL_LEVEL_SCALING: dict[str, list[tuple[str, float, float] | tuple[str, float, float, bool]]] = {
+    "18750000": [  # Chanter: Attack Preparation
+        ("PvEAmplifyDamage", 5.5, 10), ("PvPAmplifyDamage", 2.75, 5),
+        # Skill text says plain "Accuracy" (flat number, no % sign) -- that's
+        # the flat "Accuracy" Main Stat row (id WeaponAccuracy), NOT the
+        # separate "Accuracy Bonus" Offense row (id AccuracyBonus, a
+        # different real stat). Was miscoded as AccuracyBonus, which is why
+        # the +100 never showed up anywhere in Stat Info (User-Fund,
+        # 2026-09-02, screenshot showed the Accuracy row's total/tooltip
+        # missing the contribution entirely).
+        ("DefenseRatio", 2, 20), ("WeaponAccuracy", 100, 100),
+    ],
+    "18710000": [  # Chanter: Blessing of Life
+        ("HPMax", 150, 1500), ("HPIncrease", 6.5, 20),
+        # "Heal Boost" (User-caught gap, 2026-09-02: "viele andere passive
+        # Skills aendern auch teils ... nur 1-2 Werte" -- this skill's
+        # description has a THIRD highlighted number that this list was
+        # missing entirely, so it silently never scaled/described
+        # correctly even though HP/HPIncrease did). No established Stat
+        # Info row exists for it yet -- feeds the description text only
+        # (harmless no-op for Stat Info, same as any unknown stat_id).
+        ("HealBoost", 5, 14),
+    ],
+    "18720000": [("Block", 200, 200)],  # Chanter: Crossguard
+    "18740000": [("Critical", 100, 190), ("PerfectChance", 0.5, 5)],  # Chanter: Inspiring Spell
+    "18760000": [  # Chanter: Impact Hit (added 2026-09-02 full-passive audit)
+        # Lv.10 CORRECTED 2026-09-02 (was 22, real value is 20) -- found by
+        # cross-checking against gamers4.life's own EXACT per-level source
+        # data (descriptionData.placeholders, see _PASSIVE_SKILL_DAMAGE_
+        # TABLE's comment for how this was discovered) instead of trusting
+        # the earlier questlog.gg-screenshot-derived table alone. Real
+        # curve confirmed perfectly linear (1100->2000 over Lv.1-10, i.e.
+        # +100/level), so the simple 2-point formula is still correct here,
+        # just with the right endpoint.
+        ("ShockPropertyAccuracy", 11, 20),
+        # "Double Chance" has no established Stat Info row yet -- same
+        # description-only reasoning as HealBoost above. Cross-checked the
+        # same way: real curve 30->300/100, perfectly linear, matches.
+        ("DoubleChance", 0.3, 3),
+    ],
+    "18790000": [  # Chanter: Survival Willpower
+        # Lv.10 CORRECTED 2026-09-02 (was 35, real value is 30) -- same
+        # cross-check as Impact Hit above (real curve 1650->3000/100,
+        # perfectly linear). PvE/PvPDecreaseDamage moved OUT to
+        # _PASSIVE_SKILL_DESCRIPTION_ONLY_SCALING below (2026-09-02,
+        # caught while auditing Cleric's near-identical "Survival
+        # Willpower" more carefully) -- unlike Status Effect Resist
+        # (unconditional, always active), these two are explicitly
+        # CONDITIONAL ("for 5s when afflicted with Stun, Knockdown,
+        # Airborne, Frost, or Fear") -- a temporary reactive buff, not a
+        # permanent character stat, same reasoning as Earth's Promise.
+        # Wrongly fed into permanent Stat Info until this correction.
+        ("AbnormalResistance", 16.5, 30),
+    ],
+    # Cleric Passives (2026-09-02, first class after Chanter) -- all
+    # verified linear across the full Lv.1-30 curve via descriptionData.
+    # placeholders before wiring, per the by-now-established process.
+    "17780000": [("AmplifyCriticalDamage", 3, 7.5), ("WeaponAccuracy", 100, 100)],  # Earth's Grace
+    "17730000": [("Critical", 100, 145)],  # Empyrean Lord's Grace (DoubleChance/extra-damage handled separately, see below)
+    "17720000": [("Block", 200, 200)],  # Empyrean Lords' Benediction (HP-on-Block range handled separately, see _PASSIVE_SKILL_RANGE_TABLE)
+    "17750000": [("DefenseRatio", 2, 20), ("CriticalResist", 100, 190)],  # Immortal Veil
+    "17790000": [  # Cleric: Survival Willpower -- SAME name/wording as the Chanter skill but a genuinely
+        # DIFFERENT real curve (different underlying ids, 1779... vs 1879...) -- verified separately,
+        # not assumed shared. PvE/PvPTolerance moved to description-only below (conditional, see Chanter's own note).
+        ("AbnormalResistance", 16.5, 30),
+    ],
+    "17710000": [("HPIncrease", 6, 15), ("MPMax", 7, 25)],  # Warm Benediction
+    # Gladiator Passives (2026-09-02) -- all verified linear across the
+    # full Lv.1-30 curve first. "Attack Preparation" and "Identify
+    # Weakness" happen to share IDENTICAL real values with Chanter's
+    # Attack Preparation/Inspiring Spell (genuine cross-class-shared skill
+    # templates, confirmed by extracting Gladiator's OWN curve
+    # independently rather than assumed) -- Impact Hit does NOT (its
+    # Impact-type Chance rate genuinely differs from Chanter's), a useful
+    # reminder that "looks like the same skill" is never enough on its own.
+    "11750000": [("PvEAmplifyDamage", 5.5, 10), ("PvPAmplifyDamage", 2.75, 5), ("DefenseRatio", 2, 20), ("WeaponAccuracy", 100, 100)],  # Attack Preparation
+    "11740000": [("Critical", 100, 190), ("PerfectChance", 0.5, 5)],  # Identify Weakness
+    "11760000": [("ShockPropertyAccuracy", 12, 30), ("DoubleChance", 0.3, 3)],  # Impact Hit (Lv.10 CORRECTED: was 9, real value 3 -- transcribed the Lv.30 sample by mistake)
+    "11720000": [("Block", 200, 200)],  # Protection Armor (HP-on-Block range handled separately, see _PASSIVE_SKILL_RANGE_TABLE)
+    "11710000": [  # Survival Stance -- ALL unconditional (unlike Survival Willpower below), confirmed by the raw text having no "when/on X" clause at all
+        ("HPMax", 200, 2000), ("HPIncrease", 7, 25), ("Restoration", 20, 200),
+        ("PvEDecreaseDamage", 5.5, 10), ("PvPDecreaseDamage", 2.75, 5),
+    ],
+    "11790000": [("AbnormalResistance", 16.5, 30)],  # Survival Willpower -- confirmed IDENTICAL real curve to Chanter/Cleric's versions (genuinely shared template); PvE/PvPTolerance conditional, see description-only below
+    # Templar Passives (2026-09-02) -- all verified via automated cross-
+    # check against descriptionData.placeholders before wiring, per the
+    # process fix from the Gladiator round.
+    "12710000": [("HPMax", 250, 2500), ("HPIncrease", 7.5, 30), ("IncomingHealPct", 6, 15)],  # Enhance Health
+    "12740000": [  # Ironclad Defense
+        ("DefenseRatio", 7, 25),
+        # "Endurance by 1%" (real %, per the raw text) is NOT the same
+        # stat as the established flat "Endurance" row (id "IronWall",
+        # fed by gear rolls, never percent) -- same distinction as
+        # Defense vs Defense-increase/DefenseRatio. No established
+        # percent-Endurance Stat Info row exists yet, so this is a
+        # synthetic description-only id (same reasoning as HealBoost/
+        # DoubleChance) rather than corrupting IronWall's flat total.
+        ("EnduranceIncreasePct", 1, 10),
+    ],
+    "12760000": [("ShockPropertyAccuracy", 11, 20), ("DoubleChance", 0.3, 3)],  # Impact Hit -- matches Chanter's Impact Hit exactly (shared template)
+    "12730000": [("Critical", 100, 145)],  # Punishing Benediction -- matches Cleric's Empyrean Lord's Grace exactly (shared template); its proc damage is a SEPARATE non-linear value, see _PASSIVE_SKILL_DAMAGE_TABLE
+    "12720000": [("Block", 200, 200)],  # Warding Shield (HP-on-Block range handled separately, see _PASSIVE_SKILL_RANGE_TABLE)
+    "12790000": [("AbnormalResistance", 16.5, 30)],  # Survival Willpower (Templar) -- same universal curve as Chanter/Cleric/Gladiator
+    # Assassin Passives (2026-09-02) -- all verified linear across the full
+    # Lv.1-40 curve first, same process as every other class.
+    "13750000": [("CriticalDamageBoost", 6, 15)],  # Assault Stance
+    "13760000": [("ShockPropertyAccuracy", 11, 20), ("DoubleChance", 0.3, 3)],  # Impact Hit -- rate genuinely differs from Chanter/Gladiator/Templar's, verified independently rather than assumed shared
+    "13740000": [("BackAttackDamageBoost", 3, 7.5), ("PvEAmplifyDamage", 3, 7.5), ("PvPAmplifyDamage", 1.5, 3.75)],  # Rear Smite
+    "13790000": [("AbnormalResistance", 16.5, 30)],  # Revitalization Contract -- permanent portion only; the conditional "+10% for 5s when hit" and the "instant heal at <=10% HP" clauses are conditional/temporary, see description-only below
+    # Heightened Sixth Sense -- TWO separate permanent-stat spans before the
+    # HP-on-Evasion range (see _PASSIVE_SKILL_RANGE_TABLE): "HP by X" (flat)
+    # and "Max HP by an extra X%" both read the SAME underlying real value
+    # (150 at Lv.1, confirmed identical across every sampled level, just
+    # formatted two different ways for two description clauses) -- initially
+    # missed entirely (first pass only wired the heal-range span and left
+    # these two showing their static baked Lv.1 numbers), caught by the
+    # automated per-level check rendering "85-102" at every level instead of
+    # scaling.
+    "13710000": [("HPMax", 150, 1500), ("HPIncrease", 1.5, 15)],
+    # Ranger Passives (2026-09-02) -- all verified linear across the full
+    # Lv.1-40 curve first, exact template order confirmed from the raw
+    # descriptionData.text (not assumed from dict key order).
+    "14740000": [("PvEAmplifyDamage", 1, 10), ("PvPAmplifyDamage", 0.5, 5), ("HardHit", 0.2, 2)],  # Focused Eye
+    "14750000": [("CriticalDamageBoost", 6, 15)],  # Hunter's Resolve -- same rate as Assassin's Assault Stance (genuinely shared curve, verified independently)
+    "14760000": [("BodyPropertyResist", 13, 40)],  # Unyielding Resolve -- "Ailment-type Resist", a DIFFERENT stat from "Status Effect Resist"/AbnormalResistance
+    "14710000": [("HPIncrease", 6, 15)],  # Vigilant Eye -- Max HP% only; the HP-on-Evasion range is separate, see _PASSIVE_SKILL_RANGE_TABLE (Evasion itself is flat/constant, not highlighted)
+    "14790000": [("AbnormalResistance", 16.5, 30)],  # Ranger: Revitalization Contract -- permanent portion; verified independently, confirmed identical curve to Assassin's version (genuinely shared template)
+    # Sorcerer Passives (2026-09-02) -- all verified linear across the full
+    # Lv.1-40 curve first.
+    "15760000": [("BodyPropertyAccuracy", 12, 16.5), ("MentalPropertyAccuracy", 12, 16.5, False)],  # Absorb Essence -- ONE span covers both Ailment-type AND Mental-type Chance, same real value -- 2nd tuple's False means "same span as the entry above, don't consume a 2nd one" (see _passive_skill_description_with_level)
+    "15770000": [("MentalPropertyResist", 11.5, 25), ("BodyPropertyResist", 11.5, 25, False)],  # Grace of Resistance -- ONE span covers both Mental-type AND Impact-type Resist (Impact-type Resist itself doesn't have its own established id besides "BodyPropertyResist", reused same as Ailment-type Resist elsewhere)
+    "15750000": [("DefenseRatio", 1, 10), ("CriticalResist", 55, 100)],  # Robe of Cold -- Defense% permanent + flat Critical Hit Resist; the on-struck Move Speed reduce/duration are target debuffs, see description-only below
+    "15720000": [("MPIncrease", 7, 25), ("Restoration", 5, 50)],  # Robe of Earth -- Max MP% + Natural MP Regen (flat); the Critical Hit clause is conditional ("when MP is 50% or more"), see description-only below
+    "15740000": [("PvEAmplifyDamage", 1, 10), ("PvPAmplifyDamage", 0.5, 5), ("HardHit", 0.2, 2)],  # Robe of Flame -- confirmed IDENTICAL curve to Ranger's Focused Eye (genuinely shared template)
+    "15790000": [("AbnormalResistance", 16.5, 30)],  # Sorcerer: Revitalization Contract -- permanent portion; verified independently, confirmed identical curve to Assassin/Ranger's version
+    # Elementalist/Spiritmaster Passives (2026-09-02) -- all verified linear
+    # across the full Lv.1-40 curve first.
+    "16740000": [("Critical", 100, 190)],  # Corrode -- flat permanent Critical Hit; the proc damage is a separate non-linear value, see _PASSIVE_SKILL_DAMAGE_TABLE
+    "16760000": [("MentalPropertyAccuracy", 11, 20), ("DoubleChance", 0.3, 3)],  # Mental Focus
+    "16720000": [("DefenseRatio", 1.5, 15)],  # Spirit Protection -- caster's own Defense%; "Spirit's Defense" is a SEPARATE real span (same curve, same token id repeated in the raw template) but affects the pet, not the caster's own Stat Info -- see description-only below for that 2nd span
+    "16710000": [("PvEAmplifyDamage", 5.5, 10), ("PvPAmplifyDamage", 2.75, 5), ("PerfectChance", 0.4, 4)],  # Spirit Strike -- caster's own 3 stats; the Spirit's identical 3 stats are separate real spans (same reasoning as Spirit Protection), see description-only below
+    "16790000": [("AbnormalResistance", 16.5, 30)],  # Elementalist: Revitalization Contract -- permanent portion; verified independently, confirmed identical curve to every other class's version
+}
+
+# Crossguard's "restores X-Y HP on Block" is a REAL min-max range (User-
+# caught gap, 2026-09-02) -- but unlike every other scaling value handled
+# in this file, its real curve is NOT linear between Lv.1 and Lv.10 (a
+# first attempt used 2-point linear interpolation between the known
+# endpoints 53-58/351-386, which happened to LOOK right at exactly those
+# two levels but was WRONG at every level in between, e.g. Lv.5 is really
+# 162-178, not the ~185-204 linear interpolation would predict). Fixed by
+# pulling the REAL exact Lv.1-40 table directly from gamers4.life's raw
+# page data (`descriptionData.placeholders`, see _PASSIVE_SKILL_DAMAGE_
+# TABLE's own comment for the full story of that discovery) instead of
+# guessing at a formula from just two data points.
+_PASSIVE_SKILL_RANGE_TABLE: dict[str, dict[int, tuple[float, float]]] = {
+    "18720000": {  # Chanter: Crossguard, HP-on-Block (min, max)
+        1: (53, 58), 2: (67, 74), 3: (87, 96), 4: (110, 121), 5: (162, 178),
+        6: (189, 208), 7: (232, 255), 8: (275, 303), 9: (300, 330), 10: (351, 386),
+        11: (402, 442), 12: (429, 472), 13: (480, 528), 14: (509, 560), 15: (553, 608),
+        16: (607, 668), 17: (629, 692), 18: (651, 716), 19: (673, 740), 20: (695, 765),
+        21: (717, 789), 22: (739, 813), 23: (762, 838), 24: (784, 862), 25: (807, 888),
+        26: (830, 913), 27: (853, 938), 28: (876, 964), 29: (899, 989), 30: (922, 1014),
+        31: (945, 1040), 32: (968, 1065), 33: (992, 1091), 34: (1015, 1117), 35: (1039, 1143),
+        36: (1062, 1168), 37: (1086, 1195), 38: (1110, 1221), 39: (1134, 1247), 40: (1158, 1274),
+    },
+    "18170000": {  # Chanter Stigma: Healing Touch, HP restore (min, max)
+        1: (1171, 1289), 2: (1385, 1523), 3: (1514, 1666), 4: (1771, 1949), 5: (1902, 2093),
+        6: (2074, 2281), 7: (2161, 2377), 8: (2375, 2612), 9: (2470, 2717), 10: (2564, 2821),
+        11: (2790, 3070), 12: (3059, 3365), 13: (3169, 3486), 14: (3281, 3608), 15: (3392, 3732),
+        16: (3504, 3854), 17: (3616, 3977), 18: (3728, 4102), 19: (3841, 4225), 20: (3955, 4351),
+        21: (4069, 4476), 22: (4184, 4603), 23: (4300, 4729), 24: (4415, 4856), 25: (4531, 4985),
+        26: (4648, 5112), 27: (4764, 5240), 28: (4882, 5370), 29: (4999, 5500), 30: (5118, 5630),
+    },
+    "18160000": {  # Chanter Stigma: Sprint Mantra, HP-on-attack heal (min, max)
+        1: (134, 147), 2: (158, 174), 3: (173, 190), 4: (202, 222), 5: (217, 239),
+        6: (236, 260), 7: (246, 271), 8: (271, 298), 9: (282, 310), 10: (292, 321),
+        11: (318, 350), 12: (349, 384), 13: (361, 397), 14: (374, 411), 15: (387, 426),
+        16: (400, 440), 17: (412, 453), 18: (425, 468), 19: (438, 482), 20: (451, 496),
+        21: (464, 510), 22: (477, 525), 23: (490, 539), 24: (503, 553), 25: (517, 569),
+        26: (530, 583), 27: (543, 597), 28: (557, 613), 29: (570, 627), 30: (584, 642),
+    },
+    # Cleric Actives (2026-09-02) -- found the SAME "static baked Lv.1
+    # text, no {...} token" gap here that Passives originally had (see
+    # _PASSIVE_SKILL_DAMAGE_TABLE's Divine Aura entry for the sibling
+    # "malformed levels array" gap on the same audit pass).
+    "17100000": {  # Cleric Active: Healing Light (min, max)
+        1: (240, 264), 2: (302, 332), 3: (446, 490), 4: (520, 572), 5: (638, 702),
+        6: (756, 832), 7: (826, 908), 8: (966, 1062), 9: (1038, 1142), 10: (1130, 1244),
+        11: (1202, 1322), 12: (1346, 1480), 13: (1470, 1618), 14: (1548, 1702), 15: (1688, 1856),
+        16: (1748, 1922), 17: (1810, 1992), 18: (1870, 2058), 19: (1932, 2126), 20: (1992, 2192),
+        21: (2054, 2260), 22: (2116, 2328), 23: (2178, 2396), 24: (2240, 2464), 25: (2302, 2532),
+        26: (2366, 2602), 27: (2428, 2670), 28: (2492, 2742), 29: (2556, 2812), 30: (2620, 2882),
+    },
+    "17120000": {  # Cleric Active: Radiant Recovery (min, max)
+        1: (315, 347), 2: (398, 438), 3: (585, 644), 4: (683, 752), 5: (837, 921),
+        6: (990, 1089), 7: (1083, 1191), 8: (1266, 1392), 9: (1361, 1497), 10: (1482, 1631),
+        11: (1577, 1734), 12: (1766, 1943), 13: (1928, 2121), 14: (2030, 2232), 15: (2214, 2436),
+        16: (2294, 2523), 17: (2373, 2610), 18: (2453, 2699), 19: (2532, 2786), 20: (2613, 2874),
+        21: (2694, 2964), 22: (2775, 3053), 23: (2856, 3141), 24: (2937, 3231), 25: (3020, 3321),
+        26: (3102, 3413), 27: (3185, 3503), 28: (3269, 3596), 29: (3351, 3686), 30: (3435, 3779),
+    },
+    # Cleric Passives -- HP-on-Block/on-attack proc ranges, description-
+    # only (no established Stat Info row for either).
+    "17720000": {  # Empyrean Lords' Benediction, HP-on-Block (min, max)
+        1: (53, 64), 2: (67, 80), 3: (87, 104), 4: (110, 132), 5: (162, 194),
+        6: (189, 227), 7: (232, 278), 8: (275, 330), 9: (300, 360), 10: (351, 421),
+        11: (402, 482), 12: (429, 515), 13: (480, 576), 14: (509, 611), 15: (553, 664),
+        16: (607, 728), 17: (629, 755), 18: (651, 781), 19: (673, 808), 20: (695, 834),
+        21: (717, 860), 22: (739, 887), 23: (762, 914), 24: (784, 941), 25: (807, 968),
+        26: (830, 996), 27: (853, 1024), 28: (876, 1051), 29: (899, 1079), 30: (922, 1106),
+    },
+    "17800000": {  # Radiant Benediction, HP-on-attack (min, max)
+        1: (480, 576), 2: (526, 631), 3: (615, 738), 4: (660, 792), 5: (720, 864),
+        6: (750, 900), 7: (873, 1048), 8: (935, 1122), 9: (968, 1162), 10: (1002, 1202),
+        11: (1087, 1304), 12: (1126, 1351), 13: (1164, 1397), 14: (1203, 1444), 15: (1242, 1490),
+        16: (1281, 1537), 17: (1320, 1584), 18: (1360, 1632), 19: (1399, 1679), 20: (1439, 1727),
+        21: (1479, 1775), 22: (1519, 1823), 23: (1559, 1871), 24: (1599, 1919), 25: (1640, 1968),
+        26: (1681, 2017), 27: (1722, 2066), 28: (1762, 2114), 29: (1804, 2165), 30: (1845, 2214),
+    },
+    # Cleric Stigmas
+    "17290000": {  # Absolution, HP restore (min, max)
+        1: (2003, 2203), 2: (2368, 2605), 3: (2591, 2850), 4: (3029, 3332), 5: (3253, 3578),
+        6: (3546, 3901), 7: (3697, 4067), 8: (4063, 4469), 9: (4224, 4646), 10: (4386, 4825),
+        11: (4773, 5250), 12: (5233, 5756), 13: (5421, 5963), 14: (5611, 6172), 15: (5802, 6382),
+        16: (5993, 6592), 17: (6185, 6804), 18: (6378, 7016), 19: (6571, 7228), 20: (6766, 7443),
+        21: (6961, 7657), 22: (7157, 7873), 23: (7354, 8089), 24: (7551, 8306), 25: (7750, 8525),
+        26: (7949, 8744), 27: (8149, 8964), 28: (8350, 9185), 29: (8552, 9407), 30: (8754, 9629),
+    },
+    "17160000": {  # Benevolence, HP-per-tick (min, max)
+        1: (113, 125), 2: (143, 158), 3: (211, 232), 4: (246, 271), 5: (301, 332),
+        6: (356, 392), 7: (390, 429), 8: (456, 501), 9: (490, 539), 10: (534, 587),
+        11: (568, 624), 12: (636, 699), 13: (694, 764), 14: (731, 804), 15: (797, 877),
+        16: (826, 908), 17: (854, 940), 18: (883, 971), 19: (912, 1003), 20: (941, 1035),
+        21: (970, 1067), 22: (999, 1099), 23: (1028, 1131), 24: (1057, 1163), 25: (1087, 1196),
+        26: (1117, 1229), 27: (1146, 1261), 28: (1177, 1294), 29: (1206, 1327), 30: (1237, 1360),
+    },
+    # Gladiator Passives
+    "11730000": {  # Blood Absorption, HP-on-attack (min, max)
+        1: (20, 24), 2: (26, 31), 3: (33, 40), 4: (48, 58), 5: (56, 67),
+        6: (69, 83), 7: (82, 98), 8: (90, 108), 9: (105, 126), 10: (112, 134),
+        11: (125, 150), 12: (140, 168), 13: (149, 179), 14: (162, 194), 15: (171, 205),
+        16: (185, 222), 17: (192, 230), 18: (198, 238), 19: (205, 246), 20: (212, 254),
+        21: (218, 262), 22: (225, 270), 23: (232, 278), 24: (238, 286), 25: (245, 294),
+        26: (252, 302), 27: (259, 311), 28: (266, 319), 29: (272, 326), 30: (279, 335),
+    },
+    # Protection Armor (Gladiator) / Warding Shield (Templar): HP-on-Block
+    # (min, max) -- shares Crossguard's exact Min curve but a DIFFERENT Max
+    # curve, and is itself IDENTICAL between Gladiator and Templar
+    # (confirmed independently, genuine shared skill template).
+    "11720000": {
+        1: (53, 64), 2: (67, 80), 3: (87, 104), 4: (110, 132), 5: (162, 194),
+        6: (189, 227), 7: (232, 278), 8: (275, 330), 9: (300, 360), 10: (351, 421),
+        11: (402, 482), 12: (429, 515), 13: (480, 576), 14: (509, 611), 15: (553, 664),
+        16: (607, 728), 17: (629, 755), 18: (651, 781), 19: (673, 808), 20: (695, 834),
+        21: (717, 860), 22: (739, 887), 23: (762, 914), 24: (784, 941), 25: (807, 968),
+        26: (830, 996), 27: (853, 1024), 28: (876, 1051), 29: (899, 1079), 30: (922, 1106),
+    },
+}
+_PASSIVE_SKILL_RANGE_TABLE["12720000"] = _PASSIVE_SKILL_RANGE_TABLE["11720000"]  # Templar: Warding Shield
+_PASSIVE_SKILL_RANGE_TABLE["14710000"] = {  # Ranger Passive: Vigilant Eye, HP-on-Evasion (min, max) -- confirmed identical curve to Assassin's Heightened Sixth Sense (genuinely shared template), verified independently rather than aliased
+    1: (85, 102), 2: (107, 128), 3: (140, 168), 4: (176, 211), 5: (260, 312),
+    6: (303, 364), 7: (372, 446), 8: (439, 527), 9: (481, 577), 10: (562, 674),
+    11: (644, 773), 12: (686, 823), 13: (769, 923), 14: (814, 977), 15: (885, 1062),
+    16: (971, 1165), 17: (1006, 1207), 18: (1041, 1249), 19: (1076, 1291), 20: (1112, 1334),
+    21: (1147, 1376), 22: (1183, 1420), 23: (1219, 1463), 24: (1255, 1506), 25: (1291, 1549),
+    26: (1328, 1594), 27: (1364, 1637), 28: (1401, 1681), 29: (1438, 1726), 30: (1475, 1770),
+    31: (1512, 1814), 32: (1549, 1859), 33: (1586, 1903), 34: (1624, 1949), 35: (1662, 1994),
+    36: (1700, 2040), 37: (1738, 2086), 38: (1776, 2131), 39: (1814, 2177), 40: (1853, 2224),
+}
+_PASSIVE_SKILL_RANGE_TABLE["16120000"] = {  # Elementalist Active: Summon: Wind Spirit, HP-restore-on-hit (min, max)
+    1: (134, 147), 2: (169, 186), 3: (250, 275), 4: (291, 320), 5: (357, 393),
+    6: (422, 464), 7: (462, 508), 8: (540, 594), 9: (580, 638), 10: (633, 696),
+    11: (673, 740), 12: (753, 828), 13: (822, 904), 14: (866, 953), 15: (945, 1040),
+    16: (978, 1076), 17: (1012, 1113), 18: (1046, 1151), 19: (1080, 1188), 20: (1115, 1227),
+    21: (1149, 1264), 22: (1184, 1302), 23: (1218, 1340), 24: (1253, 1378), 25: (1288, 1417),
+    26: (1323, 1455), 27: (1359, 1495), 28: (1394, 1533), 29: (1430, 1573), 30: (1466, 1613),
+}
+_PASSIVE_SKILL_RANGE_TABLE["16770000"] = {  # Elementalist Passive: Spirit Communion, HP-restore-on-hit (min, max)
+    1: (182, 200), 2: (223, 245), 3: (264, 290), 4: (289, 318), 5: (338, 372),
+    6: (363, 399), 7: (395, 435), 8: (412, 453), 9: (453, 498), 10: (471, 518),
+    11: (514, 565), 12: (541, 595), 13: (590, 649), 14: (611, 672), 15: (633, 696),
+    16: (654, 719), 17: (675, 743), 18: (697, 767), 19: (718, 790), 20: (740, 814),
+    21: (762, 838), 22: (783, 861), 23: (805, 886), 24: (827, 910), 25: (849, 934),
+    26: (871, 958), 27: (894, 983), 28: (916, 1008), 29: (938, 1032), 30: (961, 1057),
+    31: (984, 1082), 32: (1006, 1107), 33: (1029, 1132), 34: (1052, 1157), 35: (1075, 1183),
+    36: (1098, 1208), 37: (1121, 1233), 38: (1144, 1258), 39: (1168, 1285), 40: (1191, 1310),
+}
+_PASSIVE_SKILL_RANGE_TABLE["13710000"] = {  # Assassin Passive: Heightened Sixth Sense, HP-on-Evasion (min, max)
+    1: (85, 102), 2: (107, 128), 3: (140, 168), 4: (176, 211), 5: (260, 312),
+    6: (303, 364), 7: (372, 446), 8: (439, 527), 9: (481, 577), 10: (562, 674),
+    11: (644, 773), 12: (686, 823), 13: (769, 923), 14: (814, 977), 15: (885, 1062),
+    16: (971, 1165), 17: (1006, 1207), 18: (1041, 1249), 19: (1076, 1291), 20: (1112, 1334),
+    21: (1147, 1376), 22: (1183, 1420), 23: (1219, 1463), 24: (1255, 1506), 25: (1291, 1549),
+    26: (1328, 1594), 27: (1364, 1637), 28: (1401, 1681), 29: (1438, 1726), 30: (1475, 1770),
+    31: (1512, 1814), 32: (1549, 1859), 33: (1586, 1903), 34: (1624, 1949), 35: (1662, 1994),
+    36: (1700, 2040), 37: (1738, 2086), 38: (1776, 2131), 39: (1814, 2177), 40: (1853, 2224),
+}
+
+# Same (stat_id, lv1, lv10) shape as _PASSIVE_SKILL_LEVEL_SCALING, but for
+# passives whose effect lands on the TARGET, not the caster -- these must
+# stay OUT of _passive_skill_stat_totals (would wrongly buff the caster's
+# own Stat Info with a debuff the caster applies to something else), but
+# still deserve a correctly-scaling description (User-Wunsch, 2026-09-02:
+# "bitte einmal alle passiven Skills pruefen").
+_PASSIVE_SKILL_DESCRIPTION_ONLY_SCALING: dict[str, list[tuple[str, float, float]]] = {
+    "18780000": [("PvEDecreaseDamage", 10.5, 15), ("PvPDecreaseDamage", 5.25, 7.5)],  # Chanter: Earth's Promise
+    # Chanter Stigmas (2026-09-02) -- each verified LINEAR all the way from
+    # Lv.1 to Lv.30 (not just Lv.1-10, see _PASSIVE_SKILL_EXACT_DESCRIPTION_
+    # ONLY's Power of the Storm entry for a case where that check FAILED),
+    # so the simple 2-point formula is safe here. Stigma effects are
+    # temporary/triggered (e.g. "for 5s on hit"), not permanent character
+    # stats -- description-only, same reasoning as Earth's Promise.
+    # Lv.10 values below CORRECTED 2026-09-02 -- first pass mistakenly
+    # transcribed the Lv.30 sample point (25/25/12.5/400) instead of the
+    # real Lv.10 value, which would have overstated the rate 3x and
+    # produced e.g. "57.2%" at Lv.30 instead of the real 25%. Caught by
+    # actually rendering Lv.30 and comparing against the fetched curve,
+    # not just trusting the entry once written.
+    "18160000": [("MoveSpeed", 10.5, 15)],  # Sprint Mantra
+    "18190000": [("PvEAmplifyDamage", 10.5, 15), ("PvPAmplifyDamage", 5.25, 7.5)],  # Undefeated Mantra
+    "18140000": [("MPRestoreOnBlock", 110, 200)],  # Focused Defense (flat MP/Stamina)
+    "11110000": [("MPRestoreOnBlock", 110, 200)],  # Gladiator Stigma: Focused Block -- verified independently, happens to share Chanter's exact curve
+    # Chanter Survival Willpower's Damage Tolerance clauses moved HERE
+    # (2026-09-02) from _PASSIVE_SKILL_LEVEL_SCALING -- see that dict's own
+    # comment on the same skill for why (conditional/temporary, not a
+    # permanent stat).
+    "18790000": [("PvEDecreaseDamage", 12, 30), ("PvPDecreaseDamage", 6, 15)],  # Chanter: Survival Willpower
+    # Cleric Passives (2026-09-02) -- all verified linear across the full
+    # Lv.1-30 curve first.
+    "17730000": [("DoubleChance", 0.2, 2)],  # Empyrean Lord's Grace (Critical Hit is in _PASSIVE_SKILL_LEVEL_SCALING; extra-damage proc is in _PASSIVE_SKILL_DAMAGE_TABLE)
+    "17760000": [("HealReduce", 32, 50)],  # Heal Block -- affects the TARGET's Incoming Heal, not the caster's own stat, same reasoning as Earth's Promise
+    "17740000": [("HealBoost", 10, 28)],  # Healing Enhancement -- base portion only; "plus extra proportional to Attack" is a separate, unmodeled formula (see project_passive_skill_stats memory)
+    "17790000": [("PvEDecreaseDamage", 12, 30), ("PvPDecreaseDamage", 6, 15)],  # Cleric: Survival Willpower (conditional, same as Chanter's -- see above)
+    # Cleric Stigma: Light of Protection -- verified linear across full
+    # Lv.1-30 curve. Stigma = active-use skill by definition, so this is
+    # description-only (no permanent Stat Info feed) same as every other
+    # Stigma bonus wired so far, regardless of whether the text itself
+    # mentions a trigger condition or not.
+    "17410000": [("PvEAmplifyDamage", 10.5, 15), ("PvPAmplifyDamage", 5.25, 7.5)],
+    # Gladiator Passives -- all proc/conditional effects, not permanent
+    # caster stats.
+    "11730000": [("MaxHPProcPct", 1.6, 2.5), ("InstantHealMaxHPPct", 26, 35)],  # Blood Absorption ("on landing an attack" / "when HP is 50% or less") -- Lv.10 CORRECTED (were 4.5/55, real values 2.5/35 -- same Lv.30-sample transcription mistake)
+    "11780000": [("PvEAmplifyDamage", 6.5, 20), ("PvPAmplifyDamage", 3.25, 10)],  # Experienced Counterstrike ("for 10s on Block")
+    "11800000": [("CriticalDamageTolerance", 5.5, 10)],  # Murderous Burst -- debuff on the TARGET, not the caster (Lv.10 CORRECTED: was 20, real value 10 -- same mistake)
+    "11790000": [("PvEDecreaseDamage", 12, 30), ("PvPDecreaseDamage", 6, 15)],  # Survival Willpower (conditional, same as Chanter/Cleric)
+    # Templar Passives -- proc/conditional effects.
+    "12800000": [("PvEDecreaseDamage", 11, 20), ("PvPDecreaseDamage", 5.5, 10)],  # Block Pain ("for 10s when struck by an enemy")
+    "12780000": [("PvEAmplifyDamage", 11, 20), ("PvPAmplifyDamage", 5.5, 10)],  # Fury ("for 10s ... on Block")
+    "12790000": [("PvEDecreaseDamage", 12, 30), ("PvPDecreaseDamage", 6, 15)],  # Survival Willpower (Templar) conditional part
+    # Templar Stigmas (2026-09-02) -- Shield of Protection's MP/Stamina
+    # restore-on-Block verified fully linear Lv.1-30 (110 -> 200 -> 400,
+    # exact +10/level all the way), same curve shape as Focused Block/
+    # Focused Defense. Comrade in Arms' two damage-sharing percentages
+    # (caster's own share / the protected ally's share) read from two
+    # DIFFERENT tokens but turned out numerically identical, and both
+    # verified linear -1%/level (50% -> 41% -> 21%).
+    "12110000": [("MPRestoreOnBlock", 110, 200)],  # Shield of Protection
+    "12250000": [("SplitPct", 50, 41), ("SplitPct", 50, 41)],  # Comrade in Arms
+    # Assassin Passives -- target debuffs and conditional/temporary effects.
+    "13780000": [("DefenseReduce", 13, 40), ("StatusResistReduce", 11, 20)],  # Defense Break -- applies to the TARGET, not the caster; synthetic ids (distinct from the caster's own "DefenseRatio"/"AbnormalResistance" rows) since this reduces someone else's stat. Lv.10 CORRECTED (was 30, real value 20 -- same Lv.30-sample transcription mistake the checklist warns about, caught by the automated cross-check)
+    "13730000": [("HealReduce", 12, 30)],  # Apply Poison -- target's Incoming Heal reduce, same synthetic id as Cleric's Heal Block
+    "13790000": [("InstantHealMaxHPPct", 35, 44)],  # Revitalization Contract -- conditional "instantly restores X% Max HP when HP<=10%" clause; permanent Status Effect Resist portion is in _PASSIVE_SKILL_LEVEL_SCALING above
+    "13080000": [("MPRestoreOnBlock", 110, 200)],  # Assassin Stigma: Evasion Stance -- MP/Stamina restore on Evasion, same curve as every other Focused Block/Defense-style skill
+    # Ranger Passives.
+    "14790000": [("InstantHealMaxHPPct", 35, 44)],  # Ranger: Revitalization Contract -- conditional heal-on-low-HP clause, identical curve to Assassin's version
+    "14730000": [  # Wind Vigor
+        ("MaxStamina", 15, 150),  # flat, permanent -- but Stat Info has no gear-fed "Max Stamina" row to sum into (see _MOVEMENT_STAT_ROWS, id is None), so description-only rather than a fake Stat Info feed
+        ("MoveSpeedOnHit", 10, 19),  # "for Xs when attacked" -- conditional/temporary, distinct synthetic id from the permanent "MoveSpeed" stat
+    ],
+    # Sorcerer Passives.
+    "15760000": [("MPRestoreOnHit", 11, 20)],  # Absorb Essence -- "restores X MP on landing an attack", unconditional but not a permanent Stat Info total, new synthetic id (distinct from the existing "on Block"-specific MPRestoreOnBlock)
+    "15720000": [("Critical", 105, 150)],  # Robe of Earth -- conditional Critical Hit clause ("when MP is 50% or more"); the permanent Max MP%/Natural MP Regen are in _PASSIVE_SKILL_LEVEL_SCALING above
+    "15790000": [("InstantHealMaxHPPct", 35, 44)],  # Sorcerer: Revitalization Contract -- conditional heal-on-low-HP clause, identical curve to Assassin/Ranger's version
+    # Elementalist/Spiritmaster Passives + Stigma.
+    "16780000": [("CriticalDamageBoost", 1.1, 2)],  # Element Unification -- conditional ("for 10s on landing a Spirit skill attack"); the duration itself is flat/unhighlighted, no wiring needed
+    "16790000": [("InstantHealMaxHPPct", 35, 44)],  # Elementalist: Revitalization Contract -- conditional heal-on-low-HP clause, identical curve to every other class's version
+    "16750000": [("SpiritHealPct", 12, 30)],  # Spirit Revitalization -- conditional "heals the Spirit for X% of its Max HP when its HP is 50% or less"; new synthetic id since this heals the pet, not the caster
+    # Spirit Protection/Spirit Strike's SECOND (and further) spans -- the
+    # Spirit's own copy of the SAME stat at the SAME real curve as the
+    # caster's own entry above in _PASSIVE_SKILL_LEVEL_SCALING. Reusing the
+    # exact same stat id here is safe: _passive_skill_stat_totals() only
+    # ever reads _PASSIVE_SKILL_LEVEL_SCALING, never this dict, so there's
+    # no double-counting risk -- only the description text's span order
+    # (caster's stats first, then the Spirit's identical stats) is
+    # affected, and it lines up correctly since Python dict/list order is
+    # preserved.
+    "16720000": [("DefenseRatio", 1.5, 15)],  # Spirit Protection -- Spirit's Defense%
+    "16710000": [("PvEAmplifyDamage", 5.5, 10), ("PvPAmplifyDamage", 2.75, 5), ("PerfectChance", 0.4, 4)],  # Spirit Strike -- Spirit's PvE/PvP/Perfect%
+    "16170000": [("SplitPct", 50, 41), ("SplitPct", 50, 41)],  # Command: Proxy -- confirmed IDENTICAL curve to Assassin/Ranger's SplitPct (genuinely shared template)
+}
+
+# Same idea as _PASSIVE_SKILL_DESCRIPTION_ONLY_SCALING, but for values that
+# are NOT linear across the full Lv.1-30 range (confirmed via the real
+# descriptionData.placeholders curve -- Power of the Storm's rate changes
+# from +500ms/level (Lv.1-10) to +550ms/level (Lv.10-20), so a 2-point
+# formula would have been wrong past Lv.10, same class of mistake as
+# Crossguard's range). Third tuple element is an optional display suffix
+# override ("s" for a time value) -- empty string means use the normal
+# percent/flat logic instead.
+
+# This exact "10s at Lv.1 -> 14.5s at Lv.10 -> 25s at Lv.30" duration curve
+# turned out to be UNIVERSAL -- confirmed identical (not just similar) on
+# Chanter's Power of the Storm, Cleric's Prayer of Amplification/Yustiel's
+# Power, and Gladiator's Armor of Balance/Lunge Stance/Zikel's Blessing/
+# Wave Armor -- shared as one constant instead of repeating the same dict
+# per skill.
+_UNIVERSAL_STIGMA_DURATION_CURVE: dict[int, float] = {1: 10, 2: 10.5, 3: 11, 4: 11.5, 5: 12, 6: 12.5, 7: 13, 8: 13.5, 9: 14, 10: 14.5, 11: 15, 12: 15.5, 13: 16, 14: 16.5, 15: 17, 16: 17.5, 17: 18, 18: 18.5, 19: 19, 20: 20, 21: 20.5, 22: 21, 23: 21.5, 24: 22, 25: 22.5, 26: 23, 27: 23.5, 28: 24, 29: 24.5, 30: 25}
+
+_PASSIVE_SKILL_EXACT_DESCRIPTION_ONLY: dict[str, list[tuple[str, dict[int, float], str]]] = {
+    "18420000": [  # Chanter Stigma: Guardian Blessing -- Max HP boost and the instant heal share the identical real curve, one span each
+        ("HPMax", {1: 1840, 2: 2160, 3: 2340, 4: 2740, 5: 2930, 6: 3190, 7: 3320, 8: 3660, 9: 3780, 10: 3910, 11: 4180, 12: 4300, 13: 4640, 14: 4770, 15: 4900, 16: 5020, 17: 5150, 18: 5280, 19: 5410, 20: 5530, 21: 5660, 22: 5790, 23: 5920, 24: 6050, 25: 6180, 26: 6310, 27: 6440, 28: 6570, 29: 6710, 30: 6840}, ""),
+        ("HPMax", {1: 1840, 2: 2160, 3: 2340, 4: 2740, 5: 2930, 6: 3190, 7: 3320, 8: 3660, 9: 3780, 10: 3910, 11: 4180, 12: 4300, 13: 4640, 14: 4770, 15: 4900, 16: 5020, 17: 5150, 18: 5280, 19: 5410, 20: 5530, 21: 5660, 22: 5790, 23: 5920, 24: 6050, 25: 6180, 26: 6310, 27: 6440, 28: 6570, 29: 6710, 30: 6840}, ""),
+    ],
+    "18250000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Chanter Stigma: Power of the Storm
+    "17770000": [  # Cleric Passive: Prayer of Concentration -- Protective Shield absorb amount, non-linear (rate 1-10 != rate 10-30)
+        ("ShieldAbsorb", {1: 424, 2: 624, 3: 729, 4: 893, 5: 1056, 6: 1155, 7: 1351, 8: 1451, 9: 1581, 10: 1648, 11: 1848, 12: 1956, 13: 2128, 14: 2334, 15: 2418, 16: 2502, 17: 2587, 18: 2672, 19: 2758, 20: 2844, 21: 2930, 22: 3017, 23: 3104, 24: 3192, 25: 3279, 26: 3367, 27: 3456, 28: 3545, 29: 3634, 30: 3724}, ""),
+    ],
+    # Cleric Stigmas
+    "17430000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Prayer of Amplification
+    "17420000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Yustiel's Power
+    # Gladiator Stigmas
+    "11130000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Armor of Balance
+    "11400000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Lunge Stance
+    "11250000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Zikel's Blessing
+    "11410000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Wave Armor (its DoT tick is in _PASSIVE_SKILL_DAMAGE_TABLE, non-linear, own curve)
+    # Templar Passive: Guarding Seal -- Protective Shield absorb, non-linear
+    "12750000": [
+        ("ShieldAbsorb", {1: 847, 2: 1248, 3: 1457, 4: 1786, 5: 2112, 6: 2310, 7: 2702, 8: 2901, 9: 3163, 10: 3297, 11: 3695, 12: 3912, 13: 4257, 14: 4667, 15: 4835, 16: 5004, 17: 5174, 18: 5345, 19: 5516, 20: 5688, 21: 5861, 22: 6034, 23: 6208, 24: 6383, 25: 6558, 26: 6735, 27: 6912, 28: 7090, 29: 7268, 30: 7447}, ""),
+    ],
+    # Templar Stigmas
+    "12200000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Armor of Balance
+    "12450000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Battlefield Banner
+    "12190000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Second Skin
+    # Noble Armor -- two spans, "Increases Max HP by X" (first) then
+    # "instantly restores X HP" (second). Only the SECOND has real data;
+    # the first's own token ({se_abe:1223000011:1223000011:value02}) is a
+    # dead end -- it resolves to a flat 300000 at every level, identical to
+    # the buff's own duration-in-ms field, not a real HP value (same
+    # se_abe-family dead-end pattern as Nezekan's Shield/Doom Shield's
+    # shield-block value below). Since substitution is positional (see
+    # _sub() above), the first span still needs an entry to keep the
+    # second span's real curve landing in the right place -- pinned to a
+    # constant matching its own always-baked value (1313) rather than left
+    # to drift, since no real per-level number exists for it to show
+    # instead.
+    "12230000": [
+        ("HPBoost", {lvl: 1313 for lvl in range(1, 31)}, ""),
+        ("InstantHeal", {1: 1313, 2: 1552, 3: 1698, 4: 1986, 5: 2132, 6: 2325, 7: 2423, 8: 2663, 9: 2769, 10: 2875, 11: 3129, 12: 3430, 13: 3554, 14: 3678, 15: 3803, 16: 3928, 17: 4054, 18: 4181, 19: 4308, 20: 4435, 21: 4563, 22: 4692, 23: 4820, 24: 4950, 25: 5080, 26: 5211, 27: 5342, 28: 5474, 29: 5606, 30: 5739}, ""),
+    ],
+    # Taunt -- the separate "Enmity by X" span. Confirmed non-linear and,
+    # oddly, numerically IDENTICAL to the skill's own main-hit damage curve
+    # (both read effect id 1212000011) -- the main hit itself needs no
+    # override here since its local `levels` array already resolves
+    # correctly via the standard bogus-first-real-second duplicate handling
+    # in _level_value.
+    "12120000": [
+        ("Enmity", {1: 888, 2: 1009, 3: 1129, 4: 1274, 5: 1395, 6: 1483, 7: 1548, 8: 1636, 9: 1725, 10: 1813, 11: 1901, 12: 1966, 13: 2032, 14: 2097, 15: 2162, 16: 2227, 17: 2292, 18: 2357, 19: 2422, 20: 2487, 21: 2552, 22: 2617, 23: 2683, 24: 2748, 25: 2813, 26: 2878, 27: 2943, 28: 3008, 29: 3073, 30: 3138}, ""),
+    ],
+    # Assassin Stigmas -- all 3 duration-only spans confirmed to reuse the
+    # same universal curve as every other class's duration Stigmas.
+    "13370000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Evasion Contract
+    "13310000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Illusive Clone
+    "13390000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Swift Contract
+    # Ranger Stigmas -- both duration-only spans reuse the same universal
+    # curve as every other class's duration Stigmas.
+    "14220000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Bow of Blessing (Critical Hit itself is flat/unhighlighted, no wiring needed)
+    "14310000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Vaizel's Authority (Attack% itself is flat/unhighlighted, no wiring needed)
+    # Ranger Passive: Wind Vigor's "for Xs when attacked" duration -- a
+    # genuinely non-linear STEPPED curve (+200ms every 2 levels, not every
+    # level), own exact table rather than the universal Stigma curve (this
+    # is a Passive, different underlying formula).
+    "14730000": [
+        ("WindVigorDuration", {1: 1, 2: 1, 3: 1.2, 4: 1.2, 5: 1.4, 6: 1.4, 7: 1.6, 8: 1.6, 9: 1.8, 10: 1.8, 11: 2, 12: 2, 13: 2.2, 14: 2.2, 15: 2.4, 16: 2.4, 17: 2.6, 18: 2.6, 19: 2.8, 20: 2.8, 21: 3, 22: 3, 23: 3.2, 24: 3.2, 25: 3.4, 26: 3.4, 27: 3.6, 28: 3.6, 29: 3.8, 30: 3.8, 31: 4, 32: 4, 33: 4.2, 34: 4.2, 35: 4.4, 36: 4.4, 37: 4.6, 38: 4.6, 39: 4.8, 40: 4.8}, "s"),
+    ],
+    # Sorcerer Actives/Stigmas -- duration-only spans reusing the universal
+    # curve.
+    "15310000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Wish of Concentration (Active) -- confirmed same curve as every Stigma duration despite not being a Stigma itself; the Attack%/Accuracy clauses are dead-end tokens matching their static baked values exactly, no real scaling data found for them
+    "15230000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Arctic Armor (PvE/PvP Tolerance% themselves are flat/unhighlighted, no wiring needed)
+    "15400000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],  # Element Enhancement (Fire/Water Attack% themselves are flat/unhighlighted, no wiring needed)
+    # Robe of Cold's on-struck reaction (target debuff, both spans
+    # non-linear stepped curves -- real data, not a universal-curve match
+    # this time).
+    "15750000": [
+        ("MoveSpeedReduce", {1: 25, 2: 28, 3: 28, 4: 31, 5: 31, 6: 34, 7: 34, 8: 37, 9: 37, 10: 40, 11: 40, 12: 43, 13: 43, 14: 46, 15: 46, 16: 49, 17: 49, 18: 52, 19: 52, 20: 55, 21: 55, 22: 58, 23: 58, 24: 61, 25: 61, 26: 64, 27: 64, 28: 67, 29: 67, 30: 70, 31: 70, 32: 73, 33: 73, 34: 76, 35: 76, 36: 79, 37: 79, 38: 82, 39: 82, 40: 85}, "%"),
+        ("MoveSpeedReduceDuration", {1: 2, 2: 2, 3: 2.5, 4: 2.5, 5: 3, 6: 3, 7: 3.5, 8: 3.5, 9: 4, 10: 4, 11: 4.5, 12: 4.5, 13: 5, 14: 5, 15: 5.5, 16: 5.5, 17: 6, 18: 6, 19: 7, 20: 7, 21: 7.5, 22: 7.5, 23: 8, 24: 8, 25: 8.5, 26: 8.5, 27: 9, 28: 9, 29: 9.5, 30: 9.5, 31: 10, 32: 10, 33: 10.5, 34: 10.5, 35: 11, 36: 11, 37: 11.5, 38: 11.5, 39: 12, 40: 12}, "s"),
+    ],
+    # Elementalist Active: Summon: Earth Spirit's "increases Enmity by X"
+    # span -- confirmed identical curve to the summon's own main-hit
+    # damage (same shape as Templar's Taunt), reusing the established
+    # "Enmity" id.
+    "16130000": [
+        ("Enmity", {1: 247, 2: 332, 3: 437, 4: 562, 5: 668, 6: 773, 7: 878, 8: 984, 9: 1109, 10: 1215, 11: 1291, 12: 1348, 13: 1425, 14: 1502, 15: 1579, 16: 1656, 17: 1713, 18: 1769, 19: 1826, 20: 1883, 21: 1939, 22: 1996, 23: 2053, 24: 2110, 25: 2166, 26: 2223, 27: 2280, 28: 2336, 29: 2393, 30: 2450}, ""),
+    ],
+    # Elementalist Stigma: Kaisinel's Power -- duration-only span, universal
+    # curve (Status Effect Chance/Resist% themselves are flat/unhighlighted).
+    "16360000": [("StigmaDuration", _UNIVERSAL_STIGMA_DURATION_CURVE, "s")],
+}
+
+# Skills where we deliberately do NOT show a level-scaled number, because
+# the only data we found doesn't add up (User-Wunsch, 2026-09-02: "bei
+# solchen Faellen ... schreiben wir dies unterhalb des Skills als
+# Zusatzinfo, damit weiss der User direkt bescheid"). Shows a plain
+# disclaimer line instead of guessing.
+# "18240000" (Chanter Stigma: Impeding Authority) -- the skill's own baked
+# Lv.1 description text shows a shield-absorb value of "3944", but the
+# real per-level curve pulled from descriptionData.placeholders (see
+# _PASSIVE_SKILL_DAMAGE_TABLE's comment for how that source was found) is
+# a clean 1000/lvl.1 -> +100/level -> 3900/lvl.30 line -- "3944" does not
+# appear ANYWHERE on that real curve, at any level. Rather than silently
+# picking one of the two conflicting numbers (or worse, quietly
+# overriding what the game itself displays), flag it as unverified.
+_SKILL_NO_LEVEL_SCALING_DATA: set[str] = {
+    "18240000",
+    # Cleric Active: Light of Regeneration -- its HoT-per-tick amount is
+    # the skill's ENTIRE point, and no reliable number exists anywhere
+    # (see _UNRELIABLE_SKILL_TOKENS below for the technical reason), so
+    # the whole-skill banner applies rather than a per-token XXX.
+    "17090000",
+    # Templar Stigma: Nezekan's Shield -- its ONLY effect is a shield-absorb
+    # value, and the skill's single non-duration token
+    # ({se_abe:1232000011:1232000021:value03}) resolves to a flat, bogus
+    # 5000 at EVERY level (both indices) -- no real per-level number exists
+    # anywhere in descriptionData.placeholders for this skill (only 2
+    # tokens total: a duration and this dead-end), unlike Doom Shield/Noble
+    # Armor where at least one span per skill has real data -- the whole
+    # skill's core number is unverifiable, so the full banner applies here.
+    "12320000",
+    # Sorcerer Stigma: Steel Barrier -- its ONLY highlighted value is the
+    # shield-block amount ("blocks 2424 damage"), and its one non-duration
+    # token ({se_abe:1516000011:1516000011:value03}) resolves to a flat,
+    # bogus 60000 at EVERY level (matching the skill's own 60s duration in
+    # ms, not a real HP value) -- same se_abe-family dead-end pattern as
+    # Nezekan's Shield. No real per-level number exists anywhere for the
+    # one number that matters, so the full banner applies.
+    "15160000",
+}
+
+# Specific literal `{...}` tokens that must NEVER resolve to a number, even
+# though the generic levels-array mechanism WOULD produce one -- these are
+# a genuinely different value from what that mechanism reads (a DoT/HoT
+# per-tick amount sharing "Max"/"Min" in its field name with the skill's
+# own MAIN hit token, which reads the same shared `levels` array field).
+# Found auditing Cleric Actives (2026-09-02, User: "detailliert wie
+# moeglich vorgehen"): Chain of Torment/Debilitating Mark's DoT-tick token
+# would otherwise silently show the MAIN hit's damage number for the DoT
+# tick too -- confirmed wrong by checking gamers4.life's own resolved
+# preview, which is ALSO broken for this specific value (shows the raw
+# duration in milliseconds, "10000", instead of a damage number) and by
+# checking descriptionData.placeholders directly (the token's own `values`
+# array contains no damage number at all, only duration/id/level fields).
+# Light of Regeneration's HoT-tick tokens are the same story -- both Min
+# and Max needed since NEITHER resolves to real data anywhere.
+_UNRELIABLE_SKILL_TOKENS: set[str] = {
+    "{se_abe_dmg:1707000013:1707000011:SkillUIDotMaxDmg:tick}",  # Chain of Torment DoT tick
+    "{se_abe_dmg:1708000013:1708000011:SkillUIDotMaxDmg:tick}",  # Debilitating Mark DoT tick
+    "{se_abe_dmg:1709000011:1709000011:SkillUIHotMin:tick}",  # Light of Regeneration HoT tick (min)
+    "{se_abe_dmg:1709000011:1709000011:SkillUIHotMax:tick}",  # Light of Regeneration HoT tick (max)
+    "{se_abe_dmg:1740001013:1740001011:SkillUIDotMaxDmg:tick}",  # Cleric Stigma: Earth Punishment DoT tick
+    "{se_abe_dmg:1730000013:1730000012:SkillUIDotMaxDmg:tick}",  # Cleric Stigma: Voice of Doom DoT tick
+}
+
+
+def _passive_skill_level_value(lv1: float, lv10: float, level: int) -> float:
+    """Linear interpolation using the real Lv.1->Lv.10 rate (confirmed
+    linear across every gathered example), extrapolated past level 10 too.
+    _SKILL_LEVEL_BASE_CAP (10) only limits how far pure Skill Points can
+    raise a skill -- Gear/Daevanion Board/Arcana bonus (self._skill_bonus)
+    routinely pushes the EFFECTIVE level well past that (real characters
+    reportedly reach level 25-30, see project_skillpoint_sources memory),
+    and the in-game bonus keeps growing accordingly (User-corrected,
+    2026-09-02: "die passiven Skills hören nicht auf bei level 10 Bonus zu
+    bekommen" -- this used to clamp at 10, silently capping the displayed
+    stat bonus for any high-bonus build at the Lv.10 reference value)."""
+    level = max(1, level)
+    rate_per_level = (lv10 - lv1) / 9.0
+    return lv1 + rate_per_level * (level - 1)
+
+
+_HIGHLIGHT_SPAN_RE = re.compile(r'(<span style="color: #FCC78B">)([^<]+)(</span>)')
+
+
+def _format_passive_scaled_value(value: float) -> str:
+    """Rounds to 1 decimal (matching the app's existing percent-display
+    convention, see _format_number's `decimals` param) and trims a
+    trailing ".0" -- plain `:g` formatting produced ugly 4-6 digit
+    decimals for any skill whose real per-level rate isn't a clean
+    fraction (e.g. Survival Willpower's Status Effect Resist, (35-16.5)/9
+    = 2.0555.../level, would otherwise show "18.5556%")."""
+    rounded = round(value, 1)
+    if rounded == int(rounded):
+        return str(int(rounded))
+    return f"{rounded:.1f}"
+
+
+def _passive_skill_description_with_level(skill_id: str, description: str, effective_level: int) -> str:
+    """For skills we have real Lv.1/Lv.10 data for
+    (_PASSIVE_SKILL_LEVEL_SCALING / _PASSIVE_SKILL_RANGE_TABLE /
+    _PASSIVE_SKILL_DESCRIPTION_ONLY_SCALING), replaces the raw scraped
+    Lv.1 numbers baked directly into the description text with the real
+    value at the caster's current effective level, and prepends a "Lv. X"
+    indicator -- without this the skill panel text always showed the
+    exact Lv.1 wording regardless of investment (User-reported,
+    2026-09-02: "Dieser wert ändert sich nach wie vor nicht ... ist das
+    rechts einfach nur eine Info Anzeige, die immer auf level 1 anzeigt?"
+    -- confirmed yes, this fixes it for the skills with real per-level
+    data).
+
+    Substitutes by SPAN POSITION (the Nth <span style="color: #FCC78B">
+    ...</span> run gets the Nth scaling value), not by searching for the
+    literal Lv.1 text -- a real, User-caught bug (2026-09-02, "Healing
+    Boost springt bei geraden/ungeraden Leveln auf 5% zurück", reproduced
+    exactly): Blessing of Life's OWN "Max HP %" value lands on an X.5%
+    value at every other level (its Lv.1->Lv.10 rate is 1.5/level), and a
+    plain text.replace("5%", ...) would match THAT "...5%" substring
+    first -- e.g. at level 15, HP-Increase's correct "27.5%" silently
+    became "27.19%" because Heal Boost's own replacement text got spliced
+    into the tail of an unrelated, already-correct number, while the real
+    Heal Boost span further down was never touched at all (still stuck at
+    the raw "5%"). Matching by span index instead of value content makes
+    this kind of collision structurally impossible.
+
+    The game's own scraped HTML only ever wraps a value in this span when
+    it's the kind of value that actually changes with level -- confirmed
+    across every skill checked so far (flat values like Attack
+    Preparation's "100 Accuracy" or Crossguard's "200 Block" are always
+    plain, unstyled text) -- so every entry below with lv1 != lv10 lines
+    up with exactly one real span, in the same left-to-right order the
+    entries were authored in.
+    """
+    entries = _PASSIVE_SKILL_LEVEL_SCALING.get(skill_id)
+    range_table = _PASSIVE_SKILL_RANGE_TABLE.get(skill_id)
+    desc_only = _PASSIVE_SKILL_DESCRIPTION_ONLY_SCALING.get(skill_id)
+    exact_desc_only = _PASSIVE_SKILL_EXACT_DESCRIPTION_ONLY.get(skill_id)
+    # Damage-table skills (Raging Spell/Wind's Promise) are substituted
+    # separately, later, by _render_skill_description's {se_dmg:...} token
+    # handling -- not by the <span>-based logic below at all. Still checked
+    # here so the "Lv. X" indicator appears for them too (User-checklist,
+    # 2026-09-02: "Wird die Level-Aenderung beim Skill/Info angezeigt?" --
+    # this guard used to skip adding the prefix for these two entirely).
+    has_damage_table = skill_id in _PASSIVE_SKILL_DAMAGE_TABLE
+    if not entries and not range_table and not desc_only and not exact_desc_only and not has_damage_table:
+        return description
+
+    scaling_texts: list[str] = []
+    for entry in list(entries or ()) + list(desc_only or ()):
+        # Optional 4th element (default True): False means this entry feeds
+        # an ADDITIONAL Stat Info id from the SAME real value as the entry
+        # immediately before it, without a description span of its own --
+        # needed when one highlighted number in the text simultaneously
+        # buffs two different named stats (confirmed: Sorcerer's Absorb
+        # Essence, "Ailment-type AND Mental-type Chance" both from the same
+        # single "12%" span; Grace of Resistance, "Mental-type AND Impact-
+        # type Resist" from the same single span) -- _passive_skill_stat_
+        # totals() still sums BOTH stat ids from the full entries list
+        # regardless of this flag, only the description-rendering span
+        # count here is affected.
+        stat_id, lv1, lv10 = entry[0], entry[1], entry[2]
+        consumes_span = entry[3] if len(entry) > 3 else True
+        if lv1 == lv10 or not consumes_span:
+            continue
+        is_percent = stat_id in _PERCENT_STAT_IDS
+        new_value = _passive_skill_level_value(lv1, lv10, effective_level)
+        scaling_texts.append(_format_passive_scaled_value(new_value) + ("%" if is_percent else ""))
+    # Exact per-level tables (non-linear values, or values needing a custom
+    # suffix like "s" for a duration) -- see _PASSIVE_SKILL_EXACT_
+    # DESCRIPTION_ONLY's own comment for why 2-point interpolation isn't
+    # safe for these specific skills.
+    for stat_id, table, suffix_override in exact_desc_only or ():
+        clamped_level = max(1, min(max(table), effective_level))
+        new_value = table[clamped_level]
+        if suffix_override:
+            suffix = suffix_override
+        else:
+            suffix = "%" if stat_id in _PERCENT_STAT_IDS else ""
+        scaling_texts.append(_format_passive_scaled_value(new_value) + suffix)
+    # Min-max ranges (e.g. "restores 53-58 HP on Block") each occupy their
+    # OWN single span ("53-58" as one run, not two) -- appended after the
+    # scalar entries above since no current skill interleaves the two
+    # categories (verify this ordering assumption again if a future class
+    # ever mixes them within one description). Exact table lookup, not
+    # interpolated (see _PASSIVE_SKILL_RANGE_TABLE's comment -- Crossguard's
+    # real curve is non-linear, an earlier 2-point interpolation attempt
+    # was wrong at every level except the two it was calibrated on).
+    if range_table:
+        clamped_level = max(1, min(max(range_table), effective_level))
+        new_min, new_max = range_table[clamped_level]
+        scaling_texts.append(f"{_format_passive_scaled_value(new_min)}-{_format_passive_scaled_value(new_max)}")
+
+    texts_iter = iter(scaling_texts)
+
+    def _sub(match: re.Match) -> str:
+        # A span whose content is STILL an unresolved "{...}" template
+        # belongs to a damage-table/se_dmg skill (resolved later by
+        # _render_skill_description, not here) -- skip it without
+        # consuming a scaling_texts entry, otherwise a skill that mixes
+        # a damage-table span with a real scaling span (confirmed:
+        # Gladiator's Murderous Burst, "deals {se_dmg...} damage ... and
+        # reduces enemy Critical Damage Tolerance by 5.5%") gets its
+        # entries assigned to the wrong span by position (User-caught,
+        # 2026-09-02, "nicht vergessen zu pruefen" -- showed "deals 5.5%
+        # damage" instead of the real damage number).
+        if _UNRESOLVED_TOKEN_RE.search(match.group(2)):
+            return match.group(0)
+        replacement = next(texts_iter, None)
+        if replacement is None:
+            return match.group(0)
+        return match.group(1) + replacement + match.group(3)
+
+    description = _HIGHLIGHT_SPAN_RE.sub(_sub, description)
+    level_note = (
+        f"<span style='color:#22d3ee; font-weight:700;'>{_t('arm_level_prefix', level=effective_level)}</span><br>"
+    )
+    return level_note + description
+
 # Which Lord a Chalice-of-{theme} grants (User screenshots, 2026-08-30,
 # Runde 13 -- only Time/Space seen across all 7 themes so far, never
 # confirmed for a different theme-lord pairing; treated as fixed until a
@@ -5236,6 +6102,28 @@ def _make_duplicate_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
+def _make_delete_icon(size: int = 22, color: str = "#f87171") -> QIcon:
+    """Draws a small trash-can glyph for the "delete this build" action
+    (User-Wunsch, 2026-09-02: no way existed to delete a Build/Set/Genius
+    profile at all before this -- red by default since it's a destructive
+    action, unlike the neutral-colored add/duplicate/rename/save icons)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor(color))
+    painter.drawRoundedRect(QRectF(size * 0.24, size * 0.30, size * 0.52, size * 0.58), size * 0.05, size * 0.05)
+    painter.drawRoundedRect(QRectF(size * 0.16, size * 0.20, size * 0.68, size * 0.10), size * 0.04, size * 0.04)
+    painter.drawRoundedRect(QRectF(size * 0.38, size * 0.10, size * 0.24, size * 0.12), size * 0.04, size * 0.04)
+    painter.setPen(QPen(QColor("#0f172a"), size * 0.05))
+    painter.drawLine(QPointF(size * 0.40, size * 0.42), QPointF(size * 0.40, size * 0.76))
+    painter.drawLine(QPointF(size * 0.50, size * 0.42), QPointF(size * 0.50, size * 0.76))
+    painter.drawLine(QPointF(size * 0.60, size * 0.42), QPointF(size * 0.60, size * 0.76))
+    painter.end()
+    return QIcon(pixmap)
+
+
 def _make_gear_icon(size: int = 20, color: str = "#e5e7eb") -> QIcon:
     """Draws a small cog glyph for the "Eigenschaften-Priorität bearbeiten"
     button next to "Eigenschaften" (User-Wunsch: "Ein Zahnrad (similar zu
@@ -5346,24 +6234,6 @@ def _make_star_icon(size: int = 18, color: str = "#facc15") -> QPixmap:
     return pixmap
 
 
-def _make_save_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
-    """Draws a simple floppy-disk glyph instead of relying on an emoji that
-    may not render (or may render too small/faint) in this button's font."""
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing)
-
-    painter.setPen(Qt.NoPen)
-    painter.setBrush(QColor(color))
-    painter.drawRoundedRect(QRectF(size * 0.12, size * 0.08, size * 0.76, size * 0.84), size * 0.08, size * 0.08)
-
-    painter.setBrush(QColor("#0f172a"))
-    painter.drawRect(QRectF(size * 0.26, size * 0.10, size * 0.34, size * 0.24))
-    painter.drawRoundedRect(QRectF(size * 0.22, size * 0.50, size * 0.56, size * 0.34), size * 0.05, size * 0.05)
-
-    painter.end()
-    return QIcon(pixmap)
 
 
 def _make_compare_icon(size: int = 20, color: str = "#e5e7eb") -> QIcon:
@@ -5428,7 +6298,45 @@ def _make_type_badge(text: str, color: str) -> QLabel:
     return badge
 
 
-def _format_skill_stats(skill: dict) -> str:
+_OWN_FLAT_COOLDOWN_REDUCTION_RE = re.compile(r"^-(\d+(?:\.\d+)?)s cooldown$")
+
+
+def _specialization_cooldown_reduction_ms(
+    skill: dict, effective_level: int, chosen_active_spec_ids: set[str] | None = None,
+) -> float:
+    """Sums up unlocked specializations' flat "-Xs cooldown" reduction to
+    THIS skill's own cooldown (User-reported, 2026-09-02: Supporting Fire's
+    Lv.15 spec reads "-30s cooldown" but the Details panel kept showing the
+    static 90s base regardless). Deliberately narrow: only matches the
+    plain, unconditional, own-skill wording exactly -- a skill's
+    specializations can ALSO read "-Xs [OtherSkillName] cooldown" (reduces a
+    DIFFERENT skill), "-X% ... cooldown" (percent, not flat seconds), "X%
+    chance to reset cooldown on Y" (a conditional proc, not a guaranteed
+    permanent reduction), or "-1s all skill cooldowns on hit" (global,
+    conditional) -- none of those are safe to fold into a single flat
+    always-on number the same way, so they're intentionally left alone
+    rather than guessed at. Stigma specs are level-gated only (unlocked
+    once effective_level reaches them, matches the existing cumulative-
+    description-swap logic above); Active specs are additionally gated by
+    whether the player actually picked them (chosen_active_spec_ids)."""
+    is_active = skill.get("type") == "active"
+    total = 0.0
+    for spec in skill.get("specializations") or []:
+        lvl = spec.get("parentSkillLvl") or 0
+        if effective_level < lvl:
+            continue
+        if is_active:
+            spec_id = str(spec.get("id") or "")
+            if not chosen_active_spec_ids or spec_id not in chosen_active_spec_ids:
+                continue
+        note = (spec.get("specialized") or "").strip()
+        m = _OWN_FLAT_COOLDOWN_REDUCTION_RE.match(note)
+        if m:
+            total += float(m.group(1)) * 1000
+    return total
+
+
+def _format_skill_stats(skill: dict, cooldown_reduction_ms: float = 0.0) -> str:
     """MP/other resource cost, cooldown, range, and required weapon(s) —
     fields added to fetch_skills.py after the fact, so older cached entries
     may be missing some of these; each line is only shown if present."""
@@ -5441,7 +6349,11 @@ def _format_skill_stats(skill: dict) -> str:
 
     cooldown = skill.get("cooldown")
     if cooldown:
-        lines.append(f"<b>Abklingzeit:</b> {cooldown / 1000:.0f}s")
+        reduced = max(0.0, cooldown - cooldown_reduction_ms)
+        text = f"<b>Abklingzeit:</b> {reduced / 1000:.0f}s"
+        if cooldown_reduction_ms:
+            text += f" <span style='color:#4ade80;'>(-{cooldown_reduction_ms / 1000:.0f}s)</span>"
+        lines.append(text)
 
     rng = skill.get("range") or {}
     max_r = rng.get("max")
@@ -5460,21 +6372,313 @@ def _format_skill_stats(skill: dict) -> str:
 
 
 def _level_value(levels: list[dict], level: int, key: str):
-    entry = next((l for l in levels if l.get("level") == level), None)
-    if entry is None and levels:
-        entry = levels[0]
+    """Some skills' raw `levels` array has MORE THAN ONE entry for the same
+    level number -- two genuinely different shapes confirmed, needing
+    OPPOSITE handling, so neither "always first" nor "always last" is
+    safe on its own:
+
+    (a) An earlier, BOGUS placeholder entry (a location-tag string like
+    "TargetLocation_CasterToTargetDirection" for minValue, paired with a
+    coincidentally-numeric maxValue) followed by the real data entry
+    (confirmed: Gladiator's Leaping Slam/Ruinous Blow/Rush Strike/Mocking
+    Blade -- the real Lv.1 value always matched the SECOND "level: 1"
+    entry). Naively taking the first here returns the bogus one.
+
+    (b) TWO GENUINELY REAL entries for the same level, belonging to
+    DIFFERENT sub-effects of the same skill that the scraper flattened
+    into one shared list (confirmed: Templar's Warding Strike has a real
+    "247/247" main-hit entry immediately followed by an UNRELATED real
+    "180/198" HP-restore-on-hit entry -- both entries are fully numeric,
+    so nothing marks either as "bogus"). Naively taking the LAST here
+    (an earlier fix's mistake, since it only accounted for case (a))
+    returns the WRONG sub-effect's value for the main hit token.
+
+    Since a bogus placeholder entry (a) always has at least one non-
+    numeric field while a real entry (b) never does, resolving this by
+    skipping non-numeric entries and taking the FIRST fully-numeric match
+    handles both cases correctly: for (a) it skips the bogus first entry
+    and lands on the real second one; for (b) it takes the genuinely
+    first (correct, main-hit) entry without ever considering the second,
+    unrelated sub-effect's data at all."""
+    def _fully_numeric(l: dict) -> bool:
+        # BOTH fields must actually be PRESENT and numeric -- a dict that's
+        # simply missing minValue/maxValue entirely (confirmed: Templar's
+        # Poach has a level-1 entry that's just {"level": 1}, nothing else)
+        # must not vacuously pass just because there's nothing to fail.
+        return all(
+            l.get(k) is not None and str(l.get(k)).lstrip("-").replace(".", "", 1).isdigit()
+            for k in ("minValue", "maxValue")
+        )
+
+    candidates = [l for l in levels if l.get("level") == level]
+    entry = next((l for l in candidates if _fully_numeric(l)), None)
+    if entry is None:
+        entry = candidates[0] if candidates else (levels[0] if levels else None)
     return entry.get(key) if entry else None
+
+
+# REAL, EXACT per-level (1-40) damage values -- User pushback, 2026-09-02:
+# "wenn Werte eingefuegt werden, sollten diese auch mit dem Level skalieren
+# -- sonst bringen uns die Werte nix" (rightly rejected the first version
+# of this, which only had a flat Lv.1 number). Digging one level deeper
+# than the rendered-HTML trick found the REAL fix: gamers4.life's own raw
+# page JSON has a field our scraper (fetch_skills.py) has always discarded
+# -- `descriptionData.placeholders`, keyed by the literal unresolved
+# token (e.g. "{se_dmg:1877000111:SkillUIMinDmg}"), each holding a `base`
+# (Lv.1) and `levels` (2..40) entry with a real resolved `values` array.
+# For `se_dmg`-type tokens the real number sits at values[0] -- confirmed
+# genuine by cross-checking a KNOWN se_dmg-free skill's `abe`-type
+# placeholders the same way (Attack Preparation's PvE Damage Boost token
+# had values[1]=="550" at Lv.1 and "1000" at Lv.10 -- exactly 5.5%/10%,
+# our own already-verified numbers, divide100 per the token's own name).
+# This is NOT just a Lv.1 preview like the rendered-HTML approach -- it's
+# the full real 1-40 curve, so no interpolation/extrapolation is needed at
+# all for these two, unlike every percent-stat passive elsewhere in this
+# file (which only ever had a Lv.1/Lv.10 pair from user screenshots).
+# BIG implication for the other 7 classes (not yet acted on): this same
+# `descriptionData.placeholders` field likely holds the exact real curve
+# for EVERY passive in the game, which would make the whole manual
+# questlog.gg-screenshot research process obsolete -- worth systematically
+# scraping into fetch_skills.py before wiring any more classes.
+_PASSIVE_SKILL_DAMAGE_TABLE: dict[str, dict[int, float]] = {
+    "18770000": {1: 146, 2: 173, 3: 200, 4: 228, 5: 255, 6: 287, 7: 315, 8: 335, 9: 349, 10: 369, 11: 389, 12: 409, 13: 429, 14: 444, 15: 459, 16: 473, 17: 488, 18: 503, 19: 518, 20: 532, 21: 547, 22: 562, 23: 577, 24: 592, 25: 606, 26: 621, 27: 636, 28: 651, 29: 666, 30: 680, 31: 695, 32: 710, 33: 725, 34: 740, 35: 754, 36: 769, 37: 784, 38: 799, 39: 813, 40: 828},  # Chanter: Raging Spell
+    "18800000": {1: 352, 2: 394, 3: 444, 4: 486, 5: 517, 6: 540, 7: 570, 8: 601, 9: 632, 10: 663, 11: 685, 12: 708, 13: 731, 14: 754, 15: 777, 16: 800, 17: 822, 18: 845, 19: 868, 20: 891, 21: 914, 22: 937, 23: 959, 24: 982, 25: 1005, 26: 1028, 27: 1051, 28: 1074, 29: 1096, 30: 1119, 31: 1142, 32: 1165, 33: 1188, 34: 1211, 35: 1234, 36: 1256, 37: 1279, 38: 1302, 39: 1325, 40: 1348},  # Chanter: Wind's Promise
+    # Chanter Stigmas (2026-09-02, User: "Einmal alle Stigmas vom Chanter
+    # anpassen") -- Stigma passives only go to Lv.30 (not 40), see
+    # _passive_skill_damage_table_value's clamp-to-max(table) handling.
+    "18700000": {1: 986, 2: 1120, 3: 1255, 4: 1414, 5: 1548, 6: 1645, 7: 1718, 8: 1816, 9: 1913, 10: 2011, 11: 2109, 12: 2181, 13: 2254, 14: 2327, 15: 2399, 16: 2472, 17: 2545, 18: 2617, 19: 2690, 20: 2763, 21: 2835, 22: 2908, 23: 2980, 24: 3053, 25: 3126, 26: 3198, 27: 3271, 28: 3344, 29: 3416, 30: 3489},  # Assault Shock
+    "18230000": {1: 1034, 2: 1174, 3: 1315, 4: 1481, 5: 1622, 6: 1724, 7: 1800, 8: 1903, 9: 2005, 10: 2107, 11: 2210, 12: 2286, 13: 2362, 14: 2438, 15: 2514, 16: 2590, 17: 2667, 18: 2743, 19: 2819, 20: 2895, 21: 2971, 22: 3047, 23: 3123, 24: 3199, 25: 3276, 26: 3352, 27: 3428, 28: 3504, 29: 3580, 30: 3656},  # Ensnaring Mark
+    "18130000": {1: 1288, 2: 1463, 3: 1638, 4: 1845, 5: 2020, 6: 2148, 7: 2243, 8: 2370, 9: 2498, 10: 2625, 11: 2753, 12: 2848, 13: 2943, 14: 3037, 15: 3132, 16: 3227, 17: 3322, 18: 3417, 19: 3511, 20: 3606, 21: 3701, 22: 3796, 23: 3891, 24: 3986, 25: 4080, 26: 4175, 27: 4270, 28: 4365, 29: 4460, 30: 4555},  # Fracturing Blow
+    "18330000": {1: 1258, 2: 1429, 3: 1600, 4: 1803, 5: 1974, 6: 2099, 7: 2191, 8: 2316, 9: 2440, 10: 2565, 11: 2690, 12: 2782, 13: 2875, 14: 2968, 15: 3060, 16: 3153, 17: 3246, 18: 3338, 19: 3431, 20: 3524, 21: 3616, 22: 3709, 23: 3802, 24: 3894, 25: 3987, 26: 4080, 27: 4172, 28: 4265, 29: 4357, 30: 4450},  # Marchutan's Wrath
+    "18220000": {1: 1078, 2: 1225, 3: 1371, 4: 1545, 5: 1691, 6: 1798, 7: 1877, 8: 1984, 9: 2091, 10: 2198, 11: 2304, 12: 2384, 13: 2463, 14: 2543, 15: 2622, 16: 2701, 17: 2781, 18: 2860, 19: 2940, 20: 3019, 21: 3098, 22: 3178, 23: 3257, 24: 3337, 25: 3416, 26: 3495, 27: 3575, 28: 3654, 29: 3733, 30: 3813},  # Obliterate
+    # Cleric (2026-09-02, User: "detailliert wie moeglich vorgehen") --
+    # found while auditing ACTIVE skills, not just Passives/Stigmas: some
+    # Actives ALSO bake a static Lv.1 number with no {...} token at all
+    # (same class of gap as the Passives originally had), so the standard
+    # levels-array mechanism never touches them either. "Divine Aura" has
+    # a real {se_dmg:...} token but its OWN local `levels` array is
+    # malformed (duplicate "level: 1" entries, no real per-level data) --
+    # descriptionData.placeholders has the real curve instead.
+    "17150000": {1: 311, 2: 443, 3: 576, 4: 775, 5: 1025, 6: 1326, 7: 1575, 8: 1825, 9: 2075, 10: 2325, 11: 2626, 12: 2876, 13: 3060, 14: 3192, 15: 3376, 16: 3559, 17: 3743, 18: 3927, 19: 4059, 20: 4192, 21: 4324, 22: 4457, 23: 4590, 24: 4722, 25: 4855, 26: 4987, 27: 5120, 28: 5253, 29: 5385, 30: 5518},  # Cleric Active: Divine Aura
+    "17730000": {1: 64, 2: 86, 3: 114, 4: 148, 5: 176, 6: 204, 7: 231, 8: 259, 9: 293, 10: 321, 11: 342, 12: 356, 13: 377, 14: 397, 15: 418, 16: 438, 17: 453, 18: 468, 19: 483, 20: 498, 21: 513, 22: 527, 23: 542, 24: 557, 25: 572, 26: 587, 27: 601, 28: 616, 29: 631, 30: 646},  # Cleric Passive: Empyrean Lord's Grace (extra-damage-on-hit proc)
+    # Cleric Stigmas (2026-09-02) -- Assault Mark's own local `levels` array
+    # is malformed (duplicate "level: 1" entries, same as Chanter's Assault
+    # Shock), so the exact curve had to come from descriptionData.
+    # placeholders instead. Noble Aura's pet-attack proc similarly needed
+    # the exact table (non-linear rate).
+    "17700000": {1: 891, 2: 1013, 3: 1135, 4: 1282, 5: 1404, 6: 1494, 7: 1558, 8: 1648, 9: 1738, 10: 1827, 11: 1917, 12: 1982, 13: 2046, 14: 2111, 15: 2176, 16: 2241, 17: 2305, 18: 2370, 19: 2435, 20: 2499, 21: 2564, 22: 2629, 23: 2694, 24: 2758, 25: 2823, 26: 2888, 27: 2953, 28: 3017, 29: 3082, 30: 3147},  # Assault Mark
+    "17440000": {1: 408, 2: 463, 3: 519, 4: 587, 5: 642, 6: 684, 7: 713, 8: 754, 9: 795, 10: 836, 11: 877, 12: 907, 13: 937, 14: 966, 15: 996, 16: 1026, 17: 1055, 18: 1085, 19: 1114, 20: 1144, 21: 1174, 22: 1203, 23: 1233, 24: 1263, 25: 1292, 26: 1322, 27: 1352, 28: 1381, 29: 1411, 30: 1440},  # Noble Aura
+    # Gladiator Passives
+    "11770000": {1: 146, 2: 173, 3: 200, 4: 228, 5: 255, 6: 287, 7: 314, 8: 334, 9: 349, 10: 369, 11: 389, 12: 408, 13: 428, 14: 443, 15: 458, 16: 473, 17: 488, 18: 502, 19: 517, 20: 532, 21: 547, 22: 562, 23: 577, 24: 592, 25: 606, 26: 621, 27: 636, 28: 651, 29: 666, 30: 681},  # Destructive Impulse
+    "11800000": {1: 414, 2: 464, 3: 522, 4: 572, 5: 608, 6: 635, 7: 671, 8: 707, 9: 743, 10: 779, 11: 806, 12: 833, 13: 860, 14: 887, 15: 914, 16: 941, 17: 968, 18: 995, 19: 1022, 20: 1049, 21: 1076, 22: 1103, 23: 1130, 24: 1157, 25: 1184, 26: 1211, 27: 1238, 28: 1265, 29: 1292, 30: 1319},  # Murderous Burst
+    # Gladiator Stigma: Wave Armor DoT tick (non-linear)
+    "11410000": {1: 207, 2: 235, 3: 263, 4: 296, 5: 324, 6: 344, 7: 360, 8: 380, 9: 400, 10: 421, 11: 441, 12: 456, 13: 472, 14: 487, 15: 502, 16: 518, 17: 533, 18: 548, 19: 564, 20: 579, 21: 594, 22: 609, 23: 625, 24: 640, 25: 655, 26: 671, 27: 686, 28: 701, 29: 717, 30: 732},
+    # Gladiator Active: Mocking Blade -- its local `levels` array has TWO
+    # genuinely-numeric entries per level (unlike the "bogus placeholder +
+    # real" pattern _level_value's own docstring covers), and the CORRECT
+    # one is the SECOND, not the first -- the opposite of Templar's Warding
+    # Strike, which needs the first. No single `_level_value` heuristic can
+    # resolve both, so this one gets an explicit override instead (User-
+    # caught via the Templar audit, 2026-09-02, regression from the
+    # Gladiator fix).
+    "11290000": {1: 172, 2: 245, 3: 318, 4: 427, 5: 561, 6: 719, 7: 852, 8: 986, 9: 1120, 10: 1253, 11: 1411, 12: 1545, 13: 1642, 14: 1715, 15: 1812, 16: 1909, 17: 2007, 18: 2104, 19: 2177, 20: 2250, 21: 2323, 22: 2395, 23: 2468, 24: 2541, 25: 2614, 26: 2687, 27: 2760, 28: 2833, 29: 2906, 30: 2979},
+    # Templar Active: Punishment -- YET ANOTHER duplicate-level-1 shape:
+    # BOTH entries are fully numeric ('10000' first, '913' second), but
+    # '10000' is a stray duration value (matches the ms-duration pattern
+    # seen elsewhere, e.g. "10s" skills), not a damage number -- the
+    # "first fully-numeric" default in _level_value picks the wrong one
+    # here. Confirms there is NO single reliable heuristic for duplicate-
+    # level entries; every such skill needs individual verification.
+    "12090000": {1: 913, 2: 1175, 3: 1395, 4: 1615, 5: 1835, 6: 2055, 7: 2318, 8: 2538, 9: 2698, 10: 2817, 11: 2977, 12: 3138, 13: 3299, 14: 3460, 15: 3578, 16: 3697, 17: 3815, 18: 3933, 19: 4052, 20: 4170, 21: 4289, 22: 4407, 23: 4526, 24: 4644, 25: 4762, 26: 4881, 27: 4999, 28: 5118, 29: 5236, 30: 5355},
+    # Templar Passives -- proc damage, non-linear
+    "12770000": {1: 166, 2: 198, 3: 229, 4: 260, 5: 291, 6: 328, 7: 360, 8: 382, 9: 399, 10: 422, 11: 445, 12: 468, 13: 490, 14: 507, 15: 524, 16: 541, 17: 558, 18: 574, 19: 591, 20: 608, 21: 625, 22: 642, 23: 658, 24: 675, 25: 692, 26: 709, 27: 726, 28: 742, 29: 759, 30: 776},  # Insulting Roar
+    "12730000": {1: 69, 2: 93, 3: 123, 4: 158, 5: 188, 6: 217, 7: 247, 8: 277, 9: 312, 10: 342, 11: 363, 12: 379, 13: 401, 14: 422, 15: 444, 16: 466, 17: 482, 18: 498, 19: 514, 20: 530, 21: 546, 22: 562, 23: 577, 24: 593, 25: 609, 26: 625, 27: 641, 28: 657, 29: 673, 30: 689},  # Punishing Benediction proc (Critical Hit itself is in _PASSIVE_SKILL_LEVEL_SCALING)
+    # Assassin Stigma: Shadow Fall -- local `levels` array has a FOUR-way
+    # duplicate at level 1 (bogus placeholder, then 250, then 2100, then the
+    # real 465 -- yet another never-before-seen duplicate-entry shape;
+    # _level_value's "first fully-numeric" heuristic picks the wrong one,
+    # 250, since only level 1 has this junk and every other level in the
+    # array is already correct) -- explicit override needed.
+    "13220000": {1: 465, 2: 615, 3: 795, 4: 945, 5: 1095, 6: 1245, 7: 1395, 8: 1575, 9: 1725, 10: 1836, 11: 1915, 12: 2025, 13: 2135, 14: 2246, 15: 2356, 16: 2435, 17: 2515, 18: 2594, 19: 2674, 20: 2754, 21: 2833, 22: 2913, 23: 2992, 24: 3072, 25: 3151, 26: 3231, 27: 3310, 28: 3390, 29: 3470, 30: 3549, 31: 3629, 32: 3708, 33: 3788, 34: 3867, 35: 3947, 36: 4026, 37: 4106, 38: 4186, 39: 4265, 40: 4345},
+    # Assassin Passives -- own top-level `levels` array is just a constant
+    # internal formula-reference id at every level (same shape confirmed
+    # across many passives, see _render_skill_description's own comment on
+    # this), never the real value -- exact curve from descriptionData.
+    # placeholders instead.
+    "13770000": {1: 152, 2: 180, 3: 209, 4: 238, 5: 266, 6: 301, 7: 329, 8: 351, 9: 366, 10: 387, 11: 408, 12: 429, 13: 450, 14: 465, 15: 480, 16: 496, 17: 511, 18: 526, 19: 541, 20: 556, 21: 572, 22: 587, 23: 602, 24: 617, 25: 632, 26: 648, 27: 663, 28: 678, 29: 693, 30: 709, 31: 724, 32: 739, 33: 754, 34: 769, 35: 785, 36: 800, 37: 815, 38: 830, 39: 845, 40: 861},  # Ambush Stance proc
+    "13800000": {1: 189, 2: 212, 3: 239, 4: 262, 5: 279, 6: 291, 7: 307, 8: 324, 9: 341, 10: 358, 11: 370, 12: 382, 13: 394, 14: 406, 15: 418, 16: 430, 17: 442, 18: 454, 19: 466, 20: 478, 21: 491, 22: 503, 23: 515, 24: 527, 25: 539, 26: 551, 27: 563, 28: 575, 29: 587, 30: 599, 31: 611, 32: 624, 33: 636, 34: 648, 35: 660, 36: 672, 37: 684, 38: 696, 39: 708, 40: 720},  # Determination proc
+    "13720000": {1: 16, 2: 21, 3: 28, 4: 37, 5: 48, 6: 57, 7: 67, 8: 76, 9: 85, 10: 96, 11: 101, 12: 108, 13: 114, 14: 121, 15: 128, 16: 133, 17: 140, 18: 146, 19: 151, 20: 156, 21: 161, 22: 166, 23: 171, 24: 176, 25: 180, 26: 185, 27: 190, 28: 195, 29: 200, 30: 205, 31: 210, 32: 215, 33: 219, 34: 224, 35: 229, 36: 234, 37: 239, 38: 244, 39: 249, 40: 254},  # Exploit Weakness clone
+    # Ranger Actives/Stigma -- own top-level `levels` array is either the
+    # duration-in-ms field (Supporting Fire) or a malformed single/garbage
+    # entry (Explosion Trap/Ensnaring Trap), not the real damage -- exact
+    # curve from descriptionData.placeholders instead.
+    "14170000": {1: 344, 2: 463, 3: 611, 4: 787, 5: 935, 6: 1082, 7: 1230, 8: 1378, 9: 1554, 10: 1702, 11: 1810, 12: 1889, 13: 1997, 14: 2105, 15: 2213, 16: 2321, 17: 2400, 18: 2479, 19: 2558, 20: 2638, 21: 2717, 22: 2796, 23: 2875, 24: 2954, 25: 3034, 26: 3113, 27: 3192, 28: 3271, 29: 3350, 30: 3430, 31: 3509, 32: 3588, 33: 3667, 34: 3746, 35: 3826, 36: 3905, 37: 3984, 38: 4063, 39: 4142, 40: 4222},  # Explosion Trap
+    "14180000": {1: 1218, 2: 1384, 3: 1550, 4: 1748, 5: 1914, 6: 2036, 7: 2125, 8: 2246, 9: 2368, 10: 2489, 11: 2611, 12: 2700, 13: 2789, 14: 2878, 15: 2967, 16: 3056, 17: 3146, 18: 3235, 19: 3324, 20: 3413, 21: 3502, 22: 3591, 23: 3680, 24: 3769, 25: 3858, 26: 3947, 27: 4037, 28: 4126, 29: 4215, 30: 4304},  # Ensnaring Trap
+    "14380000": {1: 191, 2: 217, 3: 244, 4: 275, 5: 301, 6: 320, 7: 334, 8: 353, 9: 372, 10: 391, 11: 411, 12: 425, 13: 439, 14: 453, 15: 467, 16: 481, 17: 495, 18: 509, 19: 523, 20: 537, 21: 551, 22: 565, 23: 579, 24: 593, 25: 607, 26: 621, 27: 635, 28: 649, 29: 663, 30: 677, 31: 691, 32: 705, 33: 719, 34: 733, 35: 747, 36: 761, 37: 775, 38: 789, 39: 803, 40: 817},  # Supporting Fire
+    # Ranger Passives -- own top-level `levels` array is a constant internal
+    # formula-reference id at every level (same pattern as every other
+    # class's procs).
+    "14720000": {1: 39, 2: 53, 3: 70, 4: 90, 5: 107, 6: 124, 7: 140, 8: 157, 9: 178, 10: 195, 11: 207, 12: 216, 13: 228, 14: 241, 15: 253, 16: 265, 17: 275, 18: 284, 19: 293, 20: 302, 21: 311, 22: 320, 23: 329, 24: 338, 25: 347, 26: 356, 27: 365, 28: 374, 29: 383, 30: 393, 31: 402, 32: 411, 33: 420, 34: 429, 35: 438, 36: 447, 37: 456, 38: 465, 39: 474, 40: 483},  # Concentrated Fire
+    "14800000": {1: 265, 2: 297, 3: 335, 4: 367, 5: 390, 6: 407, 7: 430, 8: 453, 9: 477, 10: 500, 11: 517, 12: 534, 13: 551, 14: 568, 15: 585, 16: 602, 17: 620, 18: 637, 19: 654, 20: 671, 21: 688, 22: 705, 23: 722, 24: 739, 25: 756, 26: 773, 27: 790, 28: 807, 29: 824, 30: 842, 31: 859, 32: 876, 33: 893, 34: 910, 35: 927, 36: 944, 37: 961, 38: 978, 39: 995, 40: 1012},  # Hunter's Soul
+    "14780000": {1: 135, 2: 153, 3: 172, 4: 194, 5: 212, 6: 226, 7: 236, 8: 249, 9: 263, 10: 276, 11: 290, 12: 300, 13: 309, 14: 319, 15: 329, 16: 339, 17: 349, 18: 359, 19: 369, 20: 379, 21: 389, 22: 399, 23: 408, 24: 418, 25: 428, 26: 438, 27: 448, 28: 458, 29: 468, 30: 478, 31: 488, 32: 498, 33: 507, 34: 517, 35: 527, 36: 537, 37: 547, 38: 557, 39: 567, 40: 577},  # Melee Fire
+    "14770000": {1: 143, 2: 170, 3: 197, 4: 224, 5: 251, 6: 283, 7: 310, 8: 329, 9: 344, 10: 364, 11: 383, 12: 403, 13: 423, 14: 437, 15: 452, 16: 466, 17: 480, 18: 495, 19: 509, 20: 524, 21: 538, 22: 553, 23: 567, 24: 581, 25: 596, 26: 610, 27: 625, 28: 639, 29: 654, 30: 668, 31: 683, 32: 697, 33: 711, 34: 726, 35: 740, 36: 755, 37: 769, 38: 784, 39: 798, 40: 812},  # Rooting Eye
+    # Sorcerer Active: Bittercold Wind -- own local `levels` array is
+    # entirely garbage (single junk level-1 entry, no real per-level data
+    # at all), exact curve from descriptionData.placeholders instead. Caps
+    # at Lv.30 (confirmed via the real curve's own max level), not 40 --
+    # unlike Assassin/Ranger, several of Sorcerer's Actives cap at 30 the
+    # same way Stigmas do.
+    "15280000": {1: 222, 2: 317, 3: 411, 4: 553, 5: 727, 6: 934, 7: 1108, 8: 1282, 9: 1456, 10: 1630, 11: 1837, 12: 2011, 13: 2138, 14: 2232, 15: 2359, 16: 2486, 17: 2613, 18: 2740, 19: 2835, 20: 2929, 21: 3023, 22: 3118, 23: 3212, 24: 3307, 25: 3401, 26: 3495, 27: 3590, 28: 3684, 29: 3779, 30: 3873},
+    # Sorcerer Passives -- own top-level `levels` array is a constant
+    # internal formula-reference id at every level (same pattern as every
+    # other class's procs).
+    "15730000": {1: 43, 2: 58, 3: 77, 4: 99, 5: 117, 6: 135, 7: 154, 8: 172, 9: 194, 10: 213, 11: 226, 12: 236, 13: 250, 14: 263, 15: 277, 16: 290, 17: 300, 18: 310, 19: 320, 20: 330, 21: 340, 22: 350, 23: 360, 24: 370, 25: 380, 26: 390, 27: 400, 28: 410, 29: 420, 30: 430, 31: 440, 32: 450, 33: 460, 34: 470, 35: 480, 36: 490, 37: 500, 38: 510, 39: 520, 40: 530},  # Cold Snap
+    "15710000": {1: 32, 2: 56, 3: 80, 4: 104, 5: 140, 6: 184, 7: 236, 8: 280, 9: 325, 10: 369, 11: 401, 12: 433, 13: 465, 14: 489, 15: 521, 16: 553, 17: 586, 18: 618, 19: 642, 20: 674, 21: 706, 22: 730, 23: 754, 24: 778, 25: 802, 26: 826, 27: 850, 28: 874, 29: 898, 30: 921, 31: 945, 32: 969, 33: 993, 34: 1017, 35: 1041, 36: 1065, 37: 1089, 38: 1113, 39: 1137, 40: 1161},  # Fire Mark
+    "15780000": {1: 106, 2: 120, 3: 135, 4: 152, 5: 166, 6: 177, 7: 185, 8: 195, 9: 206, 10: 216, 11: 227, 12: 235, 13: 243, 14: 250, 15: 258, 16: 266, 17: 274, 18: 282, 19: 289, 20: 297, 21: 305, 22: 313, 23: 321, 24: 329, 25: 336, 26: 344, 27: 352, 28: 360, 29: 368, 30: 376, 31: 383, 32: 391, 33: 399, 34: 407, 35: 415, 36: 423, 37: 430, 38: 438, 39: 446, 40: 454},  # Grace of Enhancement
+    "15800000": {1: 261, 2: 293, 3: 330, 4: 361, 5: 384, 6: 401, 7: 424, 8: 446, 9: 469, 10: 492, 11: 509, 12: 526, 13: 543, 14: 560, 15: 577, 16: 594, 17: 611, 18: 628, 19: 645, 20: 662, 21: 679, 22: 696, 23: 713, 24: 730, 25: 747, 26: 764, 27: 780, 28: 797, 29: 814, 30: 831, 31: 848, 32: 865, 33: 882, 34: 899, 35: 916, 36: 933, 37: 950, 38: 967, 39: 984, 40: 1001},  # Vitality Evaporation
+    # Sorcerer Stigmas -- own local `levels` array is entirely garbage
+    # (same as Bittercold Wind above).
+    "15200000": {1: 945, 2: 1074, 3: 1202, 4: 1354, 5: 1483, 6: 1576, 7: 1646, 8: 1740, 9: 1833, 10: 1927, 11: 2020, 12: 2090, 13: 2160, 14: 2229, 15: 2299, 16: 2368, 17: 2438, 18: 2508, 19: 2577, 20: 2647, 21: 2716, 22: 2786, 23: 2856, 24: 2925, 25: 2995, 26: 3064, 27: 3134, 28: 3204, 29: 3273, 30: 3343},  # Cold Storm main hit
+    "15390000": {1: 1300, 2: 1476, 3: 1653, 4: 1862, 5: 2039, 6: 2168, 7: 2263, 8: 2392, 9: 2521, 10: 2649, 11: 2778, 12: 2874, 13: 2970, 14: 3065, 15: 3161, 16: 3257, 17: 3352, 18: 3448, 19: 3544, 20: 3639, 21: 3735, 22: 3831, 23: 3927, 24: 4022, 25: 4118, 26: 4214, 27: 4309, 28: 4405, 29: 4501, 30: 4596},  # Fire Wall main hit
+    # Sorcerer Stigma: Delayed Explosion -- own local `levels` array is
+    # CONSTANT at every level (4000 = the skill's own 4s delay in ms, not
+    # the damage value) -- min_varies/max_varies correctly detects this and
+    # falls back to "XXX" rather than show a wrong-but-plausible number, so
+    # this needs an explicit override.
+    "15320000": {1: 1116, 2: 1268, 3: 1420, 4: 1600, 5: 1752, 6: 1862, 7: 1944, 8: 2055, 9: 2165, 10: 2276, 11: 2387, 12: 2469, 13: 2551, 14: 2633, 15: 2715, 16: 2798, 17: 2880, 18: 2962, 19: 3044, 20: 3127, 21: 3209, 22: 3291, 23: 3373, 24: 3455, 25: 3538, 26: 3620, 27: 3702, 28: 3784, 29: 3866, 30: 3949},
+    # Elementalist/Spiritmaster Actives: the 4 Summon skills + Ancient
+    # Spirit's own skill damage -- own local `levels` array is CONSTANT
+    # "200" at every level past Lv.1 across ALL FIVE of these (a
+    # systematic site-side data issue affecting the whole "Summon: X
+    # Spirit" family, not a one-off).
+    "16130000": {1: 247, 2: 332, 3: 437, 4: 562, 5: 668, 6: 773, 7: 878, 8: 984, 9: 1109, 10: 1215, 11: 1291, 12: 1348, 13: 1425, 14: 1502, 15: 1579, 16: 1656, 17: 1713, 18: 1769, 19: 1826, 20: 1883, 21: 1939, 22: 1996, 23: 2053, 24: 2110, 25: 2166, 26: 2223, 27: 2280, 28: 2336, 29: 2393, 30: 2450},  # Summon: Earth Spirit
+    "16100000": {1: 68, 2: 118, 3: 169, 4: 219, 5: 295, 6: 388, 7: 500, 8: 594, 9: 687, 10: 781, 11: 874, 12: 986, 13: 1080, 14: 1148, 15: 1198, 16: 1267, 17: 1335, 18: 1404, 19: 1472, 20: 1522, 21: 1573, 22: 1623, 23: 1674, 24: 1724, 25: 1774, 26: 1825, 27: 1875, 28: 1926, 29: 1976, 30: 2026},  # Summon: Fire Spirit
+    "16110000": {1: 143, 2: 204, 3: 265, 4: 356, 5: 469, 6: 604, 7: 717, 8: 830, 9: 943, 10: 1057, 11: 1191, 12: 1305, 13: 1387, 14: 1448, 15: 1531, 16: 1613, 17: 1696, 18: 1779, 19: 1840, 20: 1900, 21: 1961, 22: 2022, 23: 2083, 24: 2144, 25: 2205, 26: 2266, 27: 2327, 28: 2388, 29: 2449, 30: 2509},  # Summon: Water Spirit
+    "16120000": {1: 273, 2: 359, 3: 462, 4: 549, 5: 636, 6: 722, 7: 809, 8: 912, 9: 999, 10: 1062, 11: 1108, 12: 1172, 13: 1235, 14: 1298, 15: 1361, 16: 1408, 17: 1455, 18: 1501, 19: 1548, 20: 1595, 21: 1641, 22: 1688, 23: 1734, 24: 1781, 25: 1828, 26: 1874, 27: 1921, 28: 1968, 29: 2014, 30: 2061},  # Summon: Wind Spirit
+    "16250000": {1: 1082, 2: 1230, 3: 1377, 4: 1553, 5: 1701, 6: 1808, 7: 1888, 8: 1995, 9: 2103, 10: 2211, 11: 2319, 12: 2398, 13: 2477, 14: 2557, 15: 2636, 16: 2715, 17: 2795, 18: 2874, 19: 2954, 20: 3033, 21: 3112, 22: 3192, 23: 3271, 24: 3350, 25: 3430, 26: 3509, 27: 3589, 28: 3668, 29: 3747, 30: 3827},  # Summon: Ancient Spirit
+    # Elementalist Passives -- own top-level `levels` array is a constant
+    # internal formula-reference id at every level (same pattern as every
+    # other class's procs).
+    "16800000": {1: 75, 2: 89, 3: 103, 4: 117, 5: 131, 6: 147, 7: 162, 8: 172, 9: 179, 10: 190, 11: 200, 12: 210, 13: 220, 14: 228, 15: 235, 16: 243, 17: 251, 18: 258, 19: 266, 20: 273, 21: 281, 22: 288, 23: 296, 24: 304, 25: 311, 26: 319, 27: 326, 28: 334, 29: 341, 30: 349, 31: 356, 32: 364, 33: 372, 34: 379, 35: 387, 36: 394, 37: 402, 38: 409, 39: 417, 40: 424},  # Consecutive Countercurrent
+    "16740000": {1: 95, 2: 126, 3: 162, 4: 193, 5: 223, 6: 253, 7: 284, 8: 320, 9: 351, 10: 373, 11: 389, 12: 411, 13: 434, 14: 456, 15: 478, 16: 494, 17: 511, 18: 527, 19: 544, 20: 560, 21: 576, 22: 593, 23: 609, 24: 625, 25: 642, 26: 658, 27: 675, 28: 691, 29: 707, 30: 724, 31: 740, 32: 756, 33: 773, 34: 789, 35: 806, 36: 822, 37: 838, 38: 855, 39: 871, 40: 888},  # Corrode proc
+    # Elementalist Stigmas.
+    "16370000": {1: 156, 2: 177, 3: 199, 4: 224, 5: 245, 6: 261, 7: 272, 8: 288, 9: 303, 10: 319, 11: 334, 12: 346, 13: 357, 14: 369, 15: 380, 16: 392, 17: 403, 18: 415, 19: 426, 20: 438, 21: 449, 22: 461, 23: 472, 24: 484, 25: 495, 26: 506, 27: 518, 28: 529, 29: 541, 30: 552},  # Flame Blessing proc
+    # Seize Magic -- own local `levels` array is entirely non-numeric junk
+    # ("Buff"/"FALSE" at every level, not even a garbage reference-id
+    # number), a different flavor of "unusable local array" from the
+    # ref-id pattern but the same practical fix.
+    "16230000": {1: 1031, 2: 1171, 3: 1312, 4: 1479, 5: 1620, 6: 1722, 7: 1798, 8: 1900, 9: 2003, 10: 2106, 11: 2208, 12: 2284, 13: 2359, 14: 2435, 15: 2511, 16: 2586, 17: 2662, 18: 2737, 19: 2813, 20: 2889, 21: 2964, 22: 3040, 23: 3115, 24: 3191, 25: 3267, 26: 3342, 27: 3418, 28: 3493, 29: 3569, 30: 3645},
+}
+
+
+def _passive_skill_damage_table_value(table: dict[int, float], level: int) -> float:
+    """Exact lookup, clamped to whatever range this specific table actually
+    covers (Passives go to Lv.40, Stigma skills only to Lv.30 -- see
+    _STIGMA_LEVEL_BASE_CAP/project_passive_skill_stats memory) -- no
+    interpolation needed, every level in between is a real, individually-
+    fetched value already."""
+    level = max(1, min(max(table), level))
+    return table[level]
+
+
+# Keyed by the exact literal '{...}' token text (NOT skill_id) -- for the
+# rare case where a skill's Min and Max spans are genuinely DIFFERENT curves
+# (not the min==max every other _PASSIVE_SKILL_DAMAGE_TABLE entry assumes),
+# found auditing Assassin (2026-09-02): Apply Poison's DoT tick and Spiral
+# Slice's buff-removal bonus damage both have a real, distinct Min and Max.
+# A skill_id-keyed table can't represent this (it applies the same value to
+# both the Min and Max token by design), and Spiral Slice specifically also
+# has a SEPARATE main-hit se_dmg pair on the same skill_id that already
+# resolves correctly from its own local `levels` array -- a skill_id-keyed
+# override would incorrectly clobber that working span too. Matching the
+# exact token text instead affects only the one specific span it belongs to.
+_PASSIVE_SKILL_EXACT_TOKEN_TABLE: dict[str, dict[int, float]] = {
+    "{se_abe_dmg:1373000711:1373000712:SkillUIDotMinDmg:tick}": {1: 204, 2: 274, 3: 363, 4: 470, 5: 558, 6: 647, 7: 736, 8: 824, 9: 931, 10: 1020, 11: 1085, 12: 1132, 13: 1197, 14: 1262, 15: 1327, 16: 1392, 17: 1439, 18: 1486, 19: 1534, 20: 1581, 21: 1628, 22: 1675, 23: 1722, 24: 1769, 25: 1816, 26: 1863, 27: 1910, 28: 1957, 29: 2004, 30: 2051, 31: 2098, 32: 2145, 33: 2192, 34: 2239, 35: 2286, 36: 2333, 37: 2380, 38: 2427, 39: 2474, 40: 2521},  # Assassin Passive: Apply Poison DoT tick
+    "{se_abe_dmg:1373000711:1373000712:SkillUIDotMaxDmg:tick}": {1: 233, 2: 314, 3: 416, 4: 538, 5: 639, 6: 741, 7: 842, 8: 943, 9: 1066, 10: 1167, 11: 1242, 12: 1295, 13: 1370, 14: 1444, 15: 1519, 16: 1593, 17: 1647, 18: 1701, 19: 1755, 20: 1809, 21: 1863, 22: 1916, 23: 1970, 24: 2024, 25: 2078, 26: 2132, 27: 2185, 28: 2239, 29: 2293, 30: 2347, 31: 2401, 32: 2455, 33: 2508, 34: 2562, 35: 2616, 36: 2670, 37: 2724, 38: 2777, 39: 2831, 40: 2885},
+    "{se_dmg:1328000711:SkillUIMinDmgsum}": {1: 386, 2: 439, 3: 492, 4: 556, 5: 609, 6: 648, 7: 676, 8: 714, 9: 753, 10: 792, 11: 831, 12: 859, 13: 887, 14: 915, 15: 943, 16: 972, 17: 1000, 18: 1028, 19: 1056, 20: 1084, 21: 1112, 22: 1140, 23: 1168, 24: 1196, 25: 1224, 26: 1252, 27: 1280, 28: 1308, 29: 1337, 30: 1365},  # Assassin Stigma: Spiral Slice's buff-removal bonus damage
+    "{se_dmg:1328000811:SkillUIMaxDmgsum}": {1: 515, 2: 586, 3: 656, 4: 741, 5: 812, 6: 864, 7: 901, 8: 953, 9: 1005, 10: 1056, 11: 1108, 12: 1146, 13: 1183, 14: 1221, 15: 1258, 16: 1296, 17: 1333, 18: 1370, 19: 1408, 20: 1445, 21: 1483, 22: 1520, 23: 1558, 24: 1595, 25: 1632, 26: 1670, 27: 1707, 28: 1745, 29: 1782, 30: 1820},
+    # Ranger Active: Deadshot -- MIN and MAX are two DIFFERENT effect ids
+    # (1401000011 vs 1401000311), and the skill's own local `levels` array
+    # only ever recorded the MIN value in both fields (rendering "509-509"
+    # instead of the real, much wider "509-1528") -- MIN already resolves
+    # correctly via the standard mechanism, only the MAX token needs an
+    # override here.
+    "{se_dmg:1401000311:SkillUIMaxDmgsum}": {1: 1528, 2: 1969, 3: 2338, 4: 2707, 5: 3076, 6: 3445, 7: 3886, 8: 4255, 9: 4525, 10: 4723, 11: 4993, 12: 5263, 13: 5533, 14: 5803, 15: 6001, 16: 6199, 17: 6397, 18: 6595, 19: 6793, 20: 6991, 21: 7189, 22: 7387, 23: 7585, 24: 7783, 25: 7981, 26: 8179, 27: 8377, 28: 8575, 29: 8773, 30: 8971, 31: 9169, 32: 9367, 33: 9565, 34: 9763, 35: 9961, 36: 10159, 37: 10357, 38: 10555, 39: 10753, 40: 10951},
+    # Ranger Active: Drill Dart / Stigma: Griffon Arrow -- both have a real
+    # DoT tick in a nested abeBase/abeLevels sub-structure (same shape as
+    # Assassin's Apply Poison), where the smaller-magnitude index is MIN and
+    # the larger is MAX -- confirmed by comparing magnitudes directly rather
+    # than assuming a fixed index meaning (Apply Poison's MAX happened to be
+    # the smaller-numbered index, MIN the larger; here it's reversed -- no
+    # universal index convention, verify per skill).
+    "{se_abe_dmg:1405000012:1405000012:SkillUIDotMinDmg:tick}": {1: 43, 2: 62, 3: 80, 4: 108, 5: 143, 6: 184, 7: 219, 8: 253, 9: 288, 10: 322, 11: 364, 12: 398, 13: 424, 14: 442, 15: 468, 16: 493, 17: 518, 18: 544, 19: 562, 20: 581, 21: 599, 22: 618, 23: 636, 24: 655, 25: 673, 26: 692, 27: 711, 28: 729, 29: 748, 30: 766, 31: 785, 32: 803, 33: 822, 34: 841, 35: 859, 36: 878, 37: 896, 38: 915, 39: 933, 40: 952},
+    "{se_abe_dmg:1405000012:1405000012:SkillUIDotMaxDmg:tick}": {1: 47, 2: 67, 3: 88, 4: 118, 5: 156, 6: 201, 7: 239, 8: 276, 9: 314, 10: 352, 11: 397, 12: 435, 13: 462, 14: 483, 15: 510, 16: 538, 17: 566, 18: 593, 19: 613, 20: 634, 21: 654, 22: 674, 23: 694, 24: 715, 25: 735, 26: 755, 27: 775, 28: 796, 29: 816, 30: 836, 31: 856, 32: 877, 33: 897, 34: 917, 35: 937, 36: 958, 37: 978, 38: 998, 39: 1018, 40: 1039},
+    "{se_abe_dmg:1406000012:1406000011:SkillUIDotMinDmg:tick}": {1: 482, 2: 547, 3: 613, 4: 692, 5: 757, 6: 806, 7: 841, 8: 889, 9: 937, 10: 985, 11: 1033, 12: 1068, 13: 1104, 14: 1139, 15: 1174, 16: 1210, 17: 1245, 18: 1280, 19: 1315, 20: 1351, 21: 1386, 22: 1421, 23: 1456, 24: 1492, 25: 1527, 26: 1562, 27: 1597, 28: 1633, 29: 1668, 30: 1703},
+    "{se_abe_dmg:1406000012:1406000011:SkillUIDotMaxDmg:tick}": {1: 490, 2: 556, 3: 623, 4: 703, 5: 770, 6: 819, 7: 855, 8: 903, 9: 952, 10: 1001, 11: 1050, 12: 1086, 13: 1122, 14: 1158, 15: 1194, 16: 1229, 17: 1265, 18: 1301, 19: 1337, 20: 1373, 21: 1409, 22: 1444, 23: 1480, 24: 1516, 25: 1552, 26: 1588, 27: 1624, 28: 1660, 29: 1695, 30: 1731},
+    # Sorcerer Active: Hellfire -- MIN and MAX are two DIFFERENT effect ids
+    # (1506000011 vs 1506000311), same shape as Ranger's Deadshot; MIN
+    # already resolves correctly via the standard mechanism, only MAX
+    # needs an override here.
+    "{se_dmg:1506000311:SkillUIMaxDmgsum}": {1: 2655, 2: 3409, 3: 4045, 4: 4680, 5: 5316, 6: 5951, 7: 6706, 8: 7341, 9: 7805, 10: 8149, 11: 8613, 12: 9076, 13: 9539, 14: 10002, 15: 10347, 16: 10692, 17: 11036, 18: 11381, 19: 11725, 20: 12070, 21: 12414, 22: 12759, 23: 13103, 24: 13448, 25: 13792, 26: 14137, 27: 14481, 28: 14826, 29: 15170, 30: 15515},
+    # Sorcerer Stigma: Cold Storm's DoT tick -- real data in the nested
+    # abeBase/abeLevels sub-structure (same shape as Assassin's Apply
+    # Poison/Ranger's Drill Dart/Griffon Arrow); here index 3 is the
+    # smaller (MIN) and index 11 the larger (MAX) -- yet another
+    # arrangement, confirming there's no fixed convention.
+    "{se_abe_dmg:1520000212:1520000211:SkillUIDotMinDmg:tick}": {1: 472, 2: 537, 3: 601, 4: 677, 5: 741, 6: 788, 7: 823, 8: 870, 9: 916, 10: 963, 11: 1010, 12: 1045, 13: 1080, 14: 1114, 15: 1149, 16: 1184, 17: 1219, 18: 1254, 19: 1288, 20: 1323, 21: 1358, 22: 1393, 23: 1428, 24: 1462, 25: 1497, 26: 1532, 27: 1567, 28: 1602, 29: 1636, 30: 1671},
+    "{se_abe_dmg:1520000212:1520000211:SkillUIDotMaxDmg:tick}": {1: 485, 2: 551, 3: 617, 4: 696, 5: 761, 6: 810, 7: 845, 8: 893, 9: 942, 10: 990, 11: 1038, 12: 1073, 13: 1109, 14: 1145, 15: 1181, 16: 1216, 17: 1252, 18: 1288, 19: 1324, 20: 1359, 21: 1395, 22: 1431, 23: 1467, 24: 1503, 25: 1538, 26: 1574, 27: 1610, 28: 1646, 29: 1681, 30: 1717},
+    # Sorcerer Stigma: Fire Wall's DoT tick -- same sub-structure, but here
+    # index 3 is the LARGER (MAX) and index 11 the smaller (MIN) --
+    # reversed from Cold Storm right above.
+    "{se_abe_dmg:1539000212:1539000011:SkillUIDotMinDmg:tick}": {1: 618, 2: 702, 3: 786, 4: 886, 5: 970, 6: 1031, 7: 1077, 8: 1138, 9: 1199, 10: 1261, 11: 1322, 12: 1367, 13: 1413, 14: 1458, 15: 1504, 16: 1550, 17: 1595, 18: 1641, 19: 1686, 20: 1732, 21: 1777, 22: 1823, 23: 1868, 24: 1914, 25: 1959, 26: 2005, 27: 2051, 28: 2096, 29: 2142, 30: 2187},
+    "{se_abe_dmg:1539000212:1539000011:SkillUIDotMaxDmg:tick}": {1: 650, 2: 738, 3: 826, 4: 931, 5: 1019, 6: 1084, 7: 1131, 8: 1196, 9: 1260, 10: 1324, 11: 1389, 12: 1437, 13: 1485, 14: 1532, 15: 1580, 16: 1628, 17: 1676, 18: 1724, 19: 1772, 20: 1819, 21: 1867, 22: 1915, 23: 1963, 24: 2011, 25: 2059, 26: 2107, 27: 2154, 28: 2202, 29: 2250, 30: 2298},
+    # Elementalist Stigma: Cursed Cloud's DoT tick -- index 3 is MAX, index
+    # 11 is MIN.
+    "{se_abe_dmg:1622000012:1622000011:SkillUIDotMinDmg:tick}": {1: 829, 2: 941, 3: 1054, 4: 1189, 5: 1302, 6: 1384, 7: 1445, 8: 1528, 9: 1610, 10: 1692, 11: 1775, 12: 1836, 13: 1897, 14: 1957, 15: 2018, 16: 2079, 17: 2140, 18: 2200, 19: 2261, 20: 2322, 21: 2383, 22: 2443, 23: 2504, 24: 2565, 25: 2626, 26: 2687, 27: 2747, 28: 2808, 29: 2869, 30: 2930},
+    "{se_abe_dmg:1622000012:1622000011:SkillUIDotMaxDmg:tick}": {1: 1203, 2: 1367, 3: 1530, 4: 1726, 5: 1890, 6: 2009, 7: 2097, 8: 2217, 9: 2337, 10: 2457, 11: 2576, 12: 2664, 13: 2753, 14: 2841, 15: 2929, 16: 3017, 17: 3105, 18: 3194, 19: 3282, 20: 3370, 21: 3458, 22: 3546, 23: 3635, 24: 3723, 25: 3811, 26: 3899, 27: 3987, 28: 4076, 29: 4164, 30: 4252},
+    # Elementalist Stigma: Seize Magic's buff-removal bonus damage -- Min
+    # and Max on two DIFFERENT effect ids (same shape as Assassin's Spiral
+    # Slice), and the main hit's own local `levels` array already resolves
+    # correctly on its own, so no skill_id-keyed override needed for it.
+    "{se_dmg:1623000111:SkillUIMinDmgsum}": {1: 371, 2: 421, 3: 472, 4: 532, 5: 583, 6: 620, 7: 647, 8: 684, 9: 721, 10: 758, 11: 795, 12: 822, 13: 849, 14: 876, 15: 903, 16: 931, 17: 958, 18: 985, 19: 1012, 20: 1040, 21: 1067, 22: 1094, 23: 1121, 24: 1148, 25: 1176, 26: 1203, 27: 1230, 28: 1257, 29: 1284, 30: 1312},
+    "{se_dmg:1623000211:SkillUIMaxDmgsum}": {1: 495, 2: 562, 3: 629, 4: 710, 5: 777, 6: 826, 7: 863, 8: 912, 9: 961, 10: 1010, 11: 1060, 12: 1096, 13: 1132, 14: 1168, 15: 1205, 16: 1241, 17: 1277, 18: 1314, 19: 1350, 20: 1386, 21: 1423, 22: 1459, 23: 1495, 24: 1531, 25: 1568, 26: 1604, 27: 1640, 28: 1677, 29: 1713, 30: 1749},
+    # Elementalist Stigma: Jointstrike: Destructive Attack -- 5 elemental
+    # combo variants, each on its own skill id but sharing THIS one
+    # skill_id's local `levels` array (which only ever matches the MAIN
+    # hit) -- every variant here is min==max (a single flat proc value).
+    "{se_dmg:1600130111:SkillUIMinDmgsum}": {1: 664, 2: 755, 3: 845, 4: 953, 5: 1044, 6: 1110, 7: 1158, 8: 1224, 9: 1291, 10: 1357, 11: 1423, 12: 1472, 13: 1520, 14: 1569, 15: 1618, 16: 1666, 17: 1715, 18: 1764, 19: 1813, 20: 1861, 21: 1910, 22: 1959, 23: 2007, 24: 2056, 25: 2105, 26: 2154, 27: 2202, 28: 2251, 29: 2300, 30: 2349},  # Fire
+    "{se_dmg:1600130111:SkillUIMaxDmgsum}": {1: 664, 2: 755, 3: 845, 4: 953, 5: 1044, 6: 1110, 7: 1158, 8: 1224, 9: 1291, 10: 1357, 11: 1423, 12: 1472, 13: 1520, 14: 1569, 15: 1618, 16: 1666, 17: 1715, 18: 1764, 19: 1813, 20: 1861, 21: 1910, 22: 1959, 23: 2007, 24: 2056, 25: 2105, 26: 2154, 27: 2202, 28: 2251, 29: 2300, 30: 2349},
+    "{se_dmg:1600130511:SkillUIMinDmgsum}": {1: 797, 2: 906, 3: 1014, 4: 1144, 5: 1252, 6: 1332, 7: 1390, 8: 1469, 9: 1549, 10: 1628, 11: 1707, 12: 1766, 13: 1824, 14: 1883, 15: 1941, 16: 2000, 17: 2058, 18: 2117, 19: 2175, 20: 2234, 21: 2292, 22: 2351, 23: 2409, 24: 2468, 25: 2526, 26: 2584, 27: 2643, 28: 2701, 29: 2760, 30: 2818},  # Water
+    "{se_dmg:1600130511:SkillUIMaxDmgsum}": {1: 797, 2: 906, 3: 1014, 4: 1144, 5: 1252, 6: 1332, 7: 1390, 8: 1469, 9: 1549, 10: 1628, 11: 1707, 12: 1766, 13: 1824, 14: 1883, 15: 1941, 16: 2000, 17: 2058, 18: 2117, 19: 2175, 20: 2234, 21: 2292, 22: 2351, 23: 2409, 24: 2468, 25: 2526, 26: 2584, 27: 2643, 28: 2701, 29: 2760, 30: 2818},
+    "{se_dmg:1600130911:SkillUIMinDmgsum}": {1: 731, 2: 830, 3: 930, 4: 1048, 5: 1148, 6: 1221, 7: 1274, 8: 1347, 9: 1420, 10: 1492, 11: 1565, 12: 1619, 13: 1672, 14: 1726, 15: 1780, 16: 1833, 17: 1887, 18: 1940, 19: 1994, 20: 2047, 21: 2101, 22: 2155, 23: 2208, 24: 2262, 25: 2315, 26: 2369, 27: 2423, 28: 2476, 29: 2530, 30: 2583},  # Earth
+    "{se_dmg:1600130911:SkillUIMaxDmgsum}": {1: 731, 2: 830, 3: 930, 4: 1048, 5: 1148, 6: 1221, 7: 1274, 8: 1347, 9: 1420, 10: 1492, 11: 1565, 12: 1619, 13: 1672, 14: 1726, 15: 1780, 16: 1833, 17: 1887, 18: 1940, 19: 1994, 20: 2047, 21: 2101, 22: 2155, 23: 2208, 24: 2262, 25: 2315, 26: 2369, 27: 2423, 28: 2476, 29: 2530, 30: 2583},
+    "{se_dmg:1600131311:SkillUIMinDmgsum}": {1: 598, 2: 679, 3: 761, 4: 858, 5: 939, 6: 999, 7: 1042, 8: 1102, 9: 1161, 10: 1221, 11: 1280, 12: 1324, 13: 1368, 14: 1412, 15: 1456, 16: 1500, 17: 1544, 18: 1587, 19: 1631, 20: 1675, 21: 1719, 22: 1763, 23: 1807, 24: 1851, 25: 1894, 26: 1938, 27: 1982, 28: 2026, 29: 2070, 30: 2114},  # Wind
+    "{se_dmg:1600131311:SkillUIMaxDmgsum}": {1: 598, 2: 679, 3: 761, 4: 858, 5: 939, 6: 999, 7: 1042, 8: 1102, 9: 1161, 10: 1221, 11: 1280, 12: 1324, 13: 1368, 14: 1412, 15: 1456, 16: 1500, 17: 1544, 18: 1587, 19: 1631, 20: 1675, 21: 1719, 22: 1763, 23: 1807, 24: 1851, 25: 1894, 26: 1938, 27: 1982, 28: 2026, 29: 2070, 30: 2114},
+    "{se_dmg:1600131711:SkillUIMinDmgsum}": {1: 1063, 2: 1208, 3: 1353, 4: 1525, 5: 1670, 6: 1776, 7: 1854, 8: 1959, 9: 2065, 10: 2171, 11: 2277, 12: 2355, 13: 2433, 14: 2511, 15: 2589, 16: 2667, 17: 2745, 18: 2822, 19: 2900, 20: 2978, 21: 3056, 22: 3134, 23: 3212, 24: 3290, 25: 3368, 26: 3446, 27: 3524, 28: 3602, 29: 3680, 30: 3758},  # Ancient
+    "{se_dmg:1600131711:SkillUIMaxDmgsum}": {1: 1063, 2: 1208, 3: 1353, 4: 1525, 5: 1670, 6: 1776, 7: 1854, 8: 1959, 9: 2065, 10: 2171, 11: 2277, 12: 2355, 13: 2433, 14: 2511, 15: 2589, 16: 2667, 17: 2745, 18: 2822, 19: 2900, 20: 2978, 21: 3056, 22: 3134, 23: 3212, 24: 3290, 25: 3368, 26: 3446, 27: 3524, 28: 3602, 29: 3680, 30: 3758},
+    # Elementalist Stigma: Enhance: Spirit's Benediction's HoT tick -- this
+    # one's own tokens literally contain "Min"/"Max" as a substring
+    # (SkillUIHotMin/SkillUIHotMax), so it's routed through the SAME later
+    # se_dmg-style pass as any damage token (NOT the earlier _PASSIVE_
+    # SKILL_RANGE_TABLE pass, which only ever applies to spans that are
+    # ALREADY baked as plain static numbers in the description -- this
+    # token is still a raw unresolved "{...}" literal, so the range-table
+    # attempt silently never fired at all, caught by the automated check
+    # rendering the literal token text instead of a number).
+    "{se_abe_dmg:1619000011:1619000015:SkillUIHotMin:tick}": {1: 1850, 2: 2190, 3: 2390, 4: 2800, 5: 3000, 6: 3270, 7: 3410, 8: 3750, 9: 3900, 10: 4050, 11: 4410, 12: 4830, 13: 5000, 14: 5180, 15: 5360, 16: 5530, 17: 5710, 18: 5890, 19: 6070, 20: 6250, 21: 6430, 22: 6610, 23: 6790, 24: 6970, 25: 7150, 26: 7340, 27: 7520, 28: 7710, 29: 7890, 30: 8080},
+    "{se_abe_dmg:1619000011:1619000015:SkillUIHotMax:tick}": {1: 2035, 2: 2409, 3: 2629, 4: 3080, 5: 3300, 6: 3597, 7: 3751, 8: 4125, 9: 4290, 10: 4455, 11: 4851, 12: 5313, 13: 5500, 14: 5698, 15: 5896, 16: 6083, 17: 6281, 18: 6479, 19: 6677, 20: 6875, 21: 7073, 22: 7271, 23: 7469, 24: 7667, 25: 7865, 26: 8074, 27: 8272, 28: 8481, 29: 8679, 30: 8888},
+}
 
 
 def _render_skill_description(
     text: str, levels: list[dict] | None = None, level: int = 1,
-    estimate_multiplier: float | None = None,
+    estimate_multiplier: float | None = None, skill_id: str | None = None,
 ) -> str:
     """Resolves unfilled '{...}' template tokens to a real number from the
-    skill's own per-level data when possible (falling back to a plain 'x'),
-    and converts newlines to <br> — but keeps the game's own
+    skill's own per-level data when possible (falling back to 'XXX'), and
+    converts newlines to <br> — but keeps the game's own
     <span style="color:..."> tags (only ~4 known safe variants appear in the
-    data) so real numbers *and* any remaining 'x' placeholder both keep
+    data) so real numbers *and* any remaining 'XXX' placeholder both keep
     their in-game highlight color when rendered as rich text by
     QLabel/tooltips. Every observed token's field name contains 'Min' or
     'Max' as a literal substring, so that's all we need to check — no need
@@ -5490,25 +6694,61 @@ def _render_skill_description(
     _skill_damage_estimate_multiplier's module comment for what this
     multiplier does and does not model."""
 
+    # Passives' own `levels` array holds a CONSTANT internal formula-
+    # reference id (same digit string at every one of the 40 levels, e.g.
+    # "187700001") instead of a real number -- confirmed across every
+    # passive checked this session (see project_passive_skill_stats
+    # memory). That id string still passes the plain isdigit() check
+    # below, so without this guard a passive with an unresolved
+    # `{se_dmg:...}` damage token (Chanter's Raging Spell/Wind's Promise)
+    # rendered the nonsense id itself as if it were the real damage number
+    # (User-reported, 2026-09-02: "Es gibt auch passive Dmg Skills, die
+    # zusatzschaden machen" prompted checking these -- found showing
+    # "187700001-x"). A genuinely real per-level value (confirmed for
+    # Active skills, e.g. Aerial Snare) actually changes across levels;
+    # only trust the field when it does.
+    min_varies = levels is not None and len({l.get("minValue") for l in levels}) > 1
+    max_varies = levels is not None and len({l.get("maxValue") for l in levels}) > 1
+    damage_table = _PASSIVE_SKILL_DAMAGE_TABLE.get(skill_id) if skill_id else None
+
     def _sub(match: re.Match) -> str:
         token = match.group(0)
-        if levels:
-            if "Min" in token:
+        if token in _UNRELIABLE_SKILL_TOKENS:
+            return "XXX"
+        exact_token_table = _PASSIVE_SKILL_EXACT_TOKEN_TABLE.get(token)
+        if exact_token_table is not None:
+            real_value = _passive_skill_damage_table_value(exact_token_table, level)
+            result = _format_passive_scaled_value(real_value)
+            if "Max" in token and estimate_multiplier is not None:
+                result += f" (≈{_format_number(real_value * estimate_multiplier)})"
+            return result
+        if "Min" in token:
+            if damage_table:
+                return _format_passive_scaled_value(_passive_skill_damage_table_value(damage_table, level))
+            if levels:
                 value = _level_value(levels, level, "minValue")
-                if value is not None and str(value).lstrip("-").isdigit():
+                if min_varies and value is not None and str(value).lstrip("-").isdigit():
                     return str(value)
-            elif "Max" in token:
+        elif "Max" in token:
+            if damage_table:
+                real_value = _passive_skill_damage_table_value(damage_table, level)
+                result = _format_passive_scaled_value(real_value)
+                if estimate_multiplier is not None:
+                    est = _format_number(real_value * estimate_multiplier)
+                    result += f" (≈{est})"
+                return result
+            if levels:
                 value = _level_value(levels, level, "maxValue")
-                if value is not None and str(value).lstrip("-").isdigit():
+                if max_varies and value is not None and str(value).lstrip("-").isdigit():
                     result = str(value)
                     if estimate_multiplier is not None:
                         min_value = _level_value(levels, level, "minValue")
-                        if min_value is not None and str(min_value).lstrip("-").isdigit():
+                        if min_varies and min_value is not None and str(min_value).lstrip("-").isdigit():
                             est_min = _format_number(float(min_value) * estimate_multiplier)
                             est_max = _format_number(float(value) * estimate_multiplier)
                             result += f" (≈{est_min} ~ {est_max})"
                     return result
-        return "x"
+        return "XXX"
 
     text = _UNRESOLVED_TOKEN_RE.sub(_sub, text or "")
     return text.replace("\n", "<br>")
@@ -5943,6 +7183,19 @@ _PERCENT_STAT_IDS = {
     "AccuracyIncrease", "CriticalHitIncrease", "EvasionIncrease", "CriticalHitResistIncrease",
     "BlockIncrease", "CooldownReduction", "MPCostReduction", "RegenerationPenetration",
     "EndurancePenetration", "PerfectResist", "HPIncrease", "MPIncrease", "MoveSpeed",
+    # Description-only passive-skill stats with no Stat Info row yet (see
+    # _PASSIVE_SKILL_LEVEL_SCALING's Blessing of Life entry) -- still needs
+    # the right "%" formatting for _passive_skill_description_with_level.
+    "HealBoost", "DoubleChance", "HealReduce", "MaxHPProcPct", "InstantHealMaxHPPct", "IncomingHealPct", "EnduranceIncreasePct",
+    "SplitPct", "DefenseReduce", "StatusResistReduce",
+    # CriticalDamageBoost/BackAttackDamageBoost are real percent Stat Info
+    # ids (see the Genius Insight board tables) that had simply never been
+    # used inside a Passive-skill description before Assassin's Assault
+    # Stance/Rear Smite (2026-09-02) -- without these, their scaling spans
+    # rendered as a bare number with no "%" (e.g. "Critical Damage Boost by
+    # 6" instead of "...by 6%"), caught by the automated per-level check,
+    # not by eye.
+    "CriticalDamageBoost", "BackAttackDamageBoost", "MoveSpeedOnHit", "SpiritHealPct",
 }
 
 # Rows shown above Main/Sub Stats in the aggregated Stat Info panel — the 6
@@ -6024,16 +7277,6 @@ def _parse_stat_value(raw) -> float:
         return 0.0
 
 
-class _BuildTabButton(QPushButton):
-    """A checkable tab-like button that also reports double-clicks, used to
-    rename a saved skill build in place (single click still just switches
-    to it, like a normal tab)."""
-
-    doubleClicked = Signal()
-
-    def mouseDoubleClickEvent(self, event):
-        self.doubleClicked.emit()
-        super().mouseDoubleClickEvent(event)
 
 
 class _SkillPickerListWidget(QListWidget):
@@ -6444,7 +7687,7 @@ class CraftingItemPickerDialog(QDialog):
     recipes_all.json (gamers4.life's normal recipe scrape) doesn't contain
     them at all, so there is nothing to explicitly exclude yet."""
 
-    def __init__(self, items_by_id: dict, icon_cache: "IconCache", parent=None,
+    def __init__(self, items_by_id: dict, icon_cache: "IconCache", detail_cache: "ItemDetailCache", parent=None,
                  allowed_names: set[str] | None = None, min_grade: str | None = None,
                  excluded_professions: frozenset[str] = frozenset()):
         super().__init__(parent)
@@ -6452,6 +7695,16 @@ class CraftingItemPickerDialog(QDialog):
         self.resize(720, 560)
         self._items_by_id = items_by_id
         self._icon_cache = icon_cache
+        # Gear-level column (User-Wunsch, 2026-09-02: "Hier sollte man in
+        # der Datenbank noch die Gearstufen mit anzeigen" -- several same-
+        # rarity "Dragon Lord" items weren't distinguishable by strength at
+        # a glance without one). The level itself only lives in each
+        # item's DETAIL data (ItemDetailCache), not the list-level catalog
+        # entry, so it's fetched on demand per visible row exactly like the
+        # icon already is -- shows once available, a placeholder until then.
+        self._detail_cache = detail_cache
+        self._level_row_by_item_id: dict[int, list[int]] = {}
+        self._detail_cache.detail_ready.connect(self._on_detail_ready)
         self._icon_registry: dict[str, list] = {}
         # Vergleich tab's Start/Ziel pickers exclude "Cooking" -- consumables
         # never participate in an equipment Transfer chain.
@@ -6531,8 +7784,8 @@ class CraftingItemPickerDialog(QDialog):
         self.result_label.setObjectName("DetailDisclaimer")
         outer.addWidget(self.result_label)
 
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["", _t("arm_col_name"), _t("arm_rarity_label"), _t("arm_col_method")])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["", _t("arm_col_name"), _t("arm_col_level"), _t("arm_rarity_label"), _t("arm_col_method")])
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
@@ -6725,6 +7978,7 @@ class CraftingItemPickerDialog(QDialog):
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         self._icon_registry = {}
+        self._level_row_by_item_id = {}
         all_matches = self._matching_recipes()
         visible = all_matches[: self._visible_limit]
 
@@ -6737,9 +7991,10 @@ class CraftingItemPickerDialog(QDialog):
         self.table.setRowCount(len(visible))
         for row, recipe in enumerate(visible):
             output = recipe["outputs"][0]
+            output_id = output.get("id")
             icon_item = QTableWidgetItem()
             pix = _crafting_item_icon(
-                output.get("id"), self._items_by_id, self._icon_cache, 28,
+                output_id, self._items_by_id, self._icon_cache, 28,
                 apply=lambda p, it=icon_item: it.setIcon(QIcon(p)),
                 registry=self._icon_registry,
             )
@@ -6751,19 +8006,62 @@ class CraftingItemPickerDialog(QDialog):
             name_item.setData(Qt.UserRole, recipe)
             self.table.setItem(row, 1, name_item)
 
+            self.table.setItem(row, 2, self._make_level_item(output_id))
+            if output_id:
+                self._level_row_by_item_id.setdefault(output_id, []).append(row)
+
             grade = recipe.get("grade") or ""
             grade_item = _SortableTableWidgetItem(grade, RARITY_RANK.get(grade, 99))
             if grade in GRADE_COLORS:
                 grade_item.setForeground(QColor(GRADE_COLORS[grade]))
-            self.table.setItem(row, 2, grade_item)
+            self.table.setItem(row, 3, grade_item)
 
             method = recipe.get("method") or ""
             method_item = QTableWidgetItem(_t(_METHOD_LABEL_KEYS[method]) if method in _METHOD_LABEL_KEYS else method)
             if method in _METHOD_COLORS:
                 method_item.setForeground(QColor(_METHOD_COLORS[method]))
-            self.table.setItem(row, 3, method_item)
+            self.table.setItem(row, 4, method_item)
 
         self.table.setSortingEnabled(True)
+
+    def _make_level_item(self, item_id: int | None) -> "_SortableTableWidgetItem":
+        """The item's real Gear Level/Item Level only lives in its DETAIL
+        data (ItemDetailCache), never the list-level catalog entry, so it's
+        fetched on demand per visible row (same lazy pattern the icon
+        already uses) -- shows a placeholder that _on_detail_ready() swaps
+        out once the fetch resolves."""
+        detail = self._detail_cache.get(item_id) if item_id else None
+        if not detail and item_id:
+            # request() emits detail_ready SYNCHRONOUSLY on a disk-cache hit
+            # (the common case -- most items are already pre-fetched), but
+            # at this point the row isn't registered in
+            # _level_row_by_item_id yet and the table cell doesn't exist
+            # yet either, so _on_detail_ready's update silently no-ops and
+            # the placeholder below would be stuck forever. Re-checking the
+            # cache right after request() picks up that synchronous result.
+            self._detail_cache.request(item_id)
+            detail = self._detail_cache.get(item_id)
+        level = detail.get("level") if detail else None
+        if level:
+            return _SortableTableWidgetItem(str(level), level)
+        return _SortableTableWidgetItem("…", -1)
+
+    def _on_detail_ready(self, item_id: int):
+        rows = self._level_row_by_item_id.get(item_id)
+        if not rows:
+            return
+        detail = self._detail_cache.get(item_id)
+        level = detail.get("level") if detail else None
+        if not level:
+            return
+        for row in rows:
+            if row >= self.table.rowCount():
+                continue
+            item = self.table.item(row, 2)
+            if item is None:
+                continue
+            item.setText(str(level))
+            item._sort_key = level
 
     def _on_row_clicked(self, row: int, _column: int):
         name_item = self.table.item(row, 1)
@@ -7141,7 +8439,7 @@ class CraftingCalculatorWindow(QMainWindow):
         return page
 
     def _open_item_picker(self):
-        dlg = CraftingItemPickerDialog(self._items_by_id, self.icon_cache, parent=self)
+        dlg = CraftingItemPickerDialog(self._items_by_id, self.icon_cache, self.detail_cache, parent=self)
         if dlg.exec() != QDialog.Accepted or not dlg.selected_recipe:
             return
         self._select_recipe(dlg.selected_recipe)
@@ -7399,7 +8697,7 @@ class CraftingCalculatorWindow(QMainWindow):
             min_grade = "Unique"
 
         dlg = CraftingItemPickerDialog(
-            self._items_by_id, self.icon_cache, parent=self, allowed_names=allowed_names, min_grade=min_grade,
+            self._items_by_id, self.icon_cache, self.detail_cache, parent=self, allowed_names=allowed_names, min_grade=min_grade,
             # Cooking items are consumables -- never part of an equipment
             # Transfer chain, so pointless clutter for either picker here.
             excluded_professions=frozenset({"Cooking"}),
@@ -9294,12 +10592,18 @@ _DAEVANION_STAT_LABELS: dict[str, str] = {
     "bossnpcamplifydamage": "Boss Damage Boost", "bossnpcdecreasedamage": "Boss Damage Tolerance",
     "pvpaccuracy": "PvP Accuracy", "pveaccuracy": "PvE Accuracy",
     "pvpevasion": "PvP Evasion", "pveevasion": "PvE Evasion",
-    "pvpcritical": "PvP Critical Hit", "pvpcriticalresist": "PvP Critical Resist",
-    "pvpadddamage": "PvP Damage", "pvpdamagedefense": "PvP Damage Defense", "pvpdefense": "PvP Damage Defense",
-    "pvpdecreasedamage": "PvP Decrease Damage", "pvpamplifydamage": "PvP Amplify Damage",
-    "pveattack": "PvE Damage", "pveadddamage": "PvE Damage",
-    "pvedamagedefense": "PvE Damage Defense", "pvedefense": "PvE Damage Defense",
-    "pvedecreasedamage": "PvE Decrease Damage", "pveamplifydamage": "PvE Amplify Damage",
+    # User-reported, 2026-09-02: the PvE/PvP labels below read
+    # inconsistently with the rest of the app (Main Stats' own PvE/PvP
+    # mode rows, _PVE_MODE_STAT_ROWS/_PVP_MODE_STAT_ROWS) -- same stat id,
+    # different wording depending on where you look (e.g. "PvP Amplify
+    # Damage" here vs. "PvP Damage Boost" in Stat Info). Renamed to match
+    # those established names exactly.
+    "pvpcritical": "PvP Critical Hit", "pvpcriticalresist": "PvP Critical Hit Resist",
+    "pvpadddamage": "PvP Attack", "pvpdamagedefense": "PvP Defense", "pvpdefense": "PvP Defense",
+    "pvpdecreasedamage": "PvP Damage Tolerance", "pvpamplifydamage": "PvP Damage Boost",
+    "pveattack": "PvE Attack", "pveadddamage": "PvE Attack",
+    "pvedamagedefense": "PvE Defense", "pvedefense": "PvE Defense",
+    "pvedecreasedamage": "PvE Damage Tolerance", "pveamplifydamage": "PvE Damage Boost",
     "pvedamageboost": "PvE Damage Boost", "pvedamagetolerance": "PvE Damage Tolerance",
 }
 
@@ -9844,7 +11148,7 @@ class SkillInfoTooltip(_TranslucentCardTooltip):
         )
         self._title_label.setText(skill.get("name", ""))
 
-        desc = _render_skill_description(skill.get("description", ""), skill.get("levels"), 1)
+        desc = _render_skill_description(skill.get("description", ""), skill.get("levels"), 1, skill_id=skill.get("id"))
         self._desc_label.setText(desc)
         self._desc_label.setVisible(bool(desc))
 
@@ -10550,7 +11854,7 @@ class LoadoutWindow(QMainWindow):
             self._gear_type_buttons[key] = btn
 
         class_row.addSpacing(12)
-        self.skill_planner_class_combo = QComboBox()
+        self.skill_planner_class_combo = _DownwardComboBox()
         self.skill_planner_class_combo.setIconSize(QSize(22, 22))
         class_row.addWidget(self.skill_planner_class_combo)
 
@@ -10732,6 +12036,14 @@ class LoadoutWindow(QMainWindow):
         # which already runs after every equip mutation (Quick Select,
         # manual substat pick, Set switch) and after Daevanion node clicks.
         self._skill_bonus: dict[str, int] = {}
+        # Same totals as _skill_bonus, but kept separate PER SOURCE (User-
+        # Wunsch, 2026-09-02: a turquoise breakdown tooltip on the skill
+        # level counter, "Schmuck: +3 / Arcana: +8 / Daevanionboard ...",
+        # analog to the existing Stat Info source tooltip) -- see
+        # _recompute_skill_bonus/_skill_level_source_tooltip.
+        self._skill_bonus_gear: dict[str, int] = {}
+        self._skill_bonus_daevanion: dict[str, int] = {}
+        self._skill_bonus_arcana: dict[str, int] = {}
         # Arcana Planner wish list (User-Wunsch, 2026-08-28/29): "die
         # zusaetzlichen Punkte, die man nicht durch Daeva Board und Gear
         # erreichen kann" -- a manual per-skill planning target, purely an
@@ -10739,6 +12051,13 @@ class LoadoutWindow(QMainWindow):
         # math above. Persisted like _skill_levels (see
         # get_persistable_state/apply_persisted_state).
         self._skill_arcana_wish: dict[str, int] = {}
+        # Active skills' specializations are player CHOICES, not automatic
+        # cumulative unlocks (User-Wunsch, 2026-09-02) -- keyed by the
+        # specialization's own real "id" field (from skills_all.json),
+        # values are which ones this skill currently has picked. Capped by
+        # _active_skill_spec_cap(effective_level) (1 pick at Lv.8+, 2 at
+        # Lv.12+, 3 at Lv.20+). Persisted like _skill_levels.
+        self._skill_active_specs: dict[str, set[str]] = {}
         # So _on_skill_arcana_wish_changed can re-enable/disable the "+"
         # button live as the wish approaches its ceiling, without a full
         # card rebuild (see _arcana_ceiling_for_skill).
@@ -11070,6 +12389,14 @@ class LoadoutWindow(QMainWindow):
         self.skill_desc_specs_label.setObjectName("DetailInfo")
         self.skill_desc_specs_label.setWordWrap(True)
         self.skill_desc_specs_label.setVisible(False)
+        # Active skills' specializations are CHOICES the player picks (User-
+        # Wunsch, 2026-09-02), not automatic cumulative unlocks like
+        # Stigmas -- each available-but-unchosen line is a clickable link
+        # (href = the specialization's own real "id" field) so clicking it
+        # toggles that pick via _on_skill_spec_link_clicked.
+        self.skill_desc_specs_label.setOpenExternalLinks(False)
+        self.skill_desc_specs_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.skill_desc_specs_label.linkActivated.connect(self._on_skill_spec_link_clicked)
         right_layout.addWidget(self.skill_desc_specs_label)
 
         stats_header = QLabel(_t("arm_details_label"))
@@ -11252,21 +12579,18 @@ class LoadoutWindow(QMainWindow):
         self._arcana_build_tab_group = self._populate_build_tabs_row(self.arcana_build_tabs_row, builds)
         self._refresh_build_planner_settings_row()
 
-    def _populate_build_tabs_row(self, row: QHBoxLayout, builds: dict) -> QButtonGroup:
+    def _populate_build_tabs_row(self, row: QHBoxLayout, builds: dict) -> QComboBox:
         _clear_layout(row)
-        group = QButtonGroup(self)
-        group.setExclusive(True)
-        for build_name in builds:
-            btn = _BuildTabButton(build_name)
-            btn.setObjectName("SkillFilterButton")
-            btn.setCheckable(True)
-            btn.setChecked(build_name == self._current_build_name)
-            btn.setMinimumHeight(32)
-            btn.clicked.connect(lambda checked=False, bn=build_name: self._on_switch_build(bn))
-            btn.doubleClicked.connect(lambda bn=build_name: self._on_rename_build(bn))
-            btn.setToolTip(_t("arm_rename_hint"))
-            group.addButton(btn)
-            row.addWidget(btn)
+        # Dropdown instead of a pill-button row (User-Wunsch, 2026-09-02,
+        # same reasoning as _rebuild_equip_build_tabs).
+        combo = QComboBox()
+        combo.setObjectName("BuildSwitcherCombo")
+        combo.setMinimumHeight(32)
+        combo.setMinimumWidth(160)
+        combo.addItems(list(builds.keys()))
+        combo.setCurrentText(self._current_build_name)
+        combo.currentTextChanged.connect(self._on_switch_build)
+        row.addWidget(combo)
 
         add_btn = QPushButton()
         add_btn.setIcon(_make_plus_icon())
@@ -11292,19 +12616,34 @@ class LoadoutWindow(QMainWindow):
         rename_btn.clicked.connect(lambda checked=False: self._on_rename_build(self._current_build_name))
         row.addWidget(rename_btn)
 
-        save_btn = QPushButton()
-        save_btn.setIcon(_make_save_icon())
-        save_btn.setIconSize(QSize(20, 20))
-        save_btn.setFixedSize(40, 32)
-        save_btn.setToolTip(_t("arm_save_current_build"))
-        save_btn.clicked.connect(self._on_save_current_build)
-        row.addWidget(save_btn)
+        delete_btn = QPushButton()
+        delete_btn.setIcon(_make_delete_icon())
+        delete_btn.setIconSize(QSize(20, 20))
+        delete_btn.setFixedSize(40, 32)
+        delete_btn.setToolTip(_t("arm_delete_current_build"))
+        delete_btn.setEnabled(len(builds) > 1)  # always keep at least one Build
+        delete_btn.clicked.connect(self._on_delete_build)
+        row.addWidget(delete_btn)
 
-        return group
+        return combo
 
-    def _on_save_current_build(self):
+    def _on_delete_build(self):
         class_name = self.character_class_combo.currentText().strip().lower()
-        self._save_current_build_state(class_name)
+        self._ensure_class_builds(class_name)
+        builds = self._skill_builds_data[class_name]
+        if len(builds) <= 1:
+            return  # guarded by the disabled button already, belt-and-suspenders
+        name = self._current_build_name
+        reply = QMessageBox.question(
+            self, _t("arm_delete_build_confirm_title"), _t("arm_delete_build_confirm_text", name=name),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        builds.pop(name, None)
+        self._current_build_name = next(iter(builds))
+        self._rebuild_skill_build_tabs()
+        self._load_current_build_state()
 
     def _on_switch_build(self, build_name: str):
         if build_name == self._current_build_name:
@@ -11725,13 +13064,20 @@ class LoadoutWindow(QMainWindow):
             label.setText(_format_skill_level_html(new_value, bonus_level, wish_level))
         self._refresh_skillpoints_label()
         self._refresh_stigma_points_label()
+        # Passive skills can now feed real stat totals (User-Wunsch,
+        # 2026-08-31, see _passive_skill_stat_totals) -- without this,
+        # investing/removing a point in e.g. "Attack Preparation" never
+        # updated the Stat Info panel at all until something unrelated
+        # happened to trigger a refresh (User-reported gap, same class of
+        # bug as the earlier Daevanion/Genius ones this session).
+        self._refresh_stat_info()
         # Keep an already-open description panel's damage numbers in sync
         # (User-reported, 2026-08-29 -- see _render_selected_skill_
         # description's docstring).
         if self._skill_desc_selected_id == skill_id:
             skill = self._skill_id_to_skill.get(skill_id)
             if skill:
-                self._render_selected_skill_description(skill)
+                self._refresh_open_skill_description_panel(skill)
 
     def _on_skill_arcana_wish_changed(self, skill_id: str, delta: int):
         skill_type = self._skill_id_to_type.get(skill_id)
@@ -11753,7 +13099,7 @@ class LoadoutWindow(QMainWindow):
         if self._skill_desc_selected_id == skill_id:
             skill = self._skill_id_to_skill.get(skill_id)
             if skill:
-                self._render_selected_skill_description(skill)
+                self._refresh_open_skill_description_panel(skill)
 
     def _arcana_usable_and_pools(self) -> tuple[list[str], dict[str, list[dict]]]:
         """This class's usable Lord types + their (grade-independent)
@@ -11875,7 +13221,7 @@ class LoadoutWindow(QMainWindow):
         if self._skill_desc_selected_id:
             selected = self._skill_id_to_skill.get(self._skill_desc_selected_id)
             if selected:
-                self._render_selected_skill_description(selected)
+                self._refresh_open_skill_description_panel(selected)
 
     def _refresh_arcana_equip_slots(self):
         """Repaints the "Sets" tab's 5 slot widgets from the current
@@ -12013,7 +13359,7 @@ class LoadoutWindow(QMainWindow):
         if self._skill_desc_selected_id:
             selected = self._skill_id_to_skill.get(self._skill_desc_selected_id)
             if selected:
-                self._render_selected_skill_description(selected)
+                self._refresh_open_skill_description_panel(selected)
 
     def _on_skill_description_card_clicked(self, skill: dict):
         skill_id = skill.get("id")
@@ -12035,20 +13381,7 @@ class LoadoutWindow(QMainWindow):
             color = "#f87171" if damage_type == "physic" else "#60a5fa"
             self.skill_desc_badges_row.addWidget(_make_type_badge(label, color))
 
-        self._render_selected_skill_description(skill)
-
-        specs = skill.get("specializations") or []
-        if specs:
-            lines = []
-            for spec in specs:
-                lvl = spec.get("parentSkillLvl", "?")
-                note = spec.get("specialized", "").strip()
-                lines.append(f"Lv {lvl}: {note}" if note else f"Lv {lvl}")
-            self.skill_desc_specs_label.setText("\n".join(lines))
-        self.skill_desc_specs_header.setVisible(bool(specs))
-        self.skill_desc_specs_label.setVisible(bool(specs))
-
-        self.skill_desc_stats_label.setText(_format_skill_stats(skill))
+        self._refresh_open_skill_description_panel(skill)
 
     def _render_selected_skill_description(self, skill: dict):
         """Renders skill_desc_text_label's damage-aware description text --
@@ -12077,9 +13410,20 @@ class LoadoutWindow(QMainWindow):
 
         # Estimated damage range (User-Wunsch, 2026-08-29) -- appended
         # right after the real numbers inside the description text itself
-        # when the toggle is on and this is an active skill.
+        # when the toggle is on and this skill has a REAL damage value to
+        # scale. Originally gated to "active" only, since back then that
+        # was the only skill type with a resolvable per-level damage
+        # number (Passives/Stigmas' se_dmg tokens were unresolved
+        # placeholder garbage) -- now that _PASSIVE_SKILL_DAMAGE_TABLE
+        # covers real Passive AND Stigma damage skills too (User-checklist
+        # addition, 2026-09-02: "Kann der Skill mit dem geschaetzten Wert
+        # berechnet werden? Wenn ja -> wie bei aktiven Skills vorgehen"),
+        # any skill with a real damage table deserves the same estimate,
+        # regardless of its type.
         estimate_multiplier = None
-        if self.skill_estimated_damage_btn.isChecked() and skill.get("type") == "active":
+        if self.skill_estimated_damage_btn.isChecked() and (
+            skill.get("type") == "active" or skill_id in _PASSIVE_SKILL_DAMAGE_TABLE
+        ):
             totals = self._compute_stat_totals(self._equipped, self._equipped_substats, self._equipped_enchant)
             # Genius Insight's Damage Boost/Weapon/Crit/PvE/Front/Back
             # Attack Damage Boost picks feed this estimate too (User-
@@ -12099,11 +13443,180 @@ class LoadoutWindow(QMainWindow):
             # did until now (User-reported gap, 2026-08-30).
             for stat_id, value in self._daevanion_stat_totals().items():
                 totals[stat_id] = totals.get(stat_id, 0.0) + value
+            for stat_id, value in self._passive_skill_stat_totals().items():
+                totals[stat_id] = totals.get(stat_id, 0.0) + value
             estimate_multiplier = _skill_damage_estimate_multiplier(totals)
-        self.skill_desc_text_label.setText(
-            _render_skill_description(skill.get("description", ""), skill.get("levels"), effective_level, estimate_multiplier)
-        )
+        # Stigma specializations (Lv.5/10/15/20 unlocks) don't just ADD a
+        # separate bonus line -- the skill's own base description text
+        # itself grows to fold each unlocked tier's bonus in (User-
+        # screenshot, 2026-09-02: Power of the Storm's text literally reads
+        # differently once Lv.10/15/20 are reached, e.g. gains ", Accuracy
+        # by 200%,"). Use the highest unlocked tier's own "description"
+        # (which already contains the cumulative wording) as the base text
+        # instead of the skill's own Lv.1-only description whenever one
+        # applies -- it carries the SAME highlighted <span> values in the
+        # same order (verified per-skill), so the existing span-position
+        # substitution still lines up correctly.
+        base_description = skill.get("description", "")
+        # Only swap in a tier's text when it has the SAME number of
+        # highlighted spans as the base description -- some skills'
+        # specializations introduce a bonus that is ALSO highlighted but
+        # was never part of the base scaling list at all (confirmed:
+        # Sprint Mantra's Lv.5+ tiers add "Incoming Heal by 10%" as a NEW
+        # highlighted span not present at Lv.1). Swapping in a text with a
+        # different span count would misalign the position-based
+        # substitution (see _passive_skill_description_with_level's own
+        # comment on why that's exactly the bug class this session found
+        # and fixed once already) -- skip the swap for those rather than
+        # risk showing a wrong number.
+        # Active skills' specializations are player CHOICES (User-Wunsch,
+        # 2026-09-02) -- often several ALTERNATIVE options share the same
+        # unlock level (e.g. Radiant Recovery has 3 different Lv.8 perks),
+        # so a spec's own "description" text can't be assumed cumulative
+        # the way Stigma's strictly-sequential single-option-per-tier
+        # structure is. Only merge for Stigma; Active's base description
+        # stays as-is regardless of which (if any) specs are picked.
+        if skill.get("type") == "stigma":
+            base_span_count = len(_HIGHLIGHT_SPAN_RE.findall(base_description))
+            for spec in sorted(skill.get("specializations") or [], key=lambda s: s.get("parentSkillLvl") or 0):
+                if effective_level < (spec.get("parentSkillLvl") or 0):
+                    continue
+                candidate = spec.get("description") or ""
+                if len(_HIGHLIGHT_SPAN_RE.findall(candidate)) == base_span_count:
+                    base_description = candidate
+        # Passives with real Lv.1/Lv.10 data (_PASSIVE_SKILL_LEVEL_SCALING)
+        # get their baked-in Lv.1 numbers swapped for the real value at
+        # effective_level, plus a "Lv. X" indicator -- otherwise this panel
+        # always showed the exact scraped Lv.1 wording no matter how much
+        # was invested (User-reported, 2026-09-02).
+        description = _passive_skill_description_with_level(skill_id, base_description, effective_level)
+        rendered = _render_skill_description(description, skill.get("levels"), effective_level, estimate_multiplier, skill_id=skill_id)
+        # NOTE: chosen Active-skill specializations are deliberately NOT
+        # also echoed into this main description (tried once, 2026-09-02,
+        # then reverted the same day -- User: "da ist das doppelt
+        # gemoppelt, wenn wir unten die anhaken reicht das vollkommen aus")
+        # -- the colored Specializations list below (_refresh_skill_desc_
+        # specializations) is the single source of truth for what's picked.
+        # Shown for skills where the only data found doesn't add up, instead
+        # of silently guessing which number is right (User-Wunsch,
+        # 2026-09-02: "schreiben wir dies unterhalb des Skills als
+        # Zusatzinfo, damit weiss der User direkt bescheid").
+        if skill_id in _SKILL_NO_LEVEL_SCALING_DATA:
+            rendered += f"<br><br><span style='color:#f59e0b; font-style:italic;'>{_t('arm_no_level_scaling_data')}</span>"
+        self.skill_desc_text_label.setText(rendered)
+        return effective_level
 
+    def _refresh_open_skill_description_panel(self, skill: dict):
+        """Runs all three steps that keep the open skill-description panel
+        in sync (description text, specs coloring, cooldown/stats line) --
+        factored into one call so a future sync point can't repeat the
+        "forgot one of the three" bug class already found twice this
+        session (specs coloring going stale, then the cooldown line doing
+        the same for specializations that read "-Xs cooldown", User-
+        reported 2026-09-02 via the Supporting Fire screenshot)."""
+        skill_id = skill.get("id")
+        effective_level = self._render_selected_skill_description(skill)
+        self._refresh_skill_desc_specializations(skill)
+        chosen_active_specs = self._skill_active_specs.get(skill_id)
+        cooldown_reduction_ms = _specialization_cooldown_reduction_ms(skill, effective_level, chosen_active_specs)
+        self.skill_desc_stats_label.setText(_format_skill_stats(skill, cooldown_reduction_ms))
+
+    def _refresh_skill_desc_specializations(self, skill: dict):
+        """Repaints the Specializations list's orange "unlocked" coloring --
+        factored out into its own method (User-reported, 2026-09-02: "die
+        Zeilen [werden] teilweise erst 7 Level nach dem Erreichen [orange]"
+        -- the coloring was originally computed only where the description
+        panel was first opened (_on_skill_description_card_clicked), so
+        raising/lowering the level afterward via +/- updated the
+        description text above just fine but left the specs list showing
+        stale colors from whatever level was active when the panel was
+        opened. Now called from every place that already keeps the open
+        description panel's damage numbers in sync, so both stay
+        consistent together."""
+        skill_id = skill.get("id")
+        manual_level = self._skill_levels.get(skill_id, 0)
+        bonus_level = self._skill_bonus.get(skill_id, 0)
+        wish_level = self._skill_arcana_wish.get(skill_id, 0)
+        effective_level = max(1, manual_level + bonus_level + wish_level)
+
+        specs = skill.get("specializations") or []
+        is_active = skill.get("type") == "active"
+        if specs:
+            lines = []
+            if is_active:
+                # Choice-based (User-Wunsch, 2026-09-02): available-but-
+                # unpicked lines are a clickable link in muted turquoise;
+                # picked ones are dark turquoise and still clickable (to
+                # un-pick); locked ones (level not reached yet) stay the
+                # default muted color and aren't links at all.
+                chosen = self._skill_active_specs.get(skill_id, set())
+                for spec in specs:
+                    lvl = spec.get("parentSkillLvl", "?")
+                    # Always a str -- linkActivated's real signal only ever
+                    # emits str hrefs, so _skill_active_specs is keyed by
+                    # str too; the raw "id" field itself is an int in
+                    # skills_all.json, which would otherwise silently never
+                    # match (int vs str) and make picks look like they
+                    # never took effect.
+                    spec_id = str(spec.get("id") or "")
+                    note = spec.get("specialized", "").strip()
+                    label = f"Lv {lvl}: {note}" if note else f"Lv {lvl}"
+                    available = isinstance(lvl, int) and effective_level >= lvl
+                    if not available or not spec_id:
+                        lines.append(label)
+                        continue
+                    color = _ACTIVE_SPEC_CHOSEN_COLOR if spec_id in chosen else _ACTIVE_SPEC_AVAILABLE_COLOR
+                    weight = "700" if spec_id in chosen else "500"
+                    lines.append(
+                        f"<a href='{spec_id}' style='color:{color}; font-weight:{weight}; text-decoration:none;'>{label}</a>"
+                    )
+            else:
+                for spec in specs:
+                    lvl = spec.get("parentSkillLvl", "?")
+                    note = spec.get("specialized", "").strip()
+                    text = f"Lv {lvl}: {note}" if note else f"Lv {lvl}"
+                    if isinstance(lvl, int) and effective_level >= lvl:
+                        text = f"<span style='color:#f59e0b;'>{text}</span>"
+                    lines.append(text)
+            self.skill_desc_specs_label.setText("<br>".join(lines))
+        self.skill_desc_specs_header.setVisible(bool(specs))
+        self.skill_desc_specs_label.setVisible(bool(specs))
+
+    def _on_skill_spec_link_clicked(self, spec_id: str):
+        """Toggles one Active-skill specialization pick on/off, capped by
+        _active_skill_spec_cap(effective_level) -- e.g. at Lv.8 only 1 of
+        potentially several same-tier alternatives (User-Wunsch,
+        2026-09-02: Radiant Recovery has 3 different Lv.8 perks) can be
+        active at once. Clicking an already-picked one always un-picks it
+        (freeing a slot); clicking an unpicked one only succeeds if under
+        the cap."""
+        skill_id = self._skill_desc_selected_id
+        if not skill_id:
+            return
+        skill = self._skill_id_to_skill.get(skill_id)
+        if not skill:
+            return
+        manual_level = self._skill_levels.get(skill_id, 0)
+        bonus_level = self._skill_bonus.get(skill_id, 0)
+        wish_level = self._skill_arcana_wish.get(skill_id, 0)
+        effective_level = max(1, manual_level + bonus_level + wish_level)
+        cap = _active_skill_spec_cap(effective_level)
+
+        chosen = self._skill_active_specs.setdefault(skill_id, set())
+        if spec_id in chosen:
+            chosen.discard(spec_id)
+        elif len(chosen) < cap:
+            chosen.add(spec_id)
+        else:
+            return  # already at cap -- no-op, same as a disabled button
+        if not chosen:
+            self._skill_active_specs.pop(skill_id, None)
+        self._refresh_skill_desc_specializations(skill)
+        # Picking/un-picking a spec can itself unlock/lose a "-Xs cooldown"
+        # note (deliberately NOT re-rendering the main description text
+        # here too -- see the "doppelt gemoppelt" note above this handler).
+        cooldown_reduction_ms = _specialization_cooldown_reduction_ms(skill, effective_level, chosen)
+        self.skill_desc_stats_label.setText(_format_skill_stats(skill, cooldown_reduction_ms))
     # ── "Daevanion Board" tab (2026-08-28) ───────────────────────────────────
     # Ported from the approved browser mockup -- see [[project_daevanion_
     # board_port]] for the full requirement list this was checked against.
@@ -12536,12 +14049,18 @@ class LoadoutWindow(QMainWindow):
         _clear_layout(self._daevanion_sidebar_layout)
         groups = self._daevanion_build_filter_groups(grid)
         checked = self._daevanion_filter_set()
+        # (active/total) instead of a flat "×total" count (User-Wunsch,
+        # 2026-09-02: "hinter den Werten bei den Checkboxen" -- the same
+        # active-vs-potential idea as the Stats Gained summary's own
+        # "(x/max)", just applied to this filter list's counts too).
+        active = self._daevanion_active_set(board, grid)
         for i, (cat_key, label_key) in enumerate(self._DAEVANION_FILTER_SECTIONS):
             entries = sorted(groups[cat_key].items(), key=lambda kv: kv[1]["label"])
             section, body_layout = self._daevanion_build_collapsible(f"{_t(label_key)} ({len(entries)})", expanded=(i == 0))
             for key, entry in entries:
                 full_key = cat_key + "|" + key
-                cb = QCheckBox(f"{entry['label']} (×{len(entry['ids'])})")
+                active_count = len(entry["ids"] & active)
+                cb = QCheckBox(f"{entry['label']} ({active_count}/{len(entry['ids'])})")
                 cb.setChecked(full_key in checked)
                 accent = self._daevanion_entry_accent_color(entry.get("grades", set()))
                 if accent:
@@ -13027,20 +14546,14 @@ class LoadoutWindow(QMainWindow):
         if self._current_genius_build_name not in self._genius_builds_data:
             self._current_genius_build_name = next(iter(self._genius_builds_data))
 
-        group = QButtonGroup(self)
-        group.setExclusive(True)
-        for build_name in self._genius_builds_data:
-            btn = _BuildTabButton(build_name)
-            btn.setObjectName("SkillFilterButton")
-            btn.setCheckable(True)
-            btn.setChecked(build_name == self._current_genius_build_name)
-            btn.setMinimumHeight(32)
-            btn.clicked.connect(lambda checked=False, bn=build_name: self._on_switch_genius_build(bn))
-            btn.doubleClicked.connect(lambda bn=build_name: self._on_rename_genius_build(bn))
-            btn.setToolTip(_t("arm_rename_hint"))
-            group.addButton(btn)
-            row.addWidget(btn)
-        self._genius_build_tab_group = group
+        combo = QComboBox()
+        combo.setObjectName("BuildSwitcherCombo")
+        combo.setMinimumHeight(32)
+        combo.setMinimumWidth(160)
+        combo.addItems(list(self._genius_builds_data.keys()))
+        combo.setCurrentText(self._current_genius_build_name)
+        combo.currentTextChanged.connect(self._on_switch_genius_build)
+        row.addWidget(combo)
 
         add_btn = QPushButton()
         add_btn.setIcon(_make_plus_icon())
@@ -13066,7 +14579,33 @@ class LoadoutWindow(QMainWindow):
         rename_btn.clicked.connect(lambda checked=False: self._on_rename_genius_build(self._current_genius_build_name))
         row.addWidget(rename_btn)
 
+        delete_btn = QPushButton()
+        delete_btn.setIcon(_make_delete_icon())
+        delete_btn.setIconSize(QSize(20, 20))
+        delete_btn.setFixedSize(40, 32)
+        delete_btn.setToolTip(_t("arm_delete_current_build"))
+        delete_btn.setEnabled(len(self._genius_builds_data) > 1)  # always keep at least one Build
+        delete_btn.clicked.connect(self._on_delete_genius_build)
+        row.addWidget(delete_btn)
+
         self._refresh_build_planner_settings_row()
+
+    def _on_delete_genius_build(self):
+        if len(self._genius_builds_data) <= 1:
+            return  # guarded by the disabled button already, belt-and-suspenders
+        name = self._current_genius_build_name
+        reply = QMessageBox.question(
+            self, _t("arm_delete_build_confirm_title"), _t("arm_delete_build_confirm_text", name=name),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        self._genius_builds_data.pop(name, None)
+        self._current_genius_build_name = next(iter(self._genius_builds_data))
+        self._rebuild_genius_build_tabs()
+        self._refresh_genius_board_panel()
+        self._refresh_genius_total_panel()
+        self._refresh_genius_owned_sidebar()
 
     def _on_switch_genius_build(self, build_name: str):
         if build_name == self._current_genius_build_name:
@@ -13078,7 +14617,7 @@ class LoadoutWindow(QMainWindow):
         self._refresh_genius_owned_sidebar()
 
     def _on_add_genius_build(self):
-        name, ok = QInputDialog.getText(self, _t("arm_new_build_title"), _t("arm_name_colon"))
+        name, ok = _get_bounded_text_input(self, _t("arm_new_build_title"), _t("arm_name_colon"))
         name = name.strip()
         if not ok or not name or name in self._genius_builds_data:
             return
@@ -13092,7 +14631,7 @@ class LoadoutWindow(QMainWindow):
     def _on_duplicate_genius_build(self):
         source_name = self._current_genius_build_name
         default_name = _t("arm_duplicate_default_name", name=source_name)
-        name, ok = QInputDialog.getText(self, _t("arm_duplicate_build_title"), _t("arm_name_colon"), text=default_name)
+        name, ok = _get_bounded_text_input(self, _t("arm_duplicate_build_title"), _t("arm_name_colon"), default_name)
         name = name.strip()
         if not ok or not name or name in self._genius_builds_data:
             return
@@ -13108,7 +14647,7 @@ class LoadoutWindow(QMainWindow):
         self._refresh_genius_owned_sidebar()
 
     def _on_rename_genius_build(self, old_name: str):
-        new_name, ok = QInputDialog.getText(self, _t("arm_rename_build_title"), _t("arm_name_colon"), text=old_name)
+        new_name, ok = _get_bounded_text_input(self, _t("arm_rename_build_title"), _t("arm_name_colon"), old_name)
         new_name = new_name.strip()
         if not ok or not new_name or new_name == old_name or new_name in self._genius_builds_data:
             return
@@ -13493,7 +15032,7 @@ class LoadoutWindow(QMainWindow):
         if self._skill_desc_selected_id:
             skill = self._skill_id_to_skill.get(self._skill_desc_selected_id)
             if skill:
-                self._render_selected_skill_description(skill)
+                self._refresh_open_skill_description_panel(skill)
 
     def _build_genius_total_panel(self) -> QFrame:
         box = QFrame()
@@ -13613,6 +15152,23 @@ class LoadoutWindow(QMainWindow):
                 stat_key = match[0]
                 stat_id = _GENIUS_STAT_ID_MAP.get(stat_key, stat_key)
                 totals[stat_id] = totals.get(stat_id, 0.0) + (entry.get("value", 0) or 0)
+        return totals
+
+    def _passive_skill_stat_totals(self) -> dict[str, float]:
+        """Real stat contribution from invested passive skills, scaled by
+        their effective level (manual + gear/Daevanion bonus, same basis
+        as the skill-level display elsewhere) via _PASSIVE_SKILL_LEVEL_
+        SCALING's real Lv.1->Lv.10 data. Chanter-only so far (User-Wunsch,
+        2026-08-31, "eine Klasse nach der naechsten")."""
+        totals: dict[str, float] = {}
+        for skill_id, entries in _PASSIVE_SKILL_LEVEL_SCALING.items():
+            level = self._skill_levels.get(skill_id, 0) + self._skill_bonus.get(skill_id, 0)
+            if level <= 0:
+                continue
+            for entry in entries:
+                stat_id, lv1, lv10 = entry[0], entry[1], entry[2]
+                value = _passive_skill_level_value(lv1, lv10, level)
+                totals[stat_id] = totals.get(stat_id, 0.0) + value
         return totals
 
     def _arcana_lord_stat_totals(self, equipment_totals: dict[str, float]) -> dict[str, float]:
@@ -14477,6 +16033,15 @@ class LoadoutWindow(QMainWindow):
         return total
 
     def _refresh_stat_info(self):
+        # MUST run before passive_totals below -- _skill_bonus (gear/
+        # Daevanion/Arcana-granted skill levels) was previously only
+        # refreshed at the END of this method, so whichever equip/Daevanion/
+        # Arcana mutation triggered THIS refresh would compute passive stat
+        # contributions off the STALE pre-mutation bonus, one full refresh
+        # cycle late (User-reported, 2026-09-02, screenshot showing Attack
+        # Preparation at "5 (+14)" prompted the recheck). Fixed by moving
+        # this call here instead of to the tail.
+        self._recompute_skill_bonus()
         # Kept as separate per-source dicts (not just summed straight into
         # one `totals`) so each Stat Info value's tooltip can show exactly
         # which tab/build contributed how much (User-Wunsch, 2026-08-30:
@@ -14499,6 +16064,7 @@ class LoadoutWindow(QMainWindow):
         # the per-source Attack tooltip made it visible that the Daeva
         # Board wasn't contributing anything at all).
         daevanion_totals = self._daevanion_stat_totals()
+        passive_totals = self._passive_skill_stat_totals()
 
         totals: dict[str, float] = dict(equipment_totals)
         for stat_id, value in genius_totals.items():
@@ -14508,6 +16074,8 @@ class LoadoutWindow(QMainWindow):
         for stat_id, value in arcana_totals.items():
             totals[stat_id] = totals.get(stat_id, 0.0) + value
         for stat_id, value in daevanion_totals.items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+        for stat_id, value in passive_totals.items():
             totals[stat_id] = totals.get(stat_id, 0.0) + value
 
         label_groups = [
@@ -14559,6 +16127,8 @@ class LoadoutWindow(QMainWindow):
                     source_lines.append(f"{_t('arm_stat_source_genius')}: {_format_number(genius_totals[stat_id])}{suffix}")
                 if daevanion_totals.get(stat_id, 0.0):
                     source_lines.append(f"{_t('arm_stat_source_daevanion')}: {_format_number(daevanion_totals[stat_id])}{suffix}")
+                if passive_totals.get(stat_id, 0.0):
+                    source_lines.append(f"{_t('arm_stat_source_passive')}: {_format_number(passive_totals[stat_id])}{suffix}")
                 source_lines.extend(
                     f"{attr_name}: {_format_number(attr_value)}{suffix}"
                     for attr_name, attr_value in attribute_by_attr.get(stat_id, {}).items()
@@ -14615,8 +16185,6 @@ class LoadoutWindow(QMainWindow):
                     )
                 value_label.setToolTip("<br><br>".join(html_parts))
 
-        self._recompute_skill_bonus()
-
     def _recompute_skill_bonus(self):
         """Combines the gear bonus (_compute_equipped_skill_bonus), the
         Daevanion Board bonus (_compute_daevanion_skill_bonus), and the
@@ -14626,10 +16194,13 @@ class LoadoutWindow(QMainWindow):
         directly from the Daevanion node-click/reset/route handlers and
         Arcana slot/grade change handlers, since those change state without
         going through _refresh_stat_info at all."""
-        self._skill_bonus = self._compute_equipped_skill_bonus()
-        for sid, v in self._compute_daevanion_skill_bonus().items():
+        self._skill_bonus_gear = self._compute_equipped_skill_bonus()
+        self._skill_bonus_daevanion = self._compute_daevanion_skill_bonus()
+        self._skill_bonus_arcana = self._compute_arcana_card_skill_bonus()
+        self._skill_bonus = dict(self._skill_bonus_gear)
+        for sid, v in self._skill_bonus_daevanion.items():
             self._skill_bonus[sid] = self._skill_bonus.get(sid, 0) + v
-        for sid, v in self._compute_arcana_card_skill_bonus().items():
+        for sid, v in self._skill_bonus_arcana.items():
             self._skill_bonus[sid] = self._skill_bonus.get(sid, 0) + v
         self._refresh_skill_level_labels()
 
@@ -14717,6 +16288,33 @@ class LoadoutWindow(QMainWindow):
             bonus_level = self._skill_bonus.get(skill_id, 0)
             wish_level = self._skill_arcana_wish.get(skill_id, 0)
             label.setText(_format_skill_level_html(manual_level, bonus_level, wish_level))
+            label.setToolTip(self._skill_level_source_tooltip(skill_id))
+
+    def _skill_level_source_tooltip(self, skill_id: str) -> str:
+        """Turquoise breakdown of WHERE a skill's extra levels come from
+        (User-Wunsch, 2026-09-02, format example "Schmuck: +3 / Arcana: +8
+        / Daevanionboard ...") -- a distinct third tooltip color from the
+        existing Stat Info panel's blue "Source"/orange "Effect" convention
+        (see _refresh_stat_info), since this is a different kind of
+        breakdown (skill levels, not stat values) shown on a different
+        widget. Empty string (no tooltip at all) when nothing contributes,
+        matching a fresh/un-invested skill."""
+        gear = self._skill_bonus_gear.get(skill_id, 0)
+        arcana = self._skill_bonus_arcana.get(skill_id, 0)
+        daevanion = self._skill_bonus_daevanion.get(skill_id, 0)
+        wish = self._skill_arcana_wish.get(skill_id, 0)
+        lines = []
+        if gear:
+            lines.append(f"{_t('arm_jewelry_label')}: +{gear}")
+        if arcana:
+            lines.append(f"{_t('arm_skill_source_arcana')}: +{arcana}")
+        if daevanion:
+            lines.append(f"{_t('arm_stat_source_daevanion')}: +{daevanion}")
+        if wish:
+            lines.append(f"{_t('arm_skill_source_wish')}: +{wish}")
+        if not lines:
+            return ""
+        return f"<b style='color:#2dd4bf;'>{_t('arm_skill_level_source_title')}</b><br>" + "<br>".join(lines)
 
     # ── Left/right equipment columns (Weapon+Armor left, Accessory right) ──
 
@@ -14825,7 +16423,7 @@ class LoadoutWindow(QMainWindow):
         # skill_planner_class_combo (see _class_combos/_on_any_class_combo_
         # changed) purely so every other `character_class_combo.currentText()`
         # read throughout this class keeps working unchanged.
-        self.character_class_combo = QComboBox()
+        self.character_class_combo = _DownwardComboBox()
 
         return col
 
@@ -15200,6 +16798,7 @@ class LoadoutWindow(QMainWindow):
             # purely a planning target, saved the same way as skill_levels
             # so it survives a restart like everything else here.
             "skill_arcana_wish": dict(self._skill_arcana_wish),
+            "skill_active_specs": {sid: sorted(ids) for sid, ids in self._skill_active_specs.items()},
             "current_skill_build_name": self._current_build_name,
             "skill_builds_data": {
                 class_name: {
@@ -15415,6 +17014,7 @@ class LoadoutWindow(QMainWindow):
 
         self._skill_levels = dict(state.get("skill_levels", {}))
         self._skill_arcana_wish = dict(state.get("skill_arcana_wish", {}))
+        self._skill_active_specs = {sid: set(ids) for sid, ids in state.get("skill_active_specs", {}).items()}
         self._refresh_skill_description_view()
         self._refresh_skillpoints_label()
         self._refresh_stigma_points_label()
@@ -15453,21 +17053,20 @@ class LoadoutWindow(QMainWindow):
         if self._current_equip_build_name not in builds:
             self._current_equip_build_name = next(iter(builds))
 
-        self._equip_build_tab_group = QButtonGroup(self)
-        self._equip_build_tab_group.setExclusive(True)
-        for build_name in builds:
-            btn = _BuildTabButton(build_name)
-            btn.setObjectName("SkillFilterButton")
-            btn.setCheckable(True)
-            btn.setChecked(build_name == self._current_equip_build_name)
-            btn.setMinimumHeight(32)
-            btn.clicked.connect(lambda checked=False, bn=build_name: self._on_switch_equip_build(bn))
-            btn.doubleClicked.connect(lambda bn=build_name: self._on_rename_equip_build(bn))
-            btn.setToolTip(_t("arm_rename_hint"))
-            self._equip_build_tab_group.addButton(btn)
-            self.equip_build_tabs_row.addWidget(btn)
+        # Dropdown instead of a pill-button row (User-Wunsch, 2026-09-02:
+        # "wird bei mehr als 3 Profilen schnell unuebersichtlich") -- always
+        # a combo now regardless of count, so there's no threshold-based
+        # mode switch to maintain.
+        combo = QComboBox()
+        combo.setObjectName("BuildSwitcherCombo")
+        combo.setMinimumHeight(32)
+        combo.setMinimumWidth(160)
+        combo.addItems(list(builds.keys()))
+        combo.setCurrentText(self._current_equip_build_name)
+        combo.currentTextChanged.connect(self._on_switch_equip_build)
+        self.equip_build_tabs_row.addWidget(combo)
 
-        # Not part of _equip_build_tab_group -- this doesn't select a build,
+        # Not part of the switcher -- this doesn't select a build,
         # it swaps the whole page (see equip_view_stack) into the compare
         # view instead, so it stays a plain (non-exclusive, non-checkable)
         # button among the build tabs.
@@ -15504,17 +17103,32 @@ class LoadoutWindow(QMainWindow):
         rename_btn.clicked.connect(lambda checked=False: self._on_rename_equip_build(self._current_equip_build_name))
         self.equip_build_tabs_row.addWidget(rename_btn)
 
-        save_btn = QPushButton()
-        save_btn.setIcon(_make_save_icon())
-        save_btn.setIconSize(QSize(20, 20))
-        save_btn.setFixedSize(40, 32)
-        save_btn.setToolTip(_t("arm_save_current_set"))
-        save_btn.clicked.connect(self._on_save_current_equip_build)
-        self.equip_build_tabs_row.addWidget(save_btn)
+        delete_btn = QPushButton()
+        delete_btn.setIcon(_make_delete_icon())
+        delete_btn.setIconSize(QSize(20, 20))
+        delete_btn.setFixedSize(40, 32)
+        delete_btn.setToolTip(_t("arm_delete_current_set"))
+        delete_btn.setEnabled(len(builds) > 1)  # always keep at least one Set
+        delete_btn.clicked.connect(self._on_delete_equip_build)
+        self.equip_build_tabs_row.addWidget(delete_btn)
 
-    def _on_save_current_equip_build(self):
+    def _on_delete_equip_build(self):
         class_name = self.character_class_combo.currentText().strip().lower()
-        self._save_current_equip_build_state(class_name)
+        self._ensure_class_equip_builds(class_name)
+        builds = self._equip_builds_data[class_name]
+        if len(builds) <= 1:
+            return  # guarded by the disabled button already, belt-and-suspenders
+        name = self._current_equip_build_name
+        reply = QMessageBox.question(
+            self, _t("arm_delete_build_confirm_title"), _t("arm_delete_build_confirm_text", name=name),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        builds.pop(name, None)
+        self._current_equip_build_name = next(iter(builds))
+        self._rebuild_equip_build_tabs()
+        self._load_current_equip_build_state()
 
     def _on_switch_equip_build(self, build_name: str):
         if build_name == self._current_equip_build_name:
@@ -16074,6 +17688,19 @@ class LoadoutWindow(QMainWindow):
             else:
                 skipped.append(slot_id)
 
+        if applied:
+            # Stat Info/GearScore never recomputed here at all before --
+            # the substats DID get stored into _equipped_substats above,
+            # but nothing downstream of that ever ran, so the panel stayed
+            # stale until some UNRELATED action (opening/closing an item's
+            # detail view) happened to trigger a refresh (User-reported,
+            # 2026-09-02: "wenn man beim EQ die Schnellauswahl nutzt, werden
+            # die Werte erst dann aktualisiert, wenn man die Details eines
+            # EQ-Teils öffnet und wieder schließt" -- same bug class as the
+            # earlier Daevanion/Genius/skill-bonus refresh gaps this
+            # session, just a different code path).
+            self._update_gearscore()
+            self._refresh_stat_info()
         if applied and self._selected_equip_slot_id in applied:
             self._refresh_equip_item_panel()
 
@@ -16464,6 +18091,15 @@ class ItemDatabaseWindow(QMainWindow):
         self.table.setIconSize(QSize(ICON_SIZE, ICON_SIZE))
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.table.horizontalHeader().setStretchLastSection(True)
+        # stretchLastSection already makes the last column absorb all
+        # remaining width, so there's never real content to scroll to --
+        # only a few px of Qt's own internal stretch-rounding leftover
+        # (confirmed via a headless repro: horizontalScrollBar().maximum()
+        # == 3px). Without this, that residue still shows a technically-
+        # functional scrollbar that can only crawl those few px (User-
+        # reported, 2026-09-03: "wofuer ist hier ein hori Scrollbalken
+        # gelandet, wenn dieser nur 0.5mm hin und her scrollt?").
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.table.verticalHeader().setVisible(False)
 
         # Right-hand category sidebar (User-Wunsch) -- one exclusive pill
@@ -16884,10 +18520,27 @@ class ItemDatabaseWindow(QMainWindow):
         if detail:
             QToolTip.showText(QCursor.pos(), format_tooltip(detail), self.table)
 
+    # Items are appended to the model in batches, yielding to the event
+    # loop between each (QTimer.singleShot(0, ...)) instead of one giant
+    # blocking loop -- so the window paints and stays responsive to input
+    # immediately, even while ~7000 rows are still being built up in the
+    # background (User-Wunsch, 2026-09-03: opening the tab used to block
+    # until every row -- across ALL categories -- was constructed, before
+    # the user could even pick a category to narrow it down).
+    _LOAD_CHUNK_SIZE = 300
+
     def _load_items(self):
         if not DATA_PATH.exists():
             self.result_label.setText(_t("arm_no_cached_data", path=DATA_PATH))
             return
+
+        # These 4 combos only get their real entries in the finalize step
+        # below (_populate_filter_combo, once every row is in) -- greyed
+        # out for the ~5s loading takes so a user can't pick a filter that
+        # silently only applies to whatever partial rows happen to be
+        # loaded so far (User-Wunsch, 2026-09-03).
+        for combo in (self.category_combo, self.shop_combo, self.wing_equip_combo, self.wing_owned_combo):
+            combo.setEnabled(False)
 
         data = json.loads(DATA_PATH.read_text(encoding="utf-8"))
         # Collapses exact-duplicate catalog rows (same name/grade/options,
@@ -16909,10 +18562,26 @@ class ItemDatabaseWindow(QMainWindow):
         # shugo.gg's own item database, see _SKILLS_DATA_CLASS_ALIASES).
         self._raw_items = items
 
-        categories = set()
-        wing_equip_names, wing_owned_names = set(), set()
+        self._load_state = {
+            "items": items,
+            "index": 0,
+            "categories": set(),
+            "wing_equip_names": set(),
+            "wing_owned_names": set(),
+        }
+        self._load_items_chunk()
 
-        for item in items:
+    def _load_items_chunk(self):
+        state = self._load_state
+        items = state["items"]
+        categories = state["categories"]
+        wing_equip_names = state["wing_equip_names"]
+        wing_owned_names = state["wing_owned_names"]
+
+        start = state["index"]
+        end = min(start + self._LOAD_CHUNK_SIZE, len(items))
+
+        for item in items[start:end]:
             row = []
 
             icon_item = QStandardItem()
@@ -16970,18 +18639,33 @@ class ItemDatabaseWindow(QMainWindow):
 
             self.model.appendRow(row)
 
+        state["index"] = end
+
+        if end < len(items):
+            # Progress feedback while still loading -- shows how many of the
+            # eventual total are in so far (e.g. "300 / 6999"), instead of
+            # the label sitting on its stale pre-load text and then jumping
+            # straight to the full count once every chunk is done.
+            self.result_label.setText(_t("arm_items_count", shown=end, total=len(items)))
+            QTimer.singleShot(0, self._load_items_chunk)
+            return
+
         self._all_categories = categories
         self._wing_equip_names = wing_equip_names
         self._wing_owned_names = wing_owned_names
+        self._load_state = None
 
         self._populate_filter_combo(self.category_combo, categories)
         self._populate_filter_combo(self.shop_combo, set(REAL_SHOP_TYPES))
         self._populate_filter_combo(self.wing_equip_combo, wing_equip_names)
         self._populate_filter_combo(self.wing_owned_combo, wing_owned_names)
+        for combo in (self.category_combo, self.shop_combo, self.wing_equip_combo, self.wing_owned_combo):
+            combo.setEnabled(True)
 
         self.table.resizeColumnsToContents()
         self.table.setColumnWidth(0, ICON_SIZE + 24)
         self._update_result_label()
+        QTimer.singleShot(0, self._request_visible_icons)
 
     @staticmethod
     def _populate_filter_combo(combo: QComboBox, values: set):

@@ -1,6 +1,6 @@
 # Aion2 Task Manager
 
-**v1.7.1** — Modern desktop productivity manager for Aion players.
+**v1.9.0** — Modern desktop productivity manager for Aion players.
 
 Aion2 Task Manager combines task management, shopping organization, event timers, a visual flow map planner and an in-game HUD overlay into a single lightweight desktop application — built specifically for Aion 2 players who want to stay on top of their daily and weekly goals without alt-tabbing constantly. An Armory module (item database, crafting calculator, build planner) is available as an opt-in Beta and is still under active development — see the Roadmap section below.
 
@@ -126,13 +126,14 @@ Opt-in area for gear planning, unlockable at your own risk via Settings → "Unl
 
 **Already available in Beta:**
 * **Item Database** — searchable catalog with category/class/rarity/PvP-PvE-Neutral filters, a grouped Categories sidebar, dedicated Wings filters
-* **Crafting Calculator** — full material chain for any craftable item, expandable ingredient-by-ingredient; a Vergleich (Direct Craft vs. Transfer) comparison tab
+* **Crafting Calculator** — full material chain for any craftable item, expandable ingredient-by-ingredient; a Vergleich (Direct Craft vs. Transfer) comparison tab; the item picker shows a Gear Level column so same-rarity items can be told apart by strength at a glance
 * **Build Planner** — assemble a virtual character loadout, compare gear side-by-side (Build Compare), save multiple named gear sets per class, enchant-level tracking per slot, and a Quick Select for auto-equipping a full crafted/dungeon-drop/PvP gear set by race and gear tier in one click, plus a Property Priority editor (per role and gear mode) to customize which substats get auto-picked
 * **Daevanion Board** — interactive per-class/deity board with real tier art, a checkable stat/skill sidebar, and an auto-router that finds the cheapest path to everything you've checked; feeds its skill bonuses straight into the Skill Planner and persists to your profile
 * **Skill Planner** — browse/filter class skills, track Skill Points and Stigma Points separately, build a Priority List (with remove/favorite/star), and an "Arcana Calculator" that finds the best-case Arcana card setup for a wishlist of extra skill levels
 * **Arcana tab** — an Information sub-tab to browse all card types/sets, and a Sets sub-tab holding your 5 real equip slots for this season's usable cards, which the Arcana Calculator can write straight into with one click; Sets share the same named build as the Skill Planner
 * **Full English/Deutsch/Русский localization** across all Armory windows, following your Settings → Language choice (item/recipe/skill/card/material names stay in their original form until an official in-game translation exists)
 * **Templates: pick items directly from the Item Database** — the Shopping template "Import from Database" link opens the real catalog (icons, search, a shop-type sidebar pre-filtered to purchasable items) instead of typing a name — Already implemented / Done
+* **Templates: CSV Import/Export** for Shopping and Task templates — export any list to a spreadsheet, or bulk-import one back in with a choice between adding to your list or replacing only what an earlier import added, automatic duplicate-title detection, and an optional one-click insert straight into your active list
 
 **Planned / in progress:**
 * Item Database: "Compare Items" — compare two catalog items side by side, in the header spot the removed "Equip Character"/"Crafting Calculator" shortcut buttons used to occupy
@@ -149,6 +150,8 @@ Opt-in area for gear planning, unlockable at your own risk via Settings → "Unl
 * Shugo.gg character import & stat comparison (blocked until a Global-region endpoint exists) — first chance to test is the Sept 17 Global test phase (2-3 days), otherwise full testing from Sept 30; would extend to the Skill Planner/Arcana too, not just the Build Planner, depending on what data is actually available
 * Skill Rotation planner (node-based sequence builder for skill casting order) — early idea, not yet scoped
 * Crafting Calculator: rename the existing Compare tab to "Transfer" (it only compares transfer chains) and add a second, independent mode to compare any two recipes freely — which comparison types to offer (e.g. item stats for Cooking, which has few enough ingredients to free up space for it) still needs deciding
+* Genius Insight tab (Pet Genus board roll planner) — Already implemented / Done (shipped in v1.8.0: picked Line stats feed GearScore/Stat Info and the Skill Planner's damage estimate, same as Gear/Daevanion/Arcana; Owned Effects stay reference-only as planned)
+* Build Compare: also compare the two builds' Skill Planner damage numbers side by side (estimated and normal), not just gear stats
 
 ### Overlay & Flow Map
 * Skills and Equipment sections in the in-game overlay, with two-way sync back to the app when checked off
