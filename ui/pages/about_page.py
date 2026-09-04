@@ -7,10 +7,20 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPixmap, QIcon, QPainter
 from PySide6.QtCore import Qt, QByteArray
 from PySide6.QtSvg import QSvgRenderer
-from core.version import APP_VERSION
+from core.version import APP_VERSION, GITHUB_REPO, GITHUB_USER
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
-_GITHUB_URL = "https://github.com/blacksole87/Aion2-TM-DesktopApp"
+# Real bug found + fixed (2026-09-04, during a translation audit): this
+# hardcoded "blacksole87" doesn't exist -- the real account is "blacksole"
+# (core.version.GITHUB_USER, already used correctly by update_checker.py/
+# update_dialog.py) -- the button silently 404'd. Built from the same
+# shared constants those two already use instead of a second, driftable
+# literal.
+_GITHUB_URL = f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}"
+# "Official Bug Report button" (User-Wunsch, 2026-09-04) -- straight to
+# GitHub's own "new issue" composer rather than just the issues list, so
+# it's one click from here to actually filing something.
+_BUG_REPORT_URL = f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}/issues/new"
 _DISCORD_PROFILE_URL = "https://discord.com/users/294899670017114122"
 _TWITCH_URL = "https://twitch.tv/soulflaresifu"
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -185,7 +195,13 @@ class AboutPage(QWidget):
         self.discord_btn.setFixedWidth(140)
         self.discord_btn.clicked.connect(lambda: webbrowser.open(_DISCORD_PROFILE_URL))
 
+        self.bugreport_btn = QPushButton()
+        self.bugreport_btn.setObjectName("secondaryButton")
+        self.bugreport_btn.setFixedWidth(140)
+        self.bugreport_btn.clicked.connect(lambda: webbrowser.open(_BUG_REPORT_URL))
+
         about_btn_col.addWidget(self.github_btn)
+        about_btn_col.addWidget(self.bugreport_btn)
         about_btn_col.addWidget(self.copy_ver_btn)
         about_btn_col.addWidget(self.discord_btn)
         about_btn_col.addStretch()
@@ -348,6 +364,7 @@ class AboutPage(QWidget):
         self.about_desc_lbl.setText(tr_func(language, "about_desc"))
         self.about_discord_lbl.setText("Discord: .tasse")
         self.github_btn.setText(tr_func(language, "about_github"))
+        self.bugreport_btn.setText(tr_func(language, "bug_report_btn"))
         self.copy_ver_btn.setText(tr_func(language, "about_copy_ver"))
         self.coop_title_lbl.setText(tr_func(language, "coop_title"))
         self.coop_desc_lbl.setText(tr_func(language, "coop_desc"))

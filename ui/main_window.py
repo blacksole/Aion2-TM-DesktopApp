@@ -241,6 +241,7 @@ class MainWindow(QMainWindow):
         self.season_reset_datetime = ""
         self.last_daily_reset_date = None
         self.last_weekly_reset_date = None
+        self.missed_daily_activities = []
         self._daily_countdown_text = "--:--:--"
         self._weekly_countdown_text = "--:--:--"
         self.profile_name = "Default"
@@ -300,6 +301,7 @@ class MainWindow(QMainWindow):
 
         self.item_templates: list = []
         self.task_templates: list = []
+        self.standard_templates: dict = {"tasks": [], "shopping": []}
 
         self.flow_maps: dict = {}
         self.active_flow_map_name: str = "Map 1"
@@ -887,6 +889,9 @@ class MainWindow(QMainWindow):
         self.tasks_page.filter_changed.connect(self.set_task_filter)
         self.tasks_page.manual_reset_requested.connect(self._on_manual_reset)
         self.tasks_page.template_requested.connect(self._open_template_dialog)
+        self.tasks_page.character_requested.connect(self._open_character_dialog)
+        self.tasks_page.full_view_requested.connect(self._on_full_view_requested)
+        self.tasks_page.import_requested.connect(self._open_full_view_import)
 
         if hasattr(self.header, "update_btn_clicked"):
             self.header.update_btn_clicked.connect(self._open_update_dialog)
@@ -1426,6 +1431,22 @@ class MainWindow(QMainWindow):
         self.close()
 
     def closeEvent(self, event):
+        # Real, silent data-loss risk (User-Wunsch, 2026-09-04: "beim
+        # Beenden durch das X einmal prüfen, ob Daten noch ungesichert
+        # sind und den User darauf hinweisen, sicherheitshalber"):
+        # save_profile() below only ever persists what's already
+        # COMMITTED into a node (title/description typed into the Flow
+        # Map's node editor panel but not yet clicked "Save" on that node
+        # is never part of self.flow_maps/self.characters at all) --
+        # closing straight through would silently discard that in-progress
+        # edit. Reuses the exact same Save/Discard/Cancel prompt the Flow
+        # Map editor itself already shows before switching nodes/maps
+        # while dirty (FlowController.confirm_dirty_before_action) instead
+        # of a second, differently-worded warning.
+        if self.flow_map_window and not self.flow_map_window.controller.confirm_dirty_before_action():
+            event.ignore()
+            return
+
         if getattr(self, "_force_quit", False):
             self.save_profile(silent=True)
             event.accept()
@@ -1767,6 +1788,7 @@ class MainWindow(QMainWindow):
         self.last_daily_reset_date = _date.fromisoformat(_d) if _d else None
         _w = settings.get("last_weekly_reset_date")
         self.last_weekly_reset_date = _date.fromisoformat(_w) if _w else None
+        self.missed_daily_activities = settings.get("missed_daily_activities", [])
 
         self.show_events = settings.get("show_events", True)
         self.auto_save = settings.get("auto_save", True)
@@ -1883,6 +1905,7 @@ class MainWindow(QMainWindow):
 
         self.item_templates = data.get("item_templates", [])
         self.task_templates = data.get("task_templates", [])
+        self.standard_templates = data.get("standard_templates", {"tasks": [], "shopping": []})
         self.tasks_page.update_templates(self.item_templates)
         self.tasks_page.update_task_templates(self.task_templates)
 
@@ -2031,6 +2054,7 @@ class MainWindow(QMainWindow):
                     self.last_weekly_reset_date.isoformat()
                     if self.last_weekly_reset_date else None
                 ),
+                "missed_daily_activities": self.missed_daily_activities,
             },
 
             "tasks": {
@@ -2045,6 +2069,7 @@ class MainWindow(QMainWindow):
             "active_flow_map": self.active_flow_map_name,
             "item_templates": self.item_templates,
             "task_templates": self.task_templates,
+            "standard_templates": self.standard_templates,
             "build_planner": self._build_planner_state,
         }
 
@@ -2327,12 +2352,14 @@ class MainWindow(QMainWindow):
                              language=self.language,
                              tr_func=tr,
                              item_picker_callback=self.open_template_item_picker,
-                             characters=self.characters)
+                             characters=self.characters,
+                             standard_templates=self.standard_templates)
         if dlg.exec():
             old_shopping = {t.get("id"): t for t in self.item_templates}
             old_tasks = {t.get("id"): t for t in self.task_templates}
             self.item_templates = dlg.get_templates()
             self.task_templates = dlg.get_task_templates()
+            self.standard_templates = dlg.get_standard_templates()
             self.tasks_page.update_templates(self.item_templates)
             self.tasks_page.update_task_templates(self.task_templates)
             self._sync_shopping_from_templates(old_shopping)
@@ -2427,6 +2454,29 @@ class MainWindow(QMainWindow):
             if isinstance(card, TaskCard) and card.schedule in schedules:
                 card.set_completed(False)
 
+    def _record_missed_daily_activities(self):
+        """Snapshots which DAILY task/shopping cards are still incomplete
+        right before a daily reset clears them (User-Wunsch, 2026-09-05:
+        "die verpassten Missionen fehlen noch in dem Roster Grid") -- real
+        tracking, not the fabricated stat the earlier browser mockup used
+        (see full_view_export.py's own docstring on why that was left out
+        originally: the reset itself never recorded which cards were left
+        undone before wiping them, so there was no real data to show).
+        Called from BOTH the automatic overnight reset (check_auto_resets)
+        and a manual daily reset (_on_manual_reset) -- either one crosses
+        the same "yesterday -> today" boundary this is meant to capture,
+        so both get identical treatment. Replaces the previous snapshot
+        entirely (always reflects "since the LAST daily reset", not an
+        ever-growing history)."""
+        missed = []
+        for card in self.task_lists.get("tasks", []):
+            if isinstance(card, TaskCard) and card.schedule == "daily" and not card.completed:
+                missed.append({"title": card.title_label.text(), "character": card.character or ""})
+        for card in self.task_lists.get("shopping", []):
+            if isinstance(card, ShoppingCard) and card.schedule == "daily" and not card.completed:
+                missed.append({"title": card.title, "character": card.character or ""})
+        self.missed_daily_activities = missed
+
     def _sync_character_items_to_shopping(self, char_name: str, items: list):
         """Sync shopping and task items from a character node into the respective lists."""
         removed_shop = [
@@ -2481,6 +2531,345 @@ class MainWindow(QMainWindow):
         if self.active_tab in ("shopping", "tasks"):
             self.refresh()
 
+    def _on_full_view_requested(self):
+        """"🌐 Full View" button in the ToDo screen's sort/filter row
+        (User-Wunsch, 2026-09-04, concrete follow-up to the Roster-Grid
+        browser mockup discussed earlier). Exports the REAL current tasks/
+        shopping state as a self-contained HTML snapshot and opens it in
+        the system's default browser -- a snapshot, not a live view (see
+        that earlier discussion: real two-way sync would need a small
+        local HTTP server, not built here since a read-only overview
+        already covers what was asked for)."""
+        import tempfile
+        from datetime import datetime
+        from pathlib import Path
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from .full_view_export import build_full_view_csv, build_full_view_html, build_full_view_xlsx
+
+        cards = self.task_lists.get("tasks", []) + self.task_lists.get("shopping", [])
+        rows = [self.serialize_card(c) for c in cards]
+
+        export_dir = Path(tempfile.gettempdir()) / "aion2_tm_full_view"
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        # Real bug found + fixed (User-reported, 2026-09-04: "wird immer
+        # noch nicht angezeigt" after a fresh export -- a fixed
+        # "roster_grid.html" name meant some browsers just refocused an
+        # already-open tab from a PREVIOUS export instead of loading the
+        # freshly-written one, showing stale data forever). Every export
+        # now gets its own timestamped basename, so each click opens a
+        # genuinely new URL the browser has never seen -- old exports in
+        # this folder are cleared first so they don't pile up indefinitely.
+        for old in export_dir.glob("roster_grid_*.*"):
+            old.unlink(missing_ok=True)
+        basename = f"roster_grid_{datetime.now():%Y%m%d_%H%M%S}"
+
+        # Written as siblings of the HTML page (User-Wunsch, 2026-09-04:
+        # "Vielleicht eine Option, aus dieser Ansicht als Excel-Tabelle
+        # exportieren" -> "Können wir dem User die Wahl ... geben?") -- the
+        # page's own "⬇ CSV"/"⬇ Excel" links are plain relative hrefs to
+        # these, so the browser handles the actual download/open itself,
+        # no JS-side file generation needed.
+        (export_dir / f"{basename}.csv").write_text(
+            build_full_view_csv(rows, self.characters, self.language), encoding="utf-8-sig", newline="",
+        )
+        build_full_view_xlsx(rows, self.characters, export_dir / f"{basename}.xlsx", self.language)
+
+        page = build_full_view_html(
+            rows, self.characters, self.language, basename=basename,
+            missed_daily=self.missed_daily_activities,
+        )
+        path = export_dir / f"{basename}.html"
+        path.write_text(page, encoding="utf-8")
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _open_full_view_import(self):
+        """Native counterpart to "Full View" (User-Wunsch, 2026-09-05:
+        "Kann man hier auch ein Import Button einfügen mit Vorschau?").
+        Sync can't happen from the exported browser page itself -- see
+        ui/full_view_import.py's own module docstring -- so this opens a
+        real in-app dialog: pick the (possibly Excel-edited) CSV/XLSX file,
+        preview exactly what will change, Sync writes it into the real
+        profile via _plan_full_view_import/apply_full_view_import_plan."""
+        from ui.widgets.full_view_import_dialog import FullViewImportDialog
+
+        dialog = FullViewImportDialog(
+            self.characters, self._plan_full_view_import, self.apply_full_view_import_plan,
+            language=self.language, tr_func=tr, parent=self,
+        )
+        dialog.exec()
+
+    def _find_task_card(self, title: str, schedule: str, character: str):
+        title_l = title.strip().lower()
+        for card in self.task_lists.get("tasks", []):
+            if not isinstance(card, TaskCard):
+                continue
+            if card.title_label.text().strip().lower() != title_l:
+                continue
+            if getattr(card, "schedule", "daily") != schedule:
+                continue
+            if (getattr(card, "character", "") or "") != character:
+                continue
+            return card
+        return None
+
+    def _plan_full_view_import(self, entries: list) -> list[dict]:
+        """Classifies each parsed import entry against the CURRENT profile
+        state without mutating anything -- shared by the preview dialog
+        AND apply_full_view_import_plan (which executes this exact plan
+        unchanged), so preview and apply can never drift apart."""
+        plan = []
+        for entry in entries:
+            character = entry.character or ""
+            card = self._find_task_card(entry.title, entry.schedule, character)
+            if card is None:
+                action = "new"
+            elif card.completed != entry.done:
+                action = "done" if entry.done else "open"
+            else:
+                action = "unchanged"
+            plan.append({
+                "character": entry.character, "schedule": entry.schedule,
+                "title": entry.title, "done": entry.done, "action": action,
+            })
+        return plan
+
+    def apply_full_view_import_plan(self, plan: list[dict]) -> dict:
+        """Applies a plan from _plan_full_view_import to the real profile
+        (User-Wunsch, 2026-09-05: a missing (character, title, schedule)
+        combo gets a brand-new card -- "Neue Karte anlegen" -- and Sync can
+        flip an existing card's completion state in EITHER direction --
+        "Beide Richtungen", the imported file is the source of truth for
+        done/open, not a one-way catch-up)."""
+        counts = {"new": 0, "done": 0, "open": 0, "unchanged": 0}
+        for row in plan:
+            counts[row["action"]] = counts.get(row["action"], 0) + 1
+            if row["action"] == "unchanged":
+                continue
+            character = row["character"] or ""
+            if row["action"] == "new":
+                # A new per-character instance of an already-known
+                # recurring task inherits ITS priority (any character,
+                # same title+schedule) instead of always defaulting --
+                # keeps a real task's priority consistent across characters.
+                sibling = next(
+                    (c for c in self.task_lists.get("tasks", [])
+                     if isinstance(c, TaskCard)
+                     and c.title_label.text().strip().lower() == row["title"].strip().lower()
+                     and getattr(c, "schedule", "daily") == row["schedule"]),
+                    None,
+                )
+                priority = getattr(sibling, "priority_value", "middle") if sibling else "middle"
+                card = TaskCard(row["title"], schedule=row["schedule"], character=character, priority=priority)
+                card.set_completed(row["done"])
+                self._wire_card(card)
+                self.task_lists.setdefault("tasks", []).append(card)
+            else:
+                card = self._find_task_card(row["title"], row["schedule"], character)
+                if card is not None:
+                    card.set_completed(row["done"])
+
+        self.refresh()
+        if self.auto_save:
+            self.save_profile(silent=True)
+        return counts
+
+    def _open_character_dialog(self):
+        """"Character" button, right next to "Templates" on the ToDo screen
+        (User-Wunsch, 2026-09-04). Thin wrapper -- _add_character/
+        _remove_character below do the real work."""
+        from .widgets.character_dialog import CharacterManagerDialog
+
+        dlg = CharacterManagerDialog(
+            self.characters, self._add_character, self._remove_character,
+            self._character_has_children,
+            language=self.language, tr_func=tr, parent=self,
+        )
+        dlg.exec()
+
+    def _add_character(self, name: str) -> tuple[bool, str]:
+        """Creates a real Flow Map "character"-icon node as a direct child
+        of the ACTIVE flow map's root -- characters have no separate
+        registry, they ARE Flow Map nodes (see _rebuild_characters below).
+        Shared by the Templates dialog's "Character" tab (User-Wunsch,
+        2026-09-04: "hier können Chars erstellt und schnell verwaltet
+        werden") -- "am Root" per that same request, exactly what a user
+        manually adding a node under root and setting its icon to
+        "character" via the editor panel would produce, same root-child-
+        only/8-max rules flow_controller.save_selected_node() enforces for
+        that manual path, just without needing the full editor panel for a
+        name-only creation. Returns (ok, error_key); error_key is "" on
+        success or when there's simply nothing to do (empty name/already
+        exists), else a translation key the caller can show describing why
+        it failed."""
+        from core.flow_model import FlowNode
+        from ui.flow.flow_layout import find_free_child_position
+
+        name = (name or "").strip()
+        if not name or name in self.characters:
+            return False, ""
+
+        window = self.flow_map_window
+        root = window.nodes.get(window.root_node_id) if window else None
+        if not root:
+            return False, ""
+        char_count = sum(
+            1 for cid in root.children
+            if window.nodes.get(cid) and window.nodes[cid].icon == "character"
+        )
+        if char_count >= 8:
+            return False, "char_limit_reached"
+
+        new_node = FlowNode(title=name, icon="character")
+        root.children.append(new_node.id)
+        window.nodes[new_node.id] = new_node
+        pos = find_free_child_position(window.root_node_id, window.nodes)
+        if pos:
+            new_node.x, new_node.y = pos
+
+        window.render_flow()
+        window.mark_unsaved()
+        self._rebuild_characters()
+        self._apply_standard_templates(name)
+        self.tasks_page.select_character(name)
+        return True, ""
+
+    def _apply_standard_templates(self, character: str):
+        """Seeds a brand-new character with the small "Standard Templates"
+        starter pack (User-Wunsch, 2026-09-05: "Man soll 2-3 Standard
+        Templates definieren und anpassen können") -- its own small,
+        directly-editable list (see TemplateDialog's "Standards verwalten"
+        button, which replaced the old CSV Import/Export at the same spot,
+        per the user's own earlier decision), independent of the existing
+        is_general flag (that one auto-adds to EVERY character's live
+        list already; this one only fires once, at character creation)."""
+        for tmpl in self.standard_templates.get("tasks", []):
+            card = TaskCard(
+                tmpl.get("title", ""),
+                priority=tmpl.get("priority", "middle"),
+                schedule=tmpl.get("schedule", "daily"),
+                character=character,
+                location=tmpl.get("location", ""),
+            )
+            self._wire_card(card)
+            self.task_lists.setdefault("tasks", []).append(card)
+        for tmpl in self.standard_templates.get("shopping", []):
+            card = ShoppingCard(
+                priority=tmpl.get("priority", "middle"),
+                amount=str(tmpl.get("amount", "1")),
+                title=tmpl.get("title", ""),
+                location=tmpl.get("location", ""),
+                price=tmpl.get("price", "0"),
+                schedule=tmpl.get("schedule", "daily"),
+                currency=tmpl.get("currency", "kinah"),
+                character=character,
+            )
+            self._wire_card(card)
+            self.task_lists.setdefault("shopping", []).append(card)
+        if self.standard_templates.get("tasks") or self.standard_templates.get("shopping"):
+            self.refresh()
+            if self.auto_save:
+                self.save_profile(silent=True)
+
+    def _character_has_children(self, name: str) -> bool:
+        """Whether the ACTIVE flow map's version of this character node has
+        any children -- decides which confirmation CharacterManagerDialog
+        shows before calling _remove_character below (User-Wunsch,
+        2026-09-04: "Bei remove Charakter sollte eine Abfrage in Bezug auf
+        die Flow Chart kommen - siehe Kind von Vater entfernen" -- a
+        character node can have its own sub-nodes in the Flow Map just
+        like any other node, and blindly deleting it would silently orphan
+        them, same risk flow_controller.delete_node() already guards
+        against for every other node)."""
+        window = self.flow_map_window
+        if not window:
+            return False
+        for node in window.nodes.values():
+            if node.icon == "character" and node.title == name and node.children:
+                return True
+        return False
+
+    def _remove_character(self, name: str, action: str = "recursive") -> bool:
+        """Removes every Flow Map "character"-icon node with this exact
+        title -- across every flow map, not just the active one, in case
+        the same character name exists as a node in more than one map.
+        Companion to _add_character above, same "no separate registry"
+        model.
+
+        `action` ("recursive" or "intermediate") mirrors the exact same
+        choice flow_controller.delete_node() already offers for any node
+        with children, via the same DeleteConfirmDialog (see
+        CharacterManagerDialog._on_remove_clicked) -- "recursive" removes
+        the character and its whole subtree, "intermediate" removes just
+        the character node and re-parents its children up to whatever it
+        was attached to (root, for a character). Reuses FlowController's
+        own _find_parent_id/_collect_descendants rather than duplicating
+        that traversal logic a second time. Only the ACTIVE map's node
+        gets this full treatment with a real parent/children graph to
+        walk -- a same-named node in an INACTIVE map (raw serialized dict,
+        no live FlowController) is the rare edge case of one character
+        existing in more than one map, and just gets its own subtree
+        deleted outright rather than asking a second dialog per map."""
+        from ui.flow.flow_controller import FlowController
+
+        removed_any = False
+        active = self.active_flow_map_name
+        window = self.flow_map_window
+        if window:
+            target_ids = [
+                nid for nid, node in window.nodes.items()
+                if node.icon == "character" and node.title == name
+            ]
+            if target_ids:
+                controller = FlowController(window)
+                for nid in target_ids:
+                    node = window.nodes.get(nid)
+                    if not node:
+                        continue
+                    parent_id = controller._find_parent_id(nid)
+                    if action == "intermediate":
+                        if parent_id:
+                            parent = window.nodes.get(parent_id)
+                            if parent and nid in parent.children:
+                                idx = parent.children.index(nid)
+                                parent.children.remove(nid)
+                                for i, child_id in enumerate(node.children):
+                                    parent.children.insert(idx + i, child_id)
+                        window.nodes.pop(nid, None)
+                    else:
+                        for desc_id in controller._collect_descendants(nid):
+                            window.nodes.pop(desc_id, None)
+                        if parent_id:
+                            parent = window.nodes.get(parent_id)
+                            if parent and nid in parent.children:
+                                parent.children.remove(nid)
+                    removed_any = True
+                window.render_flow()
+                window.mark_unsaved()
+        for map_name, map_data in self.flow_maps.items():
+            if map_name == active:
+                continue
+            nodes = map_data.get("nodes", {})
+            target_ids = [
+                nid for nid, nd in nodes.items()
+                if nd.get("icon") == "character" and nd.get("title") == name
+            ]
+            for nid in target_ids:
+                stack = [nid]
+                while stack:
+                    cur_id = stack.pop()
+                    cur_node = nodes.pop(cur_id, None)
+                    if cur_node:
+                        stack.extend(cur_node.get("children", []))
+                for nd in nodes.values():
+                    if nid in nd.get("children", []):
+                        nd["children"].remove(nid)
+                removed_any = True
+        if removed_any:
+            self._rebuild_characters()
+        return removed_any
+
     def _rebuild_characters(self):
         """Collect all character node titles from every flow map and update the dropdown."""
         chars: set[str] = set()
@@ -2504,16 +2893,18 @@ class MainWindow(QMainWindow):
         filter_key = self.active_filter
         if tab == "tasks":
             schedules = [filter_key] if filter_key in ("daily", "weekly", "season") else ["daily", "weekly", "season"]
+            if "daily" in schedules:
+                self._record_missed_daily_activities()
             self._reset_tasks_by_schedule(schedules)
             if filter_key == "daily":
                 self.last_daily_reset_date = date.today()
             elif filter_key == "weekly":
                 self.last_weekly_reset_date = date.today()
         elif tab == "shopping":
-            if filter_key in ("daily", "weekly", "season"):
-                self._reset_shopping_by_schedule([filter_key])
-            else:
-                self._reset_shopping_by_schedule(["daily", "weekly", "season"])
+            schedules = [filter_key] if filter_key in ("daily", "weekly", "season") else ["daily", "weekly", "season"]
+            if "daily" in schedules:
+                self._record_missed_daily_activities()
+            self._reset_shopping_by_schedule(schedules)
         self.refresh()
         self.save_profile()
 
@@ -2533,6 +2924,7 @@ class MainWindow(QMainWindow):
 
         if now >= daily_reset_time_today:
             if self.last_daily_reset_date != now.date():
+                self._record_missed_daily_activities()
                 self._reset_tasks_by_schedule(["daily"])
                 self._reset_shopping_by_schedule(["daily"])
                 self.refresh()

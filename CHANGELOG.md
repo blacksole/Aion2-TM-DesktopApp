@@ -35,6 +35,19 @@ These features are **not** part of an official update yet and are still under ac
 - Your core attributes (Might, Dexterity, etc.) and equipped Arcana cards' Empyrean Lord values now feed their real derived bonuses (Attack increase, Evasion increase, Combat Speed, and more) into the stat panel and damage estimate — previously shown but not actually calculated.
 - Each Equip Build can now be linked to a specific Arcana/Skill Planner build and Genius Insight profile, so only that combination counts toward its stat panel/GearScore/damage estimate — useful once you're keeping more than one of each around.
 - Stat panel values now show a hover tooltip breaking down exactly where the number comes from (equipment, grouped into Weapon/Armor/Jewelry, plus Genius Insight, attributes, Arcana Lords, and the Daevanion Board); hovering a core-attribute/Lord value also shows what it feeds into, even at 0.
+- New Pantheon tab: a radial board (12 Artwork slots on the outer ring, 4 Statue slots on a middle ring, 1 Colossus slot in the center), filled from a left-hand inventory panel with search plus Rarity and Lord-value filters — each real item can only occupy one board slot at a time. Equipped Pantheon items' real Lord Points now feed the stat panel, GearScore, damage estimate, and Build Compare, the same way Arcana cards and gear already do.
+
+---
+
+# Version 1.9.2
+
+Release Date: 2026-09-05
+
+## ✨ New Features
+
+- **Full View gets a real Import.** A new "Import" button next to "Full View" opens a dialog to pick a CSV or Excel file — the same shape Full View's own export already produces, so a file you export, edit, and reimport just works. Shows a preview of exactly what will change (new entries, or existing ones flipping between done/open) before you commit anything with "Sync".
+- **Full View now shows what you missed.** A "Missed (Yesterday)" tile and dismissible banner list which daily tasks/shopping entries were still incomplete right at the last daily reset — real tracked data, not an estimate.
+- **Templates: "Standards verwalten" replaces the CSV Import/Export buttons.** Define a small starter pack of Standard Templates — picked from your existing templates, with Schedule/Location filters and Select All/Deselect All — that gets created automatically for every new character you add.
 
 ---
 

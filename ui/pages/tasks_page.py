@@ -127,6 +127,9 @@ class TasksPage(QWidget):
     filter_changed = Signal(str)
     manual_reset_requested = Signal()
     template_requested = Signal()
+    character_requested = Signal()
+    full_view_requested = Signal()
+    import_requested = Signal()
 
     def __init__(self, tabs: dict, language: str, tr_func):
         super().__init__()
@@ -176,6 +179,17 @@ class TasksPage(QWidget):
         self._template_btn.setVisible(False)
         self._template_btn.clicked.connect(self.template_requested.emit)
         self.tab_row.addWidget(self._template_btn)
+
+        # Directly next to "Templates", not buried inside it (User-
+        # correction, 2026-09-04, after a first pass put this inside the
+        # Templates popup as a tab: "Character sollte direkt im ToDo
+        # Fenster neben Templates stehen").
+        self._character_btn = QPushButton(self.tr(self.language, "tab_character"))
+        self._character_btn.setObjectName("templateButton")
+        self._character_btn.setCursor(Qt.PointingHandCursor)
+        self._character_btn.setVisible(False)
+        self._character_btn.clicked.connect(self.character_requested.emit)
+        self.tab_row.addWidget(self._character_btn)
 
         layout.addLayout(self.tab_row)
 
@@ -265,11 +279,19 @@ class TasksPage(QWidget):
         self.char_input = QComboBox()
         self.char_input.setObjectName("priorityInput")
         self.char_input.setMinimumWidth(110)
-        self.char_input.setPlaceholderText("Char")
-        self.char_input.addItem("leer", "")
-        self.char_input.setItemData(0, QColor("#64748b"), Qt.ForegroundRole)
-        self.char_input.model().item(0).setEnabled(False)
-        self.char_input.setCurrentIndex(-1)
+        # Real bug found + fixed (GitHub issue #2, 2026-09-04: the "leer"
+        # placeholder was untranslated German even in English, and relying
+        # on setPlaceholderText()+currentIndex(-1) instead of a real,
+        # selectable first row rendered a stray half-height blank row above
+        # the real character list). "Unassigned" is now item 0, always
+        # present and selectable (no setPlaceholderText/-1 index needed at
+        # all) -- see _rebuild_char_input(). Character CREATION itself
+        # doesn't live here (User-correction, 2026-09-04: this row is
+        # earmarked to become the "Standard Templates" picker later, per
+        # GitHub issue #2 -- adding a character doesn't belong on it) --
+        # that now happens via a dedicated "Character" tab in the Templates
+        # dialog instead (TemplateDialog._make_character_tab).
+        self._rebuild_char_input([])
 
         # Legacy fields kept for serialize/deserialize compatibility but hidden
         self.location_input = QLineEdit()
@@ -437,6 +459,31 @@ class TasksPage(QWidget):
 
         self.sort_row.addStretch()
 
+        # User-Wunsch, 2026-09-04: opens the same Roster-Grid layout
+        # discussed as a browser mockup, now over the real current tasks/
+        # shopping data (MainWindow._on_full_view_requested). Placed here,
+        # in the empty space right of the filter pills -- "nimm bitte
+        # diesen Platz" (screenshot pointed at exactly this spot).
+        self._full_view_btn = QPushButton(self.tr(self.language, "full_view_btn"))
+        self._full_view_btn.setObjectName("templateButton")
+        self._full_view_btn.setCursor(Qt.PointingHandCursor)
+        self._full_view_btn.clicked.connect(self.full_view_requested.emit)
+        self.sort_row.addWidget(self._full_view_btn)
+
+        # Native counterpart to Full View's CSV/Excel export (User-Wunsch,
+        # 2026-09-05: "Kann man hier auch ein Import Button einfügen mit
+        # Vorschau?") -- Sync can't happen from the exported browser page
+        # itself (a static file:// page has no channel back into this
+        # running app), so this opens a real in-app dialog instead: pick
+        # the (possibly Excel-edited) CSV/XLSX file, preview it, Sync
+        # writes straight into the real profile. See
+        # MainWindow._open_full_view_import.
+        self._import_btn = QPushButton(self.tr(self.language, "full_view_import_btn"))
+        self._import_btn.setObjectName("templateButton")
+        self._import_btn.setCursor(Qt.PointingHandCursor)
+        self._import_btn.clicked.connect(self.import_requested.emit)
+        self.sort_row.addWidget(self._import_btn)
+
         self._reset_hint_label = QLabel()
         self._reset_hint_label.setObjectName("resetHintLabel")
         self._reset_hint_label.setVisible(False)
@@ -544,8 +591,9 @@ class TasksPage(QWidget):
         self.filter_weekly_btn.setVisible(is_template_mode)
         self.filter_season_btn.setVisible(is_template_mode)
 
-        # Template button for both shopping and tasks
+        # Template/Character buttons for both shopping and tasks
         self._template_btn.setVisible(is_template_mode)
+        self._character_btn.setVisible(is_template_mode)
 
     def set_reset_hint(self, prefix: str, countdown: str, visible: bool):
         if visible:
@@ -656,6 +704,9 @@ class TasksPage(QWidget):
         )
 
         self._template_btn.setText(self.tr(self.language, "templates_btn"))
+        self._character_btn.setText(self.tr(self.language, "tab_character"))
+        self._full_view_btn.setText(self.tr(self.language, "full_view_btn"))
+        self._import_btn.setText(self.tr(self.language, "full_view_import_btn"))
         self.template_combo.lineEdit().setPlaceholderText(self.tr(self.language, "template_placeholder"))
         self.no_templates_hint.setText(self.tr(self.language, "no_templates_hint"))
         self._manual_reset_btn.setToolTip(self.tr(self.language, "manual_reset_tooltip"))
@@ -745,19 +796,29 @@ class TasksPage(QWidget):
 
     def update_characters(self, char_names: list[str]):
         current = self.char_input.currentData()
+        self._rebuild_char_input(char_names, select_data=current)
+
+    def _rebuild_char_input(self, char_names: list[str], select_data: str | None = None):
+        """Always has a real, selectable "Unassigned" row (index 0) -- see
+        the char_input setup comment in __init__ for why (fixes both the
+        untranslated "leer" text and the stray blank-row rendering bug)."""
         self.char_input.blockSignals(True)
         self.char_input.clear()
-        if not char_names:
-            self.char_input.addItem("leer", "")
-            self.char_input.setItemData(0, QColor("#64748b"), Qt.ForegroundRole)
-            self.char_input.model().item(0).setEnabled(False)
-            self.char_input.setCurrentIndex(-1)
-        else:
-            for name in char_names:
-                self.char_input.addItem(name, name)
-            idx = self.char_input.findData(current)
-            self.char_input.setCurrentIndex(-1 if idx < 0 else idx)
+        self.char_input.addItem(self.tr(self.language, "char_unassigned"), "")
+        for name in char_names:
+            self.char_input.addItem(name, name)
+        idx = self.char_input.findData(select_data) if select_data else -1
+        self.char_input.setCurrentIndex(idx if idx >= 0 else 0)
         self.char_input.blockSignals(False)
+
+    def select_character(self, name: str):
+        """Called by MainWindow right after a character was created via the
+        Templates dialog's "Character" tab (GitHub issue #2: "automatically
+        select that character for the task being added") -- update_characters()
+        has already refreshed the item list with the new name by then."""
+        idx = self.char_input.findData(name)
+        if idx >= 0:
+            self.char_input.setCurrentIndex(idx)
 
 
     def set_title_placeholder(self, text: str):

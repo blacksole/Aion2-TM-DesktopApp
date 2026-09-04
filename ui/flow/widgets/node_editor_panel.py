@@ -13,6 +13,10 @@ from PySide6.QtWidgets import (
     QWidget,
     QDialog,
     QButtonGroup,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
 )
 
 from PySide6.QtCore import QSize, Qt
@@ -28,7 +32,7 @@ _PRIO_NAMES  = {"low": "priorityToggleLow", "middle": "priorityToggleMiddle", "h
 
 class _NodeItemListDialog(QDialog):
     def __init__(self, items: list, shopping_templates: list,
-                 task_templates: list = None, parent=None):
+                 task_templates: list = None, parent=None, item_picker_callback=None):
         super().__init__(parent)
         self.setWindowTitle("Liste bearbeiten")
         self.setModal(True)
@@ -41,6 +45,24 @@ class _NodeItemListDialog(QDialog):
         self._task_items = [dict(i) for i in items if i.get("type") == "task"]
         self._shopping_templates = shopping_templates or []
         self._task_templates = task_templates or []
+        # Opens the REAL Item Database catalog picker (icons, search,
+        # shop-type sidebar) via MainWindow.open_template_item_picker --
+        # same bridge Templates' own "Import from Database" link already
+        # uses, since only the host app knows how to lazily load the
+        # ItemDatabase module (User-Wunsch, 2026-09-04: "die Möglichkeit,
+        # Items aus der Datenbank auszuwählen ... ein Toggle oder Button
+        # zum switchen"). None if not supplied -> the toggle simply stays
+        # hidden (e.g. if ever opened in a context without MainWindow).
+        self._item_picker_callback = item_picker_callback
+        # Each picked catalog item becomes a template-shaped dict (title
+        # only, matching how "Import from Database" already only fills the
+        # Title field elsewhere -- a catalog item has no location/price/
+        # schedule/priority of its own) appended here, kept separate from
+        # the real saved Shopping/Task templates.
+        self._shop_db_picks: list[dict] = []
+        self._task_db_picks: list[dict] = []
+        self._shop_source = "templates"
+        self._task_source = "templates"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 16, 20, 20)
@@ -76,23 +98,49 @@ class _NodeItemListDialog(QDialog):
         add_layout.setContentsMargins(14, 12, 14, 12)
         add_layout.setSpacing(8)
 
-        self._shop_combo = QComboBox()
-        self._shop_combo.setObjectName("FlowSymbolCombo")
-        self._shop_combo.setMinimumHeight(36)
-        if self._shopping_templates:
-            for tmpl in self._shopping_templates:
-                self._shop_combo.addItem(tmpl.get("title", ""), tmpl)
-        else:
-            self._shop_combo.addItem("Keine Vorlagen vorhanden")
+        # Templates vs. real Item Database as the picker table's source
+        # (User-Wunsch, 2026-09-04: "die Möglichkeit, Items aus der
+        # Datenbank auszuwählen, hier gerne ein Toggle oder Button zum
+        # switchen") -- hidden entirely if no bridge into the Item
+        # Database was supplied (e.g. this dialog opened without a
+        # MainWindow ancestor to reach the callback through).
+        if self._item_picker_callback:
+            source_row = QHBoxLayout()
+            source_row.setSpacing(6)
+            self._shop_source_group = QButtonGroup(self)
+            self._shop_source_group.setExclusive(True)
+            shop_tmpl_btn = self._make_toggle("Vorlagen", "priorityToggleLow", self._shop_source_group)
+            shop_tmpl_btn.setChecked(True)
+            shop_db_btn = self._make_toggle("Datenbank", "priorityToggleMiddle", self._shop_source_group)
+            shop_tmpl_btn.clicked.connect(lambda: self._on_shop_source_changed("templates"))
+            shop_db_btn.clicked.connect(lambda: self._on_shop_source_changed("database"))
+            source_row.addWidget(shop_tmpl_btn)
+            source_row.addWidget(shop_db_btn)
+            source_row.addStretch()
+            pick_btn = QPushButton("+ Aus Datenbank wählen")
+            pick_btn.setObjectName("secondaryButton")
+            pick_btn.setCursor(Qt.PointingHandCursor)
+            pick_btn.clicked.connect(self._pick_shop_item_from_db)
+            source_row.addWidget(pick_btn)
+            add_layout.addLayout(source_row)
 
-        self._shop_amount = QLineEdit("1")
-        self._shop_amount.setObjectName("FlowInput")
-        self._shop_amount.setFixedWidth(70)
-        self._shop_amount.setValidator(QIntValidator(1, 9999, self))
-        amount_row = QHBoxLayout()
-        amount_row.addWidget(QLabel("Anzahl:"))
-        amount_row.addWidget(self._shop_amount)
-        amount_row.addStretch()
+        # Searchable, checkbox-driven picker table instead of a single
+        # flat dropdown (User-Wunsch, 2026-09-04: "einen ähnlichen Aufbau
+        # wie die Database und dann eine extra Spalte, in der man Haken
+        # setzen kann") -- several templates can be checked and added in
+        # one go, each with its OWN Amount (confirmed via question:
+        # per-row, since you rarely want the same quantity of everything),
+        # while Priority/Schedule below stay one shared choice for the
+        # whole batch (also confirmed).
+        self._shop_picker_search = QLineEdit()
+        self._shop_picker_search.setObjectName("FlowInput")
+        self._shop_picker_search.setPlaceholderText("Suchen…")
+        self._shop_picker_search.textChanged.connect(self._refresh_shop_picker_table)
+        self._shop_picker_rows: list[tuple] = []
+        self._shop_picker_table = self._make_picker_table(has_price=True)
+        add_layout.addWidget(self._shop_picker_search)
+        add_layout.addWidget(self._shop_picker_table)
+        self._refresh_shop_picker_table()
 
         self._shop_prio_group = QButtonGroup(self)
         self._shop_prio_group.setExclusive(True)
@@ -126,8 +174,6 @@ class _NodeItemListDialog(QDialog):
         if not self._shopping_templates:
             shop_add_btn.setEnabled(False)
 
-        add_layout.addWidget(self._shop_combo)
-        add_layout.addLayout(amount_row)
         add_layout.addLayout(prio_row)
         add_layout.addLayout(sched_row)
         add_layout.addWidget(shop_add_btn)
@@ -173,23 +219,35 @@ class _NodeItemListDialog(QDialog):
         add_layout.setContentsMargins(14, 12, 14, 12)
         add_layout.setSpacing(8)
 
-        self._task_combo = QComboBox()
-        self._task_combo.setObjectName("FlowSymbolCombo")
-        self._task_combo.setMinimumHeight(36)
-        if self._task_templates:
-            for tmpl in self._task_templates:
-                self._task_combo.addItem(tmpl.get("title", ""), tmpl)
-        else:
-            self._task_combo.addItem("Keine Aufgaben-Vorlagen vorhanden")
+        if self._item_picker_callback:
+            source_row = QHBoxLayout()
+            source_row.setSpacing(6)
+            self._task_source_group = QButtonGroup(self)
+            self._task_source_group.setExclusive(True)
+            task_tmpl_btn = self._make_toggle("Vorlagen", "priorityToggleLow", self._task_source_group)
+            task_tmpl_btn.setChecked(True)
+            task_db_btn = self._make_toggle("Datenbank", "priorityToggleMiddle", self._task_source_group)
+            task_tmpl_btn.clicked.connect(lambda: self._on_task_source_changed("templates"))
+            task_db_btn.clicked.connect(lambda: self._on_task_source_changed("database"))
+            source_row.addWidget(task_tmpl_btn)
+            source_row.addWidget(task_db_btn)
+            source_row.addStretch()
+            pick_btn = QPushButton("+ Aus Datenbank wählen")
+            pick_btn.setObjectName("secondaryButton")
+            pick_btn.setCursor(Qt.PointingHandCursor)
+            pick_btn.clicked.connect(self._pick_task_item_from_db)
+            source_row.addWidget(pick_btn)
+            add_layout.addLayout(source_row)
 
-        self._task_amount = QLineEdit("1")
-        self._task_amount.setObjectName("FlowInput")
-        self._task_amount.setFixedWidth(70)
-        self._task_amount.setValidator(QIntValidator(1, 9999, self))
-        amount_row = QHBoxLayout()
-        amount_row.addWidget(QLabel("Anzahl:"))
-        amount_row.addWidget(self._task_amount)
-        amount_row.addStretch()
+        self._task_picker_search = QLineEdit()
+        self._task_picker_search.setObjectName("FlowInput")
+        self._task_picker_search.setPlaceholderText("Suchen…")
+        self._task_picker_search.textChanged.connect(self._refresh_task_picker_table)
+        self._task_picker_rows: list[tuple] = []
+        self._task_picker_table = self._make_picker_table(has_price=False)
+        add_layout.addWidget(self._task_picker_search)
+        add_layout.addWidget(self._task_picker_table)
+        self._refresh_task_picker_table()
 
         self._task_prio_group = QButtonGroup(self)
         self._task_prio_group.setExclusive(True)
@@ -223,8 +281,6 @@ class _NodeItemListDialog(QDialog):
         if not self._task_templates:
             task_add_btn.setEnabled(False)
 
-        add_layout.addWidget(self._task_combo)
-        add_layout.addLayout(amount_row)
         add_layout.addLayout(prio_row)
         add_layout.addLayout(sched_row)
         add_layout.addWidget(task_add_btn)
@@ -256,6 +312,118 @@ class _NodeItemListDialog(QDialog):
         for item in self._task_items:
             self._add_task_row(item)
         return widget
+
+    # ── Template picker table (checkbox + search, "wie die Database") ────────
+
+    @staticmethod
+    def _make_picker_table(has_price: bool) -> QTableWidget:
+        columns = ["", "Name", "Ort", "Preis", "Anzahl"] if has_price else ["", "Name", "Ort", "Anzahl"]
+        table = QTableWidget(0, len(columns))
+        table.setHorizontalHeaderLabels(columns)
+        table.verticalHeader().setVisible(False)
+        table.setSelectionMode(QAbstractItemView.NoSelection)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setMaximumHeight(180)
+        table.setObjectName("FlowPickerTable")
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        for col in range(len(columns)):
+            if col != 1:
+                header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        return table
+
+    def _refresh_shop_picker_table(self, _text: str = ""):
+        source = self._shopping_templates if self._shop_source == "templates" else self._shop_db_picks
+        self._populate_picker_table(
+            self._shop_picker_table, self._shop_picker_rows, source,
+            self._shop_picker_search.text(), has_price=True,
+        )
+
+    def _refresh_task_picker_table(self, _text: str = ""):
+        source = self._task_templates if self._task_source == "templates" else self._task_db_picks
+        self._populate_picker_table(
+            self._task_picker_table, self._task_picker_rows, source,
+            self._task_picker_search.text(), has_price=False,
+        )
+
+    def _on_shop_source_changed(self, source: str):
+        self._shop_source = source
+        self._refresh_shop_picker_table()
+
+    def _on_task_source_changed(self, source: str):
+        self._task_source = source
+        self._refresh_task_picker_table()
+
+    def _pick_shop_item_from_db(self):
+        item = self._item_picker_callback(self)
+        if not item:
+            return
+        self._shop_db_picks.append({
+            "title": item.get("name", ""), "location": "", "price": "0", "currency": "kinah",
+        })
+        if self._shop_source != "database":
+            self._shop_source_group.buttons()[1].setChecked(True)
+            self._shop_source = "database"
+        self._refresh_shop_picker_table()
+
+    def _pick_task_item_from_db(self):
+        item = self._item_picker_callback(self)
+        if not item:
+            return
+        self._task_db_picks.append({"title": item.get("name", ""), "location": ""})
+        if self._task_source != "database":
+            self._task_source_group.buttons()[1].setChecked(True)
+            self._task_source = "database"
+        self._refresh_task_picker_table()
+
+    def _populate_picker_table(
+        self, table: QTableWidget, rows: list, templates: list, filter_text: str, has_price: bool,
+    ):
+        """Rebuilds `table` (filtered by `filter_text`) and refills `rows`
+        IN PLACE (never reassigned) with (checkbox, amount_edit, tmpl) per
+        visible row, so _add_shopping_item/_add_task_item -- and this same
+        method on the next keystroke -- always see the current rows
+        through the one list object created once in _make_*_tab."""
+        table.setRowCount(0)
+        rows.clear()
+        needle = filter_text.strip().lower()
+        for tmpl in templates:
+            title = tmpl.get("title", "")
+            if needle and needle not in title.lower():
+                continue
+            row = table.rowCount()
+            table.insertRow(row)
+
+            check = QCheckBox()
+            check_wrap = QWidget()
+            check_layout = QHBoxLayout(check_wrap)
+            check_layout.setContentsMargins(0, 0, 0, 0)
+            check_layout.setAlignment(Qt.AlignCenter)
+            check_layout.addWidget(check)
+            table.setCellWidget(row, 0, check_wrap)
+
+            table.setItem(row, 1, QTableWidgetItem(title))
+            table.setItem(row, 2, QTableWidgetItem(tmpl.get("location", "")))
+
+            col = 3
+            if has_price:
+                price = tmpl.get("price", "0")
+                currency = tmpl.get("currency", "kinah")
+                table.setItem(row, col, QTableWidgetItem(f"{price} {currency}"))
+                col += 1
+
+            amount = QLineEdit("1")
+            amount.setObjectName("FlowInput")
+            amount.setFixedWidth(48)
+            amount.setValidator(QIntValidator(1, 9999, self))
+            table.setCellWidget(row, col, amount)
+
+            rows.append((check, amount, tmpl))
+        if not templates:
+            table.setRowCount(1)
+            table.setSpan(0, 0, 1, table.columnCount())
+            placeholder = "Keine Vorlagen vorhanden" if has_price else "Keine Aufgaben-Vorlagen vorhanden"
+            table.setItem(0, 0, QTableWidgetItem(placeholder))
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -298,36 +466,47 @@ class _NodeItemListDialog(QDialog):
     # ── Add actions ───────────────────────────────────────────────────────────
 
     def _add_shopping_item(self):
-        tmpl = self._shop_combo.currentData()
-        if not tmpl:
-            return
-        item = {
-            "type":     "shopping",
-            "title":    tmpl.get("title", ""),
-            "location": tmpl.get("location", ""),
-            "price":    tmpl.get("price", "0"),
-            "currency": tmpl.get("currency", "kinah"),
-            "amount":   self._shop_amount.text().strip() or "1",
-            "priority": self._shop_priority(),
-            "schedule": self._shop_schedule(),
-        }
-        self._shopping_items.append(item)
-        self._add_shop_row(item)
+        # Adds every CHECKED row at once, each with its own Amount but the
+        # one shared Priority/Schedule choice below the table (User-
+        # confirmed via question, 2026-09-04) -- unchecks them afterward so
+        # clicking "+ Hinzufügen" again doesn't silently re-add the same
+        # templates.
+        priority = self._shop_priority()
+        schedule = self._shop_schedule()
+        for check, amount_edit, tmpl in self._shop_picker_rows:
+            if not check.isChecked():
+                continue
+            item = {
+                "type":     "shopping",
+                "title":    tmpl.get("title", ""),
+                "location": tmpl.get("location", ""),
+                "price":    tmpl.get("price", "0"),
+                "currency": tmpl.get("currency", "kinah"),
+                "amount":   amount_edit.text().strip() or "1",
+                "priority": priority,
+                "schedule": schedule,
+            }
+            self._shopping_items.append(item)
+            self._add_shop_row(item)
+            check.setChecked(False)
 
     def _add_task_item(self):
-        tmpl = self._task_combo.currentData()
-        if not tmpl:
-            return
-        item = {
-            "type":     "task",
-            "title":    tmpl.get("title", ""),
-            "location": tmpl.get("location", ""),
-            "amount":   self._task_amount.text().strip() or "1",
-            "priority": self._task_priority(),
-            "schedule": self._task_schedule(),
-        }
-        self._task_items.append(item)
-        self._add_task_row(item)
+        priority = self._task_priority()
+        schedule = self._task_schedule()
+        for check, amount_edit, tmpl in self._task_picker_rows:
+            if not check.isChecked():
+                continue
+            item = {
+                "type":     "task",
+                "title":    tmpl.get("title", ""),
+                "location": tmpl.get("location", ""),
+                "amount":   amount_edit.text().strip() or "1",
+                "priority": priority,
+                "schedule": schedule,
+            }
+            self._task_items.append(item)
+            self._add_task_row(item)
+            check.setChecked(False)
 
     # ── Row builders ──────────────────────────────────────────────────────────
 
@@ -551,9 +730,24 @@ class NodeEditorPanel(QFrame):
     # ── Item list popup ───────────────────────────────────────────────────────
 
     def _open_item_list_dialog(self):
+        # Same ancestor-walk MainWindow-lookup already used a few lines
+        # below (FlowMapWindow -> its own parent is MainWindow) -- reused
+        # here to reach MainWindow.open_template_item_picker, the same
+        # bridge Templates' "Import from Database" link already uses
+        # (User-Wunsch, 2026-09-04: pick items straight from the real Item
+        # Database here too).
+        item_picker_callback = None
+        w = self.parent()
+        while w is not None:
+            main = w.parent() if hasattr(w, "nodes") and hasattr(w, "selected_node_id") else None
+            if main is not None and hasattr(main, "open_template_item_picker"):
+                item_picker_callback = main.open_template_item_picker
+                break
+            w = w.parent()
         dialog = _NodeItemListDialog(
             self._character_items, self._shopping_options,
-            task_templates=self._task_options, parent=self
+            task_templates=self._task_options, parent=self,
+            item_picker_callback=item_picker_callback,
         )
         dialog.exec()
         self._character_items = dialog.get_items()

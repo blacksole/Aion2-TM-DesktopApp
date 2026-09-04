@@ -243,10 +243,38 @@ _EQUIPMENT_SLOT_PLACEHOLDER = {
 def _placeholder_icon(subdir: str, name: str) -> QIcon | None:
     path = _PLACEHOLDER_DIR / subdir / f"{name}.png"
     return QIcon(str(path)) if path.exists() else None
+
+
+def _faded_pixmap(pixmap: "QPixmap", opacity: float = 0.35) -> "QPixmap":
+    """Greyed-out empty-slot placeholder (User-Wunsch, 2026-09-04: "die
+    Plätze, bei denen die Bilder hinkommen ... ausgrauen und als Symbol im
+    Hintergrund ... ähnlich wie bei den Empty Arcana Slots") -- Arcana's
+    own empty state shows a real representative card icon at a muted
+    style rather than a generic blank/silhouette (see ArcanaCardButton.
+    set_default_state), so Pantheon follows the same idea: a real item
+    icon from that slot type, faded, instead of a from-scratch drawn
+    placeholder graphic this app has no real art asset for."""
+    if pixmap.isNull():
+        return pixmap
+    faded = QPixmap(pixmap.size())
+    faded.fill(Qt.transparent)
+    painter = QPainter(faded)
+    painter.setOpacity(opacity)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.end()
+    return faded
 ID_COLUMN = 1
 
-COLUMNS = ["Icon", "ID", "Name", "Grade", "Category", "Classes", "Tradable", "PvP/PvE"]
+COLUMNS = ["Icon", "ID", "Name", "Grade", "Category", "Classes", "Tradable", "PvP/PvE", "Lord Values"]
 GEAR_TYPE_COLUMN = 7
+# Real Pantheon Lord points (see fetch_pantheon_items.py/_load_pantheon_
+# items) -- its own trailing column rather than folded into an existing
+# one, hidden by default (setColumnHidden, same mechanism the "Show Item
+# ID" checkbox already uses for ID_COLUMN) and only shown while the
+# "Pantheon" sidebar group is active (User-Wunsch, 2026-09-04: "können wir
+# die Spalten anpassen, je nachdem, welche Kategorie rechts ausgewählt
+# wird?").
+LORD_VALUES_COLUMN = 8
 
 # Parsed Wings Equip/Owned Effect stat names (see _parse_wing_effects) are
 # stashed on the ID column's QStandardItem under these roles -- there's no
@@ -254,6 +282,11 @@ GEAR_TYPE_COLUMN = 7
 # once at load time instead of re-parsed on every filter check.
 WING_EQUIP_STATS_ROLE = Qt.UserRole
 WING_OWNED_STATS_ROLE = Qt.UserRole + 1
+# Real Pantheon Lord keys this item grants points in (e.g. {"wisdom",
+# "destiny"}), same per-row-cached-at-load-time pattern as the Wings roles
+# above -- backs both the "illu"+"Wisdom" AND-filter and the Lord Values
+# column (User-Wunsch, 2026-09-04).
+PANTHEON_STATS_ROLE = Qt.UserRole + 2
 
 GRADE_COLORS = {
     "Common": "#94a3b8",
@@ -422,6 +455,12 @@ _ITEM_TOP_CATEGORIES: list[tuple[str, set[str] | None]] = [
     ("Gear", None),
     ("Wings", {"Wings", "Wings Unlocking Item"}),
     ("Arcana", {"Bell", "Compass", "Mirror", "Parchment", "Scales", "Chalice", "Arcana"}),
+    # Own top-level entry (User-Wunsch, 2026-09-04) rather than staying
+    # folded into "Chests & Misc" -- same reasoning as Wings getting its
+    # own entry: distinct enough a system (Artwork/Statue/Colossus, see
+    # fetch_pantheon_items.py) to deserve its own sidebar button instead of
+    # being buried in a catch-all bucket.
+    ("Pantheon", {"Pantheon", "Pantheon Decor"}),
     ("Materials & Enhancement", {
         "Crafting Material", "Gathering Material", "Gatherable Material",
         "Special Material", "Special Materials", "Special Substance Morph Material",
@@ -954,6 +993,53 @@ _WEAPON_CURVE_PARAMS = {
 }
 _HEROIC_RATE_PER_LEVEL = 17.5
 _DEFAULT_WEAPON_CURVE = (10.0, 1.0)
+
+# Clash Rune (id 310900001, PvE) / Devotion Rune (id 310900002, PvP) --
+# real per-enchant-level growth from "Kanon's Aion 2 Bible" CH2 (2026-08-
+# 29 research), NOT the generic estimate_enchant_bonus/estimate_armor_
+# bonus curve below (neither knows "Rune" as a category, and shugo.gg's
+# own enchant simulator keeps every one of this item's stat values frozen
+# across all 10 levels -- confirmed live, so its numbers can't be trusted
+# for Runes either). Level-0 base values (Combat Speed 1%, Penetration
+# 100, Multi-hit Chance 1%, +the PvE/PvP Damage Boost/Tolerance 0.5%) come
+# from the item's own real mainStats via the normal per-slot loop in
+# _compute_stat_totals_detailed -- this only adds the DELTA above that
+# base for a given enchant level, User-Wunsch 2026-09-04: "die Runen
+# reinbringen, so genau wie moeglich - die Successchance koennen wir
+# rauslassen" (enchant success % intentionally not modeled, real numbers
+# don't exist anywhere).
+#
+# Combat Speed/Multi-hit Chance don't scale linearly from level 0 -- they
+# stay at their base value until a threshold level, then gain +1%/level
+# from there on. The guide gives the threshold levels (+6 / +9) but never
+# a single concrete "value AT level N" example to pin down whether the
+# threshold level itself already shows the first bump or the level after
+# it does -- this file assumes the FIRST bump lands ON the threshold
+# level (e.g. Combat Speed: level 5 = 1%, level 6 = 2%, level 7 = 3%...).
+# Multi-hit Chance's own +9 threshold is additionally flagged UNCONFIRMED
+# by the guide itself ("Never seen one, need confirmation") -- treat its
+# numbers as the best available estimate, not a verified fact.
+_RUNE_PVE_ITEM_ID = 310900001  # Clash Rune
+_RUNE_PVP_ITEM_ID = 310900002  # Devotion Rune
+_RUNE_COMBAT_SPEED_THRESHOLD = 6
+_RUNE_MULTI_HIT_THRESHOLD = 9
+
+
+def _rune_enchant_bonus(item_id: int, level: int) -> dict[str, float]:
+    if level <= 0:
+        return {}
+    bonus = {
+        "CombatSpeed": max(0, level - _RUNE_COMBAT_SPEED_THRESHOLD + 1) * 1.0,
+        "DefensePierce": level * 50.0,
+        "AdditionalHitRate": max(0, level - _RUNE_MULTI_HIT_THRESHOLD + 1) * 1.0,
+    }
+    if item_id == _RUNE_PVE_ITEM_ID:
+        bonus["PvEAmplifyDamage"] = level * 0.5
+        bonus["PvEDecreaseDamage"] = level * 0.5
+    elif item_id == _RUNE_PVP_ITEM_ID:
+        bonus["PvPAmplifyDamage"] = level * 0.5
+        bonus["PvPDecreaseDamage"] = level * 0.5
+    return bonus
 
 
 def estimate_enchant_bonus(
@@ -1738,7 +1824,15 @@ class ItemDetailWidget(QWidget):
         # Which stat id(s) scale with enchant, and by how much, depends on
         # the item type: weapons/guards and accessories scale exactly one
         # stat (Attack); armor scales two at once (Defense AND HP).
-        if is_armor:
+        if category_name == "Rune":
+            # Own real per-level curve, several stat ids at once -- see
+            # _rune_enchant_bonus's docstring for why the generic
+            # estimators below don't apply to this category at all. No
+            # Exceed system either (Special-grade item, not part of the
+            # Common->Legend exceed-grade ladder).
+            bonus_map = _rune_enchant_bonus(self._detail.get("id"), self._enchant_level)
+            exceed = {"attack": 0, "attack_pct": 0, "defense": 0}
+        elif is_armor:
             def_bonus, hp_bonus = estimate_armor_bonus(self._enchant_level, grade_name, normal_max, category_name)
             bonus_map = {_DEFENSE_STAT_ID: def_bonus, _HP_STAT_ID: hp_bonus}
             exceed = estimate_armor_exceed_bonus(self._enchant_level, normal_max)
@@ -1816,6 +1910,30 @@ class ItemDetailWidget(QWidget):
                     lines.append(f"<span style='{orange}'>Defense: +{_format_number(exceed['defense'])}</span>")
                 if exceed["attack_pct"]:
                     lines.append(f"<span style='{orange}'>{ranged_name} increase: +{_format_number(exceed['attack_pct'])}%</span>")
+        elif category_name in _PANTHEON_BOARD_CATEGORIES:
+            # Real Pantheon Lord points (User-Wunsch, 2026-09-04: "hier
+            # fehlen dann noch die Lord Werte aus der Datenbank / API") --
+            # these items carry no mainStats at all in shugo.gg's own
+            # detail API (confirmed: fully empty), so main_stats is always
+            # []  here and the block above never runs; the real values
+            # only exist in questlog.gg's characterBuilder data (see
+            # fetch_pantheon_items.py/_load_pantheon_items). No enchant
+            # level either -- these are fixed, un-upgradeable slot fillers.
+            #
+            # Real bug found + fixed (2026-09-05): shugo.gg tags these
+            # Artwork/Statue/Colossus items inconsistently across TWO
+            # categoryName values ("Pantheon" and "Pantheon Decor", see
+            # _PANTHEON_BOARD_CATEGORIES) -- checking "Pantheon Decor" alone
+            # silently hid this whole section for every item tagged plain
+            # "Pantheon" instead (e.g. "Artwork: Ardus Shrine").
+            pantheon_stats = _load_pantheon_items().get(str(self._detail.get("id") or ""), {})
+            if pantheon_stats:
+                lines.append("<b>Pantheon Lord Points</b>")
+                for lord_key, value in pantheon_stats.items():
+                    lord_name = _PANTHEON_LORD_DISPLAY.get(lord_key, lord_key)
+                    lines.append(f"{lord_name}: {_format_number(value)}")
+            else:
+                lines.append("<i>No Lord data available for this item yet.</i>")
 
         self.main_stats_label.setText("<br>".join(lines))
 
@@ -1865,9 +1983,36 @@ class ItemDetailWidget(QWidget):
         # Weapon/Guard/Ring can take any Active skill, everything else any
         # Passive one (user's own game knowledge -- shugo.gg's API never
         # lists the actual selectable pool, only the slot count).
+        #
+        # Real bug found + fixed (User-reported, 2026-09-04, screenshot:
+        # Clash Rune's detail panel showed a full "Passive Skills (10)"
+        # picker despite the item having subStatCount/subSkillCountMax
+        # both 0 -- "soweit ich weiß, hatte ich die Option ingame nicht").
+        # This block never actually checked _sub_stat_count at all -- it
+        # populated _skill_options for ANY item as long as a character
+        # class was set, relying entirely on `sub_stats` (the real rolled-
+        # substat list, correctly empty here) to keep the section hidden
+        # via the `if sub_stats or self._skill_options:` check below. Runes
+        # were the first 0-substat item ever opened WITH a class set (the
+        # Build Planner equip panel), exposing a gap that every previously
+        # tested item happened to paper over.
+        #
+        # Second real bug found + fixed (User-reported, 2026-09-04,
+        # screenshot: "Abyssal Bracelet" showed a full Passive Skills
+        # picker despite Bracelets never having one in-game). The first fix
+        # above still checked subStatCount, on the assumption (documented
+        # at _STAT_PRIORITY_CATEGORY_SKILL_TYPES, 2026-08-27) that
+        # subSkillCountMax always mirrors it -- true for weapon/armor/ring/
+        # jewelry, but Bracelet is the one confirmed exception: real
+        # substat rolls (subStatCount>0, the Lord-point values) with
+        # subSkillCountMax always 0. subSkillCountMax is the actually
+        # authoritative field (already used this way elsewhere, e.g. the
+        # Stat Priority Editor's own skill-picker gating) -- checking it
+        # directly fixes Bracelet without needing a per-category exclusion
+        # list here.
         skill_type = None
         self._skill_options = []
-        if self._character_class:
+        if self._character_class and int(self._detail.get("subSkillCountMax") or 0) > 0:
             skill_type = "active" if category_name in _ACTIVE_SUBSKILL_SLOT_CATEGORIES else "passive"
             class_key = _skills_data_class_key(self._character_class)
             self._skill_options = [
@@ -2163,6 +2308,8 @@ SLOT_LAYOUT = [
     ("Bracelet2", "arm_slot_bracelet", ["Bracelet"]),
     ("Brooch1", "arm_slot_brooch", ["Brooch"]),
     ("Brooch2", "arm_slot_brooch", ["Brooch"]),
+    ("Rune1", "arm_slot_rune", ["Rune"]),
+    ("Rune2", "arm_slot_rune", ["Rune"]),
 ]
 
 SLOT_BUTTON_SIZE = 76
@@ -2171,6 +2318,32 @@ SLOT_BUTTON_SIZE = 76
 # panel) from Arcana slots, which reuse _pick_for_slot but still use the
 # old popup-based detail view since there's no inline panel for that tab.
 _EQUIP_SLOT_IDS = {slot_id for slot_id, _, _ in SLOT_LAYOUT}
+
+# Pantheon board layout (User-Wunsch, 2026-09-04, hand-drawn sketch: 12
+# Artwork slots in an outer ring, 4 Statue slots in a middle ring offset
+# between them, 1 Colossus slot dead center) -- confirmed real slot counts
+# via a live saved build's own "pantheon" section (characterBuilder.
+# getCharacter), see project_armory_pantheon_wings_backlog memory. Each
+# entry: (slot_id, name_prefix the real catalog uses for that subcategory,
+# button diameter, ring radius, start-angle-degrees -- angle 0 is straight
+# up, increasing clockwise). Colossus radius 0 lands it exactly on center
+# regardless of its own angle value.
+_PANTHEON_SLOT_DEFS: list[tuple[str, str, int, int, float]] = (
+    [(f"Artwork{i + 1}", "Artwork: ", 72, 258, i * 30.0) for i in range(12)]
+    + [(f"Statue{i + 1}", "Statue: ", 66, 154, 45.0 + i * 90.0) for i in range(4)]
+    + [("Colossus1", "Colossus: ", 108, 0, 0.0)]
+)
+_PANTHEON_CANVAS_SIZE = 660
+# Real bug found + fixed (2026-09-05, verified via items_all.json): shugo.gg's
+# own catalog tags Artwork/Statue/Colossus items inconsistently across TWO
+# categoryName values -- e.g. 110 Artworks under "Pantheon" but another 46
+# under "Pantheon Decor" (same split for Statue 3/67 and Colossus 1/8).
+# Filtering on "Pantheon" alone (the original board-slot picker's check)
+# silently excluded 121 real items, "Artwork: Zikel's Apparition (Bound)"
+# among them. Both values only ever hold Artwork:/Statue:/Colossus:-prefixed
+# items (no unrelated items share them), so checking membership in this set
+# is safe everywhere a Pantheon board slot needs its real candidate pool.
+_PANTHEON_BOARD_CATEGORIES = {"Pantheon", "Pantheon Decor"}
 
 # Groups the paperdoll slots under category headers — Weapon+Armor sit in
 # the left column, Accessory in the right one, either side of Stat Info.
@@ -2183,8 +2356,15 @@ _LEFT_EQUIP_SECTIONS = [
 # Brooch doesn't exist yet at global release — excluded from the active
 # slot set for now (still defined in SLOT_LAYOUT above for whenever it's
 # added back). Bracelet's global-launch status is unconfirmed — left in.
+# Rune1/Rune2 added (User-Wunsch, 2026-09-04: "die Runen reinbringen, so
+# genau wie möglich") — confirmed real+equippable via direct item-detail
+# lookup even though absent from the public catalog listing (see
+# _RUNE_EXTRA_ITEMS).
 _RIGHT_EQUIP_SECTIONS = [
-    ("arm_section_accessory", ["Earring1", "Earring2", "Necklace", "Amulet", "Ring1", "Ring2", "Bracelet1", "Bracelet2"]),
+    ("arm_section_accessory", [
+        "Earring1", "Earring2", "Necklace", "Amulet", "Ring1", "Ring2", "Bracelet1", "Bracelet2",
+        "Rune1", "Rune2",
+    ]),
 ]
 
 # Equipment Priority List — same idea as the Skill Planner's own priority
@@ -2843,6 +3023,42 @@ def _is_excluded_item(item: dict) -> bool:
     return (item.get("name") or "").startswith(_EXCLUDED_ITEM_NAME_PREFIXES)
 
 
+# Clash Rune (PvE, id 310900001) / Devotion Rune (PvP, id 310900002) --
+# real, currently-equippable items (confirmed 2026-09-04 via a live
+# item-detail lookup: both resolve fine with real mainStats/grade/icon/
+# level/maxEnchantLevel), but NOT present in the public /api/items/all
+# catalog LISTING at all (quest-/reward-bound, per their own `sources`:
+# ["Reward Chest", "Quest"]) -- fetch_items.py's normal scrape will never
+# pick these up since it only ever walks that listing endpoint. Injected
+# here (raw-catalog shape, same fields _load_items() expects) instead of
+# living in the scraped items_all.json, so they survive every future
+# `check_for_updates.py` re-fetch automatically rather than getting
+# silently dropped. classNames intentionally omitted, matching every real
+# jewelry item in the catalog (no restriction key at all -> any class).
+_RUNE_EXTRA_ITEMS = [
+    {
+        "id": 310900001, "name": "Clash Rune",
+        "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Acc_Rune_R_002.png",
+        "grade": "Special",
+        "options": [
+            "Combat Speed 1%", "Penetration 100", "Multi-hit Chance 1%",
+            "PvE Damage Boost 0.5%", "PvE Damage Tolerance 0.5%",
+        ],
+        "favorite": False, "tradable": False, "categoryName": "Rune",
+    },
+    {
+        "id": 310900002, "name": "Devotion Rune",
+        "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_Acc_Rune_R_004.png",
+        "grade": "Special",
+        "options": [
+            "Combat Speed 1%", "Penetration 100", "Multi-hit Chance 1%",
+            "PvP Damage Boost 0.5%", "PvP Damage Tolerance 0.5%",
+        ],
+        "favorite": False, "tradable": False, "categoryName": "Rune",
+    },
+]
+
+
 def _dedupe_bound_unbound(items) -> list[dict]:
     """Collapses Bound/Unbound catalog duplicates -- same name, grade and
     substat options, just a different tradable flag and item id (User-
@@ -2853,10 +3069,11 @@ def _dedupe_bound_unbound(items) -> list[dict]:
     between a pair), so keeping just one representative changes nothing
     mechanically, only removes the confusing lookalike row. Keeps
     whichever copy is encountered first (list order from items_all.json is
-    stable run-to-run, so this is deterministic, not arbitrary per-call)."""
+    stable run-to-run, so this is deterministic, not arbitrary per-call).
+    Also appends _RUNE_EXTRA_ITEMS -- see that constant's own docstring."""
     seen: set[tuple] = set()
     result = []
-    for item in items:
+    for item in list(items) + _RUNE_EXTRA_ITEMS:
         if _is_excluded_item(item):
             continue
         key = (item.get("name"), item.get("grade"), tuple(item.get("options") or []))
@@ -2910,7 +3127,20 @@ class ItemPickerPopup(QWidget):
         self.setFixedWidth(3 * _PICKER_TILE_WIDTH + 40)
         self.setMinimumHeight(420)
 
-        self._items = _dedupe_bound_unbound(i for i in items if i.get("categoryName") in categories)
+        # Real bug found + fixed (User-reported, 2026-09-04, screenshot: a
+        # Pantheon Colossus-slot picker (categories=["Pantheon"]) showed
+        # Clash Rune/Devotion Rune too). `items` here is ALREADY the one
+        # canonical deduped catalog (_load_items() calls
+        # _dedupe_bound_unbound ONCE, at whole-catalog scope, specifically
+        # so _RUNE_EXTRA_ITEMS ends up in it) -- calling
+        # _dedupe_bound_unbound a SECOND time here just to filter by
+        # category unconditionally re-appended those same 2 Rune items on
+        # top, ignoring the category filter entirely (the append happens
+        # inside that function, after the category-filtered generator has
+        # already been consumed). A plain filter, no second dedupe pass,
+        # fixes it -- Rune1/Rune2's own picker (categories=["Rune"]) still
+        # sees them correctly since they're already present in `items`.
+        self._items = [i for i in items if i.get("categoryName") in categories]
         self.icon_cache = icon_cache
         self.detail_cache = detail_cache
         # Set by the persistent PvP/PvE/Neutral toggle up in the header row
@@ -3445,6 +3675,49 @@ class ItemPickerPopup(QWidget):
     def hideEvent(self, event):
         logger.info("ItemPickerPopup.hideEvent fired")
         super().hideEvent(event)
+
+
+PANTHEON_DATA_PATH = _BUNDLE_DIR / "data" / "pantheon_items.json"
+_pantheon_items_cache: dict[str, dict[str, float]] | None = None
+
+# Raw questlog.gg lord keys -> the display name shown in the item detail
+# panel and the Pantheon sidebar filter chips (User-Wunsch, 2026-09-04:
+# real values found via fetch_pantheon_items.py, wiring into the UI
+# deferred until now). Plain lord names, not "Wisdom [Lumiel]"-style
+# deity-bracket suffixes -- that questlog-specific convention isn't used
+# anywhere else in this app's own UI (_ARCANA_LORD_STAT_IDS and everywhere
+# it's displayed just say "Wisdom"/"Destiny"/etc.), so matching THIS app's
+# existing convention beats copying questlog's, and avoids guessing at a
+# deity-name pairing this file has no independent way to verify.
+_PANTHEON_LORD_DISPLAY = {
+    "life": "Life", "wisdom": "Wisdom", "illusion": "Illusion", "destiny": "Destiny",
+    "death": "Death", "freedom": "Freedom", "justice": "Justice", "space": "Space",
+    "time": "Time", "destruction": "Destruction",
+}
+
+
+def _load_pantheon_items() -> dict[str, dict[str, float]]:
+    """{item_id_str: {lord_key: points}} for every Pantheon Artwork/Statue/
+    Colossus with confirmed real stat data (see fetch_pantheon_items.py --
+    28 of 236 have no stats even on questlog's own side, a real upstream
+    gap, simply absent here rather than guessed). Confirmed the SAME id
+    space as shugo.gg's own catalog (e.g. "Artwork: Zikel's Apparition
+    (Bound)" is id 534310104 in both), so a plain str(item id) lookup is
+    all that's needed -- no name-matching required."""
+    global _pantheon_items_cache
+    if _pantheon_items_cache is not None:
+        return _pantheon_items_cache
+    result: dict[str, dict[str, float]] = {}
+    if PANTHEON_DATA_PATH.exists():
+        try:
+            for entry in json.loads(PANTHEON_DATA_PATH.read_text(encoding="utf-8")):
+                stats = entry.get("stats") or {}
+                if stats:
+                    result[str(entry["id"])] = stats
+        except (OSError, json.JSONDecodeError, KeyError):
+            pass
+    _pantheon_items_cache = result
+    return result
 
 
 def _load_shop_items() -> dict[str, list[int]]:
@@ -6696,7 +6969,7 @@ _PASSIVE_SKILL_EXACT_TOKEN_TABLE: dict[str, dict[int, float]] = {
 def _render_skill_description(
     text: str, levels: list[dict] | None = None, level: int = 1,
     estimate_multiplier: float | None = None, skill_id: str | None = None,
-) -> str:
+) -> tuple[str, float | None]:
     """Resolves unfilled '{...}' template tokens to a real number from the
     skill's own per-level data when possible (falling back to 'XXX'), and
     converts newlines to <br> — but keeps the game's own
@@ -6706,6 +6979,14 @@ def _render_skill_description(
     QLabel/tooltips. Every observed token's field name contains 'Min' or
     'Max' as a literal substring, so that's all we need to check — no need
     to parse out which segment of the token is "the field".
+
+    Returns (rendered_text, estimated_max_value) -- the second element is
+    the same number appended as "(≈...)" after the Max token (None if no
+    estimate applies), added so Build Compare's Skill Compare can read the
+    plain number without re-deriving it (this function's own token-
+    resolution priority order is too fiddly/well-tuned across many per-
+    skill edge cases to safely duplicate elsewhere -- see the many
+    _PASSIVE_SKILL_* tables/comments this session built up).
 
     `estimate_multiplier` (User-Wunsch, 2026-08-29: "die estimated min/max
     Value hinter den Standard-Zahlen in der Skillbeschreibung ... statt
@@ -6733,8 +7014,10 @@ def _render_skill_description(
     min_varies = levels is not None and len({l.get("minValue") for l in levels}) > 1
     max_varies = levels is not None and len({l.get("maxValue") for l in levels}) > 1
     damage_table = _PASSIVE_SKILL_DAMAGE_TABLE.get(skill_id) if skill_id else None
+    estimated_value: float | None = None
 
     def _sub(match: re.Match) -> str:
+        nonlocal estimated_value
         token = match.group(0)
         if token in _UNRELIABLE_SKILL_TOKENS:
             return "XXX"
@@ -6743,7 +7026,8 @@ def _render_skill_description(
             real_value = _passive_skill_damage_table_value(exact_token_table, level)
             result = _format_passive_scaled_value(real_value)
             if "Max" in token and estimate_multiplier is not None:
-                result += f" (≈{_format_number(real_value * estimate_multiplier)})"
+                estimated_value = real_value * estimate_multiplier
+                result += f" (≈{_format_number(estimated_value)})"
             return result
         if "Min" in token:
             if damage_table:
@@ -6757,8 +7041,8 @@ def _render_skill_description(
                 real_value = _passive_skill_damage_table_value(damage_table, level)
                 result = _format_passive_scaled_value(real_value)
                 if estimate_multiplier is not None:
-                    est = _format_number(real_value * estimate_multiplier)
-                    result += f" (≈{est})"
+                    estimated_value = real_value * estimate_multiplier
+                    result += f" (≈{_format_number(estimated_value)})"
                 return result
             if levels:
                 value = _level_value(levels, level, "maxValue")
@@ -6767,14 +7051,15 @@ def _render_skill_description(
                     if estimate_multiplier is not None:
                         min_value = _level_value(levels, level, "minValue")
                         if min_varies and min_value is not None and str(min_value).lstrip("-").isdigit():
+                            estimated_value = float(value) * estimate_multiplier
                             est_min = _format_number(float(min_value) * estimate_multiplier)
-                            est_max = _format_number(float(value) * estimate_multiplier)
+                            est_max = _format_number(estimated_value)
                             result += f" (≈{est_min} ~ {est_max})"
                     return result
         return "XXX"
 
     text = _UNRESOLVED_TOKEN_RE.sub(_sub, text or "")
-    return text.replace("\n", "<br>")
+    return text.replace("\n", "<br>"), estimated_value
 
 
 _CLASS_SELECT_ENTRIES = [
@@ -10343,13 +10628,40 @@ class StatPriorityEditorDialog(QWidget):
             self._on_done(self._data)
 
 
+class _SearchableComboBox(QComboBox):
+    """QComboBox subclass fixing a real bug (User-reported, 2026-09-04,
+    screenshot: opening any rank's dropdown showed just one highlighted,
+    blank-looking row instead of the real stat list). Root cause: Qt's
+    auto-completer for an editable combo box continuously syncs its
+    completionPrefix to whatever text the line edit currently displays --
+    including text set PROGRAMMATICALLY via setCurrentIndex() (e.g. the
+    "— (empty) —" placeholder, or a previously-picked name like "Might"),
+    not just text the user actually typed. Since Qt.MatchContains then
+    filters the popup down to entries whose text contains that stale
+    prefix, and no real stat name contains "— (empty) —" (or, for an
+    already-assigned rank, anything BUT that one exact name), the popup
+    ends up showing at most 1 row every time -- confirmed via a live
+    completer.completionModel().rowCount() dump (17 real items, but 1 after
+    setCurrentIndex(0)). Resetting the prefix right before the native popup
+    opens fixes it without touching the live-filter-while-typing behavior
+    at all (that still works exactly as before, driven by the user's own
+    keystrokes after the popup is already open)."""
+
+    def showPopup(self):
+        completer = self.completer()
+        if completer:
+            completer.setCompletionPrefix("")
+            completer.complete()
+        super().showPopup()
+
+
 def _build_stat_priority_combo() -> QComboBox:
     """One rank's searchable dropdown -- [Position][Suchfeld mit Dropdown]
     [Pfeilindikator] per User-Wunsch, the arrow being the combo's own native
     one. Editable + a contains/case-insensitive QCompleter turns typing into
     a live filter; NoInsert keeps a non-matching typed string from ever
     becoming a fake selection."""
-    combo = QComboBox()
+    combo = _SearchableComboBox()
     combo.setEditable(True)
     combo.setInsertPolicy(QComboBox.NoInsert)
     combo.lineEdit().setPlaceholderText(_t("arm_search_placeholder"))
@@ -11171,7 +11483,7 @@ class SkillInfoTooltip(_TranslucentCardTooltip):
         )
         self._title_label.setText(skill.get("name", ""))
 
-        desc = _render_skill_description(skill.get("description", ""), skill.get("levels"), 1, skill_id=skill.get("id"))
+        desc, _est = _render_skill_description(skill.get("description", ""), skill.get("levels"), 1, skill_id=skill.get("id"))
         self._desc_label.setText(desc)
         self._desc_label.setVisible(bool(desc))
 
@@ -11992,6 +12304,8 @@ class LoadoutWindow(QMainWindow):
 
         self.main_tabs.addTab(skill_planner_widget, _t("arm_skill_planner_tab"))
 
+        self.main_tabs.addTab(self._build_pantheon_tab(), _t("arm_pantheon_tab"))
+
         self.main_tabs.addTab(self._build_genius_insight_tab(), _t("arm_genius_insight_tab"))
 
         icon_cache.icon_ready.connect(self._on_icon_ready)
@@ -12579,6 +12893,23 @@ class LoadoutWindow(QMainWindow):
         # otherwise it would keep showing the PREVIOUS build's Arcana
         # bonus until something unrelated happened to trigger a recompute.
         self._recompute_skill_bonus()
+        # Real bug found + fixed (User-reported, 2026-09-04: "Das Default
+        # Profil sollte hier den Wishwert auf +0 haben"). _skill_arcana_wish
+        # was never build-scoped at all -- a single window-wide dict, only
+        # ever cleared after a Calculator result gets Applied (see
+        # _on_apply_arcana_result's own reset, same reasoning). Switching
+        # builds WITHOUT applying left whatever was wished on the previous
+        # build showing on the newly-selected one too (e.g. "Default" would
+        # keep showing a purple (+4) left over from "Chanter 2"), which
+        # made no sense since a wish only ever means something in the
+        # context of the build it was set on. Cleared here too, same
+        # cleanup as that Apply-time reset.
+        self._skill_arcana_wish = {}
+        for skill_id, plus_btn in self._arcana_wish_plus_buttons.items():
+            ceiling = self._arcana_ceiling_for_skill(skill_id, self._skill_id_to_type.get(skill_id))
+            plus_btn.setEnabled(ceiling > 0)
+        self._refresh_skill_level_labels()
+        self._refresh_arcana_calculator_button()
 
     def _rebuild_skill_build_tabs(self):
         """Populates BOTH build-tab rows -- the Skill Planner's own
@@ -13513,7 +13844,7 @@ class LoadoutWindow(QMainWindow):
         # always showed the exact scraped Lv.1 wording no matter how much
         # was invested (User-reported, 2026-09-02).
         description = _passive_skill_description_with_level(skill_id, base_description, effective_level)
-        rendered = _render_skill_description(description, skill.get("levels"), effective_level, estimate_multiplier, skill_id=skill_id)
+        rendered, _est = _render_skill_description(description, skill.get("levels"), effective_level, estimate_multiplier, skill_id=skill_id)
         # NOTE: chosen Active-skill specializations are deliberately NOT
         # also echoed into this main description (tried once, 2026-09-02,
         # then reverted the same day -- User: "da ist das doppelt
@@ -14502,6 +14833,551 @@ class LoadoutWindow(QMainWindow):
 
     # ── "Genius Insight" tab (Pet Genus board planner) ──────────────────────
 
+    # ── Pantheon tab ─────────────────────────────────────────────────────
+
+    def _build_pantheon_tab(self) -> QWidget:
+        """17-slot Pantheon board (User-Wunsch, 2026-09-04, hand-drawn
+        sketch: 12 Artwork in an outer ring, 4 Statue in a middle ring
+        offset between them, 1 Colossus dead center) -- real slot counts/
+        item catalog from questlog.gg (see fetch_pantheon_items.py,
+        _PANTHEON_SLOT_DEFS). Persisted account-wide like Genius Insight/
+        the Daevanion Board (not per Equip Build/Class), single flat state
+        for now, no named profiles.
+
+        Only builds the visual board + its own Lord Points total panel in
+        this first pass -- feeding those totals into Stat Info/GearScore/
+        the damage estimate (same _ARCANA_LORD_STAT_IDS/_ARCANA_LORD_RATE
+        pipeline Arcana cards already use, since Pantheon's 10 lord keys
+        are the exact same ones) is a deliberate follow-up, same staged
+        order the Daevanion Board itself was built in (board first,
+        GearScore/Stat Info wiring two days later)."""
+        self._pantheon_slots: dict[str, str | None] = {defn[0]: None for defn in _PANTHEON_SLOT_DEFS}
+        self._pantheon_slot_buttons: dict[str, QToolButton] = {}
+        self._pantheon_lord_value_labels: dict[str, QLabel] = {}
+        self._pantheon_slot_prefix: dict[str, str] = {defn[0]: defn[1] for defn in _PANTHEON_SLOT_DEFS}
+        # Empty-slot placeholder (User-Wunsch, 2026-09-04: "die Plätze, bei
+        # denen die Bilder hinkommen ... ausgrauen ... ähnlich wie bei den
+        # Empty Arcana Slots") -- one real representative item per prefix
+        # (first Pantheon-category match in the catalog), shown faded via
+        # _faded_pixmap instead of a from-scratch placeholder graphic this
+        # app has no real art asset for.
+        self._pantheon_placeholder_items: dict[str, dict] = {}
+        for prefix in ("Artwork: ", "Statue: ", "Colossus: "):
+            match = next(
+                (it for it in self._items if it.get("categoryName") in _PANTHEON_BOARD_CATEGORIES and (it.get("name") or "").startswith(prefix)),
+                None,
+            )
+            if match:
+                self._pantheon_placeholder_items[prefix] = match
+        self.icon_cache.icon_ready.connect(self._on_pantheon_placeholder_icon_ready)
+
+        # Left inventory browser (User-Wunsch, 2026-09-05: the floating
+        # ItemPickerPopup this board used to open per-slot had no room for
+        # the Item Database's own Pantheon Lord filter chips -- "so bringt
+        # uns das nichts", 10 pills squeezed in next to Search/Grade/Block/
+        # Row/Sort just clipped unreadable. Replaced entirely with a
+        # permanent panel in this tab's own left column: click a board
+        # slot to make it "active" (highlighted + the category tab below
+        # auto-matches that slot's prefix), then click an item tile here
+        # to assign it -- plenty of width for Search + category tabs + a
+        # full vertical Lord-filter checklist, none of which fit the old
+        # popup.
+        self._pantheon_active_slot: str | None = None
+        self._pantheon_data = _load_pantheon_items()
+        self._pantheon_inv_category: str = ""
+        self._pantheon_inv_cat_buttons: dict[str, QPushButton] = {}
+        self._pantheon_inv_lord_checks: dict[str, QCheckBox] = {}
+        # Same lazy viewport-only icon loading as ItemPickerPopup's own
+        # _row_icon_queue/_icon_labels/_request_visible_icons (User-
+        # reported, 2026-09-05: "Die Icons sind teilweise nicht sichtbar" --
+        # requesting all 235 items' icons at once on every refresh queued
+        # behind Qt's per-host concurrent-connection cap, so most tiles
+        # just sat blank forever instead of eventually resolving). Rebuilt
+        # on every _refresh_pantheon_inventory() call; only rows actually
+        # scrolled into view get requested.
+        self._pantheon_inv_row_icon_queue: list[tuple[str, str | None]] = []
+        self._pantheon_inv_icon_labels: dict[str, list[tuple]] = {}
+        self.icon_cache.icon_ready.connect(self._on_pantheon_inventory_icon_ready)
+
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(10)
+
+        title = QLabel(_t("arm_pantheon_tab"))
+        title.setObjectName("DetailHeader")
+        outer.addWidget(title)
+
+        hint = QLabel(_t("arm_pantheon_hint"))
+        hint.setObjectName("GeniusHint")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
+
+        content = QHBoxLayout()
+        content.setSpacing(16)
+        outer.addLayout(content, 1)
+
+        inventory_panel = QFrame()
+        inventory_panel.setObjectName("ChainSidePanel")
+        inventory_panel.setFixedWidth(300)
+        # Matches the board canvas's own fixed height (User-Wunsch, 2026-
+        # 09-05: "die Länge des Kastens ... an den unteren Rand von dem
+        # Pantheon anpassen -- dann schließen beide auf der gleichen Linie
+        # ab") so both panels' bottom edges line up instead of the
+        # inventory panel just sizing to its own content.
+        inventory_panel.setFixedHeight(_PANTHEON_CANVAS_SIZE)
+        inv_layout = QVBoxLayout(inventory_panel)
+        inv_layout.setContentsMargins(12, 12, 12, 12)
+        inv_layout.setSpacing(8)
+
+        inv_title = QLabel(_t("arm_pantheon_inventory_title"))
+        inv_title.setObjectName("GeniusSectionTitle")
+        inv_layout.addWidget(inv_title)
+
+        self._pantheon_inv_hint_label = QLabel(_t("arm_pantheon_select_slot_hint"))
+        self._pantheon_inv_hint_label.setObjectName("GeniusHint")
+        self._pantheon_inv_hint_label.setWordWrap(True)
+        inv_layout.addWidget(self._pantheon_inv_hint_label)
+
+        self._pantheon_inv_clear_btn = QPushButton(_t("arm_clear_slot_tooltip"))
+        self._pantheon_inv_clear_btn.setObjectName("SkillFilterButton")
+        self._pantheon_inv_clear_btn.setVisible(False)
+        self._pantheon_inv_clear_btn.clicked.connect(self._on_pantheon_inventory_clear_clicked)
+        inv_layout.addWidget(self._pantheon_inv_clear_btn)
+
+        cat_row = QHBoxLayout()
+        cat_group = QButtonGroup(inventory_panel)
+        cat_group.setExclusive(True)
+        for prefix, label in (("", _t("arm_all")), ("Artwork: ", "Artwork"), ("Statue: ", "Statue"), ("Colossus: ", "Colossus")):
+            cat_btn = QPushButton(label)
+            cat_btn.setObjectName("SkillFilterButton")
+            cat_btn.setCheckable(True)
+            cat_btn.setChecked(prefix == "")
+            cat_btn.clicked.connect(lambda _c=False, p=prefix: self._on_pantheon_inv_category_changed(p))
+            cat_group.addButton(cat_btn)
+            cat_row.addWidget(cat_btn)
+            self._pantheon_inv_cat_buttons[prefix] = cat_btn
+        inv_layout.addLayout(cat_row)
+
+        self._pantheon_inv_search_input = QLineEdit()
+        self._pantheon_inv_search_input.setPlaceholderText(_t("arm_search_placeholder"))
+        self._pantheon_inv_search_input.textChanged.connect(self._refresh_pantheon_inventory)
+        inv_layout.addWidget(self._pantheon_inv_search_input)
+
+        # Rarity FILTER, not a column (User-Wunsch, 2026-09-05: "die Spalte
+        # für Rarität kannst du rauslassen, die sieht man am Icon -- aber
+        # ein Filter für Rarität wäre nice") -- same combo + counts +
+        # per-grade colored text as ItemPickerPopup's own grade_combo.
+        self._pantheon_inv_grade_combo = QComboBox()
+        self._pantheon_inv_grade_combo.setItemDelegate(_RoleColorDelegate(self._pantheon_inv_grade_combo))
+        pantheon_grade_counts: dict[str, int] = {}
+        for it in self._items:
+            if it.get("categoryName") in _PANTHEON_BOARD_CATEGORIES and it.get("grade"):
+                pantheon_grade_counts[it["grade"]] = pantheon_grade_counts.get(it["grade"], 0) + 1
+        grade_model = QStandardItemModel(self._pantheon_inv_grade_combo)
+        all_grade_item = QStandardItem(_t("arm_all") + f" ({sum(pantheon_grade_counts.values())})")
+        all_grade_item.setData("All", Qt.UserRole)
+        grade_model.appendRow(all_grade_item)
+        for grade in RARITY_ORDER:
+            grade_count = pantheon_grade_counts.get(grade)
+            if not grade_count:
+                continue
+            grade_item = QStandardItem(f"{grade} ({grade_count})")
+            grade_item.setData(grade, Qt.UserRole)
+            grade_item.setForeground(QColor(GRADE_COLORS[grade]))
+            grade_model.appendRow(grade_item)
+        self._pantheon_inv_grade_combo.setModel(grade_model)
+        self._pantheon_inv_grade_combo.currentIndexChanged.connect(self._refresh_pantheon_inventory)
+        inv_layout.addWidget(self._pantheon_inv_grade_combo)
+
+        lord_filter_label = QLabel(_t("arm_pantheon_lord_filter_label"))
+        lord_filter_label.setObjectName("EquipSectionLabel")
+        inv_layout.addWidget(lord_filter_label)
+
+        # Vertical 2-column grid, not a horizontal pill row -- exactly what
+        # broke in the popup (10 short labels can still overflow a narrow
+        # single row once real German/Russian strings replace English
+        # ones); a grid has no width ceiling to hit.
+        lord_grid = QGridLayout()
+        lord_grid.setSpacing(2)
+        for idx, (lord_key, lord_label) in enumerate(_PANTHEON_LORD_DISPLAY.items()):
+            lord_check = QCheckBox(lord_label)
+            lord_check.toggled.connect(self._refresh_pantheon_inventory)
+            lord_grid.addWidget(lord_check, idx // 2, idx % 2)
+            self._pantheon_inv_lord_checks[lord_key] = lord_check
+        inv_layout.addLayout(lord_grid)
+
+        # Row view only (User-Wunsch, 2026-09-05: "nimm mal die Blockansicht
+        # raus -- machen wir nur die Row - die reicht"), no more Block/Row
+        # toggle. No Rarity column either (earlier User-Wunsch: "die Spalte
+        # für Rarität kannst du rauslassen, die sieht man am Icon") -- the
+        # grade combo above filters by it instead; the icon's own grade-
+        # tinted frame (see icon_cache's grade parameter) still shows it
+        # per row.
+        self._pantheon_inv_table = QTableWidget(0, 2)
+        self._pantheon_inv_table.setHorizontalHeaderLabels(["", _t("arm_col_name")])
+        self._pantheon_inv_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self._pantheon_inv_table.verticalHeader().setVisible(False)
+        self._pantheon_inv_table.setSelectionBehavior(QTableView.SelectRows)
+        self._pantheon_inv_table.setEditTriggers(QTableView.NoEditTriggers)
+        # ~1mm (a few px at typical screen DPI) of breathing room on every
+        # side of the icon (User-Wunsch, 2026-09-05: "links und rechts
+        # jeweils 1mm Platz ... Zeilenhöhe anpassen, sodass das Icon
+        # zentriert steht") -- both the column and the row were only
+        # exactly icon-size + 8px before, reading as squeezed with almost
+        # no margin.
+        self._pantheon_inv_table.setColumnWidth(0, 44)
+        self._pantheon_inv_table.setIconSize(QSize(30, 30))
+        self._pantheon_inv_table.verticalHeader().setDefaultSectionSize(40)
+        self._pantheon_inv_table.cellClicked.connect(self._on_pantheon_inventory_row_clicked)
+        self._pantheon_inv_table.verticalScrollBar().valueChanged.connect(self._request_pantheon_visible_icons)
+        inv_layout.addWidget(self._pantheon_inv_table, 1)
+
+        content.addWidget(inventory_panel, 0, Qt.AlignTop)
+
+        canvas = QWidget()
+        canvas.setObjectName("PantheonCanvas")
+        canvas.setFixedSize(_PANTHEON_CANVAS_SIZE, _PANTHEON_CANVAS_SIZE)
+        center = _PANTHEON_CANVAS_SIZE / 2
+
+        for slot_id, name_prefix, size, radius, angle_deg in _PANTHEON_SLOT_DEFS:
+            angle = math.radians(angle_deg)
+            x = center + radius * math.sin(angle) - size / 2
+            y = center - radius * math.cos(angle) - size / 2
+
+            if slot_id.startswith("Colossus"):
+                style = "PantheonColossusSlot"
+            elif slot_id.startswith("Statue"):
+                style = "PantheonStatueSlot"
+            else:
+                style = "PantheonArtworkSlot"
+
+            btn = QToolButton(canvas)
+            btn.setObjectName(style)
+            btn.setFixedSize(size, size)
+            btn.setIconSize(QSize(round(size * 0.68), round(size * 0.68)))
+            btn.move(round(x), round(y))
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(_t("arm_pantheon_slot_empty_tooltip"))
+            btn.clicked.connect(
+                lambda _c=False, s=slot_id, p=name_prefix: self._on_pantheon_slot_clicked(s, p)
+            )
+            self._pantheon_slot_buttons[slot_id] = btn
+
+        canvas_wrap = QWidget()
+        canvas_wrap_layout = QVBoxLayout(canvas_wrap)
+        canvas_wrap_layout.setContentsMargins(0, 0, 0, 0)
+        canvas_wrap_layout.addWidget(canvas, 0, Qt.AlignCenter)
+        content.addWidget(canvas_wrap, 1)
+
+        sidebar = QFrame()
+        sidebar.setObjectName("ChainSidePanel")
+        sidebar.setFixedWidth(220)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(14, 14, 14, 14)
+        sidebar_layout.setSpacing(8)
+
+        lord_title = QLabel(_t("arm_pantheon_lord_points_title"))
+        lord_title.setObjectName("GeniusSectionTitle")
+        sidebar_layout.addWidget(lord_title)
+
+        for lord_key, lord_label in _PANTHEON_LORD_DISPLAY.items():
+            row = QHBoxLayout()
+            name_lbl = QLabel(lord_label)
+            name_lbl.setObjectName("GeniusOwnedName")
+            value_lbl = QLabel("0")
+            value_lbl.setObjectName("GeniusOwnedValue")
+            self._pantheon_lord_value_labels[lord_key] = value_lbl
+            row.addWidget(name_lbl)
+            row.addStretch(1)
+            row.addWidget(value_lbl)
+            sidebar_layout.addLayout(row)
+
+        sidebar_layout.addStretch(1)
+        content.addWidget(sidebar, 0, Qt.AlignTop)
+
+        self._refresh_pantheon_board()
+        self._refresh_pantheon_inventory()
+        return page
+
+    def _on_pantheon_inv_category_changed(self, prefix: str):
+        self._pantheon_inv_category = prefix
+        self._refresh_pantheon_inventory()
+
+    def _on_pantheon_slot_clicked(self, slot_id: str, name_prefix: str):
+        self._pantheon_active_slot = slot_id
+        for sid, btn in self._pantheon_slot_buttons.items():
+            btn.setProperty("pantheonActive", sid == slot_id)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+        cat_btn = self._pantheon_inv_cat_buttons.get(name_prefix)
+        if cat_btn is not None:
+            cat_btn.setChecked(True)
+        self._pantheon_inv_category = name_prefix
+        self._refresh_pantheon_inventory()
+        self._update_pantheon_inv_hint()
+
+    def _update_pantheon_inv_hint(self):
+        slot_id = self._pantheon_active_slot
+        if not slot_id:
+            self._pantheon_inv_hint_label.setText(_t("arm_pantheon_select_slot_hint"))
+            self._pantheon_inv_clear_btn.setVisible(False)
+            return
+        match = re.match(r"([A-Za-z]+)(\d+)", slot_id)
+        display = f"{match.group(1)} {match.group(2)}" if match else slot_id
+        self._pantheon_inv_hint_label.setText(_t("arm_pantheon_assigning_to", slot=display))
+        self._pantheon_inv_clear_btn.setVisible(bool(self._pantheon_slots.get(slot_id)))
+
+    def _refresh_pantheon_inventory(self, *_args):
+        query = self._pantheon_inv_search_input.text().strip().lower()
+        category = self._pantheon_inv_category
+        grade_filter = self._pantheon_inv_grade_combo.currentData()
+        lord_filter = {k for k, cb in self._pantheon_inv_lord_checks.items() if cb.isChecked()}
+        # "Artworks können nur einmalig im Pantheon eingesetzt werden,
+        # genauso wie Statuen" (User-Wunsch, 2026-09-05) -- each real
+        # Artwork/Statue/Colossus item can only occupy ONE board slot at a
+        # time, so once placed it must disappear from every other slot's
+        # browsable pool. The slot currently being edited keeps its own
+        # already-assigned item visible (picking it again is a harmless
+        # no-op), only OTHER slots' picks are excluded here.
+        used_elsewhere = {
+            item_id for sid, item_id in self._pantheon_slots.items()
+            if item_id and sid != self._pantheon_active_slot
+        }
+
+        matched = [
+            it for it in self._items
+            if it.get("categoryName") in _PANTHEON_BOARD_CATEGORIES
+            and it.get("id") not in used_elsewhere
+            and (not category or (it.get("name") or "").startswith(category))
+            and (grade_filter in (None, "All") or it.get("grade") == grade_filter)
+            and (not query or query in (it.get("name") or "").lower())
+            and (not lord_filter or lord_filter.issubset(
+                set(self._pantheon_data.get(str(it.get("id") or ""), {}).keys())))
+        ]
+        matched.sort(key=lambda i: i.get("name", ""))
+
+        self._pantheon_inv_row_icon_queue = []
+        self._pantheon_inv_icon_labels = {}
+        self._populate_pantheon_row_view(matched)
+        QTimer.singleShot(0, self._request_pantheon_visible_icons)
+
+    def _populate_pantheon_row_view(self, matched: list[dict]):
+        table = self._pantheon_inv_table
+        icon_size = table.iconSize().width()
+        table.setRowCount(len(matched))
+        for row, item in enumerate(matched):
+            icon_item = QTableWidgetItem()
+            icon_item.setData(Qt.UserRole, item)
+            # Centers the icon (no text in this cell) instead of the
+            # default left+vcenter decoration alignment, so the padding
+            # from the wider column/row actually shows on BOTH sides, not
+            # just the right (User-Wunsch, 2026-09-05).
+            icon_item.setTextAlignment(Qt.AlignCenter)
+            grade = item.get("grade")
+            url = item.get("image") or ""
+            pix = self.icon_cache.pixmap(url, icon_size, grade=grade)
+            if pix:
+                icon_item.setIcon(QIcon(pix))
+            if url:
+                apply_fn = lambda pix, it=icon_item: it.setIcon(QIcon(pix))
+                self._pantheon_inv_icon_labels.setdefault(url, []).append((apply_fn, grade))
+            self._pantheon_inv_row_icon_queue.append((url, grade))
+            table.setItem(row, 0, icon_item)
+
+            name_item = QTableWidgetItem(item.get("name", ""))
+            name_item.setToolTip(item.get("name", ""))
+            if grade in GRADE_COLORS:
+                name_item.setForeground(QColor(GRADE_COLORS[grade]))
+            table.setItem(row, 1, name_item)
+
+    def _request_pantheon_visible_icons(self, *_args):
+        widget = self._pantheon_inv_table
+        count = len(self._pantheon_inv_row_icon_queue)
+        if count == 0 or not widget.isVisible():
+            return
+
+        viewport = widget.viewport()
+        top_row = widget.rowAt(0)
+        top_row = top_row if top_row >= 0 else 0
+        row_height = widget.verticalHeader().defaultSectionSize() or 28
+        bottom_row = top_row + viewport.height() // row_height + 2
+        if bottom_row < 0:
+            bottom_row = count - 1
+
+        buffer = 6 * 3
+        start = max(0, top_row - buffer)
+        end = min(count - 1, bottom_row + buffer)
+        icon_size = widget.iconSize().width()
+        for row in range(start, end + 1):
+            if row >= len(self._pantheon_inv_row_icon_queue):
+                continue
+            url, grade = self._pantheon_inv_row_icon_queue[row]
+            if url and self.icon_cache.pixmap(url, icon_size, grade=grade) is None:
+                self.icon_cache.request(url)
+
+    def _on_pantheon_inventory_icon_ready(self, url: str):
+        entries = self._pantheon_inv_icon_labels.get(url)
+        if not entries:
+            return
+        icon_size = self._pantheon_inv_table.iconSize().width()
+        for apply_fn, grade in entries:
+            pix = self.icon_cache.pixmap(url, icon_size, grade=grade)
+            if not pix:
+                continue
+            try:
+                apply_fn(pix)
+            except RuntimeError:
+                # The tile/row this icon belonged to may already be gone
+                # (view switched or list re-filtered since the request went
+                # out) -- nothing to recover, just skip it.
+                pass
+
+    def _on_pantheon_inventory_row_clicked(self, row: int, _column: int):
+        icon_item = self._pantheon_inv_table.item(row, 0)
+        if icon_item is None:
+            return
+        item = icon_item.data(Qt.UserRole)
+        self._assign_pantheon_active_slot(item)
+
+    def _assign_pantheon_active_slot(self, item: dict | None):
+        slot_id = self._pantheon_active_slot
+        if not slot_id or not item:
+            return
+        prefix = self._pantheon_slot_prefix.get(slot_id, "")
+        self._on_pantheon_item_chosen(slot_id, item)
+
+        # Auto-advance to the next empty slot of the same type -- speeds up
+        # filling all 12 Artwork/4 Statue slots via repeated slot-then-item
+        # clicks, falling back to clearing the active slot once every
+        # matching slot is filled.
+        next_slot = next(
+            (sid for sid, pfx in self._pantheon_slot_prefix.items()
+             if pfx == prefix and not self._pantheon_slots.get(sid)),
+            None,
+        )
+        if next_slot:
+            self._on_pantheon_slot_clicked(next_slot, prefix)
+        else:
+            self._pantheon_active_slot = None
+            for btn in self._pantheon_slot_buttons.values():
+                btn.setProperty("pantheonActive", False)
+                btn.style().unpolish(btn)
+                btn.style().polish(btn)
+            self._update_pantheon_inv_hint()
+            # _on_pantheon_slot_clicked (the auto-advance branch above)
+            # already refreshes the inventory itself -- only this no-next-
+            # slot path needs its own call, so the just-placed item
+            # actually disappears from the list here too.
+            self._refresh_pantheon_inventory()
+
+    def _on_pantheon_inventory_clear_clicked(self):
+        slot_id = self._pantheon_active_slot
+        if not slot_id:
+            return
+        self._pantheon_slots[slot_id] = None
+        self._refresh_pantheon_slot_button(slot_id)
+        self._refresh_pantheon_lord_panel()
+        self._update_pantheon_inv_hint()
+        self._refresh_pantheon_inventory()
+        self._refresh_stat_info()
+
+    def _on_pantheon_item_chosen(self, slot_id: str, item: dict):
+        self._pantheon_slots[slot_id] = item.get("id")
+        self._refresh_pantheon_slot_button(slot_id)
+        self._refresh_pantheon_lord_panel()
+        # Same recurring bug class as Daevanion/Genius/Skill-Bonus before it
+        # (User-Wunsch, 2026-09-05: "Dann müssen die Werte noch in den
+        # Build Compare und Eq Stat Info einfließen") -- a state mutation
+        # with no matching _refresh_stat_info() call silently leaves the
+        # live Stat Info panel showing stale Lord-derived %-stats.
+        self._refresh_stat_info()
+
+    def _refresh_pantheon_slot_button(self, slot_id: str):
+        btn = self._pantheon_slot_buttons.get(slot_id)
+        if not btn:
+            return
+        item_id = self._pantheon_slots.get(slot_id)
+        item = self._items_by_id.get(item_id) if item_id else None
+        if not item:
+            placeholder = self._pantheon_placeholder_items.get(self._pantheon_slot_prefix.get(slot_id, ""))
+            if placeholder:
+                size = btn.iconSize().width()
+                pix = self.icon_cache.pixmap(placeholder.get("image") or "", size, grade=placeholder.get("grade") or "")
+                if pix:
+                    btn.setIcon(QIcon(_faded_pixmap(pix)))
+                else:
+                    self.icon_cache.request(placeholder.get("image") or "")
+                    btn.setIcon(QIcon())
+            else:
+                btn.setIcon(QIcon())
+            btn.setToolTip(_t("arm_pantheon_slot_empty_tooltip"))
+            return
+
+        grade = item.get("grade") or ""
+        size = btn.iconSize().width()
+        pix = self.icon_cache.pixmap(item.get("image") or "", size, grade=grade)
+        if pix:
+            btn.setIcon(QIcon(pix))
+        else:
+            self.icon_cache.request(item.get("image") or "")
+
+        lord_stats = _load_pantheon_items().get(str(item_id), {})
+        lord_lines = "\n".join(
+            f"{_PANTHEON_LORD_DISPLAY.get(k, k)}: {_format_number(v)}" for k, v in lord_stats.items()
+        )
+        tooltip = item.get("name", "")
+        if lord_lines:
+            tooltip += "\n" + lord_lines
+        btn.setToolTip(tooltip)
+
+    def _refresh_pantheon_board(self):
+        for slot_id in self._pantheon_slots:
+            self._refresh_pantheon_slot_button(slot_id)
+        self._refresh_pantheon_lord_panel()
+
+    def _on_pantheon_placeholder_icon_ready(self, url: str):
+        """A placeholder icon (or any equipped Pantheon item's own icon)
+        can arrive asynchronously well after the tab was first built (see
+        IconCache) -- re-render whichever slots were waiting on exactly
+        this URL instead of a blanket full-board refresh on every unrelated
+        icon arrival elsewhere in the app."""
+        placeholder_urls = {p.get("image") for p in self._pantheon_placeholder_items.values()}
+        equipped_urls = {
+            (self._items_by_id.get(iid) or {}).get("image")
+            for iid in self._pantheon_slots.values() if iid
+        }
+        if url in placeholder_urls or url in equipped_urls:
+            self._refresh_pantheon_board()
+
+    def _pantheon_lord_totals(self) -> dict[str, float]:
+        """Sums real Lord points across every filled Pantheon slot -- same
+        10 keys _ARCANA_LORD_STAT_IDS already uses for Arcana cards, added
+        into that same total by _arcana_lord_stat_totals_detailed (which
+        both the live Stat Info panel and Build Compare already share).
+
+        Guarded on _pantheon_slots existing: the Equipment tab (built
+        earlier in __init__ than the Pantheon tab, see main_tabs.addTab
+        order) can trigger an early _refresh_stat_info() before
+        _build_pantheon_tab has run at all -- return no contribution yet
+        rather than an AttributeError."""
+        if not hasattr(self, "_pantheon_slots"):
+            return {}
+        totals: dict[str, float] = {}
+        pantheon_data = _load_pantheon_items()
+        for item_id in self._pantheon_slots.values():
+            if not item_id:
+                continue
+            for lord_key, value in pantheon_data.get(str(item_id), {}).items():
+                totals[lord_key] = totals.get(lord_key, 0) + value
+        return totals
+
+    def _refresh_pantheon_lord_panel(self):
+        totals = self._pantheon_lord_totals()
+        for lord_key, label in self._pantheon_lord_value_labels.items():
+            label.setText(_format_number(totals.get(lord_key, 0)))
+
     def _build_genius_insight_tab(self) -> QWidget:
         """Plans the Pet Genus system's 5 boards (Cogni/Fera/Natura/Varian/
         Special), each with 9 "Lines" that roll a real property + value --
@@ -14868,6 +15744,23 @@ class LoadoutWindow(QMainWindow):
         layout.addLayout(tabs_row)
         self._genius_board_tab_group = board_group
 
+        # Applies across ALL 5 boards, not just the one currently shown
+        # (User-Wunsch, 2026-09-04, confirmed via question: "Alle 5 Boards
+        # zusammen") -- changing one Line's value also pushes that same
+        # value onto every OTHER Line (any board) currently holding the
+        # SAME stat, e.g. setting one "Max Attack" pick to 18 sets every
+        # other "Max Attack" Line to 18 too. Off by default so normal
+        # independent editing isn't affected until opted into.
+        self._genius_sync_same_stat = False
+        sync_row = QHBoxLayout()
+        sync_check = QCheckBox(_t("arm_genius_sync_same_stat"))
+        sync_check.setToolTip(_t("arm_genius_sync_same_stat_tooltip"))
+        sync_check.toggled.connect(self._on_genius_sync_toggled)
+        sync_row.addWidget(sync_check)
+        sync_row.addStretch(1)
+        layout.addLayout(sync_row)
+        self._genius_sync_same_stat_check = sync_check
+
         head_row = QHBoxLayout()
         self._genius_board_title_lbl = QLabel()
         self._genius_board_title_lbl.setObjectName("GeniusBoardTitle")
@@ -14878,9 +15771,28 @@ class LoadoutWindow(QMainWindow):
         head_row.addWidget(lvl_lbl)
         layout.addLayout(head_row)
 
+        section_row = QHBoxLayout()
+        section_row.setSpacing(8)
+        # Locks/unlocks all 9 of the CURRENTLY shown board's Lines at once,
+        # alongside each Line's own individual lock (User-Wunsch, 2026-09-
+        # 04: "links ein Schloss, um gleichzeitig alle Stats zu
+        # verschliessen oder zu oeffnen zu koennen, zusaetzlich zu jedem
+        # einzelnen") -- same 🔒/🔓 glyph convention as the per-Line toggle.
+        master_lock_btn = QToolButton()
+        master_lock_btn.setObjectName("GeniusLockToggle")
+        master_lock_btn.setCheckable(True)
+        master_lock_btn.setText("🔓")
+        master_lock_btn.setCursor(Qt.PointingHandCursor)
+        master_lock_btn.setToolTip(_t("arm_genius_lock_all_tooltip"))
+        master_lock_btn.toggled.connect(self._on_genius_master_lock_toggled)
+        section_row.addWidget(master_lock_btn)
+        self._genius_master_lock_btn = master_lock_btn
+
         section_lbl = QLabel(_t("arm_genius_analysis_effect"))
         section_lbl.setObjectName("GeniusSectionTitle")
-        layout.addWidget(section_lbl)
+        section_row.addWidget(section_lbl)
+        section_row.addStretch(1)
+        layout.addLayout(section_row)
         self._genius_analysis_effect_lbl = section_lbl
 
         self._genius_line_list_layout = QVBoxLayout()
@@ -14973,6 +15885,33 @@ class LoadoutWindow(QMainWindow):
 
             layout.addLayout(row)
 
+        all_locked = all(
+            board_state.get(str(l), {}).get("locked", False)
+            for l in range(1, 10) if _genius_pool_for_line(board, l)
+        )
+        self._genius_master_lock_btn.blockSignals(True)
+        self._genius_master_lock_btn.setChecked(all_locked)
+        self._genius_master_lock_btn.setText("🔒" if all_locked else "🔓")
+        self._genius_master_lock_btn.blockSignals(False)
+
+    def _on_genius_master_lock_toggled(self, locked: bool):
+        board = self._genius_active_board
+        board_state = self._current_genius_state().get(board, {})
+        self._genius_master_lock_btn.setText("🔒" if locked else "🔓")
+        for line in range(1, 10):
+            entry = board_state.get(str(line))
+            widgets = self._genius_line_widgets.get(line)
+            if entry is None or widgets is None:
+                continue
+            entry["locked"] = locked
+            widgets["lock_btn"].blockSignals(True)
+            widgets["lock_btn"].setChecked(locked)
+            widgets["lock_btn"].blockSignals(False)
+            widgets["lock_btn"].setText("🔒" if locked else "🔓")
+            if widgets["combo"] is not None:
+                widgets["combo"].setEnabled(not locked)
+            widgets["spin"].setEnabled(not locked)
+
     def _on_genius_line_lock_toggled(self, line: int, locked: bool):
         board = self._genius_active_board
         entry = self._current_genius_state()[board].get(str(line))
@@ -14986,6 +15925,18 @@ class LoadoutWindow(QMainWindow):
         if widgets["combo"] is not None:
             widgets["combo"].setEnabled(not locked)
         widgets["spin"].setEnabled(not locked)
+
+        # Keep the "lock all" master toggle in sync with whether every Line
+        # now happens to be locked/unlocked individually.
+        board_state = self._current_genius_state().get(board, {})
+        all_locked = all(
+            board_state.get(str(l), {}).get("locked", False)
+            for l in range(1, 10) if _genius_pool_for_line(board, l)
+        )
+        self._genius_master_lock_btn.blockSignals(True)
+        self._genius_master_lock_btn.setChecked(all_locked)
+        self._genius_master_lock_btn.setText("🔒" if all_locked else "🔓")
+        self._genius_master_lock_btn.blockSignals(False)
 
     def _genius_apply_stat_bounds(self, line: int, stat_key: str, initial_value=None):
         widgets = self._genius_line_widgets[line]
@@ -15028,14 +15979,56 @@ class LoadoutWindow(QMainWindow):
             return
         board = self._genius_active_board
         entry = self._current_genius_state()[board][str(line)]
+        old_stat_key = entry.get("stat")
         entry["stat"] = stat_key
         self._genius_apply_stat_bounds(line, stat_key)
         entry["value"] = widgets["spin"].value()
         label = next((p[1] for p in widgets["pool"] if p[0] == stat_key), stat_key)
         widgets["combo"].setText(label)
         widgets["combo"].setProperty("stat_key", stat_key)
+        if self._genius_sync_same_stat and old_stat_key != stat_key:
+            self._sync_genius_same_stat_change(old_stat_key, stat_key, entry["value"], skip=(board, line))
         self._refresh_genius_total_panel()
         self._on_genius_stats_changed()
+
+    def _sync_genius_same_stat_change(self, old_stat_key: str, new_stat_key: str, value: float, skip: tuple[str, int]):
+        """When Sync is on and a Line's STAT (not just its value) is
+        switched, every OTHER Line (any board) that previously held the
+        SAME old stat switches to the new stat + value too (User-Wunsch,
+        2026-09-04: changing one "Boss Attack" Line to Critical Hit while
+        Sync is on left the other Boss Attack Lines untouched -- confirmed
+        via question this should instead treat them as one group).
+        Verifies the new stat is actually offered on the TARGET line's own
+        pool first (via the real _genius_pool_for_line, not a hardcoded
+        Line-group list) before touching it -- Special's Lines 1/2/4/5/7/8
+        share one combined pool without the 1/4/7 vs 2/5/8 split every
+        other board has, and don't offer every stat the others do (e.g. no
+        Critical Hit there at all), so blindly forcing the new stat onto
+        them would create an impossible pick. Skips locked Lines, same as
+        the value-only sync."""
+        skip_board, skip_line = skip
+        active_board = self._genius_active_board
+        for board_name, board_state in self._current_genius_state().items():
+            for line_str, entry in board_state.items():
+                if board_name == skip_board and line_str == str(skip_line):
+                    continue
+                if entry.get("stat") != old_stat_key or entry.get("locked"):
+                    continue
+                line_num = int(line_str)
+                match = next((p for p in _genius_pool_for_line(board_name, line_num) if p[0] == new_stat_key), None)
+                if match is None:
+                    continue  # this Line's pool doesn't offer the new stat at all -- leave it alone
+                _key, label, lo, hi, _pct = match
+                clamped = max(lo, min(hi, value))
+                entry["stat"] = new_stat_key
+                entry["value"] = clamped
+                if board_name == active_board:
+                    widgets = self._genius_line_widgets.get(line_num)
+                    if widgets:
+                        if widgets["combo"] is not None:
+                            widgets["combo"].setText(label)
+                            widgets["combo"].setProperty("stat_key", new_stat_key)
+                        self._genius_apply_stat_bounds(line_num, new_stat_key, initial_value=clamped)
 
     def _on_genius_line_value_changed(self, line: int, value: float):
         board = self._genius_active_board
@@ -15043,8 +16036,39 @@ class LoadoutWindow(QMainWindow):
         if entry is None:
             return
         entry["value"] = value
+        if self._genius_sync_same_stat:
+            self._sync_genius_same_stat_lines(entry.get("stat"), value, skip=(board, line))
         self._refresh_genius_total_panel()
         self._on_genius_stats_changed()
+
+    def _on_genius_sync_toggled(self, checked: bool):
+        self._genius_sync_same_stat = checked
+
+    def _sync_genius_same_stat_lines(self, stat_key: str, value: float, skip: tuple[str, int]):
+        """Pushes `value` onto every OTHER Line (any of the 5 boards) whose
+        currently-selected stat matches `stat_key`, skipping locked Lines
+        (respecting the lock) and the Line that was just edited. Only
+        the CURRENTLY shown board has live widgets to update visually;
+        other boards' Lines are updated in the underlying data only and
+        will show correctly next time that board tab is opened (User-
+        Wunsch, 2026-09-04, confirmed via question: applies across all 5
+        boards, not just the one on screen)."""
+        skip_board, skip_line = skip
+        active_board = self._genius_active_board
+        for board_name, board_state in self._current_genius_state().items():
+            for line_str, entry in board_state.items():
+                if board_name == skip_board and line_str == str(skip_line):
+                    continue
+                if entry.get("stat") != stat_key or entry.get("locked"):
+                    continue
+                entry["value"] = value
+                if board_name == active_board:
+                    widgets = self._genius_line_widgets.get(int(line_str))
+                    if widgets:
+                        spin = widgets["spin"]
+                        spin.blockSignals(True)
+                        spin.setValue(value)
+                        spin.blockSignals(False)
 
     def _on_genius_stats_changed(self):
         """Genius Insight now feeds the Build Planner's Stat Info AND the
@@ -15130,11 +16154,17 @@ class LoadoutWindow(QMainWindow):
         to whichever profile is currently being viewed if nothing was
         explicitly linked yet (older profile / fresh Equip Build), same
         pattern as _linked_skill_build_name."""
+        class_name = self.character_class_combo.currentText().strip().lower()
+        equip_build = self._equip_builds_data.get(class_name, {}).get(self._current_equip_build_name, {})
+        return self._linked_genius_build_name_for(equip_build)
+
+    def _linked_genius_build_name_for(self, equip_build: dict) -> str:
+        """Parameterized variant of _linked_genius_build_name, taking an
+        arbitrary Equip Build's own state dict instead of resolving the
+        live/current one -- used by Build Compare's Skill Compare."""
         genius_builds = getattr(self, "_genius_builds_data", None)
         if not genius_builds:
             return "Default"
-        class_name = self.character_class_combo.currentText().strip().lower()
-        equip_build = self._equip_builds_data.get(class_name, {}).get(self._current_equip_build_name, {})
         linked = equip_build.get("linked_genius_build")
         if linked in genius_builds:
             return linked
@@ -15150,6 +16180,12 @@ class LoadoutWindow(QMainWindow):
         -- User: "die einzelnen Petwerte ... lassen wir raus", only the
         Insight roll picks count here. Reads the LINKED Genius profile
         (User-Wunsch, 2026-08-30), not whichever one is just being viewed."""
+        return self._genius_stat_totals_for(self._linked_genius_build_name())
+
+    def _genius_stat_totals_for(self, genius_build_name: str) -> dict[str, float]:
+        """Parameterized variant of _genius_stat_totals, taking an explicit
+        Genius profile name instead of resolving the live/linked one --
+        used by Build Compare's Skill Compare."""
         # Defensive: the Genius Insight tab is built LAST in __init__ (see
         # _build_genius_insight_tab), but _refresh_stat_info already runs
         # once during the Equipment tab's own setup, before
@@ -15158,7 +16194,7 @@ class LoadoutWindow(QMainWindow):
         genius_builds = getattr(self, "_genius_builds_data", None)
         if not genius_builds:
             return {}
-        genius_insight = genius_builds.get(self._linked_genius_build_name()) or {}
+        genius_insight = genius_builds.get(genius_build_name) or {}
         if not genius_insight:
             return {}
         totals: dict[str, float] = {}
@@ -15183,9 +16219,18 @@ class LoadoutWindow(QMainWindow):
         as the skill-level display elsewhere) via _PASSIVE_SKILL_LEVEL_
         SCALING's real Lv.1->Lv.10 data. Chanter-only so far (User-Wunsch,
         2026-08-31, "eine Klasse nach der naechsten")."""
+        return self._passive_skill_stat_totals_for(self._skill_bonus)
+
+    def _passive_skill_stat_totals_for(self, skill_bonus: dict[str, int]) -> dict[str, float]:
+        """Parameterized variant of _passive_skill_stat_totals, taking an
+        explicit per-skill bonus-level dict instead of the live/cached
+        self._skill_bonus -- used by Build Compare's Skill Compare (manual
+        invested levels, self._skill_levels, stay shared/global across
+        builds of the same class -- only the gear/Daevanion/Arcana bonus
+        on top of that actually differs per compared build)."""
         totals: dict[str, float] = {}
         for skill_id, entries in _PASSIVE_SKILL_LEVEL_SCALING.items():
-            level = self._skill_levels.get(skill_id, 0) + self._skill_bonus.get(skill_id, 0)
+            level = self._skill_levels.get(skill_id, 0) + skill_bonus.get(skill_id, 0)
             if level <= 0:
                 continue
             for entry in entries:
@@ -15257,15 +16302,40 @@ class LoadoutWindow(QMainWindow):
                 add(points_id, ct, points)
             arcana_points_by_lord[lord] = arcana_points_by_lord.get(lord, 0.0) + points
 
+        # Pantheon board's own Lord points (User-Wunsch, 2026-09-05: "Dann
+        # müssen die Werte noch in den Build Compare und Eq Stat Info
+        # einfließen") -- a 3RD real source alongside gear-rolled points
+        # and Arcana cards, same 10 Lords. _pantheon_lord_totals() returns
+        # lowercase keys ("wisdom") matching fetch_pantheon_items.py's raw
+        # questlog data; _PANTHEON_LORD_DISPLAY maps those onto the exact
+        # capitalized form ("Wisdom") _LORD_POINTS_STAT_ID/
+        # _ARCANA_LORD_STAT_IDS use everywhere else in this pipeline.
+        # Pantheon is account-wide (not per Equip Build, see
+        # _build_pantheon_tab's own docstring), so this total is identical
+        # regardless of which build's equipment_totals this call is for --
+        # exactly like Daevanion's board, which gets the same equal
+        # treatment on both sides of Build Compare.
+        pantheon_points_by_lord = {
+            _PANTHEON_LORD_DISPLAY[lord_key]: points
+            for lord_key, points in self._pantheon_lord_totals().items()
+            if lord_key in _PANTHEON_LORD_DISPLAY
+        }
+        for lord, points in pantheon_points_by_lord.items():
+            points_id = _LORD_POINTS_STAT_ID.get(lord)
+            if points_id:
+                add(points_id, _t("arm_stat_source_pantheon"), points)
+
         # Derived %-stats, computed per Lord from gear points (already in
-        # equipment_totals via the alias) PLUS Arcana points combined --
-        # broken down by LORD name, not card/slot: "Illusion: 5%" on the
-        # Cooldown Reduction row is the more useful answer (which Lord is
-        # responsible), one less mental hop than naming the card/bracelet.
+        # equipment_totals via the alias) PLUS Arcana points PLUS Pantheon
+        # points combined -- broken down by LORD name, not card/slot:
+        # "Illusion: 5%" on the Cooldown Reduction row is the more useful
+        # answer (which Lord is responsible), one less mental hop than
+        # naming the card/bracelet/Pantheon item.
         for lord, points_id in _LORD_POINTS_STAT_ID.items():
             gear_points = equipment_totals.get(points_id, 0.0)
             arcana_points = arcana_points_by_lord.get(lord, 0.0)
-            total_points = gear_points + arcana_points
+            pantheon_points = pantheon_points_by_lord.get(lord, 0.0)
+            total_points = gear_points + arcana_points + pantheon_points
             if not total_points:
                 continue
             pct = total_points * _ARCANA_LORD_RATE
@@ -16019,6 +17089,13 @@ class LoadoutWindow(QMainWindow):
                 grade_name = detail.get("gradeName") or detail.get("grade") or ""
                 category_name = detail.get("categoryName") or ""
                 normal_max = int(detail.get("maxEnchantLevel") or 0)
+                if category_name == "Rune":
+                    # Own real per-level curve -- see _rune_enchant_bonus's
+                    # docstring for why the generic estimators below don't
+                    # apply to this category at all.
+                    for stat_id, value in _rune_enchant_bonus(item.get("id"), level).items():
+                        add(slot_id, stat_id, value)
+                    continue
                 is_armor = category_name in _ARMOR_CATEGORIES or category_name == _BELT_CATEGORY
                 if is_armor:
                     def_bonus, hp_bonus = estimate_armor_bonus(level, grade_name, normal_max, category_name)
@@ -16235,16 +17312,25 @@ class LoadoutWindow(QMainWindow):
         use (self._skills_by_class filtered by type), so the index space
         lines up with what's actually stored in _equipped_substats."""
         class_key = _skills_data_class_key(self.character_class_combo.currentText())
+        return self._compute_equipped_skill_bonus_for(self._equipped, self._equipped_substats, class_key)
+
+    def _compute_equipped_skill_bonus_for(
+        self, equipped: dict, equipped_substats: dict, class_key: str,
+    ) -> dict[str, int]:
+        """Parameterized variant of _compute_equipped_skill_bonus, taking an
+        arbitrary equip state instead of the live self._equipped/
+        self._equipped_substats -- used by Build Compare's Skill Compare to
+        evaluate a compared build that may not be the live/active one."""
         class_skills = self._skills_by_class.get(class_key, [])
         bonus: dict[str, int] = {}
-        for slot_id, item in self._equipped.items():
+        for slot_id, item in equipped.items():
             detail = self.detail_cache.get(item.get("id"))
             if not detail or not int(detail.get("subSkillCountMax") or 0):
                 continue
             offset = len(detail.get("subStats") or [])
             skill_type = "active" if detail.get("categoryName") in _ACTIVE_SUBSKILL_SLOT_CATEGORIES else "passive"
             skill_options = [s for s in class_skills if s.get("type") == skill_type]
-            for i in self._equipped_substats.get(slot_id, ()):
+            for i in equipped_substats.get(slot_id, ()):
                 if i >= offset and (i - offset) < len(skill_options):
                     sid = skill_options[i - offset].get("id")
                     if sid:
@@ -16289,7 +17375,13 @@ class LoadoutWindow(QMainWindow):
         WISH counter, which stays a separate hypothetical planning target
         and deliberately does NOT feed into this)."""
         class_name = self.character_class_combo.currentText().strip().lower()
-        build = self._skill_builds_data.get(class_name, {}).get(self._linked_skill_build_name(), {})
+        return self._compute_arcana_card_skill_bonus_for(class_name, self._linked_skill_build_name())
+
+    def _compute_arcana_card_skill_bonus_for(self, class_name: str, skill_build_name: str) -> dict[str, int]:
+        """Parameterized variant of _compute_arcana_card_skill_bonus, taking
+        an explicit class + Skill/Arcana build name instead of resolving the
+        live/linked one -- used by Build Compare's Skill Compare."""
+        build = self._skill_builds_data.get(class_name, {}).get(skill_build_name, {})
         arcana_cards = build.get("arcana_cards") or {}
         bonus: dict[str, int] = {}
         for card_data in arcana_cards.values():
@@ -16739,12 +17831,20 @@ class LoadoutWindow(QMainWindow):
         to whichever build is currently being viewed if nothing was
         explicitly linked yet (older profile / fresh Equip Build)."""
         class_name = self.character_class_combo.currentText().strip().lower()
-        skill_builds = self._skill_builds_data.get(class_name, {})
         equip_build = self._equip_builds_data.get(class_name, {}).get(self._current_equip_build_name, {})
+        return self._linked_skill_build_name_for(equip_build, class_name)
+
+    def _linked_skill_build_name_for(self, equip_build: dict, class_name: str) -> str:
+        """Parameterized variant of _linked_skill_build_name, taking an
+        arbitrary Equip Build's own state dict + class instead of resolving
+        the live/current one -- used by Build Compare's Skill Compare."""
+        skill_builds = self._skill_builds_data.get(class_name, {})
         linked = equip_build.get("linked_skill_build")
         if linked in skill_builds:
             return linked
-        return self._current_build_name
+        if self._current_build_name in skill_builds:
+            return self._current_build_name
+        return next(iter(skill_builds), "Default")
 
     def _load_current_equip_build_state(self):
         class_name = self.character_class_combo.currentText().strip().lower()
@@ -16861,6 +17961,14 @@ class LoadoutWindow(QMainWindow):
             "daevanion_active": {
                 key: sorted(ids) for key, ids in self._daevanion_active.items()
             },
+            # Sidebar substat/skill highlight checkboxes (User-Wunsch,
+            # 2026-09-04: "Checkboxen ... weiterhin selektiert ... wenn
+            # man später das Daeva Board aufruft") -- same "variant:class"
+            # keying as _daevanion_filter_set() itself, sets turned into
+            # sorted lists for JSON-safety like daevanion_active above.
+            "daevanion_filter_checked": {
+                key: sorted(ids) for key, ids in self._daevanion_filter_checked.items()
+            },
             # Genius Insight (User-Wunsch, 2026-08-30) -- account-wide like
             # daevanion_active above, not per Class/Skill-Build (Pet Genus
             # isn't class-specific), but now its own named-profile system
@@ -16876,6 +17984,15 @@ class LoadoutWindow(QMainWindow):
                 for build_name, build in self._genius_builds_data.items()
             },
             "current_genius_build_name": self._current_genius_build_name,
+            # Pantheon board (User-Wunsch, 2026-09-04) -- account-wide like
+            # daevanion_active/genius_builds_data above, single flat state,
+            # no named profiles yet. None values kept as "" for JSON-safety
+            # (item ids are otherwise ints, and JSON has no bare-None-in-a-
+            # dict-of-ints ambiguity either way, but staying consistent
+            # with how empty slots read back below is simpler).
+            "pantheon_slots": {
+                slot_id: (item_id or "") for slot_id, item_id in self._pantheon_slots.items()
+            },
         }
 
     def apply_persisted_state(self, state: dict):
@@ -16929,6 +18046,10 @@ class LoadoutWindow(QMainWindow):
             self._daevanion_active = {
                 key: set(ids) for key, ids in state["daevanion_active"].items()
             }
+        if "daevanion_filter_checked" in state:
+            self._daevanion_filter_checked = {
+                key: set(ids) for key, ids in state["daevanion_filter_checked"].items()
+            }
         self._daevanion_order = None
         self._daevanion_rebuild_deity_tabs()
         self._daevanion_refresh()
@@ -16979,6 +18100,21 @@ class LoadoutWindow(QMainWindow):
             self._refresh_genius_owned_sidebar()
             self._refresh_genius_board_panel()
             self._refresh_genius_total_panel()
+
+        # Pantheon board (User-Wunsch, 2026-09-04) -- "" read back as an
+        # empty slot (see get_persistable_state's own note on why "" is
+        # used instead of a bare None here); an older/missing key just
+        # keeps the fresh all-empty state this window was constructed with.
+        if "pantheon_slots" in state and hasattr(self, "_pantheon_slot_buttons"):
+            self._pantheon_slots = {
+                slot_id: (item_id or None)
+                for slot_id, item_id in state["pantheon_slots"].items()
+                if slot_id in self._pantheon_slots
+            }
+            for slot_id in self._pantheon_slot_buttons:
+                self._pantheon_slots.setdefault(slot_id, None)
+            self._refresh_pantheon_board()
+            self._refresh_pantheon_inventory()
 
         self._active_skill_class = self.character_class_combo.currentText().strip().lower()
         self._rebuild_equip_build_tabs()
@@ -17224,17 +18360,27 @@ class LoadoutWindow(QMainWindow):
     # above), not a popup. Iterated first as a browser mockup (User: "Die
     # Darstellung des Vergleiches machen wir wieder im Browser"), approved
     # unchanged ("Perfekt, den Vergleich kannst du genau so übernehmen") --
-    # ported 1:1 from that preview: 5 stat-category tabs (Main/Sub/Offense/
-    # Defense/Utility & Recovery), matching the existing Stat Info panel's
-    # own row lists even though that panel itself only groups them into 3
-    # real QTabWidget tabs (Sub Stats nests Offense+Defense inline) -- the
-    # 5-way split reads better side-by-side without one giant tab. ────────
+    # ported 1:1 from that preview: originally 5 stat-category tabs (Main/
+    # Sub/Offense/Defense/Utility & Recovery), matching the existing Stat
+    # Info panel's own row lists even though that panel itself only groups
+    # them into 3 real QTabWidget tabs (Sub Stats nests Offense+Defense
+    # inline) -- the 5-way split read better side-by-side than one giant
+    # tab. Folded down to 4 (User-Wunsch, 2026-09-04: "um die Anzahl der
+    # Reiter zu reduzieren, verschiebe 'MP' dahin, wo auch HP ist und den
+    # Rest in Defense") -- Sub Stats' own 4 rows split into Main (MP,
+    # joining HP) and Defense (Defense/Evasion/Critical Hit Resist), Sub
+    # Stats itself removed as its own tab. Deliberately only reshuffles
+    # THIS list, not the shared _MAIN_STAT_ROWS/_DEFENSE_STAT_ROWS/
+    # _SUB_STAT_ROWS constants themselves -- those still feed the live Stat
+    # Info panel's own (already coarser, unrelated) tab grouping via
+    # _build_sub_stats_tab, which must stay untouched by this. ───────────
 
     _STAT_COMPARE_CATEGORIES = [
-        ("main", "arm_main_stats_tab", _MAIN_STAT_ROWS),
-        ("sub", "arm_sub_stats_tab", _SUB_STAT_ROWS),
+        ("main", "arm_main_stats_tab", _MAIN_STAT_ROWS + [("MP", "MPMax")]),
         ("offense", "arm_offense", _OFFENSE_STAT_ROWS),
-        ("defense", "arm_defense", _DEFENSE_STAT_ROWS),
+        ("defense", "arm_defense", [
+            ("Defense", "ArmorDefense"), ("Evasion", "ArmorEvasion"), ("Critical Hit Resist", "CriticalResist"),
+        ] + _DEFENSE_STAT_ROWS),
         ("utility", "arm_tab_utility_recovery", _UTILITY_RECOVERY_STAT_ROWS),
         # The live Stat Info panel folds these two behind a PvE/PvP toggle
         # (_set_stat_info_mode) since a character only ever has one active
@@ -17326,6 +18472,19 @@ class LoadoutWindow(QMainWindow):
             btn.clicked.connect(lambda checked=False, k=key: self._on_compare_category_changed(k))
             self._compare_category_group.addButton(btn)
             tabs_row.addWidget(btn)
+        # Skills isn't a stat category (no (name, stat_id) rows to sum --
+        # see _STAT_COMPARE_CATEGORIES) -- its own pill + its own row
+        # renderer, branched on in _rebuild_compare_stat_rows (User-Wunsch,
+        # 2026-09-03: "den Skill Compare beim Build Compare", comparing
+        # each skill's invested Level and Estimated Damage between the two
+        # builds, with the skill's own icon+name per row).
+        skills_btn = QPushButton(_t("arm_compare_skills_tab").replace("&", "&&"))
+        skills_btn.setObjectName("SkillFilterButton")
+        skills_btn.setCheckable(True)
+        skills_btn.setMinimumHeight(30)
+        skills_btn.clicked.connect(lambda checked=False: self._on_compare_category_changed("skills"))
+        self._compare_category_group.addButton(skills_btn)
+        tabs_row.addWidget(skills_btn)
         tabs_row.addStretch(1)
         outer.addLayout(tabs_row)
 
@@ -17347,6 +18506,54 @@ class LoadoutWindow(QMainWindow):
         self.compare_head_b_label.setAlignment(Qt.AlignCenter)
         head_row.addWidget(self.compare_head_b_label, 2)
         table_outer.addLayout(head_row)
+        # Kept as a plain attribute (not just a local var) so
+        # _rebuild_compare_stat_rows can widen the A/B columns from 2 to 3
+        # each on entering Skills mode (each build's column there holds a
+        # Level+Est.Dmg SUB-column pair, see compare_skill_subheader_row
+        # right below, instead of one plain value).
+        self.compare_head_row = head_row
+
+        # Only shown in Skills mode -- labels the Level/Est.Dmg sub-columns
+        # under each build's name (User-Wunsch, 2026-09-03: "spalten wie
+        # folgt: icon, name ... dann jeweils eine Doppelspalte pro Seite mit
+        # 'level des Skills' und 'estimated dmg'" -- one row per skill,
+        # grouped by build, not stacked Level/Dmg rows like the first cut).
+        self.compare_skill_subheader_row = QWidget()
+        subheader_layout = QHBoxLayout(self.compare_skill_subheader_row)
+        subheader_layout.setContentsMargins(16, 0, 16, 8)
+        subheader_layout.setSpacing(8)
+        subheader_layout.addWidget(QLabel(""), 3)
+        for _ in range(2):
+            lvl_label = QLabel(_t("arm_compare_level_col"))
+            lvl_label.setObjectName("DetailInfo")
+            lvl_label.setAlignment(Qt.AlignCenter)
+            lvl_label.setStyleSheet("font-size: 11px; color: #64748b;")
+            subheader_layout.addWidget(lvl_label, 1)
+            dmg_label = QLabel(_t("arm_compare_est_dmg"))
+            dmg_label.setObjectName("DetailInfo")
+            dmg_label.setAlignment(Qt.AlignCenter)
+            dmg_label.setStyleSheet("font-size: 11px; color: #64748b;")
+            subheader_layout.addWidget(dmg_label, 2)
+        self.compare_skill_subheader_row.setVisible(False)
+        table_outer.addWidget(self.compare_skill_subheader_row)
+
+        # Sits directly above the "Active Skills" section title (inside
+        # the Skills tab's own content, not next to the crowded row of
+        # category pills) -- User-Wunsch, 2026-09-03: "kannst du den Button
+        # bitte ueber den Titel 'Aktive Skills' platzieren ... dies soll
+        # nicht neben Skills stehen (hier sind bereits sehr viele Reiter)".
+        self.compare_skills_toolbar_row = QWidget()
+        toolbar_layout = QHBoxLayout(self.compare_skills_toolbar_row)
+        toolbar_layout.setContentsMargins(16, 0, 16, 8)
+        self.compare_skills_favorites_btn = QPushButton(_t("arm_only_favorites"))
+        self.compare_skills_favorites_btn.setObjectName("SkillFilterButton")
+        self.compare_skills_favorites_btn.setCheckable(True)
+        self.compare_skills_favorites_btn.setMinimumHeight(30)
+        self.compare_skills_favorites_btn.toggled.connect(lambda _checked: self._rebuild_compare_stat_rows())
+        toolbar_layout.addWidget(self.compare_skills_favorites_btn)
+        toolbar_layout.addStretch(1)
+        self.compare_skills_toolbar_row.setVisible(False)
+        table_outer.addWidget(self.compare_skills_toolbar_row)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -17362,6 +18569,20 @@ class LoadoutWindow(QMainWindow):
         outer.addWidget(table_frame, 1)
 
         self._compare_active_category = "main"
+        # Debounces the burst of _on_detail_ready calls that follows a
+        # build switch -- _request_compare_details() fires a detail_cache
+        # fetch per equipped item across BOTH builds, and each one landing
+        # (one network reply at a time) used to trigger its own immediate
+        # full _refresh_build_compare(), rebuilding the whole rows layout
+        # from scratch every single time -- up to a dozen-plus rebuilds in
+        # a row, visible as several seconds of window flicker (User-
+        # reported, 2026-09-04, screenshot: switching Build B "kam ganz
+        # viel Fenster flimmern, so ca 3-5 Sekunden"). Restarting a single-
+        # shot timer on every arrival instead means only the LAST one in a
+        # burst actually triggers a (single) refresh.
+        self._compare_refresh_timer = QTimer(self)
+        self._compare_refresh_timer.setSingleShot(True)
+        self._compare_refresh_timer.timeout.connect(self._refresh_build_compare)
         return page
 
     def _open_build_compare(self):
@@ -17436,59 +18657,320 @@ class LoadoutWindow(QMainWindow):
         else:
             self.compare_gs_b_label.setText(f"{_format_number(gs_b)}")
 
-        self._compare_totals_a = self._compute_stat_totals(state_a["equipped"], state_a["substats"], state_a["enchant"])
-        self._compare_totals_b = self._compute_stat_totals(state_b["equipped"], state_b["substats"], state_b["enchant"])
+        # Same class both sides -- computed once, reused for both builds'
+        # full totals below AND for Skill Compare's per-skill level calc.
+        daevanion_bonus = self._compute_daevanion_skill_bonus()
+        daevanion_totals = self._daevanion_stat_totals()
+
+        # Real BUG found by the User (2026-09-03, screenshot: a build whose
+        # power comes entirely from a Genius Insight profile showed 0 for
+        # every affected stat) -- this used to only sum raw GEAR totals,
+        # same gap the live Stat Info panel closed long ago (_refresh_stat_
+        # info merges Equipment + Genius + Attribute + Arcana-Lord +
+        # Daevanion + passive-skill totals) but Build Compare's stat tabs
+        # never got the same treatment. Now uses the exact same full-totals
+        # pipeline Skill Compare's damage estimate already needed.
+        self._compare_totals_a, _skill_bonus_a = self._compute_full_build_totals(
+            state_a, class_name, daevanion_bonus, daevanion_totals,
+        )
+        self._compare_totals_b, _skill_bonus_b = self._compute_full_build_totals(
+            state_b, class_name, daevanion_bonus, daevanion_totals,
+        )
+        self._compare_skill_rows_data = self._compute_skill_compare_rows(
+            class_name, state_a, state_b, daevanion_bonus, daevanion_totals,
+        )
         self._rebuild_compare_stat_rows()
+
+    def _compute_full_build_totals(
+        self, state: dict, class_name: str, daevanion_bonus: dict[str, int], daevanion_totals: dict[str, float],
+    ) -> tuple[dict[str, float], dict[str, int]]:
+        """The SAME 6-source merge _refresh_stat_info uses for the live/
+        active build (Equipment + Genius + Attribute + Arcana-Lord +
+        Daevanion + passive-skill totals), but for an arbitrary Equip
+        Build's own state instead of self._equipped/live session state --
+        shared by Build Compare's stat-category tabs AND Skill Compare's
+        damage estimate (which additionally needs the resolved skill_bonus
+        dict back, for its own per-skill effective-level calc)."""
+        equipped, substats, enchant = state["equipped"], state["substats"], state["enchant"]
+        totals = self._compute_stat_totals(equipped, substats, enchant)
+        genius_build_name = self._linked_genius_build_name_for(state)
+        for stat_id, value in self._genius_stat_totals_for(genius_build_name).items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+        for stat_id, value in self._attribute_derived_stat_totals(totals).items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+        for stat_id, value in self._arcana_lord_stat_totals(totals).items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+        for stat_id, value in daevanion_totals.items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+
+        class_key = _skills_data_class_key(class_name)
+        gear_bonus = self._compute_equipped_skill_bonus_for(equipped, substats, class_key)
+        skill_build_name = self._linked_skill_build_name_for(state, class_name)
+        arcana_bonus = self._compute_arcana_card_skill_bonus_for(class_name, skill_build_name)
+        skill_bonus = dict(gear_bonus)
+        for sid, v in daevanion_bonus.items():
+            skill_bonus[sid] = skill_bonus.get(sid, 0) + v
+        for sid, v in arcana_bonus.items():
+            skill_bonus[sid] = skill_bonus.get(sid, 0) + v
+        for stat_id, value in self._passive_skill_stat_totals_for(skill_bonus).items():
+            totals[stat_id] = totals.get(stat_id, 0.0) + value
+
+        return totals, skill_bonus
 
     def _rebuild_compare_stat_rows(self):
         _clear_layout(self.compare_rows_layout)
+        is_skills = self._compare_active_category == "skills"
+        # Skills mode needs each build's own column widened from a single
+        # value (stretch 2) to a Level+Est.Dmg sub-column PAIR (stretch 3 =
+        # 1+2), with the sub-header row underneath labeling which is which
+        # (User-Wunsch, 2026-09-03: "spalten wie folgt: icon, name des
+        # Skills, dann jeweils eine Doppelspalte pro Seite mit 'level des
+        # Skills' und 'estimated dmg'").
+        self.compare_head_row.setStretch(1, 3 if is_skills else 2)
+        self.compare_head_row.setStretch(2, 3 if is_skills else 2)
+        self.compare_skills_toolbar_row.setVisible(is_skills)
+        self.compare_skill_subheader_row.setVisible(is_skills)
+        if is_skills:
+            self._rebuild_compare_skill_rows()
+            return
         rows = next(rows for key, _label, rows in self._STAT_COMPARE_CATEGORIES if key == self._compare_active_category)
         totals_a = getattr(self, "_compare_totals_a", {})
         totals_b = getattr(self, "_compare_totals_b", {})
 
         for name, stat_id in rows:
-            row = QHBoxLayout()
-            row.setSpacing(8)
             name_label = QLabel(name)
             name_label.setObjectName("DetailInfo")
-            row.addWidget(name_label, 3)
-
             if stat_id is None:
-                for _ in range(2):
-                    val_label = QLabel("—")
-                    val_label.setAlignment(Qt.AlignCenter)
-                    row.addWidget(val_label, 2)
+                self.compare_rows_layout.addWidget(self._make_compare_value_row(name_label, None, None))
             else:
-                val_a = totals_a.get(stat_id, 0.0)
-                val_b = totals_b.get(stat_id, 0.0)
                 suffix = "%" if stat_id in _PERCENT_STAT_IDS else ""
+                self.compare_rows_layout.addWidget(self._make_compare_value_row(
+                    name_label, totals_a.get(stat_id, 0.0), totals_b.get(stat_id, 0.0), suffix=suffix,
+                ))
 
-                label_a = QLabel(f"{_format_number(val_a)}{suffix}")
-                label_a.setAlignment(Qt.AlignCenter)
-                label_b = QLabel(f"{_format_number(val_b)}{suffix}")
-                label_b.setAlignment(Qt.AlignCenter)
+    def _make_compare_value_labels(
+        self, val_a: float | None, val_b: float | None, suffix: str = "", fmt=None,
+    ) -> tuple[QLabel, QLabel]:
+        """Returns a bare (label_a, label_b) pair with the shared better/
+        worse green/red coloring + "(+/-delta)" span on B -- factored out of
+        _make_compare_value_row so Skill Compare's columnar layout (several
+        such pairs side by side in ONE row: Level A/B, then Est.Dmg A/B, per
+        skill) can use the same coloring logic without also getting a whole
+        dedicated 3:2:2 row per pair. `None` for both renders as "—"/"—"."""
+        fmt = fmt or _format_number
+        if val_a is None and val_b is None:
+            label_a, label_b = QLabel("—"), QLabel("—")
+            label_a.setAlignment(Qt.AlignCenter)
+            label_b.setAlignment(Qt.AlignCenter)
+            return label_a, label_b
 
-                if val_a != val_b:
-                    better_color, worse_color = "#4ade80", "#f87171"
-                    if val_a > val_b:
-                        label_a.setStyleSheet(f"color: {better_color}; font-weight: 700;")
-                        label_b.setStyleSheet(f"color: {worse_color}; font-weight: 700;")
-                    else:
-                        label_a.setStyleSheet(f"color: {worse_color}; font-weight: 700;")
-                        label_b.setStyleSheet(f"color: {better_color}; font-weight: 700;")
-                    delta = val_b - val_a
-                    sign = "+" if delta > 0 else ""
-                    delta_color = "#4ade80" if delta > 0 else "#f87171"
-                    label_b.setText(
-                        f"{_format_number(val_b)}{suffix} "
-                        f"<span style='color:{delta_color}; font-size:11px;'>({sign}{_format_number(delta)}{suffix})</span>"
-                    )
-                row.addWidget(label_a, 2)
-                row.addWidget(label_b, 2)
+        val_a = val_a or 0
+        val_b = val_b or 0
+        label_a = QLabel(f"{fmt(val_a)}{suffix}")
+        label_a.setAlignment(Qt.AlignCenter)
+        label_b = QLabel(f"{fmt(val_b)}{suffix}")
+        label_b.setAlignment(Qt.AlignCenter)
+
+        # Compares the DISPLAYED (formatted/rounded) values, not the raw
+        # floats -- two builds' totals can differ by a float-noise sliver
+        # (e.g. 79.6 vs 80.4, accumulation-order artifacts from summing the
+        # same gear+Genius+Daevanion+etc. sources in a different order per
+        # side) that both round to the identical shown number, e.g. "80%".
+        # Raw-float comparison used to color THAT as a real +/- difference
+        # anyway, appending a "(0%)" delta that only underlined there was
+        # nothing to show (User-screenshot, 2026-09-04: several 0%/0
+        # deltas still painted red/green).
+        if fmt(val_a) != fmt(val_b):
+            better_color, worse_color = "#4ade80", "#f87171"
+            if val_a > val_b:
+                label_a.setStyleSheet(f"color: {better_color}; font-weight: 700;")
+                label_b.setStyleSheet(f"color: {worse_color}; font-weight: 700;")
+            else:
+                label_a.setStyleSheet(f"color: {worse_color}; font-weight: 700;")
+                label_b.setStyleSheet(f"color: {better_color}; font-weight: 700;")
+            delta = val_b - val_a
+            sign = "+" if delta > 0 else ""
+            delta_color = "#4ade80" if delta > 0 else "#f87171"
+            label_b.setText(
+                f"{fmt(val_b)}{suffix} "
+                f"<span style='color:{delta_color}; font-size:11px;'>({sign}{fmt(delta)}{suffix})</span>"
+            )
+        return label_a, label_b
+
+    def _make_compare_value_row(
+        self, label_widget: QWidget, val_a: float | None, val_b: float | None,
+        suffix: str = "", fmt=None,
+    ) -> QWidget:
+        """Shared row builder for Build Compare's stat rows -- 3:2:2
+        stretch, values via _make_compare_value_labels."""
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(label_widget, 3)
+        label_a, label_b = self._make_compare_value_labels(val_a, val_b, suffix=suffix, fmt=fmt)
+        row.addWidget(label_a, 2)
+        row.addWidget(label_b, 2)
+        row_widget = QWidget()
+        row_widget.setLayout(row)
+        return row_widget
+
+    def _rebuild_compare_skill_rows(self):
+        """Renders one row per skill: icon + name, then Level/Est.Dmg as a
+        double sub-column PER build (grouped by build, not by metric --
+        Level A, Dmg A, Level B, Dmg B), matching compare_skill_subheader_
+        row's column order (User-Wunsch, 2026-09-03, after seeing the first
+        cut's stacked-rows layout: "kannst du dies eher in Spalten
+        einordnen? ... icon, name des Skills, dann jeweils eine
+        Doppelspalte pro Seite")."""
+        int_fmt = lambda v: str(int(v))
+        entries = getattr(self, "_compare_skill_rows_data", [])
+        if self.compare_skills_favorites_btn.isChecked():
+            favorite_ids = self._priority_skill_ids()
+            filtered = []
+            pending_section = None
+            for entry in entries:
+                if entry.get("kind") == "section":
+                    pending_section = entry
+                    continue
+                if entry["skill"].get("id") not in favorite_ids:
+                    continue
+                if pending_section is not None:
+                    filtered.append(pending_section)
+                    pending_section = None
+                filtered.append(entry)
+            entries = filtered
+
+        for entry in entries:
+            if entry.get("kind") == "section":
+                section_label = QLabel(_t(entry["label_key"]))
+                section_label.setObjectName("SkillSectionHeader")
+                self.compare_rows_layout.addWidget(section_label)
+                continue
+            skill = entry["skill"]
+            row = QHBoxLayout()
+            row.setSpacing(8)
+
+            name_row = QHBoxLayout()
+            name_row.setSpacing(6)
+            icon = _skill_icon(skill)
+            if icon:
+                icon_label = QLabel()
+                icon_label.setPixmap(icon.pixmap(20, 20))
+                name_row.addWidget(icon_label, 0)
+            name_label = QLabel(skill.get("name", ""))
+            name_label.setObjectName("DetailInfo")
+            name_row.addWidget(name_label, 1)
+            name_widget = QWidget()
+            name_widget.setLayout(name_row)
+            row.addWidget(name_widget, 3)
+
+            lvl_a, lvl_b = self._make_compare_value_labels(entry["level_a"], entry["level_b"], fmt=int_fmt)
+            dmg_a, dmg_b = self._make_compare_value_labels(entry["dmg_a"], entry["dmg_b"])
+            row.addWidget(lvl_a, 1)
+            row.addWidget(dmg_a, 2)
+            row.addWidget(lvl_b, 1)
+            row.addWidget(dmg_b, 2)
 
             row_widget = QWidget()
             row_widget.setLayout(row)
             self.compare_rows_layout.addWidget(row_widget)
+
+    def _compute_skill_compare_rows(
+        self, class_name: str, state_a: dict, state_b: dict,
+        daevanion_bonus: dict[str, int], daevanion_totals: dict[str, float],
+    ) -> list[dict]:
+        """Builds {skill, level_a, level_b, dmg_a, dmg_b} for every one of
+        the class's skills, comparing two arbitrary Equip Build states --
+        neither needs to be the live/active build. Manual invested levels
+        (self._skill_levels) and the Arcana WISH counter are shared/global
+        across a class's builds (see _compute_arcana_card_skill_bonus_for's
+        docstring); only the gear/Genius/Daevanion/Arcana-card BONUS on top
+        differs per build, mirroring exactly what _render_selected_skill_
+        description computes for the live/active build. daevanion_bonus/
+        _totals are precomputed once by the caller (_refresh_build_compare)
+        since they're identical for both sides -- same class, not build-
+        specific at all."""
+        class_key = _skills_data_class_key(class_name)
+        all_skills = self._skills_by_class.get(class_key, [])
+        if not all_skills:
+            return []
+        # Grouped Active -> Passive -> Stigma with a section title per group
+        # (User-Wunsch, 2026-09-03: "erst Aktive Skills ..., danach passive,
+        # danach Stigmas") -- same fixed order/labels as the Skill Planner's
+        # own _SKILL_BUILD_SECTIONS, alphabetical by name within each group.
+        skills: list[dict] = []
+        section_at: dict[int, str] = {}
+        for type_key, label_key in self._SKILL_BUILD_SECTIONS:
+            group = sorted((s for s in all_skills if s.get("type") == type_key), key=lambda s: s.get("name", ""))
+            if not group:
+                continue
+            section_at[len(skills)] = label_key
+            skills.extend(group)
+
+        rows = []
+        for state in (state_a, state_b):
+            totals, skill_bonus = self._compute_full_build_totals(state, class_name, daevanion_bonus, daevanion_totals)
+            estimate_multiplier = _skill_damage_estimate_multiplier(totals)
+            rows.append((skill_bonus, estimate_multiplier))
+
+        (bonus_a, mult_a), (bonus_b, mult_b) = rows
+        wish = self._skill_arcana_wish
+        result = []
+        pending_section: dict | None = None
+        for i, skill in enumerate(skills):
+            if i in section_at:
+                pending_section = {"kind": "section", "label_key": section_at[i]}
+            skill_id = skill.get("id")
+            manual_level = self._skill_levels.get(skill_id, 0)
+            wish_level = wish.get(skill_id, 0)
+            level_a = max(1, manual_level + bonus_a.get(skill_id, 0) + wish_level)
+            level_b = max(1, manual_level + bonus_b.get(skill_id, 0) + wish_level)
+            dmg_a = self._estimate_skill_damage_value(skill, level_a, mult_a)
+            dmg_b = self._estimate_skill_damage_value(skill, level_b, mult_b)
+            # Skills with no damage value on EITHER side (no real per-level
+            # damage number to estimate from at all -- e.g. a pure buff/
+            # utility skill) are hidden automatically (User-Wunsch,
+            # 2026-09-03: "koennen wir automatisch die Skills ausblenden,
+            # die keinen Schadenswert haben?", renaming the tab to "Skill
+            # Damage" to match). A section with nothing left under it after
+            # this never gets its title emitted either.
+            if dmg_a is None and dmg_b is None:
+                continue
+            if pending_section is not None:
+                result.append(pending_section)
+                pending_section = None
+            result.append({
+                "kind": "skill", "skill": skill, "level_a": level_a, "level_b": level_b,
+                "dmg_a": dmg_a, "dmg_b": dmg_b,
+            })
+        return result
+
+    def _estimate_skill_damage_value(
+        self, skill: dict, effective_level: int, estimate_multiplier: float | None,
+    ) -> float | None:
+        """Numeric-only counterpart to _render_selected_skill_description's
+        estimate (same Stigma-specialization description swap, then
+        delegates the actual token resolution to _render_skill_description,
+        discarding its rendered text and keeping just the number) -- used
+        by Skill Compare, which has no description QLabel to paint into."""
+        skill_id = skill.get("id")
+        if estimate_multiplier is None or not (
+            skill.get("type") == "active" or skill_id in _PASSIVE_SKILL_DAMAGE_TABLE
+        ):
+            return None
+        base_description = skill.get("description", "")
+        if skill.get("type") == "stigma":
+            base_span_count = len(_HIGHLIGHT_SPAN_RE.findall(base_description))
+            for spec in sorted(skill.get("specializations") or [], key=lambda s: s.get("parentSkillLvl") or 0):
+                if effective_level < (spec.get("parentSkillLvl") or 0):
+                    continue
+                candidate = spec.get("description") or ""
+                if len(_HIGHLIGHT_SPAN_RE.findall(candidate)) == base_span_count:
+                    base_description = candidate
+        description = _passive_skill_description_with_level(skill_id, base_description, effective_level)
+        _text, value = _render_skill_description(
+            description, skill.get("levels"), effective_level, estimate_multiplier, skill_id=skill_id,
+        )
+        return value
 
     def _on_gear_type_toggled(self, key: str, checked: bool):
         # PvP and PvE used to force each other off here -- User-Wunsch,
@@ -17811,7 +19293,10 @@ class LoadoutWindow(QMainWindow):
             self._refresh_stat_info()
             self._update_gearscore()
         if self.equip_view_stack.currentIndex() == 1:
-            self._refresh_build_compare()
+            # Debounced (see _compare_refresh_timer's own comment in
+            # _build_compare_page) -- a build switch can fire this once per
+            # equipped item across both builds as their details trickle in.
+            self._compare_refresh_timer.start(200)
 
     def closeEvent(self, event):
         logger.debug("LoadoutWindow (Build Planner) closed")
@@ -17873,6 +19358,11 @@ class ItemFilterProxyModel(QSortFilterProxyModel):
         # per-row stat-name sets come from.
         self.wing_equip_filter: str | None = None
         self.wing_owned_filter: str | None = None
+        # Pantheon-only Lord filter (User-Wunsch, 2026-09-04) -- AND logic:
+        # empty set means unfiltered, otherwise a row must contain EVERY
+        # selected Lord key, not just any one of them (see PANTHEON_STATS_
+        # ROLE for where each row's own Lord-key set comes from).
+        self.pantheon_lord_filter: set[str] = set()
         self.setSortRole(Qt.EditRole)
 
     def set_search(self, text: str):
@@ -17905,6 +19395,10 @@ class ItemFilterProxyModel(QSortFilterProxyModel):
 
     def set_wing_owned_filter(self, stat_name: str | None):
         self.wing_owned_filter = stat_name
+        self.invalidateFilter()
+
+    def set_pantheon_lord_filter(self, lord_keys: set[str]):
+        self.pantheon_lord_filter = lord_keys
         self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row, source_parent):
@@ -17945,6 +19439,11 @@ class ItemFilterProxyModel(QSortFilterProxyModel):
         if self.wing_owned_filter:
             stats = model.index(source_row, ID_COLUMN, source_parent).data(WING_OWNED_STATS_ROLE) or set()
             if self.wing_owned_filter not in stats:
+                return False
+
+        if self.pantheon_lord_filter:
+            stats = model.index(source_row, ID_COLUMN, source_parent).data(PANTHEON_STATS_ROLE) or set()
+            if not self.pantheon_lord_filter.issubset(stats):
                 return False
 
         return True
@@ -18101,6 +19600,32 @@ class ItemDatabaseWindow(QMainWindow):
         type_row.addWidget(self.show_id_check)
         outer.addLayout(type_row)
 
+        # Pantheon-only Lord filter (User-Wunsch, 2026-09-04: "einen
+        # Filter, bei dem man nach bestimmten Werten suchen kann, bsp:
+        # illu und Wisdom -> Dann werden alle Items angezeigt, die diese
+        # beiden Werte beinhalten") -- non-exclusive checkable pills (AND
+        # logic, unlike the exclusive grade/single-value Wings combos)
+        # since an Artwork/Statue/Colossus can and often does grant
+        # several Lords at once. Only visible while the "Pantheon" sidebar
+        # group is active (see _on_sidebar_group_selected).
+        self.pantheon_lord_row = QHBoxLayout()
+        pantheon_lord_label = QLabel(_t("arm_pantheon_lord_filter_label"))
+        pantheon_lord_label.setObjectName("EquipSectionLabel")
+        self.pantheon_lord_row.addWidget(pantheon_lord_label)
+        self.pantheon_lord_buttons: dict[str, QPushButton] = {}
+        for lord_key, lord_label in _PANTHEON_LORD_DISPLAY.items():
+            btn = QPushButton(lord_label)
+            btn.setObjectName("SkillFilterButton")
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda checked=False, k=lord_key: self._on_pantheon_lord_toggled(k, checked))
+            self.pantheon_lord_row.addWidget(btn)
+            self.pantheon_lord_buttons[lord_key] = btn
+        self.pantheon_lord_row.addStretch()
+        self._pantheon_lord_row_widgets = [pantheon_lord_label] + list(self.pantheon_lord_buttons.values())
+        for w in self._pantheon_lord_row_widgets:
+            w.setVisible(False)
+        outer.addLayout(self.pantheon_lord_row)
+
         self.result_label = QLabel()
         self.result_label.setObjectName("ResultLabel")
         outer.addWidget(self.result_label)
@@ -18197,12 +19722,14 @@ class ItemDatabaseWindow(QMainWindow):
         self.model.setHorizontalHeaderLabels([
             _t("arm_col_icon"), _t("arm_col_id"), _t("arm_col_name"), _t("arm_grade_label"),
             _t("arm_col_category"), _t("arm_col_classes"), _t("arm_col_tradable"), _t("arm_col_pvp_pve"),
+            _t("arm_col_lord_values"),
         ])
 
         self.proxy = ItemFilterProxyModel(self)
         self.proxy.setSourceModel(self.model)
         self.table.setModel(self.proxy)
         self.table.setColumnHidden(ID_COLUMN, True)  # matches show_id_check's default unchecked state
+        self.table.setColumnHidden(LORD_VALUES_COLUMN, True)  # shown only while "Pantheon" is the active sidebar group
 
         self.icon_cache = IconCache(ICON_CACHE_DIR, self)
         self.icon_cache.icon_ready.connect(self._on_icon_ready)
@@ -18401,11 +19928,22 @@ class ItemDatabaseWindow(QMainWindow):
         own visibility rule."""
         self._current_sidebar_group = group_label
         is_wings = group_label == "Wings"
+        is_pantheon = group_label == "Pantheon"
 
         self.category_combo.setVisible(not is_wings)
         self.shop_combo.setVisible(not is_wings)
         self.wing_equip_combo.setVisible(is_wings)
         self.wing_owned_combo.setVisible(is_wings)
+        for w in self._pantheon_lord_row_widgets:
+            w.setVisible(is_pantheon)
+        self.table.setColumnHidden(LORD_VALUES_COLUMN, not is_pantheon)
+        if not is_pantheon:
+            # Leaving (or never entering) Pantheon -- clear any leftover
+            # Lord filter so it can't silently hide rows in every other
+            # category (which all have an empty Pantheon-stats set).
+            for btn in self.pantheon_lord_buttons.values():
+                btn.setChecked(False)
+            self.proxy.set_pantheon_lord_filter(set())
         # A combo box that JUST became visible via setVisible() hasn't had
         # its layout/geometry pass run yet -- Qt schedules that for the
         # next event-loop iteration, not synchronously. Clicking it before
@@ -18457,6 +19995,11 @@ class ItemDatabaseWindow(QMainWindow):
                 self.gear_type_buttons[other].setChecked(False)
         active = {k for k, b in self.gear_type_buttons.items() if b.isChecked()}
         self.proxy.set_gear_types(active)
+        self._update_result_label()
+
+    def _on_pantheon_lord_toggled(self, _key: str, _checked: bool):
+        active = {k for k, b in self.pantheon_lord_buttons.items() if b.isChecked()}
+        self.proxy.set_pantheon_lord_filter(active)
         self._update_result_label()
 
     def _update_result_label(self):
@@ -18628,6 +20171,9 @@ class ItemDatabaseWindow(QMainWindow):
             if owned_stats:
                 id_item.setData(owned_stats, WING_OWNED_STATS_ROLE)
                 wing_owned_names |= owned_stats
+            pantheon_stats = _load_pantheon_items().get(str(item.get("id") or ""), {})
+            if pantheon_stats:
+                id_item.setData(set(pantheon_stats.keys()), PANTHEON_STATS_ROLE)
             row.append(id_item)
 
             grade = item.get("grade", "") or ""
@@ -18659,6 +20205,11 @@ class ItemDatabaseWindow(QMainWindow):
             if gear_color:
                 gear_type_item.setForeground(QColor(gear_color))
             row.append(gear_type_item)
+
+            lord_values_text = ", ".join(
+                f"{_PANTHEON_LORD_DISPLAY.get(k, k)} {v:g}" for k, v in pantheon_stats.items()
+            )
+            row.append(QStandardItem(lord_values_text))
 
             self.model.appendRow(row)
 

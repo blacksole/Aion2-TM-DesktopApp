@@ -379,6 +379,75 @@ QPushButton:pressed {
     background-color: rgba(34, 211, 238, 0.25);
 }
 
+/* Pantheon board (User-Wunsch, 2026-09-04) -- radially-positioned slots
+   drawn straight onto #PantheonCanvas (no layout manager, see
+   _build_pantheon_tab), so this panel needs its own explicit dark
+   background rather than inheriting one from a layout container. Artwork
+   keeps #SlotIconButton's rounded-rect look; Statue/Colossus get a real
+   circular radius (half their own fixed size) to match the sketch, with
+   Colossus additionally gold-accented since it's the board's centerpiece. */
+#PantheonCanvas {
+    background-color: rgba(11, 18, 32, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 16px;
+}
+
+#PantheonArtworkSlot,
+#PantheonStatueSlot,
+#PantheonColossusSlot {
+    background-color: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    color: #94a3b8;
+}
+
+#PantheonArtworkSlot {
+    border-radius: 12px;
+}
+
+#PantheonStatueSlot {
+    border-radius: 33px;
+}
+
+#PantheonColossusSlot {
+    border-radius: 54px;
+    border: 2px solid rgba(250, 204, 21, 0.55);
+}
+
+#PantheonArtworkSlot:hover,
+#PantheonStatueSlot:hover {
+    border-color: rgba(34, 211, 238, 0.8);
+    background-color: rgba(34, 211, 238, 0.1);
+}
+
+#PantheonColossusSlot:hover {
+    border-color: rgba(250, 204, 21, 0.9);
+    background-color: rgba(250, 204, 21, 0.12);
+}
+
+#PantheonArtworkSlot:pressed,
+#PantheonStatueSlot:pressed {
+    background-color: rgba(34, 211, 238, 0.25);
+}
+
+#PantheonColossusSlot:pressed {
+    background-color: rgba(250, 204, 21, 0.25);
+}
+
+/* "Active" slot -- the one the left inventory panel is currently assigning
+   into (User-Wunsch, 2026-09-05, replacing the per-slot popup picker).
+   Set via a dynamic property (see _on_pantheon_slot_clicked), not :checked,
+   since QToolButton here isn't checkable -- only ever one slot at a time. */
+#PantheonArtworkSlot[pantheonActive="true"],
+#PantheonStatueSlot[pantheonActive="true"] {
+    border: 2px solid rgba(34, 211, 238, 1.0);
+    background-color: rgba(34, 211, 238, 0.22);
+}
+
+#PantheonColossusSlot[pantheonActive="true"] {
+    border: 2px solid rgba(250, 204, 21, 1.0);
+    background-color: rgba(250, 204, 21, 0.22);
+}
+
 #SlotEnchantLabel {
     background: transparent;
     border: none;
