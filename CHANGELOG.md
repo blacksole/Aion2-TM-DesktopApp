@@ -39,6 +39,19 @@ These features are **not** part of an official update yet and are still under ac
 
 ---
 
+# Version 1.9.3
+
+Release Date: 2026-09-05
+
+## 🐛 Bug Fixes
+
+- **Pantheon tab: the Lord filter showed no results at all, and other data (Wings, Shop, Dungeon Sets) could be affected too.** The packaged app was missing several data files that got added after the last build — Pantheon's Lord Points now load correctly.
+- **Removing a character could silently delete an entire Flow Map.** If a character's own node happened to be that Flow Map's root, removing the character wiped the whole map instead of just that node. Now blocked with a clear warning.
+- **Templates: editing a Standard Template didn't always update cards that already used it.** Cards created before a template link was established now sync correctly by matching on title.
+- **Templates/Standards dialogs: closing via the window's X button or Escape could silently discard edits made in that session.** Both now save properly on close, same as the explicit Close button.
+
+---
+
 # Version 1.9.2
 
 Release Date: 2026-09-05

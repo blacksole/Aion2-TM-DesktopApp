@@ -112,6 +112,23 @@ class TemplateDialog(QDialog):
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, 0, Qt.AlignRight)
 
+    def reject(self):
+        # Real bug found + fixed (User-reported, 2026-09-05: templates/
+        # Standard Templates added here showed up empty again later) --
+        # this dialog has no actual "cancel and discard" semantics (every
+        # add/edit/delete already applies straight to self.templates/
+        # self.task_templates/self.standard_templates as you go, there's
+        # no separate pending draft), so its "Close" button intentionally
+        # calls accept(). But Qt's OWN native window X button and the
+        # Escape key both call reject() by default, which this class never
+        # overrode -- _open_template_dialog's entire "pull the edited
+        # lists back into MainWindow" block only runs `if dlg.exec():`,
+        # so closing via the X/Escape silently discarded the whole
+        # session's edits instead of keeping them, with no error and no
+        # visible sign anything was lost until the user reopened the
+        # dialog later and found it back to how it was before.
+        self.accept()
+
     def _t(self, key: str, **kwargs) -> str:
         return self._tr(self._language, key, **kwargs)
 
@@ -933,6 +950,13 @@ class _StandardTemplatesDialog(QDialog):
         layout.addWidget(close_btn, 0, Qt.AlignRight)
 
         self._rebuild_list()
+
+    def reject(self):
+        # Same fix as TemplateDialog.reject -- no real cancel semantics
+        # (add/edit/delete already apply straight to self._items), so the
+        # native window X / Escape must commit too, not silently discard
+        # the whole session like Qt's default reject() would.
+        self.accept()
 
     def _t(self, key: str, **kwargs) -> str:
         return self._tr(self._language, key, **kwargs)

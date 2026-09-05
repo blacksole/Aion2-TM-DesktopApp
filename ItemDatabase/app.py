@@ -15096,6 +15096,13 @@ class LoadoutWindow(QMainWindow):
         sidebar_layout.addStretch(1)
         content.addWidget(sidebar, 0, Qt.AlignTop)
 
+        # Same permanent "Arcana Types" legend footer as the Arcana tab
+        # (User-Wunsch, 2026-09-05: "Kannst du diesen Footer zusätzlich
+        # beim Pantheon einfügen?") -- Pantheon feeds the exact same 10
+        # Lords/effects, so the reference is identical, not a separate
+        # Pantheon-specific one.
+        outer.addWidget(self._build_arcana_lord_bar())
+
         self._refresh_pantheon_board()
         self._refresh_pantheon_inventory()
         return page
@@ -16593,10 +16600,19 @@ class LoadoutWindow(QMainWindow):
         layout.setContentsMargins(14, 6, 14, 6)
         layout.setSpacing(2)
 
-        self._arcana_lord_bar_title = QLabel(_t("arm_arcana_types"))
-        self._arcana_lord_bar_title.setObjectName("EquipSectionLabel")
-        self._arcana_lord_bar_title.setStyleSheet("font-size: 10px;")
-        layout.addWidget(self._arcana_lord_bar_title)
+        # A list, not a single attribute (User-Wunsch, 2026-09-05: reused
+        # a 2nd time for the Pantheon tab's own footer, "Kannst du diesen
+        # Footer zusätzlich beim Pantheon einfügen? also angepasst?") --
+        # a single self._arcana_lord_bar_title would only ever track
+        # whichever instance was built LAST, silently leaving the other
+        # one's title stuck in its original language on a language switch.
+        title = QLabel(_t("arm_arcana_types"))
+        title.setObjectName("EquipSectionLabel")
+        title.setStyleSheet("font-size: 10px;")
+        if not hasattr(self, "_lord_bar_titles"):
+            self._lord_bar_titles: list[QLabel] = []
+        self._lord_bar_titles.append(title)
+        layout.addWidget(title)
 
         text = QLabel()
         text.setObjectName("DetailInfo")
@@ -17672,7 +17688,8 @@ class LoadoutWindow(QMainWindow):
 
         self._arcana_sub_tabs.setTabText(0, _t("arm_arcana_information_tab"))
         self._arcana_sub_tabs.setTabText(1, _t("arm_arcana_sets_tab"))
-        self._arcana_lord_bar_title.setText(_t("arm_arcana_types"))
+        for title_lbl in getattr(self, "_lord_bar_titles", []):
+            title_lbl.setText(_t("arm_arcana_types"))
         self._refresh_arcana_cards()
         self._refresh_arcana_equip_slots()
         self._rebuild_skill_build_tabs()

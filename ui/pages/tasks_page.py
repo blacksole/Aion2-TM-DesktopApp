@@ -191,6 +191,26 @@ class TasksPage(QWidget):
         self._character_btn.clicked.connect(self.character_requested.emit)
         self.tab_row.addWidget(self._character_btn)
 
+        # NOT added to self.tab_row -- moved up one more level, into
+        # TodoTabsPage's own outer "ToDo | Timer" row instead (User-Wunsch,
+        # 2026-09-05: first moved here from the Sort/Filter row where they
+        # got crushed once the list had entries, then "wie wärs so" with a
+        # screenshot showing them top-right next to "ToDo | Timer" --
+        # TodoTabsPage reaches in for these two exactly like it already
+        # does for title_label/subtitle_label, see its own docstring).
+        # Built here (not in TodoTabsPage) since their signals belong to
+        # THIS page -- full_view_requested/import_requested act on the
+        # live task/shopping list, not the Timer page's own data.
+        self._full_view_btn = QPushButton(self.tr(self.language, "full_view_btn"))
+        self._full_view_btn.setObjectName("templateButton")
+        self._full_view_btn.setCursor(Qt.PointingHandCursor)
+        self._full_view_btn.clicked.connect(self.full_view_requested.emit)
+
+        self._import_btn = QPushButton(self.tr(self.language, "full_view_import_btn"))
+        self._import_btn.setObjectName("templateButton")
+        self._import_btn.setCursor(Qt.PointingHandCursor)
+        self._import_btn.clicked.connect(self.import_requested.emit)
+
         layout.addLayout(self.tab_row)
 
         self.progress_bar = TaskProgressBar()
@@ -458,31 +478,6 @@ class TasksPage(QWidget):
         self.sort_row.addWidget(self.filter_season_btn)
 
         self.sort_row.addStretch()
-
-        # User-Wunsch, 2026-09-04: opens the same Roster-Grid layout
-        # discussed as a browser mockup, now over the real current tasks/
-        # shopping data (MainWindow._on_full_view_requested). Placed here,
-        # in the empty space right of the filter pills -- "nimm bitte
-        # diesen Platz" (screenshot pointed at exactly this spot).
-        self._full_view_btn = QPushButton(self.tr(self.language, "full_view_btn"))
-        self._full_view_btn.setObjectName("templateButton")
-        self._full_view_btn.setCursor(Qt.PointingHandCursor)
-        self._full_view_btn.clicked.connect(self.full_view_requested.emit)
-        self.sort_row.addWidget(self._full_view_btn)
-
-        # Native counterpart to Full View's CSV/Excel export (User-Wunsch,
-        # 2026-09-05: "Kann man hier auch ein Import Button einfügen mit
-        # Vorschau?") -- Sync can't happen from the exported browser page
-        # itself (a static file:// page has no channel back into this
-        # running app), so this opens a real in-app dialog instead: pick
-        # the (possibly Excel-edited) CSV/XLSX file, preview it, Sync
-        # writes straight into the real profile. See
-        # MainWindow._open_full_view_import.
-        self._import_btn = QPushButton(self.tr(self.language, "full_view_import_btn"))
-        self._import_btn.setObjectName("templateButton")
-        self._import_btn.setCursor(Qt.PointingHandCursor)
-        self._import_btn.clicked.connect(self.import_requested.emit)
-        self.sort_row.addWidget(self._import_btn)
 
         self._reset_hint_label = QLabel()
         self._reset_hint_label.setObjectName("resetHintLabel")

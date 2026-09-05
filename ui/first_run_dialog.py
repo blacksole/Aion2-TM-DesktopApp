@@ -11,7 +11,14 @@ class FirstRunDialog(QDialog):
         self._setup_ui()
 
     def _setup_ui(self):
-        self.setWindowTitle("Willkommen bei Aion2 TM")
+        # Always English, not translated via tr() (User-Wunsch, 2026-09-05:
+        # "Die Standard Sprache von der App ist englisch - da kann das
+        # Fenster gerne auf englisch sein") -- this dialog only ever shows
+        # on a fresh install, BEFORE any profile (and therefore any real
+        # language preference) has been loaded, so there's no language
+        # signal to translate against anyway; English matches the app's
+        # own actual default/fallback language for exactly that state.
+        self.setWindowTitle("Welcome to Aion2 TM")
         self.setObjectName("UpdateDialog")
         self.setFixedSize(480, 280)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
@@ -20,7 +27,7 @@ class FirstRunDialog(QDialog):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
 
-        title = QLabel("Willkommen bei Aion2 TM!")
+        title = QLabel("Welcome to Aion2 TM!")
         title.setObjectName("updateDialogTitle")
         layout.addWidget(title)
 
@@ -30,8 +37,8 @@ class FirstRunDialog(QDialog):
         layout.addWidget(sep)
 
         info = QLabel(
-            "Profile werden lokal auf deinem PC gespeichert.\n"
-            "Hast du bereits Profile aus einer früheren Installation?"
+            "Profiles are stored locally on your PC.\n"
+            "Do you already have profiles from a previous installation?"
         )
         info.setObjectName("updateDialogNotesLabel")
         info.setWordWrap(True)
@@ -42,12 +49,12 @@ class FirstRunDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
 
-        self.existing_btn = QPushButton("Ja — Pfad angeben")
+        self.existing_btn = QPushButton("Yes — specify path")
         self.existing_btn.setObjectName("primaryButton")
         self.existing_btn.setFixedHeight(40)
         self.existing_btn.clicked.connect(self._pick_existing)
 
-        self.fresh_btn = QPushButton("Nein — Neu starten")
+        self.fresh_btn = QPushButton("No — start fresh")
         self.fresh_btn.setObjectName("updateDialogLaterBtn")
         self.fresh_btn.setFixedHeight(40)
         self.fresh_btn.clicked.connect(self.accept)
@@ -58,7 +65,7 @@ class FirstRunDialog(QDialog):
 
     def _pick_existing(self):
         path = QFileDialog.getExistingDirectory(
-            self, "Profilordner auswählen", ""
+            self, "Select profile folder", ""
         )
         if path:
             self.chosen_path = path

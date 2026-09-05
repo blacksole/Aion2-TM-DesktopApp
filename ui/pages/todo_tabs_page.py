@@ -40,6 +40,19 @@ class TodoTabsPage(QWidget):
         self.tab_row.addWidget(self.timer_tab_btn)
         self.tab_row.addStretch()
 
+        # Reaches into todo_widget (TasksPage) for these two exact same way
+        # as title_label/subtitle_label above (User-Wunsch, 2026-09-05:
+        # "wie wärs so", screenshot showing Full View/Import top-right next
+        # to "ToDo | Timer" instead of sharing TasksPage's own crowded
+        # rows). Hidden while the Timer tab is active in set_active_tab
+        # below -- they only ever act on Tasks/Shopping data.
+        self._full_view_btn = getattr(todo_widget, "_full_view_btn", None)
+        self._import_btn = getattr(todo_widget, "_import_btn", None)
+        if self._full_view_btn is not None:
+            self.tab_row.addWidget(self._full_view_btn)
+        if self._import_btn is not None:
+            self.tab_row.addWidget(self._import_btn)
+
         layout.addLayout(self.tab_row)
 
         self.content_stack = QStackedWidget()
@@ -56,6 +69,11 @@ class TodoTabsPage(QWidget):
             btn.style().unpolish(btn)
             btn.style().polish(btn)
         self.content_stack.setCurrentIndex(0 if key == "todo" else 1)
+        is_todo = key == "todo"
+        if self._full_view_btn is not None:
+            self._full_view_btn.setVisible(is_todo)
+        if self._import_btn is not None:
+            self._import_btn.setVisible(is_todo)
 
     def update_language(self, language: str, tr_func):
         self.todo_tab_btn.setText(tr_func(language, "todo"))

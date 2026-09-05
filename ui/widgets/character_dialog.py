@@ -152,7 +152,10 @@ class CharacterManagerDialog(QDialog):
         if not dialog.exec():
             return
         action = dialog.get_action()  # "recursive" or "intermediate"
-        if self._remove_character_callback(name, action):
+        ok, error_key = self._remove_character_callback(name, action)
+        if ok:
             if name in self._characters:
                 self._characters.remove(name)
             self._rebuild_list()
+        elif error_key:
+            QMessageBox.warning(self, self._t("tab_character"), self._t(error_key))

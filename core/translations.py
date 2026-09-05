@@ -386,6 +386,7 @@ TRANSLATIONS = {
         "char_add_new_title": "Charakter hinzufügen",
         "char_add_new_label": "Name des Charakters:",
         "char_limit_reached": "Maximal 8 Charaktere erlaubt.",
+        "char_remove_is_flowmap_root": "Dieser Charakter ist der Root-Knoten seiner eigenen Flow Map und kann so nicht entfernt werden. Lösche stattdessen die ganze Flow Map über das Mülleimer-Symbol, oder benenne zuerst einen anderen Knoten zum Root um.",
         "manual_reset_tooltip": "Manuell zurücksetzen",
 
         "templates_title": "Vorlagen",
@@ -1181,6 +1182,7 @@ TRANSLATIONS = {
         "char_add_new_title": "Добавить персонажа",
         "char_add_new_label": "Имя персонажа:",
         "char_limit_reached": "Максимум 8 персонажей.",
+        "char_remove_is_flowmap_root": "Этот персонаж — корневой узел своей собственной Flow Map, поэтому его нельзя удалить так. Удали всю Flow Map через значок корзины, либо сначала сделай корнем другой узел.",
         "manual_reset_tooltip": "Сбросить вручную",
 
         "templates_title": "Шаблоны",
@@ -1977,6 +1979,7 @@ TRANSLATIONS = {
         "char_add_new_title": "Add Character",
         "char_add_new_label": "Character name:",
         "char_limit_reached": "Maximum of 8 characters allowed.",
+        "char_remove_is_flowmap_root": "This character is the root node of its own Flow Map, so it can't be removed this way. Delete the whole Flow Map via the trash-can icon instead, or rename a different node to be root first.",
         "manual_reset_tooltip": "Reset manually",
 
         "templates_title": "Templates",

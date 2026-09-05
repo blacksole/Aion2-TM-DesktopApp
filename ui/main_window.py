@@ -2408,7 +2408,25 @@ class MainWindow(QMainWindow):
 
             if tid:
                 for card in shopping_cards:
-                    if card.template_id == tid:
+                    # Real bug found + fixed (User-reported, 2026-09-05:
+                    # correcting a template's price didn't update the
+                    # already-created "Abyss Command..." shopping entries)
+                    # -- template_id only ever gets set on a card created
+                    # THROUGH the "general" checkbox/Standard Templates
+                    # flow; a card that started life some other way (e.g.
+                    # a manually typed entry that happens to share a
+                    # template's title) had template_id="" and this loop
+                    # skipped it forever, with no way to ever link up.
+                    # Falling back to a same-title match for any card
+                    # that's not ALREADY linked to a different template,
+                    # and backfilling its template_id once matched, so
+                    # every future edit updates it directly from here on.
+                    same_title = (
+                        not card.template_id
+                        and card.title.strip().lower() == title.lower()
+                    )
+                    if card.template_id == tid or same_title:
+                        card.template_id = tid
                         card.update_from_template(tmpl)
 
     def _sync_tasks_from_templates(self, old_templates: dict):
@@ -2445,7 +2463,13 @@ class MainWindow(QMainWindow):
 
             if tid:
                 for card in task_cards:
-                    if card.template_id == tid:
+                    # Same fallback as _sync_shopping_from_templates above.
+                    same_title = (
+                        not card.template_id
+                        and card.title_label.text().strip().lower() == title.lower()
+                    )
+                    if card.template_id == tid or same_title:
+                        card.template_id = tid
                         card.update_from_template(tmpl)
 
     def _reset_tasks_by_schedule(self, schedules: list):
@@ -2790,7 +2814,7 @@ class MainWindow(QMainWindow):
                 return True
         return False
 
-    def _remove_character(self, name: str, action: str = "recursive") -> bool:
+    def _remove_character(self, name: str, action: str = "recursive") -> tuple[bool, str]:
         """Removes every Flow Map "character"-icon node with this exact
         title -- across every flow map, not just the active one, in case
         the same character name exists as a node in more than one map.
@@ -2810,10 +2834,28 @@ class MainWindow(QMainWindow):
         walk -- a same-named node in an INACTIVE map (raw serialized dict,
         no live FlowController) is the rare edge case of one character
         existing in more than one map, and just gets its own subtree
-        deleted outright rather than asking a second dialog per map."""
+        deleted outright rather than asking a second dialog per map.
+
+        Real bug found + fixed (User-reported, 2026-09-05, screenshot: the
+        entire "Streamer Test" flow map reduced to one orphaned "New Node"
+        after removing 2 characters) -- _add_flow_map/the "+" next to the
+        map dropdown creates each NEW flow map with its OWN root node
+        already carrying icon="character" (root = "the character this map
+        is for"), so a character removed via THIS dialog can perfectly
+        legitimately BE some map's root, not just an ordinary child node.
+        flow_controller.delete_node() already refuses to ever delete
+        root_node_id -- this function had no equivalent guard at all, so
+        removing a character who happened to be their own map's root
+        collected/popped every descendant of root, i.e. the ENTIRE map,
+        with no error and no warning. Now skips (never touches) any
+        target id that IS a root_node_id in any map, and reports it back
+        via the same (ok, error_key) contract _add_character already
+        uses, so the dialog can explain why nothing happened for that
+        name instead of silently doing something catastrophic."""
         from ui.flow.flow_controller import FlowController
 
         removed_any = False
+        blocked_as_root = False
         active = self.active_flow_map_name
         window = self.flow_map_window
         if window:
@@ -2824,6 +2866,9 @@ class MainWindow(QMainWindow):
             if target_ids:
                 controller = FlowController(window)
                 for nid in target_ids:
+                    if nid == window.root_node_id:
+                        blocked_as_root = True
+                        continue
                     node = window.nodes.get(nid)
                     if not node:
                         continue
@@ -2845,17 +2890,22 @@ class MainWindow(QMainWindow):
                             if parent and nid in parent.children:
                                 parent.children.remove(nid)
                     removed_any = True
-                window.render_flow()
-                window.mark_unsaved()
+                if removed_any:
+                    window.render_flow()
+                    window.mark_unsaved()
         for map_name, map_data in self.flow_maps.items():
             if map_name == active:
                 continue
             nodes = map_data.get("nodes", {})
+            root_id = map_data.get("root_node_id")
             target_ids = [
                 nid for nid, nd in nodes.items()
                 if nd.get("icon") == "character" and nd.get("title") == name
             ]
             for nid in target_ids:
+                if nid == root_id:
+                    blocked_as_root = True
+                    continue
                 stack = [nid]
                 while stack:
                     cur_id = stack.pop()
@@ -2868,7 +2918,9 @@ class MainWindow(QMainWindow):
                 removed_any = True
         if removed_any:
             self._rebuild_characters()
-        return removed_any
+        if blocked_as_root and not removed_any:
+            return False, "char_remove_is_flowmap_root"
+        return removed_any, ""
 
     def _rebuild_characters(self):
         """Collect all character node titles from every flow map and update the dropdown."""
