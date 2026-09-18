@@ -36,14 +36,16 @@ from utils import paths
 
 logger = get_logger("main_window")
 from PySide6.QtWidgets import QTimeEdit
-from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
+from PySide6.QtGui import (
+    QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap, QKeySequence, QShortcut,
+)
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QMenu, QComboBox, QStackedWidget, QFileDialog, QMessageBox,
-    QSystemTrayIcon, QInputDialog, QApplication,
+    QSystemTrayIcon, QInputDialog, QApplication, QLineEdit, QTextEdit, QAbstractSpinBox,
 )
 from datetime import datetime, timedelta
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, QEvent
 
 THEME_LOGOS = {
     "abyss": "assets/logos/logo_abyss.png",
@@ -122,6 +124,11 @@ class TaskCard(QFrame):
         self.location = location
         self.setProperty("event", self.is_event)
         self.setObjectName("taskCard")
+        # Keyboard reachability (UX audit 2026-09-18, C1): a card has to
+        # be able to HOLD focus before Delete can act on "the focused
+        # card". Deliberately no focus styling here -- the QSS is owned
+        # by a separate design pass.
+        self.setFocusPolicy(Qt.StrongFocus)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
@@ -397,6 +404,12 @@ class MainWindow(QMainWindow):
             key: [] for key in self.tabs
         }
 
+        # Soft-delete state (UX audit 2026-09-18, C2). At most one card
+        # is ever pending; the sequence number is what lets a fired undo
+        # timer tell "still mine" from "already superseded".
+        self._pending_delete = None
+        self._pending_delete_seq = 0
+
         self.item_templates: list = []
         self.task_templates: list = []
         self.standard_templates: dict = {"tasks": [], "shopping": []}
@@ -468,6 +481,7 @@ class MainWindow(QMainWindow):
 
         self._editing_card = None
         self._setup_tray_icon()
+        self._setup_shortcuts()
         self.update_countdowns()
 
     def _wire_card(self, card):
@@ -493,29 +507,123 @@ class MainWindow(QMainWindow):
         if self.auto_save:
             self.save_profile(silent=True)
 
+    # How long a deleted card stays undoable. Long enough to read the
+    # toast and aim for the button (UX audit 2026-09-18, C2 asked for 5-8 s).
+    UNDO_WINDOW_MS = 6000
+
     def _delete_card(self, card):
+        """Soft delete: the card leaves the list (and therefore every
+        serialization, count and refresh) immediately, but nothing is
+        actually destroyed or saved until the undo window closes.
+
+        Before this, the "x" was a single irreversible click: it dropped the
+        card, flipped the matching template's ``is_general`` and auto-saved,
+        with no confirmation and no way back (UX audit 2026-09-18, C2).
+
+        The three effects that used to fire here are now split:
+          * removing the card from ``task_lists`` happens NOW, so a pending
+            card can never be serialized, counted, rendered or resurrected
+            by a reset that runs while the toast is up;
+          * the template mutation + ``deleteLater`` + save are deferred into
+            ``_commit_pending_delete``;
+          * ``_undo_pending_delete`` puts the card back at its exact index,
+            which needs no save at all (nothing was written yet).
+        """
         if self._editing_card is card:
             self._cancel_edit()
-        for cards in self.task_lists.values():
+
+        # Only one card may be pending at a time: a second delete commits the
+        # first (its undo chance is over the moment its toast is replaced).
+        self._commit_pending_delete()
+
+        tab = None
+        index = None
+        for key, cards in self.task_lists.items():
             if card in cards:
+                tab = key
+                index = cards.index(card)
                 cards.remove(card)
                 break
-        if isinstance(card, ShoppingCard):
-            title_lower = card.title.lower()
-            for tmpl in self.item_templates:
-                if tmpl.get("title", "").lower() == title_lower:
-                    tmpl["is_general"] = False
-                    break
-        elif isinstance(card, TaskCard):
-            title_lower = card.title.lower()
-            for tmpl in self.task_templates:
-                if tmpl.get("title", "").lower() == title_lower:
-                    tmpl["is_general"] = False
-                    break
-        card.deleteLater()
+
+        if tab is None:
+            # Not in any list (already deleted / never added) -- nothing to
+            # undo, so fall back to the old destructive path for that card.
+            card.deleteLater()
+            return
+
+        self._pending_delete_seq += 1
+        seq = self._pending_delete_seq
+        self._pending_delete = {
+            "seq": seq,
+            "tab": tab,
+            "index": index,
+            "card": card,
+            "apply": self._template_delete_side_effects(card),
+        }
+
+        # refresh() re-renders from task_lists, which no longer holds the
+        # card -- render_tasks hides and unparents it for us.
         self.refresh()
+
+        self.show_toast(
+            tr(self.language, "toast_task_removed"),
+            action_label=tr(self.language, "undo"),
+            on_action=self._undo_pending_delete,
+            duration_ms=self.UNDO_WINDOW_MS,
+        )
+        QTimer.singleShot(self.UNDO_WINDOW_MS, lambda: self._commit_pending_delete(seq))
+
+    def _template_delete_side_effects(self, card):
+        """The template mutation the old ``_delete_card`` did inline, frozen
+        into a closure so it can run later (on commit) or never (on undo)."""
+        if isinstance(card, ShoppingCard):
+            templates = self.item_templates
+        elif isinstance(card, TaskCard):
+            templates = self.task_templates
+        else:
+            return lambda: None
+
+        title_lower = card.title.lower()
+
+        def _apply():
+            for tmpl in templates:
+                if tmpl.get("title", "").lower() == title_lower:
+                    tmpl["is_general"] = False
+                    break
+
+        return _apply
+
+    def _commit_pending_delete(self, seq=None):
+        """Makes the pending delete real. Idempotent and safe to call from
+        anywhere; ``seq`` lets a fired timer bow out when the delete it was
+        scheduled for is already gone (undone, or committed by a newer one)."""
+        pending = self._pending_delete
+        if not pending:
+            return
+        if seq is not None and pending["seq"] != seq:
+            return
+
+        self._pending_delete = None
+        pending["apply"]()
+        card = pending["card"]
+        card.setParent(None)
+        card.deleteLater()
         if self.auto_save:
             self.save_profile(silent=True)
+
+    def _undo_pending_delete(self):
+        """Puts the card back exactly where it was. No save: the deletion was
+        never written, so the file on disk is still the pre-delete state."""
+        pending = self._pending_delete
+        if not pending:
+            return
+        self._pending_delete = None
+
+        cards = self.task_lists.setdefault(pending["tab"], [])
+        index = min(pending["index"], len(cards))
+        cards.insert(index, pending["card"])
+        self._hide_toast()
+        self.refresh()
 
     def _set_card_selected(self, card, selected: bool):
         card.setProperty("selected", selected)
@@ -1023,9 +1131,34 @@ class MainWindow(QMainWindow):
 
         self.page_stack = QStackedWidget()
 
+        # A row, not a bare label, so a toast can carry ONE action button
+        # (UX audit 2026-09-18, C2 -- "Task removed / Undo"). The label keeps
+        # its #toastLabel objectName so every existing QSS rule still
+        # matches; the container and the button get their own names rather
+        # than any inline colour (the design pass owns the styling).
+        self.toast_widget = QWidget()
+        self.toast_widget.setObjectName("toastBar")
+
+        toast_row = QHBoxLayout(self.toast_widget)
+        toast_row.setContentsMargins(0, 0, 0, 0)
+        toast_row.setSpacing(10)
+
         self.toast_label = QLabel()
         self.toast_label.setObjectName("toastLabel")
-        self.toast_label.hide()
+
+        self.toast_action_btn = QPushButton()
+        self.toast_action_btn.setObjectName("toastActionButton")
+        self.toast_action_btn.setCursor(Qt.PointingHandCursor)
+        self.toast_action_btn.clicked.connect(self._on_toast_action)
+        self.toast_action_btn.hide()
+
+        toast_row.addWidget(self.toast_label)
+        toast_row.addWidget(self.toast_action_btn)
+        toast_row.addStretch()
+
+        self.toast_widget.hide()
+        self._toast_action = None
+        self._toast_seq = 0
     
     def _setup_sidebar(self):
         self.sidebar = SidebarWidget()
@@ -1088,7 +1221,7 @@ class MainWindow(QMainWindow):
         self.left_layout.addWidget(self.overlay_toggle_btn)
 
         self.content_layout.addWidget(self.page_stack, 1)
-        self.content_layout.addWidget(self.toast_label)
+        self.content_layout.addWidget(self.toast_widget)
 
         self.main_layout.addWidget(self.left_panel)
         self.main_layout.addWidget(self.content_container, 1)
@@ -1395,7 +1528,7 @@ class MainWindow(QMainWindow):
         minutes, secs = divmod(remainder, 60)
 
         if days > 0:
-            return f"{days}T {hours:02}:{minutes:02}"
+            return f"{days}{tr(self.language, 'day_abbrev')} {hours:02}:{minutes:02}"
 
         return f"{hours:02}:{minutes:02}:{secs:02}"
 
@@ -1542,7 +1675,7 @@ class MainWindow(QMainWindow):
             hours = int((diff % 86400) // 3600)
             minutes = int((diff % 3600) // 60)
             if days > 0:
-                return f"{days}T {hours:02d}:{minutes:02d}"
+                return f"{days}{tr(self.language, 'day_abbrev')} {hours:02d}:{minutes:02d}"
             return f"{hours:02d}:{minutes:02d}"
         except (ValueError, TypeError):
             return ""
@@ -1816,6 +1949,11 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
 
+        # Same reasoning as in load_profile: the undo window cannot outlive
+        # the session, so a pending delete is committed before the final save
+        # on every path below that actually closes the app.
+        self._commit_pending_delete()
+
         if getattr(self, "_force_quit", False):
             self.save_profile(silent=True)
             event.accept()
@@ -2021,8 +2159,7 @@ class MainWindow(QMainWindow):
             reset += timedelta(days=7)
         return reset
 
-    @staticmethod
-    def _format_custom_countdown(seconds: float, fmt: str) -> str:
+    def _format_custom_countdown(self, seconds: float, fmt: str) -> str:
         s = max(0, int(seconds))
         if fmt == "mm:ss":
             total_minutes, secs = divmod(s, 60)
@@ -2032,7 +2169,7 @@ class MainWindow(QMainWindow):
             hours, remainder = divmod(remainder, 3600)
             minutes, secs = divmod(remainder, 60)
             if days > 0:
-                return f"{days}T {hours:02}:{minutes:02}:{secs:02}"
+                return f"{days}{tr(self.language, 'day_abbrev')} {hours:02}:{minutes:02}:{secs:02}"
             return f"{hours:02}:{minutes:02}:{secs:02}"
         # default: hh:mm:ss
         minutes, secs = divmod(s, 60)
@@ -2153,6 +2290,12 @@ class MainWindow(QMainWindow):
         # copy we actually got so the user can be warned (and so a file that
         # is beyond rescue never gets overwritten).
         from core.persistence import load_json_with_fallback
+
+        # A card whose undo window is still open belongs to the profile we
+        # are about to leave -- commit it against THAT profile (self.profile_
+        # name is still the old one here) rather than let the switch quietly
+        # resurrect or strand it (UX audit 2026-09-18, C2).
+        self._commit_pending_delete()
 
         profile_path = Path(profile_path)
         data, status = load_json_with_fallback(profile_path)
@@ -2677,7 +2820,7 @@ class MainWindow(QMainWindow):
 
         # Immer aus dem neuen Ordner laden – last_profile.txt könnte auf alten Ordner zeigen
         self._load_best_profile_from_dir(new_dir)
-        self.show_toast("Profilpfad gespeichert")
+        self.show_toast(tr(self.language, "profile_path_saved"))
 
     # ── Language-default helpers ──────────────────────────────────────────────
     _LANG_DEFAULT_STEMS = {"en": "Default", "de": "Default_de", "ru": "Default_ru"}
@@ -2958,14 +3101,147 @@ class MainWindow(QMainWindow):
 
         self.update()
 
-    def show_toast(self, text):
+    def show_toast(self, text, action_label=None, on_action=None, duration_ms=2200):
+        """Bottom-of-content status line. ``action_label``/``on_action`` add a
+        single clickable action (Undo) for the lifetime of this toast."""
         self.toast_label.setText(f"✓ {text}")
-        self.toast_label.show()
 
-        QTimer.singleShot(
-            2200,
-            self.toast_label.hide
-        )
+        if action_label and on_action is not None:
+            self._toast_action = on_action
+            self.toast_action_btn.setText(action_label)
+            self.toast_action_btn.show()
+        else:
+            self._toast_action = None
+            self.toast_action_btn.hide()
+
+        self._toast_seq += 1
+        seq = self._toast_seq
+        self.toast_widget.show()
+
+        QTimer.singleShot(duration_ms, lambda: self._hide_toast(seq))
+
+    def _on_toast_action(self):
+        action = self._toast_action
+        self._toast_action = None
+        if action is not None:
+            action()
+
+    def _hide_toast(self, seq=None):
+        """``seq`` makes an expiring toast's timer a no-op once a NEWER toast
+        has taken the row over -- otherwise the first toast's timer would cut
+        the second one short."""
+        if seq is not None and seq != self._toast_seq:
+            return
+        self._toast_action = None
+        self.toast_action_btn.hide()
+        self.toast_widget.hide()
+
+    # ── Keyboard (UX audit 2026-09-18, C1) ────────────────────────────────
+
+    def _setup_shortcuts(self):
+        """The app had literally zero QShortcut/keyPressEvent before this
+        (audit C1). Deliberately a small map of the five things a user does
+        every session, plus Delete on a focused card.
+
+        Delete is NOT a QShortcut: a window-context shortcut is resolved
+        BEFORE the key ever reaches the focused widget, so binding it here
+        would silently break Delete inside every QLineEdit/QTextEdit in the
+        window. An application event filter sees the same key press but can
+        decline it (return False) and let the editor have it.
+        """
+        self._shortcuts = {}
+
+        def _bind(key, slot):
+            sc = QShortcut(QKeySequence(key), self)
+            sc.activated.connect(slot)
+            self._shortcuts[key] = sc
+            return sc
+
+        _bind("Ctrl+N", self._focus_add_task_input)
+        _bind("Ctrl+1", lambda: self._activate_todo_tab("todo"))
+        _bind("Ctrl+2", lambda: self._activate_todo_tab("timer"))
+        _bind("Ctrl+O", self._toggle_overlay)
+        _bind("Ctrl+S", lambda: self.save_profile(explicit=True))
+
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+
+    # The add-row's entry points, most-typed first. Ctrl+N has to pick the
+    # first one that is actually on screen: TasksPage.update_input_mode()
+    # shows a DIFFERENT set per tab and template source -- on the
+    # Tasks/Shopping tabs the free-text title field is hidden entirely in
+    # favour of the template picker, so hardcoding title_input would make
+    # Ctrl+N a no-op exactly where it is used most.
+    _ADD_ROW_FOCUS_ORDER = ("title_input", "template_combo", "char_input", "amount_input", "add_btn")
+
+    def _focus_add_task_input(self):
+        """Ctrl+N -- jump to the ToDo tab's add row. Returns the widget that
+        took focus, or None when the row has nothing focusable (e.g. the
+        Templates source is empty, which also disables "+ Add")."""
+        self._activate_todo_tab("todo")
+
+        for name in self._ADD_ROW_FOCUS_ORDER:
+            widget = getattr(self.tasks_page, name, None)
+            if widget is None or not widget.isEnabled():
+                continue
+            # isVisibleTo, not isVisible: "would be shown if the window is"
+            # -- the answer must not depend on the window being mapped.
+            if not widget.isVisibleTo(self.tasks_page):
+                continue
+            widget.setFocus(Qt.ShortcutFocusReason)
+            if isinstance(widget, QLineEdit):
+                widget.selectAll()
+            return widget
+
+        return None
+
+    def _activate_todo_tab(self, key: str):
+        """Ctrl+1 / Ctrl+2 -- show the ToDo page and select one of its tabs.
+        Goes through the sidebar so its highlight never lies about which page
+        is on screen."""
+        self.sidebar.set_active_page("tasks")
+        self.page_stack.setCurrentWidget(self.todo_page)
+        self.todo_page.set_active_tab(key)
+
+    @staticmethod
+    def _card_for_widget(widget):
+        """The TaskCard/ShoppingCard ``widget`` sits in, if any."""
+        node = widget
+        while node is not None:
+            if isinstance(node, (TaskCard, ShoppingCard)):
+                return node
+            node = node.parentWidget()
+        return None
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Delete:
+            if self._delete_focused_card():
+                return True
+        return super().eventFilter(obj, event)
+
+    def _delete_focused_card(self) -> bool:
+        """Soft-deletes the focused card. Returns False -- key not consumed --
+        whenever focus is in a text/selection editor or outside any card, so
+        Delete keeps its normal meaning everywhere else."""
+        focused = QApplication.focusWidget()
+        if focused is None:
+            return False
+        # The filter is installed on the QApplication, so it sees key presses
+        # meant for OTHER top-level windows too (the overlay, the Flow Map,
+        # the Armory windows -- and, in the test suite, a second MainWindow).
+        # Only this window's own cards are ours to delete.
+        if focused is not self and not self.isAncestorOf(focused):
+            return False
+        if isinstance(focused, (QLineEdit, QTextEdit, QComboBox, QAbstractSpinBox)):
+            return False
+
+        card = self._card_for_widget(focused)
+        if card is None:
+            return False
+
+        self._delete_card(card)
+        return True
 
     def reset_tasks_for_tabs(self, tabs, do_refresh=True):
         for tab in tabs:
@@ -3784,10 +4060,14 @@ class MainWindow(QMainWindow):
         if page_key in self.page_indexes:
             self.page_stack.setCurrentIndex(self.page_indexes[page_key])
 
-        if page_key == "tasks":
-            self.show_toast(tr(self.language, "toast_tasks_opened"))
-
-        elif page_key == "plan":
+        # No "Tasks opened"/"Plan opened"/"Settings opened" toast here any
+        # more (UX audit 2026-09-18, M4): confirming a navigation the sidebar
+        # highlight already shows is chatter, and because About fired none the
+        # previous page's toast used to sit under the About page. Toasts are
+        # reserved for state changes now (saved / reset / imported / undo).
+        # The translation keys stay in place -- harmless, and still used by
+        # nothing else that would break.
+        if page_key == "plan":
             # Deferred a tick (User-reported, 2026-09-13, screenshot: a
             # tiny ~3x4cm window with no content, just minimize/maximize/
             # close buttons, flashes every time) -- same real bug already
@@ -3799,10 +4079,6 @@ class MainWindow(QMainWindow):
             # painted yet) for a moment before it either gets its real
             # size/content or gets misread as something to dismiss.
             QTimer.singleShot(0, self.open_flow_map_window)
-            self.show_toast(tr(self.language, "toast_plan_opened"))
-
-        elif page_key == "settings":
-            self.show_toast(tr(self.language, "toast_settings_opened"))
 
         elif page_key == "about":
             self.about_page.update_language(self.language, tr)

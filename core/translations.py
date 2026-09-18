@@ -166,14 +166,14 @@ TRANSLATIONS = {
         # ================= SETTINGS =================
         "settings": "Einstellungen",
         "general": "Allgemein",
-        "layout": "Layout",
+        "layout": "Darstellung",
         "language": "Sprache",
         "display": "Anzeige",
         "show_events": "Events anzeigen",
         "system_time": "Systemzeit",
         "settings_saved": "Einstellungen gespeichert",
         "settings_title": "Einstellungen",
-        "settings_subtitle": "App-, Layout- und Timer-Einstellungen",
+        "settings_subtitle": "App-, Darstellungs- und Timer-Einstellungen",
 
         # ================= SETTINGS GENERAL =================
         "auto_save": "Automatisch speichern",
@@ -910,6 +910,31 @@ TRANSLATIONS = {
         "arm_section_armor": "Armor",
         "arm_section_accessory": "Accessory",
         "arm_section_wings": "Wings",
+
+        # ================= UX AUDIT 2026-09-18 (C2 / M3 / M4 / M2) =========
+        # Day abbreviation for every "<n>d hh:mm" countdown (M3: a hardcoded
+        # German "T" used to show up in EN and RU too).
+        "day_abbrev": "T",
+
+        # Soft-delete undo toast (C2).
+        "toast_task_removed": "Eintrag entfernt",
+        "undo": "Rückgängig",
+
+        # Hardcoded literals swept out of the pages (M3).
+        "about_open_discord": "Discord öffnen ↗",
+        "open_in_browser": "Im Browser öffnen",
+        "timers_open_settings_tooltip": "Timer-Einstellungen öffnen",
+        "open_folder": "Ordner öffnen",
+        "profile_path_saved": "Profilpfad gespeichert",
+
+        # Empty states (M2).
+        "empty_tasks_title": "Noch keine Aufgaben",
+        "empty_tasks_hint": "Oben eine hinzufügen oder eine Vorlage wählen",
+        "empty_shopping_title": "Noch keine Einkäufe",
+        "empty_shopping_hint": "Oben einen hinzufügen oder aus Vorlagen übernehmen",
+        "empty_timers_title": "Keine eigenen Timer",
+        "empty_timers_hint": "Mit + den ersten Timer anlegen",
+        "empty_overlay_tasks": "Keine offenen Aufgaben",
     },
 
     "ru": {
@@ -1075,14 +1100,14 @@ TRANSLATIONS = {
         # ================= SETTINGS =================
         "settings": "Настройки",
         "general": "Основные",
-        "layout": "Интерфейс",
+        "layout": "Оформление",
         "language": "Язык",
         "display": "Отображение",
         "show_events": "Показывать события",
         "system_time": "Системное время",
         "settings_saved": "Настройки сохранены",
         "settings_title": "Настройки",
-        "settings_subtitle": "Настройки приложения, интерфейса и таймеров",
+        "settings_subtitle": "Настройки приложения, оформления и таймеров",
 
         # ================= SETTINGS GENERAL =================
         "auto_save": "Автосохранение",
@@ -1818,6 +1843,26 @@ TRANSLATIONS = {
         "arm_section_armor": "Броня",
         "arm_section_accessory": "Аксессуары",
         "arm_section_wings": "Крылья",
+
+        # ================= UX AUDIT 2026-09-18 (C2 / M3 / M4 / M2) =========
+        "day_abbrev": "д",
+
+        "toast_task_removed": "Запись удалена",
+        "undo": "Отменить",
+
+        "about_open_discord": "Открыть Discord ↗",
+        "open_in_browser": "Открыть в браузере",
+        "timers_open_settings_tooltip": "Открыть настройки таймеров",
+        "open_folder": "Открыть папку",
+        "profile_path_saved": "Путь к профилям сохранён",
+
+        "empty_tasks_title": "Задач пока нет",
+        "empty_tasks_hint": "Добавьте выше или выберите шаблон",
+        "empty_shopping_title": "Покупок пока нет",
+        "empty_shopping_hint": "Добавьте выше или возьмите из шаблонов",
+        "empty_timers_title": "Нет своих таймеров",
+        "empty_timers_hint": "Создайте первый таймер кнопкой +",
+        "empty_overlay_tasks": "Нет активных задач",
     },
 
     "en": {
@@ -1983,14 +2028,14 @@ TRANSLATIONS = {
         # ================= SETTINGS =================
         "settings": "Settings",
         "general": "General",
-        "layout": "Layout",
+        "layout": "Appearance",
         "language": "Language",
         "display": "Display",
         "show_events": "Show events",
         "system_time": "System time",
         "settings_saved": "Settings saved",
         "settings_title": "Settings",
-        "settings_subtitle": "App, layout and timer settings",
+        "settings_subtitle": "App, appearance and timer settings",
 
         # ================= SETTINGS GENERAL =================
         "auto_save": "Auto Save",
@@ -2727,6 +2772,26 @@ TRANSLATIONS = {
         "arm_section_armor": "Armor",
         "arm_section_accessory": "Accessory",
         "arm_section_wings": "Wings",
+
+        # ================= UX AUDIT 2026-09-18 (C2 / M3 / M4 / M2) =========
+        "day_abbrev": "d",
+
+        "toast_task_removed": "Entry removed",
+        "undo": "Undo",
+
+        "about_open_discord": "Open Discord ↗",
+        "open_in_browser": "Open in browser",
+        "timers_open_settings_tooltip": "Open timer settings",
+        "open_folder": "Open folder",
+        "profile_path_saved": "Profile path saved",
+
+        "empty_tasks_title": "No tasks yet",
+        "empty_tasks_hint": "Add one above, or pick a template",
+        "empty_shopping_title": "No shopping items yet",
+        "empty_shopping_hint": "Add one above, or import from Templates",
+        "empty_timers_title": "No custom timers",
+        "empty_timers_hint": "Create your first timer with +",
+        "empty_overlay_tasks": "No active tasks",
     }
 }
 

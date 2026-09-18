@@ -535,9 +535,7 @@ class SettingsPage(QWidget):
         self.profiles_change_btn.setText(
             {"en": "Change...", "de": "Ändern...", "ru": "Изменить..."}.get(language, "Change...")
         )
-        self.profiles_open_btn.setText(
-            {"en": "Open folder", "de": "Ordner öffnen", "ru": "Открыть папку"}.get(language, "Open folder")
-        )
+        self.profiles_open_btn.setText(tr_func(language, "open_folder"))
         self.profiles_restore_btn.setText(
             {"en": "Restore Default profile", "de": "Standardprofil wiederherstellen",
              "ru": "Восстановить профиль по умолчанию"}.get(language, "Restore Default profile")
@@ -1322,7 +1320,7 @@ class SettingsPage(QWidget):
         notif_text.addWidget(self.notif_title)
         notif_text.addWidget(self.notif_desc)
 
-        self.notif_sync_btn = QPushButton("Synchron")
+        self.notif_sync_btn = QPushButton()
         self.notif_sync_btn.setCheckable(True)
         self.notif_sync_btn.setChecked(True)
         self.notif_sync_btn.setObjectName("toggleButton")
@@ -1502,9 +1500,9 @@ class SettingsPage(QWidget):
         lang = self._cur_lang
         tr = self._cur_tr
         if checked:
-            self.notif_sync_btn.setText(tr(lang, "notif_sync") if tr else "Synchron")
+            self.notif_sync_btn.setText(tr(lang, "notif_sync") if tr else "Synchronized")
         else:
-            self.notif_sync_btn.setText(tr(lang, "notif_nosync") if tr else "Nicht-Synchron")
+            self.notif_sync_btn.setText(tr(lang, "notif_nosync") if tr else "Separate")
         self._notif_sync_row.setVisible(checked)
         self._notif_nosync_widget.setVisible(not checked)
         # notif_sync_btn doesn't go through _set_toggle (it swaps text to
@@ -1883,7 +1881,7 @@ class SettingsPage(QWidget):
             lang = self._cur_lang
             tr = self._cur_tr
             key = "notif_sync" if synced else "notif_nosync"
-            self.notif_sync_btn.setText(tr(lang, key) if tr else ("Synchron" if synced else "Nicht-Synchron"))
+            self.notif_sync_btn.setText(tr(lang, key) if tr else ("Synchronized" if synced else "Separate"))
             _apply_active_button_style(self.notif_sync_btn, synced, "toggle")
             self._notif_sync_row.setVisible(synced)
             self._notif_nosync_widget.setVisible(not synced)

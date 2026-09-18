@@ -61,7 +61,7 @@ class TimersPage(QWidget):
 
         self.timer_settings_btn = QPushButton("⚙")
         self.timer_settings_btn.setObjectName("pageIconButton")
-        self.timer_settings_btn.setToolTip("Timer-Einstellungen öffnen")
+        self.timer_settings_btn.setToolTip("")
         self.timer_settings_btn.clicked.connect(self.timer_settings_requested.emit)
 
         header_row.addWidget(self.manage_timers_btn)
@@ -186,6 +186,7 @@ class TimersPage(QWidget):
         self.title_label.setText(tr_func(language, "timers"))
         self.subtitle_label.setText(tr_func(language, "timers_subtitle"))
         self.manage_timers_btn.setText(tr_func(language, "timers_manage"))
+        self.timer_settings_btn.setToolTip(tr_func(language, "timers_open_settings_tooltip"))
         self.daily_reset_card.title_label.setText(tr_func(language, "daily_reset").upper())
         self.weekly_reset_card.title_label.setText(tr_func(language, "weekly_reset").upper())
         self.season_timer_card.title_label.setText("SEASON")
