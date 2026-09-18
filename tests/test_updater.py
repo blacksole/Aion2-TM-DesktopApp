@@ -8,6 +8,7 @@ import zipfile
 import pytest
 
 from core.update_checker import (
+    decide_checksum_policy,
     is_sha256_hex,
     parse_sha256_sidecar,
     safe_extract,
@@ -206,3 +207,90 @@ def test_select_assets_with_no_build_asset():
 def test_sidecar_url_is_the_asset_url_plus_suffix():
     assert sha256_sidecar_url(_BASE_URL) == f"{_BASE_URL}.sha256"
     assert sha256_sidecar_url("") == ""
+
+
+# ---------------------------------------------------------------------------
+# checksum policy: "no sidecar published" is NOT "sidecar fetch failed"
+# ---------------------------------------------------------------------------
+
+def test_policy_skips_when_the_release_published_no_sidecar():
+    # Every release built before the checksum step. Refusing these would
+    # brick the updater for anyone still on an old version.
+    assert decide_checksum_policy("", None) == "skip"
+    assert decide_checksum_policy(None, "") == "skip"
+
+
+def test_policy_aborts_when_a_published_sidecar_could_not_be_fetched():
+    # 404, timeout, captive portal, proxy, truncated body -- indistinguishable
+    # from tampering, and we are about to overwrite the user's installation.
+    assert decide_checksum_policy("https://x/asset.zip.sha256", "") == "abort"
+    assert decide_checksum_policy("https://x/asset.zip.sha256", None) == "abort"
+
+
+def test_policy_verifies_when_the_digest_is_in_hand():
+    assert decide_checksum_policy("https://x/asset.zip.sha256", "a" * 64) == "verify"
+
+
+def test_checker_emits_the_sidecar_url_with_the_update(monkeypatch):
+    # The plumbing that makes the distinction above reachable: the installer
+    # sees a URL only, so the asset LIST knowledge has to travel with it.
+    from core import update_checker as uc
+
+    release = {
+        "tag_name": "v99.0.0",
+        "body": "notes",
+        "assets": [
+            {"name": "Aion2_TM.zip", "browser_download_url": "https://x/Aion2_TM.zip"},
+            {"name": "Aion2_TM.zip.sha256", "browser_download_url": "https://x/Aion2_TM.zip.sha256"},
+        ],
+    }
+    checker = uc.UpdateChecker()
+    monkeypatch.setattr(checker, "_fetch_latest_stable", lambda: release)
+    emitted = []
+    checker.update_available.connect(lambda *args: emitted.append(args))
+
+    checker.run()
+
+    assert emitted == [("99.0.0", "notes", "https://x/Aion2_TM.zip", "https://x/Aion2_TM.zip.sha256")]
+
+
+def test_checker_emits_an_empty_sidecar_url_for_an_old_release(monkeypatch):
+    from core import update_checker as uc
+
+    release = {
+        "tag_name": "v99.0.0",
+        "body": "",
+        "assets": [{"name": "Aion2_TM.zip", "browser_download_url": "https://x/Aion2_TM.zip"}],
+    }
+    checker = uc.UpdateChecker()
+    monkeypatch.setattr(checker, "_fetch_latest_stable", lambda: release)
+    emitted = []
+    checker.update_available.connect(lambda *args: emitted.append(args))
+
+    checker.run()
+
+    assert emitted[0][3] == ""
+
+
+def test_dialog_hands_the_sidecar_url_to_the_installer_thread(qapp, tmp_path):
+    from ui.update_dialog import UpdateDialog
+
+    dlg = UpdateDialog("9.9.9", "notes", "https://x/a.zip", tmp_path, "https://x/a.zip.sha256")
+    try:
+        assert dlg.sha256_url == "https://x/a.zip.sha256"
+        thread = dlg._build_installer_thread()
+        assert thread.sha256_url == "https://x/a.zip.sha256"
+        assert thread.asset_url == "https://x/a.zip"
+        thread.setParent(None)          # never started; drop it before the dialog goes
+    finally:
+        dlg.deleteLater()
+
+
+def test_main_window_keeps_the_sidecar_url_with_the_pending_update():
+    import ui.main_window as mw
+
+    win = mw.MainWindow.__new__(mw.MainWindow)
+    win.header = object()
+    mw.MainWindow._on_update_available(win, "9.9.9", "notes", "https://x/a.zip", "https://x/a.zip.sha256")
+
+    assert win._pending_update == ("9.9.9", "notes", "https://x/a.zip", "https://x/a.zip.sha256")

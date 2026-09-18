@@ -123,7 +123,9 @@ uv sync                 # creates .venv from uv.lock
 
 **Where your data lives.** Config in `$XDG_CONFIG_HOME/aion2-tm` (`~/.config/aion2-tm`), profiles in `$XDG_DATA_HOME/aion2-tm/Profiles`, the Armory cache in `$XDG_CACHE_HOME/aion2-tm`, the log in `$XDG_STATE_HOME/aion2-tm`. Windows and macOS keep their own conventions (`%APPDATA%\Aion2 TM`, `~/Library/Application Support`) — nothing moved there. Running from a git clone keeps everything in the repo folder, as before.
 
-**Portable mode.** Put an empty `portable.txt` next to the executable and the app reads and writes its profiles from `profiles/` beside itself instead of your home directory — for a USB stick or a self-contained folder. Without the marker an installed build never writes next to its own files.
+**Portable mode.** Put an empty `portable.txt` next to the executable (beside `Aion2 TM.exe`, *not* inside `_internal/`) and the app reads and writes its profiles from `profiles/` beside itself instead of your home directory — for a USB stick or a self-contained folder. Without the marker an installed build never writes next to its own files.
+
+Windows-visible changes this branch makes on purpose (minimum window height, the `Browse...` row, the Armory cache location) are listed in [docs/DEV.md](docs/DEV.md).
 
 Notification sounds are played through Qt (WAV only). Desktop sound themes ship `.oga` files, which Qt cannot play, so the sound picker is usually empty on Linux — use its **Browse...** entry to point at any `.wav`. Without a system tray (a Wayland session with no StatusNotifier host), notifications appear as in-app toasts and minimize-to-tray is skipped. The in-app updater is Windows-only; on Linux the update button opens the release page.
 

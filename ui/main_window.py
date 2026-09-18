@@ -1,5 +1,6 @@
 import json
 import shutil
+import os
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -291,6 +292,11 @@ class MainWindow(QMainWindow):
         # load_profile is still restoring fields, so nothing can serialize
         # half-restored state over the file on disk (see load_profile/save_profile).
         self._profile_loading: bool = False
+        # Set when the loaded profile (and its .bak) could not be parsed: the
+        # guard above then stays on past load_profile, and only this flag --
+        # not the re-entrancy one -- authorises a snapshot + warning.
+        self._profile_unreadable: bool = False
+        self._autosave_disabled_notified: bool = False
         self._pending_update = None
         self._checker = None
 
@@ -1188,7 +1194,12 @@ class MainWindow(QMainWindow):
         if hasattr(self.settings_page, "dps_start_requested"):
             self.settings_page.dps_start_requested.connect(self._start_dps_meter)
 
-        QTimer.singleShot(2000, self.run_update_check)
+        # AION2TM_NO_UPDATE_CHECK=1 skips the startup update check (tests, CI,
+        # packaged Linux builds where the distribution channel owns updates).
+        # Without it, any event-loop pump 2 s after construction starts a real
+        # network QThread that can still be running at interpreter exit.
+        if not os.environ.get("AION2TM_NO_UPDATE_CHECK"):
+            QTimer.singleShot(2000, self.run_update_check)
 
     def open_main_menu(self):
         menu = QMenu(self)
@@ -2081,6 +2092,60 @@ class MainWindow(QMainWindow):
             if self.auto_save:
                 self.save_profile(silent=True)
 
+    def _ask_unreadable_profile_choice(self, profile_path: Path) -> str:
+        """Modal asking what to do about a profile that could not be read.
+
+        Returns "overwrite" or "keep". Split out from the handler below so a
+        test can drive both answers without a real dialog.
+        """
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(tr(self.language, "profile_unreadable_title"))
+        box.setText(tr(self.language, "profile_unreadable_text", file=profile_path))
+        save_btn = box.addButton(
+            tr(self.language, "profile_unreadable_overwrite"), QMessageBox.AcceptRole
+        )
+        box.addButton(tr(self.language, "profile_unreadable_keep"), QMessageBox.RejectRole)
+        box.setDefaultButton(box.buttons()[-1])
+        box.exec()
+        return "overwrite" if box.clickedButton() is save_btn else "keep"
+
+    def _handle_unreadable_profile(self, profile_path: Path):
+        """Tell the user the profile is unreadable and let them choose.
+
+        A safety system that engages without saying so is indistinguishable,
+        from the user's chair, from the app being broken: before this, a
+        profile whose file AND .bak were both unparsable silently disabled
+        auto-save for the whole session, with nothing but a line in app.log.
+
+        "Save anyway" copies the unreadable file aside (so a manual rescue
+        stays possible) and releases the guard; "Keep the file" leaves
+        auto-save off, and says so once.
+        """
+        if self._ask_unreadable_profile_choice(profile_path) == "overwrite":
+            from core.persistence import snapshot_corrupt
+
+            snapshot = snapshot_corrupt(profile_path)
+            self._profile_loading = False
+            self._profile_unreadable = False
+            self._autosave_disabled_notified = False
+            self.show_toast(
+                tr(self.language, "profile_unreadable_snapshot", file=snapshot.name)
+                if snapshot else tr(self.language, "profile_saved")
+            )
+            return
+        self._note_autosave_disabled()
+
+    def _note_autosave_disabled(self):
+        """Say once per session that auto-save is off. Called from the dialog
+        above and from every skipped auto-save, so the message reappears if
+        the user never saw the modal (a load that failed before the UI was
+        up, for instance) -- but never turns into a toast storm."""
+        if self._autosave_disabled_notified:
+            return
+        self._autosave_disabled_notified = True
+        self.show_toast(tr(self.language, "profile_autosave_disabled"))
+
     def load_profile(self, profile_path):
         # Self-healing load (audit §2): a truncated/corrupt profile is no
         # longer silently turned into {} -- load_json_with_fallback tries the
@@ -2100,6 +2165,10 @@ class MainWindow(QMainWindow):
         # past this method so no auto-save buries whatever is still on disk.
         # Only a deliberate "Save Profile" click writes from here on.
         unrecoverable = status == "empty" and profile_path.exists()
+        # Why the guard is on matters: `_profile_loading` is also True during
+        # a perfectly normal load, and only the unreadable-file case may
+        # snapshot and warn.
+        self._profile_unreadable = unrecoverable
         if unrecoverable:
             logger.error(
                 "Profile %s and its backup are both unreadable -- loaded as empty; "
@@ -2303,7 +2372,9 @@ class MainWindow(QMainWindow):
             self._profile_loading = unrecoverable
 
         if status == "bak":
-            self.show_toast("Profile restored from backup")
+            self.show_toast(tr(self.language, "profile_restored_from_backup"))
+        elif unrecoverable:
+            self._handle_unreadable_profile(profile_path)
 
         # Real, confirmed data-loss bug found + fixed (User-reported,
         # 2026-09-10, screenshot: a 122 KB profile got reduced to 23 KB just
@@ -2401,7 +2472,18 @@ class MainWindow(QMainWindow):
         # "Save Profile" click (explicit=True) is the user's way out.
         if self._profile_loading and not explicit:
             logger.debug("save_profile skipped: profile load in progress / profile file unreadable")
+            if self._profile_unreadable:
+                self._note_autosave_disabled()
             return
+
+        if explicit and self._profile_unreadable:
+            # The guard is on because the file on disk could not be parsed.
+            # This deliberate save is about to overwrite it, so preserve it
+            # first -- the user may still want to hand-repair the original.
+            from core.persistence import snapshot_corrupt
+
+            snapshot_corrupt(self.profile_dir / f"{self.profile_name}.json")
+            self._profile_unreadable = False
 
         # "Default"/"Default_de"/"Default_ru" are the language-picker starter
         # templates (see _is_lang_default), not a real ongoing profile --
@@ -2504,6 +2586,30 @@ class MainWindow(QMainWindow):
             self.show_toast(tr(self.language, "profile_saved"))
 
     def _resolve_profile_dir(self) -> Path:
+        """Where this installation keeps its profiles, in strict precedence:
+
+        1. ``config.json``'s ``profile_dir``, when that path still exists --
+           the user's explicit choice always wins.
+        2. Running from source: ``<repo>/profiles`` when present. That folder
+           *is* the developer's profile directory; nothing to opt into.
+        3. Frozen: ``<install>/profiles`` when it already holds ``*.json``
+           (an existing install, including every portable one that predates
+           the marker -- their profiles must not appear to vanish just
+           because a stored absolute path stopped resolving), OR when
+           ``portable.txt`` sits next to the executable (the documented way
+           to CREATE a new portable installation).
+        4. Otherwise the per-user data directory
+           (``%APPDATA%\\Aion2 TM\\Profiles`` on Windows).
+
+        The marker is looked up next to the EXECUTABLE (``paths.install_root()``
+        == ``self.project_root``), never under ``sys._MEIPASS``: for this
+        onedir build that is ``<install>/_internal``, a directory the user
+        never sees and where the documentation never tells them to put it.
+        A bare empty ``profiles/`` folder is deliberately not enough to flip a
+        frozen install into portable mode -- a system-wide install must never
+        write next to its own read-only files, and an installer that happened
+        to create the folder would silently redirect every fresh install.
+        """
         # 1. User hat explizit einen Pfad gesetzt → immer bevorzugen
         if self.app_config_path.exists():
             try:
@@ -2521,21 +2627,17 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        # 2. Portable mode: profiles/ next to the app.
-        #    From source that folder IS the dev profile dir -- always honour it.
-        #    Frozen, the bare existence of the folder is not enough: a system-wide
-        #    install (/opt, /usr/lib, Program Files) must never write next to its
-        #    own read-only files, and an installer that happens to create the
-        #    folder would silently flip every fresh install to portable mode.
-        #    An explicit portable.txt marker next to the executable opts in.
+        # 2./3. profiles/ next to the app (see the docstring above).
         local_dir = self.project_root / "profiles"
         frozen = getattr(sys, "frozen", False)
-        if not frozen and local_dir.exists():
-            return local_dir
-        if frozen and paths.is_portable(paths.app_root()):
-            return local_dir
+        if not frozen:
+            if local_dir.exists():
+                return local_dir
+        else:
+            if any(local_dir.glob("*.json")) or paths.is_portable(paths.install_root()):
+                return local_dir
 
-        # 3. Neue Installation → per-user data dir
+        # 4. Neue Installation → per-user data dir
         return paths.default_profiles_dir()
 
     def _save_app_config(self):
@@ -4103,15 +4205,18 @@ class MainWindow(QMainWindow):
         self._checker.up_to_date.connect(lambda: None)
         self._checker.start()
 
-    def _on_update_available(self, version: str, body: str, asset_url: str):
-        self._pending_update = (version, body, asset_url)
+    def _on_update_available(self, version: str, body: str, asset_url: str, sha256_url: str = ""):
+        # sha256_url is "" when the release published no checksum sidecar --
+        # the installer needs that distinction (core.update_checker.
+        # decide_checksum_policy), so it travels with the rest.
+        self._pending_update = (version, body, asset_url, sha256_url)
         if hasattr(self.header, "show_update"):
             self.header.show_update(version)
 
     def _open_update_dialog(self):
         if not self._pending_update:
             return
-        version, body, asset_url = self._pending_update
+        version, body, asset_url, sha256_url = self._pending_update
 
         if sys.platform != "win32":
             # UpdateDialog installs in place through a Windows .bat +
@@ -4133,7 +4238,7 @@ class MainWindow(QMainWindow):
             return
 
         app_root = self.project_root
-        dlg = UpdateDialog(version, body, asset_url, app_root, parent=self)
+        dlg = UpdateDialog(version, body, asset_url, app_root, sha256_url, parent=self)
         dlg.exec()
 
     def _on_avatar_changed(self, b64: str):

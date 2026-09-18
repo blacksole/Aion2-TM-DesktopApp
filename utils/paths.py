@@ -105,6 +105,25 @@ def app_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def install_root() -> Path:
+    """Directory the application is INSTALLED in -- where the executable sits.
+
+    Deliberately NOT the same as :func:`app_root`. For the PyInstaller onedir
+    build this project ships, ``sys._MEIPASS`` points at ``<install>/_internal``
+    while the executable lives in ``<install>``. Everything the USER is told to
+    put "next to the app" is addressed from here -- the ``portable.txt`` marker
+    and the ``profiles/`` folder it unlocks -- whereas read-only bundled payload
+    (data files, default profiles) is addressed from :func:`app_root`.
+
+    Not ``resolve()``d: it must stay byte-identical to
+    ``MainWindow.project_root`` (``Path(sys.executable).parent``), which is what
+    builds the ``profiles/`` path the marker unlocks.
+    """
+    if is_frozen():
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parents[1]
+
+
 def user_data_dir(platform: str | None = None, env: Mapping[str, str] | None = None) -> Path:
     """Per-user writable data directory.
 
@@ -177,12 +196,11 @@ def portable_marker(root: Path) -> Path:
 def is_portable(root: Path) -> bool:
     """True when ``root`` carries the portable sentinel file.
 
-    Intended replacement for the current "a folder named ``profiles/`` exists
-    next to the exe" heuristic (``ui/main_window.py:2517-2519``), which misfires
-    for a system-wide install (read-only program directory) and forced the
-    ``.spec`` to bundle the shipped defaults under ``default_profiles/`` to
-    avoid tripping it. The heuristic itself is untouched for now; this is the
-    API the call-site migration will switch to.
+    Pass :func:`install_root` (not :func:`app_root`): the marker belongs next
+    to the executable, in the same directory as the ``profiles/`` folder it
+    unlocks. Looking for it under ``sys._MEIPASS`` would search
+    ``<install>/_internal`` and never find a marker the user placed where the
+    documentation tells them to.
     """
     try:
         return portable_marker(root).is_file()

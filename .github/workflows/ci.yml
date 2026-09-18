@@ -56,12 +56,9 @@ jobs:
   smoke-import:
     name: Smoke import (ui.main_window)
     runs-on: ubuntu-latest
-    # EXPECTED TO FAIL TODAY: ui/main_window.py still does a top-level
-    # `import winsound`, which is Windows-only, so the module cannot be
-    # imported on Linux at all. Kept visible (and non-blocking) as the
-    # tracking signal for the Phase 1 cross-platform sound work.
-    # Flips to required once Phase 1 lands.
-    continue-on-error: true
+    # Required gate: importing the UI on Linux is the whole point of Phase 1
+    # (the top-level `import winsound` is gone, core/sound.py dispatches by
+    # platform). If this job fails, the Linux port is broken -- do not merge.
     env:
       QT_QPA_PLATFORM: offscreen
     steps:

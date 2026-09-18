@@ -176,9 +176,16 @@ def system_sound_dirs(platform: str | None = None, env: Mapping[str, str] | None
 
 
 def list_system_wavs(platform: str | None = None, env: Mapping[str, str] | None = None) -> list[Path]:
-    """Every .wav found in :func:`system_sound_dirs`, de-duplicated and sorted
-    by display name -- the cross-platform drop-in for ``get_windows_sounds()``
-    and ``SettingsPage._populate_sound_combo``'s hardcoded glob."""
+    """Every .wav found in :func:`system_sound_dirs`, de-duplicated -- the
+    cross-platform drop-in for ``get_windows_sounds()`` and
+    ``SettingsPage._populate_sound_combo``'s hardcoded glob.
+
+    Sorted by full path, case-sensitively, which is exactly what the
+    ``sorted(glob.glob(r"C:\\Windows\\Media\\*.wav"))`` it replaces produced:
+    on Windows that puts ``Ring01`` before ``chimes`` (uppercase first), and
+    the notification-sound combo keeps the order users know. A case-insensitive
+    sort would read better but would silently reorder the Windows picker.
+    """
     seen: set[str] = set()
     found: list[Path] = []
     for directory in system_sound_dirs(platform, env):
@@ -196,4 +203,4 @@ def list_system_wavs(platform: str | None = None, env: Mapping[str, str] | None 
                 continue
             seen.add(key)
             found.append(wav)
-    return sorted(found, key=lambda w: (w.stem.lower(), str(w)))
+    return sorted(found, key=str)

@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 
 from core.app_logger import get_logger
 from core.update_checker import (
-    parse_sha256_sidecar, safe_extract, sha256_sidecar_url, verify_sha256,
+    decide_checksum_policy, parse_sha256_sidecar, safe_extract, verify_sha256,
 )
 from core.version import GITHUB_USER, GITHUB_REPO
 
@@ -61,11 +61,14 @@ class _InstallerThread(QThread):
     finished = Signal()
     failed = Signal(str)
 
-    def __init__(self, version: str, asset_url: str, app_root: Path, parent=None):
+    def __init__(self, version: str, asset_url: str, app_root: Path, sha256_url: str = "", parent=None):
         super().__init__(parent)
         self.version = version
         self.asset_url = asset_url
         self.app_root = app_root
+        # "" means the release published no checksum sidecar (see
+        # decide_checksum_policy) -- NOT that we failed to fetch one.
+        self.sha256_url = sha256_url
         self.bat_path: Path | None = None
 
     def run(self):
@@ -106,8 +109,27 @@ class _InstallerThread(QThread):
             # user's installation. Releases predating the sidecar have none
             # -- those still install, with a warning in app.log.
             self.status.emit("Download prüfen...")
-            expected = self._fetch_expected_sha256(download_url)
-            if expected:
+            sidecar_url = self.sha256_url
+            expected = self._fetch_expected_sha256(sidecar_url) if sidecar_url else ""
+            policy = decide_checksum_policy(sidecar_url, expected)
+
+            if policy == "abort":
+                # The release publishes a checksum; we could not read it. A
+                # network failure and a tampered mirror look identical from
+                # here, and the next step overwrites the user's install.
+                zip_path.unlink(missing_ok=True)
+                logger.error(
+                    "Checksum sidecar %s published but unreadable -- update aborted", sidecar_url
+                )
+                self.failed.emit(
+                    "Die Prüfsumme des Downloads konnte nicht geladen werden.\n"
+                    "Das Update wurde aus Sicherheitsgründen abgebrochen und die "
+                    "Datei gelöscht.\n"
+                    "Bitte später erneut versuchen."
+                )
+                return
+
+            if policy == "verify":
                 if not verify_sha256(zip_path, expected):
                     zip_path.unlink(missing_ok=True)
                     logger.error("SHA-256 mismatch for %s -- download deleted", download_url)
@@ -120,7 +142,8 @@ class _InstallerThread(QThread):
                 logger.info("Update archive SHA-256 verified: %s", download_url)
             else:
                 logger.warning(
-                    "No usable SHA-256 sidecar for %s -- installing unverified", download_url
+                    "Release published no SHA-256 sidecar for %s -- installing unverified",
+                    download_url,
                 )
 
             self.status.emit("Entpacken...")
@@ -162,11 +185,10 @@ class _InstallerThread(QThread):
         except Exception as e:
             self.failed.emit(str(e))
 
-    def _fetch_expected_sha256(self, download_url: str) -> str:
-        """Digest published alongside the asset, or "" when the release has
-        no (usable) sidecar -- backward compatibility with releases built
-        before the checksum step existed."""
-        sidecar_url = sha256_sidecar_url(download_url)
+    def _fetch_expected_sha256(self, sidecar_url: str) -> str:
+        """Digest published at ``sidecar_url``, or "" when it could not be
+        fetched or parsed. The CALLER decides what "" means -- see
+        decide_checksum_policy."""
         if not sidecar_url:
             return ""
         try:
@@ -197,11 +219,13 @@ class _InstallerThread(QThread):
 
 
 class UpdateDialog(QDialog):
-    def __init__(self, version: str, body: str, asset_url: str, app_root: Path, parent=None):
+    def __init__(self, version: str, body: str, asset_url: str, app_root: Path,
+                 sha256_url: str = "", parent=None):
         super().__init__(parent)
         self.version = version
         self.asset_url = asset_url
         self.app_root = app_root
+        self.sha256_url = sha256_url
         self._thread = None
         self._setup_ui(body)
 
@@ -268,11 +292,18 @@ class UpdateDialog(QDialog):
         self.status_label.show()
         self.status_label.setText("Vorbereitung...")
 
-        self._thread = _InstallerThread(self.version, self.asset_url, self.app_root, parent=self)
+        self._thread = self._build_installer_thread()
         self._thread.status.connect(self.status_label.setText)
         self._thread.finished.connect(self._on_done)
         self._thread.failed.connect(self._on_failed)
         self._thread.start()
+
+    def _build_installer_thread(self) -> _InstallerThread:
+        """The installer thread, fully wired. Split from _start_install so the
+        checksum plumbing can be asserted without starting a download."""
+        return _InstallerThread(
+            self.version, self.asset_url, self.app_root, self.sha256_url, parent=self
+        )
 
     def _on_done(self):
         self.status_label.setText("Fertig! App wird beim Neustart aktualisiert.")

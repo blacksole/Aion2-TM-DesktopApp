@@ -12,6 +12,19 @@ TRANSLATIONS = {
         "load_profile": "Profil laden ▾",
         "reset_profile": "Profil zurücksetzen",
         "profile_saved": "Profil gespeichert",
+        "profile_restored_from_backup": "Profil aus der Sicherungskopie wiederhergestellt",
+        "profile_unreadable_title": "Profil nicht lesbar",
+        "profile_unreadable_text": (
+            "Die Profildatei konnte nicht gelesen werden:\n{file}\n\n"
+            "Auch die Sicherungskopie ist unbrauchbar. Das automatische "
+            "Speichern ist für diese Sitzung ausgeschaltet, damit die Datei "
+            "auf der Festplatte nicht überschrieben wird.\n\n"
+            "Trotzdem speichern legt vorher eine Kopie der defekten Datei an."
+        ),
+        "profile_unreadable_overwrite": "Trotzdem speichern (überschreibt)",
+        "profile_unreadable_keep": "Datei behalten",
+        "profile_unreadable_snapshot": "Defekte Datei gesichert als {file}",
+        "profile_autosave_disabled": "Automatisches Speichern ist aus — Profil nicht lesbar",
         "profile": "Profil",
         "profile_subtitle": "Profile verwalten und speichern",
 
@@ -910,6 +923,18 @@ TRANSLATIONS = {
         "load_profile": "Загрузить профиль ▾",
         "reset_profile": "Сбросить профиль",
         "profile_saved": "Профиль сохранён",
+        "profile_restored_from_backup": "Профиль восстановлен из резервной копии",
+        "profile_unreadable_title": "Профиль не читается",
+        "profile_unreadable_text": (
+            "Не удалось прочитать файл профиля:\n{file}\n\n"
+            "Резервная копия тоже непригодна. Автосохранение отключено на эту "
+            "сессию, чтобы файл на диске не был перезаписан.\n\n"
+            "«Всё равно сохранить» сначала создаст копию повреждённого файла."
+        ),
+        "profile_unreadable_overwrite": "Всё равно сохранить (перезаписать)",
+        "profile_unreadable_keep": "Оставить файл",
+        "profile_unreadable_snapshot": "Повреждённый файл сохранён как {file}",
+        "profile_autosave_disabled": "Автосохранение отключено — профиль не читается",
         "profile": "Профиль",
         "profile_subtitle": "Управление и сохранение профилей",
 
@@ -1806,6 +1831,18 @@ TRANSLATIONS = {
         "load_profile": "Load Profile ▾",
         "reset_profile": "Reset Profile",
         "profile_saved": "Profile saved",
+        "profile_restored_from_backup": "Profile restored from backup",
+        "profile_unreadable_title": "Profile unreadable",
+        "profile_unreadable_text": (
+            "This profile file could not be read:\n{file}\n\n"
+            "Its backup copy is unusable too. Auto-save is switched off for "
+            "this session so the file on disk is not overwritten.\n\n"
+            "Save anyway first copies the damaged file aside."
+        ),
+        "profile_unreadable_overwrite": "Save anyway (overwrites)",
+        "profile_unreadable_keep": "Keep the file",
+        "profile_unreadable_snapshot": "Damaged file kept as {file}",
+        "profile_autosave_disabled": "Auto-save is off — profile unreadable",
         "profile": "Profile",
         "profile_subtitle": "Manage and save profiles",
 

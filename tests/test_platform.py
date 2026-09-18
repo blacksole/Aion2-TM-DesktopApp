@@ -153,7 +153,26 @@ def test_system_sound_dirs_macos():
     assert sound.system_sound_dirs("darwin", MAC_ENV) in ([Path("/System/Library/Sounds")], [])
 
 
-def test_list_system_wavs_globs_dedupes_and_sorts(tmp_path, monkeypatch):
+def test_list_system_wavs_keeps_the_windows_glob_order(tmp_path, monkeypatch):
+    # A representative C:\Windows\Media listing: the old call site was
+    # sorted(glob.glob(...)), i.e. case-SENSITIVE on the full path, so every
+    # capitalized name sorts before every lowercase one. Locking that exact
+    # order is the point of this test -- a case-insensitive sort passes a
+    # test built only from same-case names, and silently reorders the picker.
+    media = tmp_path / "Media"
+    media.mkdir()
+    for name in ("Alarm01.wav", "Ring01.wav", "Windows Background.wav",
+                 "chimes.wav", "notify.wav", "tada.wav", "readme.txt"):
+        (media / name).write_bytes(b"")
+
+    monkeypatch.setattr(sound, "system_sound_dirs", lambda *a, **k: [media])
+
+    assert [w.stem for w in sound.list_system_wavs()] == [
+        "Alarm01", "Ring01", "Windows Background", "chimes", "notify", "tada",
+    ]
+
+
+def test_list_system_wavs_globs_dedupes_across_dirs(tmp_path, monkeypatch):
     first = tmp_path / "one"
     second = tmp_path / "two"
     first.mkdir()
@@ -166,7 +185,7 @@ def test_list_system_wavs_globs_dedupes_and_sorts(tmp_path, monkeypatch):
     monkeypatch.setattr(sound, "system_sound_dirs", lambda *a, **k: [first, second, first])
 
     found = sound.list_system_wavs()
-    assert [w.stem for w in found] == ["alpha", "Mid", "Zeta"]
+    assert [w.stem for w in found] == ["Zeta", "alpha", "Mid"]
     assert len(found) == len(set(map(str, found)))
 
 
@@ -369,13 +388,22 @@ def test_picker_leads_with_browse_when_no_system_wavs(picker, monkeypatch):
 
 def test_picker_keeps_the_windows_order_and_trails_browse(picker, monkeypatch, tmp_path):
     # With system sounds present (Windows), the list must read exactly as it
-    # always did -- sentinel, then the sorted sounds -- with Browse appended.
+    # always did -- sentinel, then the sounds in list_system_wavs() order --
+    # with Browse appended. Mixed case on purpose: with same-case names this
+    # test cannot tell a case-sensitive sort from a case-insensitive one.
     from ui.pages import settings_page as sp
 
-    wavs = [tmp_path / "Alarm.wav", tmp_path / "Chime.wav"]
-    monkeypatch.setattr(sp, "list_system_wavs", lambda *a, **k: wavs)
+    media = tmp_path / "Media"
+    media.mkdir()
+    for name in ("Alarm01.wav", "Ring01.wav", "chimes.wav", "tada.wav"):
+        (media / name).write_bytes(b"")
+    monkeypatch.setattr(sound, "system_sound_dirs", lambda *a, **k: [media])
+    monkeypatch.setattr(sp, "list_system_wavs", sound.list_system_wavs)
+
     sp.populate_sound_combo(picker)
-    assert [text for text, _ in _rows(picker)] == ["-- No Sound --", "Alarm", "Chime", "Browse..."]
+    assert [text for text, _ in _rows(picker)] == [
+        "-- No Sound --", "Alarm01", "Ring01", "chimes", "tada", "Browse...",
+    ]
 
 
 def test_picker_keeps_an_unknown_saved_path_selected(picker, monkeypatch):

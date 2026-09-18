@@ -111,6 +111,32 @@ def safe_extract(zip_path, target_dir) -> None:
         zf.extractall(target)
 
 
+def decide_checksum_policy(sidecar_url: str | None, fetched: str | None) -> str:
+    """What to do with a downloaded update, given what we know about its checksum.
+
+    Three genuinely different situations that the old code collapsed into one
+    ("no digest in hand -> install anyway"):
+
+    * ``"skip"``   -- the release published no ``.sha256`` asset at all. Every
+      release before the checksum step is like this, so refusing them would
+      brick the updater for anyone still on an old version. Install, and say
+      so in the log.
+    * ``"abort"``  -- the release DOES publish a sidecar, but we could not read
+      it (404, timeout, captive portal, proxy, truncated body). We cannot tell
+      a network failure from tampering, and we are about to overwrite the
+      user's installation: refuse.
+    * ``"verify"`` -- we have the published digest; compare it.
+
+    The distinction is only possible because the checker sees the release's
+    asset LIST; the installer thread, which only sees a URL, cannot make it.
+    """
+    if not sidecar_url:
+        return "skip"
+    if not fetched:
+        return "abort"
+    return "verify"
+
+
 def select_assets(assets: list) -> tuple[str, str]:
     """Pick (download_url, sha256_url) out of a release's asset list.
 
@@ -139,7 +165,7 @@ def select_assets(assets: list) -> tuple[str, str]:
 
 
 class UpdateChecker(QThread):
-    update_available = Signal(str, str, str)  # (version, body, asset_url)
+    update_available = Signal(str, str, str, str)  # (version, body, asset_url, sha256_url)
     up_to_date = Signal()
 
     def __init__(self, include_prereleases: bool = False, parent=None):
@@ -150,11 +176,12 @@ class UpdateChecker(QThread):
         # /releases (the full list, newest first) instead, so someone can
         # explicitly go looking for the newest test build when they want to.
         self.include_prereleases = include_prereleases
-        # Checksum sidecar of the asset the last run picked, when the release
-        # published one. Kept as an attribute rather than added to
-        # `update_available` so the signal's three-string signature (and all
-        # of its consumers) stays exactly as it was; the installer thread
-        # derives the same URL via sha256_sidecar_url().
+        # Checksum sidecar of the asset the last run picked, or "" when the
+        # release published none. Also emitted with `update_available`: the
+        # installer thread cannot re-derive the DIFFERENCE between "no sidecar
+        # was published" and "the sidecar could not be fetched" from a URL
+        # alone, and that difference decides whether a failed fetch installs
+        # or aborts (see decide_checksum_policy).
         self.sha256_url = ""
 
     def run(self):
@@ -182,9 +209,9 @@ class UpdateChecker(QThread):
                 # nicht zuverlässig vergleichen, und wer aktiv nach einer
                 # Testversion sucht, will sie sehen, nicht stillschweigend
                 # per Versionsvergleich übersprungen bekommen.
-                self.update_available.emit(tag, body, asset_url)
+                self.update_available.emit(tag, body, asset_url, self.sha256_url)
             elif self._is_newer(tag, APP_VERSION):
-                self.update_available.emit(tag, body, asset_url)
+                self.update_available.emit(tag, body, asset_url, self.sha256_url)
             else:
                 self.up_to_date.emit()
         except Exception:

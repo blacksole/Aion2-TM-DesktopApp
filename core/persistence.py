@@ -25,6 +25,7 @@ Two failure modes from the audit (docs/audit-2026-09-18/A-core-architecture.md
 import json
 import os
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from core.app_logger import get_logger
@@ -142,6 +143,33 @@ def load_json_with_fallback(path) -> tuple[dict, str]:
         logger.debug("No file at %s (and no backup) -- starting empty", path)
 
     return {}, "empty"
+
+
+def snapshot_corrupt(path) -> Path | None:
+    """Copy an unreadable profile aside as ``<name>.json.corrupt-<YYYYmmdd-HHMMSS>``.
+
+    Called before anything deliberately overwrites a file that could not be
+    parsed (neither it nor its ``.bak``), so a manual rescue -- a missing
+    closing brace, a truncated tail -- stays possible after the user chooses
+    to carry on. Copies rather than renames: the profile the app is about to
+    write must keep its own name, and a rename would briefly leave none.
+
+    Returns the snapshot path, or None when there was nothing to copy or the
+    copy failed (never raises: this runs on the way to saving the user's work,
+    and must not be what stops it).
+    """
+    path = Path(path)
+    try:
+        if not path.is_file():
+            return None
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target = path.with_name(f"{path.name}.corrupt-{stamp}")
+        shutil.copy2(path, target)
+        logger.warning("Unreadable profile %s copied aside to %s", path, target)
+        return target
+    except OSError as exc:
+        logger.error("Could not snapshot the unreadable profile %s: %s", path, exc)
+        return None
 
 
 def stamp_schema(data: dict) -> dict:

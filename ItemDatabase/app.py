@@ -10,6 +10,7 @@ import html
 import json
 import math
 import re
+import shutil
 import sys
 from collections import deque
 from pathlib import Path
@@ -247,21 +248,35 @@ def _cache_root() -> Path:
 def _migrate_legacy_cache(new_root: Path) -> None:
     """One-off move of a pre-XDG cache sitting next to the executable.
 
-    Only runs when the new location has no icons yet, so it can never
-    overwrite a live cache; a failure is silent because everything in here is
-    re-downloadable.
+    Per subdirectory, and only when the new location does not have it yet, so
+    a live cache is never overwritten, a partial move self-heals on the next
+    launch, and a second launch is a no-op. Never runs from source (the
+    legacy and new roots are then the same path).
+
+    Path.replace() is os.rename: same-volume only. The frozen Windows case is
+    exactly the cross-volume one -- the app installed on a data drive, the cache
+    going to %LOCALAPPDATA% on the system drive -- where rename raises EXDEV /
+    ERROR_NOT_SAME_DEVICE. shutil.move() copies and unlinks in that case, so
+    the fast path stays a rename and the slow path still works. A failure is
+    logged at warning (a silently orphaned ~278 MB of icons, re-downloaded
+    from scratch, is worth a line someone can actually see).
     """
     legacy = BASE_DIR / "data"
     if legacy == new_root or not legacy.is_dir():
         return
-    try:
-        for name in ("icons", "details"):
-            source, target = legacy / name, new_root / name
-            if source.is_dir() and not target.exists():
+    for name in ("icons", "details"):
+        source, target = legacy / name, new_root / name
+        if not source.is_dir() or target.exists():
+            continue
+        try:
+            try:
                 source.replace(target)
-                logger.info("Moved cached %s to %s", name, target)
-    except OSError as exc:
-        logger.debug("Could not migrate the legacy cache: %s", exc)
+            except OSError:
+                # Different volumes (or a Windows share): copy + unlink.
+                shutil.move(str(source), str(target))
+            logger.info("Moved cached %s to %s", name, target)
+        except OSError as exc:
+            logger.warning("Could not migrate the cached %s to %s: %s", name, target, exc)
 
 
 CACHE_ROOT = _cache_root()
