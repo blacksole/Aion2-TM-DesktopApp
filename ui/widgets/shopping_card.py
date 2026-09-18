@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -94,6 +95,9 @@ class ShoppingCard(QFrame):
         self.price_display = self.format_price(price, currency)
 
         self.setObjectName("taskCard")
+        # Keyboard reachability (UX audit 2026-09-18, C1) -- mirrors
+        # TaskCard. No focus styling here; the QSS is a separate pass.
+        self.setFocusPolicy(Qt.StrongFocus)
 
         # Layout rebuilt to match TaskCard's own arrangement (User-Wunsch,
         # 2026-09-09: "das Layout von Shopping ... so anpassen, dass es

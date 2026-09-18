@@ -6,6 +6,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, QRect, Qt
 from PySide6.QtGui import QIntValidator, QPainter, QColor, QLinearGradient, QBrush, QActionGroup
 
+from ui.widgets.empty_state import EmptyStateWidget
+
 class TaskProgressBar(QFrame):
     def __init__(self):
         super().__init__()
@@ -160,6 +162,7 @@ class TasksPage(QWidget):
         self.active_sort = "priority"
         self.sort_direction = "desc"
         self._show_events = True
+        self._rendered_count = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -276,9 +279,34 @@ class TasksPage(QWidget):
         add_panel = QFrame()
         add_panel.setObjectName("addPanel")
 
-        add_layout = QHBoxLayout(add_panel)
-        add_layout.setContentsMargins(18, 18, 18, 18)
+        # UX audit 2026-09-18, M1: this used to be ONE QHBoxLayout, whose
+        # combined minimum (880px in EN, 931px in DE) was the single widest
+        # thing on the page and forced the whole window's minimum width.
+        # It is now two stacked rows: everything lives in the first one at
+        # normal widths (pixel-identical to before), and the tail --
+        # template / character / amount / Add -- drops to the second row
+        # once one line no longer fits. See _update_add_row_wrap().
+        add_panel_layout = QVBoxLayout(add_panel)
+        add_panel_layout.setContentsMargins(18, 18, 18, 18)
+        add_panel_layout.setSpacing(10)
+
+        self._add_row_1 = QWidget()
+        add_layout = QHBoxLayout(self._add_row_1)
+        add_layout.setContentsMargins(0, 0, 0, 0)
         add_layout.setSpacing(12)
+
+        self._add_row_2 = QWidget()
+        add_row_2_layout = QHBoxLayout(self._add_row_2)
+        add_row_2_layout.setContentsMargins(0, 0, 0, 0)
+        add_row_2_layout.setSpacing(12)
+        self._add_row_2.setVisible(False)
+
+        add_panel_layout.addWidget(self._add_row_1)
+        add_panel_layout.addWidget(self._add_row_2)
+
+        self._add_row_primary = add_layout
+        self._add_row_secondary = add_row_2_layout
+        self._add_row_wrapped = False
 
         self.title_input = QLineEdit()
         self.title_input.setPlaceholderText(self.tr(self.language, "title"))
@@ -330,7 +358,13 @@ class TasksPage(QWidget):
         self.amount_input = QLineEdit()
         self.amount_input.setValidator(QIntValidator(0, 999999))
         self.amount_input.setPlaceholderText(self.tr(self.language, "amount"))
-        self.amount_input.setMaximumWidth(80)
+        # UX audit 2026-09-18, M1: an 80px hard cap elided the placeholder
+        # to "Amo…" at 1280px in EN already (DE "Anzahl"/RU
+        # "Количество" are longer still). Keep it a narrow field --
+        # it only ever holds up to 6 digits -- but never narrower than its
+        # own placeholder.
+        self.amount_input.setMinimumWidth(92)
+        self.amount_input.setMaximumWidth(130)
 
         # Template selector — replaces free-text title in shopping / tasks mode
         self._templates: list[dict] = []
@@ -365,6 +399,13 @@ class TasksPage(QWidget):
         self.char_input = QComboBox()
         self.char_input.setObjectName("priorityInput")
         self.char_input.setMinimumWidth(110)
+        # UX audit 2026-09-18, M1: rendered "No charac…" at 1280px. The
+        # widest entry this combo ever shows is its own "unassigned" row
+        # ("No character" / "Kein Charakter" / "Без персонажа"), so size to
+        # that and let a long character name grow the box instead of
+        # eliding it.
+        self.char_input.setMinimumContentsLength(14)
+        self.char_input.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         # Real bug found + fixed (GitHub issue #2, 2026-09-04: the "leer"
         # placeholder was untranslated German even in English, and relying
         # on setPlaceholderText()+currentIndex(-1) instead of a real,
@@ -437,6 +478,16 @@ class TasksPage(QWidget):
         self.schedule_season_btn.hide()
 
         add_layout.addWidget(self.add_btn)
+
+        # (widget, stretch) in the order they must reappear -- moved as a
+        # block between the two rows by _update_add_row_wrap().
+        self._add_row_tail = [
+            (self.template_combo, 3),
+            (self.no_templates_hint, 0),
+            (self.char_input, 2),
+            (self.amount_input, 0),
+            (self.add_btn, 0),
+        ]
 
         # Tight spacing here (unlike the page's own 22px section spacing)
         # so the source tabs sit visually flush on top of add_panel, like a
@@ -605,10 +656,72 @@ class TasksPage(QWidget):
 
         scroll.setWidget(self.list_container)
 
+        self._list_scroll = scroll
         layout.addWidget(scroll, 1)
+
+        # UX audit 2026-09-18, M2: a Tasks/Shopping tab with zero cards used
+        # to render as a bare void. The placeholder replaces the (equally
+        # empty) scroll area rather than sitting under it, so it can center
+        # itself over the full remaining height.
+        self.empty_state = EmptyStateWidget()
+        layout.addWidget(self.empty_state, 1)
 
         self.update_input_mode()
 
+
+    # add_panel's own left+right content margins, subtracted from the page
+    # width to get what the add-row actually has to lay out in.
+    _ADD_PANEL_CHROME = 36
+    # Slack the row must regain before it un-wraps, so a width that lands
+    # exactly on the one-line minimum cannot oscillate between the two
+    # states on consecutive resize events.
+    _ADD_ROW_WRAP_HYSTERESIS = 24
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_add_row_wrap()
+
+    def _update_add_row_wrap(self):
+        """Moves template/character/amount/Add between the add-panel's two
+        rows (UX audit 2026-09-18, M1).
+
+        The threshold is measured, not hardcoded: the width one line would
+        need is the primary row's minimum plus -- while already wrapped --
+        the secondary row's. That keeps it correct per language (DE/RU run
+        20-35% wider) and per tab, since update_input_mode() hides a
+        different set of controls on each.
+        """
+        available = self.width() - self._ADD_PANEL_CHROME
+        one_line_needs = self._add_row_primary.minimumSize().width()
+        if self._add_row_wrapped:
+            one_line_needs += (
+                self._add_row_primary.spacing()
+                + self._add_row_secondary.minimumSize().width()
+            )
+            wrapped = available < one_line_needs + self._ADD_ROW_WRAP_HYSTERESIS
+        else:
+            wrapped = available < one_line_needs
+
+        if wrapped == self._add_row_wrapped:
+            return
+        self._add_row_wrapped = wrapped
+
+        if wrapped:
+            src, dst = self._add_row_primary, self._add_row_secondary
+        else:
+            src, dst = self._add_row_secondary, self._add_row_primary
+
+        for widget, stretch in self._add_row_tail:
+            # addWidget() reparents, and Qt hides a reparented widget --
+            # so each one's own explicit hidden/shown state (set by
+            # update_input_mode() for this tab and template source) has to
+            # be carried across by hand.
+            was_hidden = widget.isHidden()
+            src.removeWidget(widget)
+            dst.addWidget(widget, stretch)
+            widget.setVisible(not was_hidden)
+
+        self._add_row_2.setVisible(wrapped)
 
     def set_active_tab(self, tab_key: str):
         self.active_tab = tab_key
@@ -706,6 +819,9 @@ class TasksPage(QWidget):
         # Template/Character buttons for both shopping and tasks
         self._template_btn.setVisible(is_template_mode)
         self._character_btn.setVisible(is_template_mode)
+
+        # This just changed how wide one line would have to be.
+        self._update_add_row_wrap()
 
     def set_reset_hint(self, prefix: str, countdown: str, visible: bool):
         if visible:
@@ -813,6 +929,14 @@ class TasksPage(QWidget):
 
         self._update_char_filter_btn_label()
 
+        # Re-pins the character combo's minimum width to the new locale's
+        # "unassigned" label (see _rebuild_char_input) -- and translates
+        # that row, which a plain text refresh cannot do since it is a
+        # combo item, not a placeholder.
+        self._rebuild_char_input(
+            self._known_characters, select_data=self.char_input.currentData()
+        )
+
         self.event_input.setText(
             self.tr(self.language, "filter_by_events")
         )
@@ -829,6 +953,11 @@ class TasksPage(QWidget):
         self._manual_reset_btn.setToolTip(self.tr(self.language, "manual_reset_tooltip"))
 
         self.progress_bar.update_language(language, self.tr)
+
+        # isHidden(), not isVisible(): the page is a descendant of a
+        # MainWindow that may not be shown yet when the language is applied.
+        if not self.empty_state.isHidden():
+            self._retranslate_empty_state()
 
     def update_stats(self, total: int, done: int, open_count: int, missed_count: int = 0):
         self.progress_bar.update_stats(total, done, open_count, missed_count)
@@ -1043,6 +1172,18 @@ class TasksPage(QWidget):
         self.char_input.setCurrentIndex(idx if idx >= 0 else 0)
         self.char_input.blockSignals(False)
 
+        # UX audit 2026-09-18, M1: setMinimumContentsLength alone only
+        # feeds minimumSizeHint(), and QComboBox's default size policy
+        # carries the Shrink flag -- so the add-row happily squeezed this
+        # combo down to its explicit 110px minimum and Qt elided the label
+        # to "No charac...". Pinning the explicit minimum to that hint is
+        # what actually holds the width; re-done here rather than once in
+        # __init__ because the hint moves with the language ("No character"
+        # / "Kein Charakter" / "Bez personazha").
+        self.char_input.setMinimumWidth(
+            max(110, self.char_input.minimumSizeHint().width())
+        )
+
     def select_character(self, name: str):
         """Called by MainWindow right after a character was created via the
         Templates dialog's "Character" tab (GitHub issue #2: "automatically
@@ -1079,6 +1220,80 @@ class TasksPage(QWidget):
         for task in tasks:
             self.list_layout.insertWidget(self.list_layout.count() - 1, task)
             task.show()
+
+        self._rendered_count = len(tasks)
+        self.update_empty_state()
+
+    # ── Empty state (UX audit 2026-09-18, M2) ─────────────────────────────
+
+    def update_empty_state(self):
+        """Shows the placeholder whenever the ACTIVE tab rendered zero
+        cards, and swaps the (then pointless) scroll area out for it.
+
+        Public on purpose: ``render_tasks`` -- the one call MainWindow
+        already makes on every ``refresh()`` -- drives it automatically, so
+        MainWindow needs no change; any other owner that mutates the list
+        outside a refresh can call this directly.
+        """
+        is_empty = self._rendered_count == 0 and self.active_tab in ("tasks", "shopping")
+        if is_empty:
+            self._retranslate_empty_state()
+        self.empty_state.setVisible(is_empty)
+        self._list_scroll.setVisible(not is_empty)
+
+    def _retranslate_empty_state(self):
+        """Feeds the placeholder the copy for whichever tab is active.
+
+        The action is the one thing the user can actually do next: Shopping
+        entries only ever come from a template (the add-row is a picker, not
+        a free-text field), so its button opens the Templates dialog via the
+        page's existing ``template_requested`` signal; Tasks focuses its own
+        add-row picker instead -- unless there is no template to pick yet,
+        in which case it falls back to the same Templates dialog.
+        """
+        if self.active_tab == "shopping":
+            title_key, hint_key = "empty_shopping_title", "empty_shopping_hint"
+            action_label = self.tr(self.language, "templates_btn")
+            on_action = self.template_requested.emit
+        else:
+            title_key, hint_key = "empty_tasks_title", "empty_tasks_hint"
+            if self._add_row_target() is None:
+                # No template for this tab yet -- the add-row itself is
+                # inert (it only shows "No templates ..."), so the only
+                # move left is the same one Shopping offers.
+                action_label = self.tr(self.language, "templates_btn")
+                on_action = self.template_requested.emit
+            else:
+                action_label = self.tr(self.language, "add")
+                on_action = self._focus_add_row
+
+        # tr() falls back to the raw key for a key that does not exist yet
+        # (core.translations.tr: ``.get(key, key)``), which would print
+        # "empty_tasks_title" on screen -- so drop the hint and keep a
+        # neutral title until the keys land.
+        title = self.tr(self.language, title_key)
+        hint = self.tr(self.language, hint_key)
+        if title == title_key:
+            title = self.tr(self.language, "no_templates_hint")
+        if hint == hint_key:
+            hint = ""
+
+        self.empty_state.set_content(title, hint, action_label, on_action)
+
+    def _add_row_target(self):
+        """Where a new Tasks entry actually starts: the template picker in
+        template mode, the free-text title on the legacy tabs -- whichever
+        of the two update_input_mode() left on screen, or None when neither
+        is (which is the "no templates at all" state)."""
+        for candidate in (self.template_combo, self.title_input):
+            if not candidate.isHidden():
+                return candidate
+        return None
+
+    def _focus_add_row(self):
+        target = self._add_row_target()
+        if target is not None:
+            target.setFocus()
 
     def set_event_features_visible(self, visible: bool):
         self._show_events = visible

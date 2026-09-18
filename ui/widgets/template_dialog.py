@@ -183,11 +183,18 @@ class TemplateDialog(QDialog):
         self._shop_add_btn.clicked.connect(self._handle_shop_add_btn)
         header.addWidget(self._shop_source_tmpl_btn)
         header.addWidget(self._shop_source_std_btn)
-        header.addWidget(self._shop_info_label)
         header.addStretch()
         header.addWidget(self._shop_sync_btn)
         header.addWidget(self._shop_add_btn)
         vl.addLayout(header)
+
+        # UX audit 2026-09-18, M1: sitting inside the header row, this
+        # legend got squeezed between the source tabs and the "Add" button
+        # and rendered clipped ("☑ = quest appears automatically in the
+        # task…"). It reads as a caption for the list below anyway, so it
+        # gets its own full-width row under the controls.
+        self._shop_info_label.setWordWrap(True)
+        vl.addWidget(self._shop_info_label)
 
         self._shop_search_input = QLineEdit()
         self._shop_search_input.setObjectName("FlowInput")
@@ -259,11 +266,15 @@ class TemplateDialog(QDialog):
         self._task_add_btn.clicked.connect(self._handle_task_add_btn)
         header.addWidget(self._task_source_tmpl_btn)
         header.addWidget(self._task_source_std_btn)
-        header.addWidget(self._task_info_label)
         header.addStretch()
         header.addWidget(self._task_sync_btn)
         header.addWidget(self._task_add_btn)
         vl.addLayout(header)
+
+        # Own row under the controls -- see the Shopping tab's twin comment
+        # (UX audit 2026-09-18, M1: clipped by the Add Task button).
+        self._task_info_label.setWordWrap(True)
+        vl.addWidget(self._task_info_label)
 
         self._task_search_input = QLineEdit()
         self._task_search_input.setObjectName("FlowInput")

@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QWidget, QInputDialog,
 )
 from ui.custom_timer_dialog import CustomTimerDialog
+from ui.widgets.empty_state import EmptyStateWidget
 
 
 class CustomTimerManagerDialog(QDialog):
@@ -62,6 +63,12 @@ class CustomTimerManagerDialog(QDialog):
         self._custom_ct_layout.setContentsMargins(0, 0, 0, 0)
         self._custom_ct_layout.setSpacing(8)
         layout.addWidget(self._custom_ct_container)
+
+        # UX audit 2026-09-18, M2: with no timers configured this section
+        # showed nothing at all but the "＋" button in its header.
+        self._ct_empty_state = EmptyStateWidget()
+        layout.addWidget(self._ct_empty_state)
+
         self._rebuild_custom_timer_rows()
 
         # ── Buttons ───────────────────────────────────────────────────────
@@ -240,6 +247,26 @@ class CustomTimerManagerDialog(QDialog):
             self._custom_ct_layout.addWidget(row)
 
         self._add_ct_btn.setVisible(len(self._custom_timer_configs) < 8)
+        self._update_ct_empty_state()
+
+    def _update_ct_empty_state(self):
+        """Placeholder for the Timers section, gone as soon as one timer
+        exists. Falls back to a neutral title while the translation keys
+        are still missing -- core.translations.tr returns the raw key
+        itself for an unknown one, which would show as "empty_timers_title".
+        """
+        if self._custom_timer_configs:
+            self._ct_empty_state.setVisible(False)
+            return
+
+        title = self._tr(self._language, "empty_timers_title")
+        hint = self._tr(self._language, "empty_timers_hint")
+        if title == "empty_timers_title":
+            title = self._tr(self._language, "ct_manager_timer_section_title")
+        if hint == "empty_timers_hint":
+            hint = ""
+        self._ct_empty_state.set_content(title, hint)
+        self._ct_empty_state.setVisible(True)
 
     def _build_custom_timer_row(self, idx: int, cfg: dict) -> QFrame:
         row = QFrame()
