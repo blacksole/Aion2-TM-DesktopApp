@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import destroy_window
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QPushButton
 
 from core.translations import tr
 from ui.custom_timer_manager_dialog import CustomTimerManagerDialog
@@ -125,9 +125,11 @@ def page(qapp):
     p = TasksPage(TABS, "en", tr)
     p.show()
     yield p
-    p.close()
-    p.deleteLater()
-    QApplication.processEvents()
+    # ``close() + deleteLater() + processEvents()`` was not enough:
+    # processEvents does not flush the DeferredDelete queue, so every test
+    # using this function-scoped fixture left a whole page behind (~465
+    # widgets by the end of the module -- see the census in conftest).
+    destroy_window(p)
 
 
 def test_page_starts_with_the_list_visible_and_no_placeholder(page):
@@ -257,7 +259,7 @@ def unshown_page(qapp):
     p.update_characters(["QA Char"])
     p.set_active_tab("tasks")
     yield p
-    p.close()
+    destroy_window(p)
 
 
 def test_add_row_wraps_to_a_second_line_when_narrow(unshown_page):
@@ -325,34 +327,48 @@ def test_timer_manager_shows_the_placeholder_with_no_timers(qapp):
     # in QApplication's stack breaks the focus-sensitive tests elsewhere in
     # the suite. isHidden() is the flag under test and needs no window.
     dlg = CustomTimerManagerDialog([], [], language="en", tr_func=tr)
-    assert not dlg._ct_empty_state.isHidden()
-    assert dlg._ct_empty_state.title_label.text() == tr("en", "empty_timers_title")
-    assert dlg._ct_empty_state.hint_label.text() == tr("en", "empty_timers_hint")
+    try:
+        assert not dlg._ct_empty_state.isHidden()
+        assert dlg._ct_empty_state.title_label.text() == tr("en", "empty_timers_title")
+        assert dlg._ct_empty_state.hint_label.text() == tr("en", "empty_timers_hint")
+    finally:
+        # A dialog nobody frees is ~45 widgets that every later app-wide
+        # restyle re-resolves against (census in tests/conftest.py).
+        destroy_window(dlg)
 
 
 def test_timer_manager_hides_the_placeholder_once_a_timer_exists(qapp):
     timer = {"name": "Deva", "color": "#22d3ee", "timer_mode": "hourly",
              "interval_minutes": 60, "enabled": True}
     dlg = CustomTimerManagerDialog([], [timer], language="en", tr_func=tr)
-    assert dlg._ct_empty_state.isHidden()
+    try:
+        assert dlg._ct_empty_state.isHidden()
+    finally:
+        destroy_window(dlg)
 
 
 def test_timer_manager_placeholder_toggles_when_the_last_timer_goes(qapp):
     timer = {"name": "Deva", "color": "#22d3ee", "timer_mode": "hourly",
              "interval_minutes": 60, "enabled": True}
     dlg = CustomTimerManagerDialog([], [timer], language="en", tr_func=tr)
-    assert dlg._ct_empty_state.isHidden()
+    try:
+        assert dlg._ct_empty_state.isHidden()
 
-    dlg._remove_custom_timer(0)
+        dlg._remove_custom_timer(0)
 
-    assert not dlg._ct_empty_state.isHidden()
+        assert not dlg._ct_empty_state.isHidden()
+    finally:
+        destroy_window(dlg)
 
 
 def test_timer_manager_tolerates_a_missing_translation_key(qapp):
     dlg = CustomTimerManagerDialog([], [], language="en",
                                    tr_func=lambda lang, key, **kw: key)
-    assert dlg._ct_empty_state.title_label.text() != "empty_timers_title"
-    assert dlg._ct_empty_state.hint_label.isHidden()
+    try:
+        assert dlg._ct_empty_state.title_label.text() != "empty_timers_title"
+        assert dlg._ct_empty_state.hint_label.isHidden()
+    finally:
+        destroy_window(dlg)
 
 
 # ---------------------------------------------------------------------------

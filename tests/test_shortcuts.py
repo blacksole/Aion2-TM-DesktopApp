@@ -116,9 +116,19 @@ def _focus(win, widget):
     widget, and on the offscreen platform nothing re-activates a window on
     its own -- so every test that reads focus has to claim it first, or it
     silently depends on whatever the previous test left behind."""
-    QApplication.setActiveWindow(win)
+    from PySide6.QtCore import QDeadlineTimer, QEventLoop
+
     widget.setFocus(Qt.OtherFocusReason)
-    QApplication.processEvents()
+    # Activation is delivered as an EVENT, not applied inline, and the app's
+    # own ``Qt.Tool`` overlay is a second top-level that can take it back --
+    # so one setActiveWindow() + one processEvents() was a race (it failed
+    # ~1 run in 3 with `focusWidget() is None`).  Wait for the outcome.
+    deadline = QDeadlineTimer(2000)
+    while QApplication.focusWidget() is not widget and not deadline.hasExpired():
+        if not win.isActiveWindow():
+            win.activateWindow()
+        widget.setFocus(Qt.OtherFocusReason)
+        QApplication.processEvents(QEventLoop.AllEvents, 20)
     assert QApplication.focusWidget() is widget, (
         f"could not give focus to {widget!r}; got {QApplication.focusWidget()!r}"
     )

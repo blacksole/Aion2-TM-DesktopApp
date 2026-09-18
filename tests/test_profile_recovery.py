@@ -186,4 +186,4 @@ def test_a_corrupt_profile_at_STARTUP_does_not_crash_the_app(qapp, tmp_path, mon
         assert win._profile_loading is True          # auto-save stays disabled
         assert (profile_dir / "Rescue.json").read_text(encoding="utf-8") == CORRUPT
     finally:
-        win.close()
+        destroy_window(win)

@@ -100,20 +100,30 @@ def test_no_window_carries_its_own_copy_of_the_sheet(win):
 
 
 def test_apply_theme_re_renders_the_app_stylesheet_and_palette(win):
-    """One test over all five non-Abyss themes rather than two parametrized
-    ones: each switch is an app-wide restyle (see _back_to_abyss), and this
-    way the module pays for five of them instead of twenty."""
-    for name in sorted(set(theme.THEMES) - {"abyss"}):
+    """One test over every theme rather than two parametrized ones: each
+    switch is an app-wide restyle (see _back_to_abyss), and this way the
+    module pays for six of them instead of twenty.
+
+    Abyss is in the loop now, and ``HighlightedText`` is asserted here, so
+    that this single pass carries the per-theme PALETTE half of what
+    ``test_a_profile_theme_reaches_the_palette_at_startup`` used to check by
+    building a fresh MainWindow per theme (three window builds inside a
+    module that already holds one).  That test keeps the startup PATH; the
+    values every theme installs are these.
+    """
+    for name in sorted(theme.THEMES):
         win.apply_theme(name)
 
         sheet = QApplication.instance().styleSheet()
         accent = theme.THEMES[name].accent
         assert accent in sheet, f"{name}'s accent {accent} is not in the rendered sheet"
-        assert theme.ABYSS.accent not in sheet, f"{name}: Abyss's accent survived the switch"
+        if name != "abyss":
+            assert theme.ABYSS.accent not in sheet, f"{name}: Abyss's accent survived the switch"
 
         palette = QApplication.instance().palette()
         assert palette.color(QPalette.Highlight) == theme.qcolor(name, "accent"), name
         assert palette.color(QPalette.Base) == theme.qcolor(name, "bg.input"), name
+        assert palette.color(QPalette.HighlightedText) == theme.qcolor(name, "fg.on_accent"), name
 
 
 def test_apply_theme_publishes_the_current_theme_for_painters(win):
@@ -355,8 +365,7 @@ def test_the_legacy_stylesheet_is_not_in_the_tree():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["inferno", "emerald", "void"])
-def test_a_profile_theme_reaches_the_palette_at_startup(qapp, tmp_path_factory, name):
+def test_a_profile_theme_reaches_the_palette_at_startup(qapp, tmp_path_factory):
     """The regression the review found, tested through the real caller.
 
     ``__init__`` and ``load_profile`` both assign ``current_theme`` *before*
@@ -365,12 +374,24 @@ def test_a_profile_theme_reaches_the_palette_at_startup(qapp, tmp_path_factory, 
     followed the profile, the palette stayed on whatever ``main.py`` set.
     Building a window from a profile is the only way to see that; the
     theme-picker path (``apply_theme(other)``) hides it.
+
+    One theme, not three.  This was parametrized over inferno/emerald/void,
+    i.e. three MainWindows built from scratch inside one module that already
+    holds one — and what it proves (that the startup path applies the
+    palette at all, instead of leaving it on main.py's) is a property of
+    ``_APPLIED_PALETTE_THEME``, not of a colour: the *values* for the other
+    five themes are asserted on the shared window by
+    ``test_apply_theme_re_renders_the_app_stylesheet_and_palette`` above and
+    by ``test_every_theme_reaches_the_palette_through_apply_theme`` below,
+    and the guard itself by
+    ``test_apply_theme_tracks_what_it_applied_not_what_was_asked``.
     """
     import json
 
     import ui.main_window as mw
     from PySide6.QtGui import QPalette
 
+    name = "inferno"
     profile_dir = tmp_path_factory.mktemp(f"palette_{name}")
     data = json.loads(FIXTURE_PROFILE.read_text(encoding="utf-8"))
     data["theme"] = name
@@ -399,6 +420,15 @@ def test_a_profile_theme_reaches_the_palette_at_startup(qapp, tmp_path_factory, 
     finally:
         destroy_window(window)
         patcher.undo()
+        # ``patcher.undo()`` puts the two module globals back to what they
+        # were BEFORE this test -- but the QApplication's palette and sheet
+        # are now this test's theme, so the restored guard describes a state
+        # that no longer exists and the next ``apply_theme`` for that theme
+        # would be a no-op over a palette that never moved.  That is the F-1
+        # bug itself, reproduced inside the harness.  Clearing them says the
+        # honest thing: nothing is known to be applied.
+        mw._APPLIED_PALETTE_THEME = None
+        mw._APPLIED_STYLE_KEY = None
 
 
 def test_apply_theme_tracks_what_it_applied_not_what_was_asked(win):

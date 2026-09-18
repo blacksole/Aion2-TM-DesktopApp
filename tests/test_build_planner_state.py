@@ -34,6 +34,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import destroy_window
+
 ROOT = Path(__file__).resolve().parent.parent
 APP_PY = ROOT / "ItemDatabase" / "app.py"
 
@@ -111,10 +113,17 @@ def armory_module(qapp, tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def armory_window(armory_module):
-    """The ItemDatabaseWindow -- the object MainWindow actually holds."""
+    """The ItemDatabaseWindow -- the object MainWindow actually holds.
+
+    Torn down with ``destroy_window``, not ``close()``: close only hides a
+    top-level, and the Armory tree is ~1 600 widgets.  Three of these
+    fixtures used to leave ~4 800 widgets alive for the rest of the session,
+    which every later app-wide ``setStyleSheet`` then had to re-resolve
+    against (the live-widget census in tests/conftest.py prints the number).
+    """
     window = armory_module.create_window(parent=None, language="en")
     yield window
-    window.close()
+    destroy_window(window)
 
 
 @pytest.fixture(scope="module")
@@ -122,7 +131,7 @@ def loadout(armory_window):
     """The real LoadoutWindow, built through the host's own entry point."""
     loadout_window = armory_window.ensure_loadout_window()
     yield loadout_window
-    loadout_window.close()
+    destroy_window(loadout_window)
 
 
 @pytest.fixture(scope="module")
@@ -235,7 +244,7 @@ def test_host_pull_without_an_open_planner_returns_the_pushed_dict(armory_module
         window.set_pending_loadout_state({"character_class": "Cleric"})
         assert window.get_loadout_state() == {"character_class": "Cleric"}
     finally:
-        window.close()
+        destroy_window(window)
 
 
 # ---------------------------------------------------------------------------

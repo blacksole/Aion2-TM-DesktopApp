@@ -47,7 +47,7 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QInputDialog, QApplication, QLineEdit, QTextEdit, QAbstractSpinBox,
 )
 from datetime import datetime, timedelta
-from PySide6.QtCore import QTimer, QEvent
+from PySide6.QtCore import QObject, QTimer, QEvent
 
 #: ``(theme, asset_base)`` currently installed on the QApplication by
 #: :meth:`MainWindow.load_styles` — see the note there.  Module level, not
@@ -536,23 +536,71 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self.update_countdowns()
 
+    #: The one :class:`_CardPressFilter` this window installs on its cards,
+    #: built on first use.  A class-level default rather than an ``__init__``
+    #: assignment because ``refresh()`` (and therefore ``_wire_card``) already
+    #: runs while ``__init__`` is still building the window.
+    _card_press_filter = None
+
+    class _CardPressFilter(QObject):
+        """Turns a left-click on a card into "edit this card", for every card.
+
+        This used to be ``card.mousePressEvent = on_press``: a closure that
+        captured the card (as a default argument) and the window (as a free
+        variable), stored in the *card's own* ``__dict__``.  That is a
+        reference cycle rooted on a live Qt object -- card -> its instance
+        dict -> the function -> the card again, and on to the MainWindow --
+        so ``deleteLater()`` could free the C++ widget while the Python
+        wrapper, the window and every other card stayed reachable until a
+        full ``gc.collect()`` happened to run.  In the app that is a slow
+        drip; in the test suite it is ~600 widgets per MainWindow that never
+        left, and since the stylesheet lives on the QApplication (MASTER
+        §4-1) every ``setStyleSheet`` had to re-resolve against all of them
+        (F-apex "Re-verification 2": one theme switch, 9 s).
+
+        An event filter needs neither capture: Qt hands it the event target,
+        so the card comes in as ``obj``, and the owning window is reachable
+        through the filter's Qt parent.  Both links are C++ -- nothing here
+        holds a Python reference to a card or to the window.
+        """
+
+        def eventFilter(self, obj, event):
+            if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+                window = self.parent()
+                child = obj.childAt(event.position().toPoint())
+                if not isinstance(child, QPushButton):
+                    if window._editing_card is obj:
+                        window._cancel_edit()
+                    else:
+                        window._start_editing(obj)
+            # False: the card's own mousePressEvent still runs, which is what
+            # the old closure's trailing ``type(c).mousePressEvent(c, event)``
+            # did by hand.
+            return False
+
     def _wire_card(self, card):
         card.check_btn.clicked.connect(self._on_task_toggled)
         card.delete_btn.clicked.disconnect()
-        card.delete_btn.clicked.connect(lambda checked=False, c=card: self._delete_card(c))
+        # A bound method, not ``lambda c=card: ...``: PySide holds bound-method
+        # slots weakly, so this connection adds no reference to the card or to
+        # the window (the lambda did both, and outlived the card).
+        card.delete_btn.clicked.connect(self._on_card_delete_clicked)
         card.setCursor(Qt.PointingHandCursor)
 
-        def on_press(event, c=card):
-            if event.button() == Qt.LeftButton:
-                child = c.childAt(event.pos())
-                if not isinstance(child, QPushButton):
-                    if self._editing_card is c:
-                        self._cancel_edit()
-                    else:
-                        self._start_editing(c)
-            type(c).mousePressEvent(c, event)
+        if self._card_press_filter is None:
+            self._card_press_filter = self._CardPressFilter(self)
+        card.installEventFilter(self._card_press_filter)
 
-        card.mousePressEvent = on_press
+    def _on_card_delete_clicked(self):
+        """The "x" on a card. Resolves the card from the button, not a closure."""
+        button = self.sender()
+        if button is None:
+            return
+        card = button.parentWidget()
+        while card is not None and getattr(card, "delete_btn", None) is not button:
+            card = card.parentWidget()
+        if card is not None:
+            self._delete_card(card)
 
     def _on_task_toggled(self):
         self.refresh()
@@ -876,6 +924,7 @@ class MainWindow(QMainWindow):
                 self.item_database_window.set_theme(self.current_theme)
             if self._build_planner_state and hasattr(self.item_database_window, "set_pending_loadout_state"):
                 self.item_database_window.set_pending_loadout_state(self._build_planner_state)
+            self.armory_page.set_build_planner_state(self._build_planner_state)
             if hasattr(self.item_database_window, "add_to_templates_requested"):
                 self.item_database_window.add_to_templates_requested.connect(
                     self._add_item_database_item_to_templates
@@ -1268,7 +1317,13 @@ class MainWindow(QMainWindow):
 
         self.timers_page = TimersPage()
         self.todo_page = TodoTabsPage(self.tasks_page, self.timers_page)
-        self.armory_page = ArmoryPage()
+        # The Armory page is a dashboard over the persisted Build Planner
+        # state (Phase 4c).  The provider lets it re-derive its own summary
+        # whenever it is shown, so the save-time refresh of
+        # `_build_planner_state` (save_profile pulls `get_loadout_state()`)
+        # needs no notification of its own; the explicit push below in
+        # load_profile covers the profile-load case.
+        self.armory_page = ArmoryPage(state_provider=lambda: self._build_planner_state)
         self.settings_page = SettingsPage()
         self.about_page = AboutPage()
 
@@ -2626,6 +2681,7 @@ class MainWindow(QMainWindow):
             self._build_planner_state = data.get("build_planner")
             if self.item_database_window and hasattr(self.item_database_window, "set_pending_loadout_state"):
                 self.item_database_window.set_pending_loadout_state(self._build_planner_state)
+            self.armory_page.set_build_planner_state(self._build_planner_state)
 
             self._rebuild_characters()
             if hasattr(self.header, "set_profile"):

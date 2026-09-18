@@ -1,9 +1,18 @@
 """Shared test setup: headless Qt so the suite runs on CI and on Linux without a display."""
+import gc
 import os
 import sys
+import warnings
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# FORCED, not setdefault.  A desktop session exports its own value -- Omarchy
+# sets ``QT_QPA_PLATFORM="wayland;xcb"`` -- and ``setdefault`` then does
+# nothing, so the suite ran on the developer's real compositor: every test
+# MainWindow, overlay and dialog opened an actual window on his screen and a
+# grab-heavy module could lock the desktop up.  There is no case in which a
+# test wants the session's platform, so this is an assignment.
+# ``tests/test_headless.py`` asserts the result on the live QApplication.
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
 # Never let a test MainWindow start the real startup update-check QThread.
 os.environ.setdefault("AION2TM_NO_UPDATE_CHECK", "1")
 
@@ -56,8 +65,10 @@ def destroy_window(window) -> None:
     (it takes MainWindow as a plain argument, not as a Qt parent), so
     nothing would ever collect it otherwise.
     """
-    from PySide6.QtCore import QEvent
+    from PySide6.QtCore import QEvent, QTimer
     from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
 
     for attribute in ("overlay", "flow_map_window", "item_database_window"):
         child = getattr(window, attribute, None)
@@ -70,10 +81,94 @@ def destroy_window(window) -> None:
         if timer is not None:
             timer.stop()
 
+    # Every OTHER timer in the tree, by discovery rather than by name, and
+    # its already-queued timeout drained while the objects its slot touches
+    # are still alive.  A slot that runs after the C++ side is gone raises
+    # inside the Qt event loop ("Internal C++ object already deleted"), which
+    # pytest-qt reports against whichever test happened to pump next -- the
+    # Armory's icon-request timer did exactly that.
+    for timer in window.findChildren(QTimer):
+        timer.stop()
+    if app is not None:
+        app.processEvents()
+
     window.close()
     window.deleteLater()
 
-    app = QApplication.instance()
     if app is not None:
+        # Two passes, and a gc.collect() between them.  One pass is not
+        # enough: the first DeferredDelete flush destroys the C++ trees, but
+        # what is left over is *Python* -- wrapper objects still reachable
+        # from a cycle (a widget's own ``__dict__`` pointing back at itself
+        # through a closure or a lambda slot, review F "Re-verification 2").
+        # Until the collector breaks those, the wrappers keep their children
+        # alive and any deleteLater they themselves posted never runs.
         app.sendPostedEvents(None, QEvent.DeferredDelete)
         app.processEvents()
+        gc.collect()
+        app.sendPostedEvents(None, QEvent.DeferredDelete)
+        app.processEvents()
+    else:
+        gc.collect()
+
+
+def live_widget_count() -> int:
+    """How many QWidgets the process is still holding.
+
+    The number the suite's cost is proportional to: the stylesheet lives on
+    the QApplication (MASTER §4-1), so every ``setStyleSheet`` /
+    ``setPalette`` re-resolves against every live widget in the process, no
+    matter which module created it.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    return len(app.allWidgets()) if app is not None else 0
+
+
+#: How many widgets a single test module may leave behind before the census
+#: below says so.  A module that builds one MainWindow and tears it down with
+#: ``destroy_window`` settles at a couple of dozen; a module that forgets the
+#: teardown leaves several hundred.  Deliberately a WARNING, not a failure:
+#: this is a budget on a global resource, and a test module should not fail
+#: because of what an earlier one left in the QApplication.
+WIDGET_LEAK_BUDGET = 150
+
+#: ``[(module, before, after)]`` -- filled by the census fixture, printed by
+#: ``pytest_terminal_summary``.
+_WIDGET_CENSUS: list[tuple[str, int, int]] = []
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _widget_census(request):
+    """Report (never enforce) how many widgets each module leaves behind.
+
+    Autouse and module-scoped, so it brackets every module's own window
+    fixtures: autouse fixtures of a scope are set up before the non-autouse
+    ones of that same scope, which puts ``before`` ahead of the MainWindow
+    build and ``after`` behind its teardown.
+    """
+    before = live_widget_count()
+    yield
+    gc.collect()
+    after = live_widget_count()
+    _WIDGET_CENSUS.append((request.node.name, before, after))
+    leaked = after - before
+    if leaked > WIDGET_LEAK_BUDGET:
+        warnings.warn(
+            f"{request.node.name} left {leaked} widgets alive "
+            f"({before} -> {after}); budget is {WIDGET_LEAK_BUDGET}. "
+            f"Every later app-wide restyle now pays for them.",
+            stacklevel=1,
+        )
+
+
+def pytest_terminal_summary(terminalreporter):
+    """One line per module: widgets before -> after, and what leaked."""
+    if not _WIDGET_CENSUS:
+        return
+    worst = sorted(_WIDGET_CENSUS, key=lambda row: row[2] - row[1], reverse=True)
+    terminalreporter.write_sep("=", "live widget census (top 10 by leak)")
+    for name, before, after in worst[:10]:
+        terminalreporter.write_line(f"{after - before:+6d}  {before:5d} -> {after:5d}  {name}")
+    terminalreporter.write_line(f"final live widgets: {live_widget_count()}")

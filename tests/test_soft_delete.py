@@ -625,3 +625,122 @@ def test_a_real_close_still_commits(win, monkeypatch):
     win.closeEvent(event)
 
     assert win._pending_delete is None, "a real close left the undo window open"
+
+
+# ---------------------------------------------------------------------------
+# How the card is wired to all of the above (MainWindow._wire_card)
+#
+# Every test above calls ``win._delete_card(card)`` directly, so the wiring
+# between a card and those methods was the one part of the path nothing
+# covered -- and it was also the part that leaked: ``_wire_card`` used to
+# store ``card.mousePressEvent = on_press``, a closure holding the card and
+# the window, in the card's own instance dict.  A card therefore kept itself
+# and its MainWindow reachable for as long as the process lived (review F,
+# "Re-verification 2": ~600 widgets per window that never left, and every
+# app-wide restyle re-resolving against all of them).  It is an event filter
+# owned by the window now.  These tests pin the BEHAVIOUR that filter has to
+# keep, so the leak cannot be fixed a second time by accident.
+# ---------------------------------------------------------------------------
+
+
+def _press(card, pos):
+    """Deliver a real left-button press to ``card`` at ``pos``."""
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+
+    local = QPointF(pos)
+    event = QMouseEvent(
+        QMouseEvent.Type.MouseButtonPress,
+        local,
+        QPointF(card.mapToGlobal(pos)),
+        Qt.LeftButton,
+        Qt.LeftButton,
+        Qt.NoModifier,
+    )
+    QApplication.sendEvent(card, event)
+
+
+def test_the_x_button_routes_to_the_soft_delete(win, writes):
+    """The "x" is the only way a user reaches _delete_card."""
+    card = win.task_lists["tasks"][0]
+    title = card.title
+
+    card.delete_btn.click()
+
+    assert card not in win.task_lists["tasks"], "the x did not reach _delete_card"
+    assert win._pending_delete is not None, "the x deleted without an undo window"
+    assert win._pending_delete["card"] is card
+    assert writes == [], "the x wrote the profile before the undo window closed"
+    win._undo_pending_delete()
+    assert title in _titles(win)
+
+
+def test_the_x_picks_out_its_own_card_from_a_list_of_them(win):
+    """The old closure bound the card by value; the replacement resolves it
+    from the button that was clicked, so it has to pick the RIGHT card out of
+    a list of them -- not the first, and not the last."""
+    cards = list(win.task_lists["tasks"])
+    assert len(cards) > 2, "fixture profile has too few tasks to tell them apart"
+    target = cards[2]
+
+    target.delete_btn.click()
+
+    assert win._pending_delete is not None, "the x did not reach _delete_card"
+    assert win._pending_delete["card"] is target, "the x deleted the wrong card"
+    assert win._pending_delete["index"] == 2
+    assert win.task_lists["tasks"] == cards[:2] + cards[3:]
+
+    win._undo_pending_delete()
+    assert win.task_lists["tasks"] == cards, "undo did not put it back in place"
+
+
+def test_a_left_click_on_a_card_starts_editing_it(win):
+    card = win.task_lists["tasks"][0]
+    win._cancel_edit()
+    assert win._editing_card is None
+
+    _press(card, card.rect().center())
+    assert win._editing_card is card, "a click on the card did not start an edit"
+    assert win.tasks_page.title_input.text() == card.title
+
+    # A second click on the same card cancels, as the closure did.
+    _press(card, card.rect().center())
+    assert win._editing_card is None, "the second click did not cancel the edit"
+
+
+def test_a_click_landing_on_a_button_inside_the_card_does_not_start_editing(win):
+    """The ``isinstance(child, QPushButton)`` guard: the x and the check
+    circle are inside the card's own rect, and hitting one must not also
+    open the edit form."""
+    card = win.task_lists["tasks"][0]
+    win._cancel_edit()
+
+    _press(card, card.delete_btn.geometry().center())
+    assert win._editing_card is None, "a press over the x opened the edit form"
+
+    _press(card, card.check_btn.geometry().center())
+    assert win._editing_card is None, "a press over the check circle opened the edit form"
+
+
+def test_no_card_holds_a_python_reference_back_to_the_window(win):
+    """The leak, as a property rather than as a widget count.
+
+    ``card.mousePressEvent`` being the class's own bound method (and not an
+    entry in the card's ``__dict__``) is what makes the card collectable:
+    an instance attribute there is a function object whose closure and
+    defaults reach the card and the MainWindow.
+    """
+    import gc
+
+    for tab in ("tasks", "shopping"):
+        for card in win.task_lists[tab]:
+            assert "mousePressEvent" not in vars(card), (
+                f"{tab} card {card.title!r} carries a per-instance "
+                f"mousePressEvent again -- that is the F reference cycle"
+            )
+            assert card.mousePressEvent.__self__ is card, "not a bound method"
+            holders = [
+                referrer for referrer in gc.get_referrers(card)
+                if isinstance(referrer, dict) and referrer.get("c") is card
+            ]
+            assert not holders, "a closure still captures the card as `c`"

@@ -6,8 +6,9 @@ focus ring shipped broken (review F-4/F-7): the rendered QSS contained the
 string the test looked for, and the ring still landed inside the control, on
 top of the label.
 
-So this module renders.  It builds one offscreen MainWindow per theme, grabs
-the pages, and asserts three things a name-based test cannot:
+So this module renders.  It builds ONE offscreen MainWindow for the whole
+module, switches it through every theme, grabs the pages, and asserts three
+things a name-based test cannot:
 
 a. nothing raises while rendering;
 b. no meaningful area of the page is Fusion's default grey — the signature of
@@ -54,6 +55,68 @@ def _settle(app, ms: int = 500) -> None:
         app.processEvents(QEventLoop.AllEvents, 20)
 
 
+def _focus(app, widget, ms: int = 200) -> None:
+    """Give ``widget`` real keyboard focus, then let the repaint land.
+
+    ``setFocus()`` only arms a window's focus chain: ``hasFocus()`` -- and
+    therefore the QSS ``:focus`` state the gate below photographs -- is false
+    for every widget of an INACTIVE window, and the offscreen platform has no
+    window manager to activate one.  Worse, activation here is delivered as
+    an event and can be dropped again by a later top-level, so it is not a
+    thing a fixture can set once.  Waiting on ``hasFocus()`` (and
+    re-activating while waiting) replaces the fixed sleep that used to sit
+    here and made the ring measurable at all.
+    """
+    window = widget.window()
+    widget.setFocus()
+    deadline = QDeadlineTimer(2000)
+    while not widget.hasFocus() and not deadline.hasExpired():
+        if not window.isActiveWindow():
+            window.activateWindow()
+        app.processEvents(QEventLoop.AllEvents, 20)
+    assert widget.hasFocus(), (
+        f"{type(widget).__name__}#{widget.objectName()} never took focus "
+        f"(window active: {window.isActiveWindow()})"
+    )
+    _settle(app, ms)
+
+
+def _edge_pixels(image) -> list[int]:
+    edges = []
+    for x in range(image.width()):
+        edges.append(image.pixel(x, 0) & 0xFFFFFF)
+        edges.append(image.pixel(x, image.height() - 1) & 0xFFFFFF)
+    for y in range(image.height()):
+        edges.append(image.pixel(0, y) & 0xFFFFFF)
+        edges.append(image.pixel(image.width() - 1, y) & 0xFFFFFF)
+    return edges
+
+
+def _edge_hits(widget, colour) -> tuple[int, int]:
+    """How many of ``widget``'s outermost pixels are exactly ``colour``."""
+    edges = _edge_pixels(widget.grab().toImage())
+    return sum(1 for pixel in edges if pixel == colour), len(edges)
+
+
+def _settled_edge_hits(app, widget, colour, fraction=0.5, timeout_ms=1500):
+    """``_edge_hits``, but wait for the repaint before believing a low count.
+
+    A stylesheet swap and a focus change are both applied on POSTED events
+    (unpolish/repolish, then the focus rect), so a fixed sleep measures
+    whichever of the two happened to land inside it.  On a loaded machine
+    one theme in six lost that race about once every three runs -- 0 accent
+    pixels on a control that does show the ring.  This polls until the ring
+    is there or the deadline passes, and returns the last measurement either
+    way: the assertion at the call site is still the thing that decides.
+    """
+    hits, total = _edge_hits(widget, colour)
+    deadline = QDeadlineTimer(timeout_ms)
+    while hits <= total * fraction and not deadline.hasExpired():
+        app.processEvents(QEventLoop.AllEvents, 20)
+        hits, total = _edge_hits(widget, colour)
+    return hits, total
+
+
 def _grey_histogram(image) -> dict[int, int]:
     """Count Fusion-grey pixels, at C speed.
 
@@ -92,8 +155,28 @@ def win(qapp, tmp_path_factory):
 
     window = mw.MainWindow()
     window.countdown_timer.stop()
-    window.resize(1100, 720)
     window.show()
+    _settle(qapp, 200)
+    # Activation is NOT set up here: on the offscreen platform there is no
+    # window manager, activation arrives as an event, and the app's own
+    # ``Qt.Tool`` overlay is a second top-level that can take it away again
+    # at any point in the module.  It is therefore acquired per measurement,
+    # by ``_focus`` -- which is the reason the ring is visible in a grab at
+    # all (``hasFocus()``, and so the QSS ``:focus`` state, is false for
+    # every widget of an INACTIVE window: ``setFocus()`` alone armed the
+    # focus chain and photographed a resting control).
+    #
+    # After show(), and only after the loop has run: the offscreen platform
+    # has no window manager, so it answers the initial show with a resize to
+    # the layout's own size hint (460x501 here) and any resize() made before
+    # that is thrown away.  The gate asserts a real page-sized grab, so the
+    # size has to be (re)applied on this side of the settle.
+    window.resize(1100, 720)
+    _settle(qapp, 120)
+    assert window.width() > 500 and window.height() > 400, (
+        f"the offscreen window is {window.width()}x{window.height()} -- the "
+        f"grabs below would not be of a full page"
+    )
     yield window
     destroy_window(window)
     patcher.undo()
@@ -111,18 +194,36 @@ def _abyss_after(win):
 
 
 PAGES = (
-    ("todo", lambda w: w.sidebar.set_active_page("tasks")),
+    # Settings first, tasks last: the ground check and the focus check below
+    # both want the tasks page, so ending on it lets all three reuse one
+    # activation and one settle instead of three.
     ("settings", lambda w: w.sidebar.set_active_page("settings")),
+    ("todo", lambda w: w.sidebar.set_active_page("tasks")),
 )
 
 
 @pytest.mark.parametrize("name", sorted(theme.THEMES))
-def test_every_theme_renders_every_page_with_no_fusion_grey(qapp, win, name):
+def test_every_theme_renders_grounded_styled_and_focus_ringed(qapp, win, name):
+    """(a) + (b) + (c) for one theme, in one test.
+
+    This was three parametrized tests -- pages/no-Fusion-grey, window
+    ground, focus ring -- i.e. three app-wide theme switches and nine
+    event-loop settles per theme, eighteen tests for six themes.  The
+    stylesheet lives on the QApplication (MASTER §4-1), so a switch is the
+    single most expensive thing this module does; doing it once per theme
+    and then taking every measurement off that state is the same set of
+    assertions for a third of the switches.  Every assertion below is the
+    one it replaced, verbatim -- the only thing that went away is the
+    repetition of ``win.apply_theme(name)``.
+    """
     win.apply_theme(name)
+
+    grabs = {}
     for page, activate in PAGES:
         activate(win)
         _settle(qapp)
-        pixmap = win.grab()          # (a) — raises if rendering fails
+        pixmap = win.grab()          # (a) -- raises if rendering fails
+        grabs[page] = pixmap
         assert not pixmap.isNull(), f"{name}/{page}: grab produced nothing"
         assert pixmap.width() > 500 and pixmap.height() > 400
 
@@ -130,76 +231,55 @@ def test_every_theme_renders_every_page_with_no_fusion_grey(qapp, win, name):
         offenders = {hex(c): n for c, n in greys.items() if n > MAX_GREY_PIXELS}
         assert not offenders, (
             f"{name}/{page}: Fusion default surfaces on the page "
-            f"{offenders} — a widget the stylesheet did not reach"
+            f"{offenders} -- a widget the stylesheet did not reach"
         )
 
-
-@pytest.mark.parametrize("name", sorted(theme.THEMES))
-def test_the_window_ground_is_the_theme_token(qapp, win, name):
-    """The cheapest proof that the grab is of a themed window at all — and
-    it would catch a page grabbed mid-fade (all-black) too."""
-    win.apply_theme(name)
-    win.sidebar.set_active_page("tasks")
-    _settle(qapp)
-    image = win.grab().toImage()
+    # ------------------------------------------------------------------
+    # The window ground is the theme token.  The cheapest proof that the
+    # grab is of a themed window at all -- and it would catch a page
+    # grabbed mid-fade (all-black) too.  Read off the tasks-page grab
+    # taken above, which is the same window state the old standalone test
+    # built for itself.
+    # ------------------------------------------------------------------
+    image = grabs["todo"].toImage()
     expected = theme.qcolor(name, "bg.window").rgb() & 0xFFFFFF
     corner = image.pixel(2, image.height() - 3) & 0xFFFFFF
     assert corner == expected, (
         f"{name}: window ground is {hex(corner)}, expected {hex(expected)}"
     )
 
-
-# ---------------------------------------------------------------------------
-# (c) the focus ring is on the control's edge
-# ---------------------------------------------------------------------------
-
-
-def _edge_pixels(image) -> list[int]:
-    edges = []
-    for x in range(image.width()):
-        edges.append(image.pixel(x, 0) & 0xFFFFFF)
-        edges.append(image.pixel(x, image.height() - 1) & 0xFFFFFF)
-    for y in range(image.height()):
-        edges.append(image.pixel(0, y) & 0xFFFFFF)
-        edges.append(image.pixel(image.width() - 1, y) & 0xFFFFFF)
-    return edges
-
-
-@pytest.mark.parametrize("name", sorted(theme.THEMES))
-def test_a_focused_control_shows_the_accent_on_its_own_edge(qapp, win, name):
-    """Review F-4, the part a string match could not see.
-
-    ``outline`` on a QWidget only recolours Fusion's PE_FrameFocusRect, drawn
-    around the *label* sub-rect INSIDE the control; the ring is a border now.
-    So: focus a control, grab the control itself, and count accent pixels on
-    its outermost rows and columns.
-    """
-    win.apply_theme(name)
-    win.sidebar.set_active_page("tasks")
-    _settle(qapp)
-
+    # ------------------------------------------------------------------
+    # (c) the focus ring is on the control's own edge.  Review F-4, the
+    # part a string match could not see: ``outline`` on a QWidget only
+    # recolours Fusion's PE_FrameFocusRect, drawn around the *label*
+    # sub-rect INSIDE the control; the ring is a border now.  So: focus a
+    # control, grab the control itself, and count accent pixels on its
+    # outermost rows and columns.
+    # ------------------------------------------------------------------
     button = win.tasks_page.tab_buttons["shopping"]
     accent = theme.qcolor(name, "accent").rgb() & 0xFFFFFF
 
     button.clearFocus()
     _settle(qapp, 120)
-    resting = _edge_pixels(button.grab().toImage())
-    resting_hits = sum(1 for pixel in resting if pixel == accent)
+    resting_hits, _ = _edge_hits(button, accent)
 
-    button.setFocus()
-    _settle(qapp, 200)
-    focused = _edge_pixels(button.grab().toImage())
-    focused_hits = sum(1 for pixel in focused if pixel == accent)
+    _focus(qapp, button)
+    focused_hits, edge_total = _settled_edge_hits(qapp, button, accent)
 
-    assert focused_hits > len(focused) * 0.5, (
-        f"{name}: only {focused_hits}/{len(focused)} edge pixels carry the "
-        f"accent — the ring is not on the control's edge"
+    assert focused_hits > edge_total * 0.5, (
+        f"{name}: only {focused_hits}/{edge_total} edge pixels carry the "
+        f"accent -- the ring is not on the control's edge"
     )
     assert focused_hits > resting_hits + 20, (
         f"{name}: focusing changed the edge by {focused_hits - resting_hits} "
-        f"pixels — the ring is not distinguishable from the resting state"
+        f"pixels -- the ring is not distinguishable from the resting state"
     )
     button.clearFocus()
+
+
+# ---------------------------------------------------------------------------
+# (c) continued: the two focus properties that are not per-theme
+# ---------------------------------------------------------------------------
 
 
 def test_focusing_does_not_move_the_control(qapp, win):
@@ -215,8 +295,7 @@ def test_focusing_does_not_move_the_control(qapp, win):
     _settle(qapp, 120)
     before = (button.size(), neighbour.pos())
 
-    button.setFocus()
-    _settle(qapp, 200)
+    _focus(qapp, button)
     after = (button.size(), neighbour.pos())
 
     assert before == after, f"focus moved geometry: {before} -> {after}"
@@ -232,12 +311,10 @@ def test_an_accent_filled_button_rings_in_on_accent(qapp, win):
     assert save.objectName() == "primaryButton"
 
     on_accent = theme.qcolor("abyss", "fg.on_accent").rgb() & 0xFFFFFF
-    save.setFocus()
-    _settle(qapp, 200)
-    edges = _edge_pixels(save.grab().toImage())
-    hits = sum(1 for pixel in edges if pixel == on_accent)
-    assert hits > len(edges) * 0.5, (
-        f"only {hits}/{len(edges)} edge pixels are fg.on-accent — the ring is "
+    _focus(qapp, save)
+    hits, edge_total = _settled_edge_hits(qapp, save, on_accent)
+    assert hits > edge_total * 0.5, (
+        f"only {hits}/{edge_total} edge pixels are fg.on-accent — the ring is "
         f"invisible on an accent-filled control"
     )
     save.clearFocus()
