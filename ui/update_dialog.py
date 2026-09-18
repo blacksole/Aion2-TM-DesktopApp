@@ -370,7 +370,7 @@ class ChangelogHistoryDialog(QDialog):
     """"Update-Verlauf" (User-Wunsch, 2026-09-14): shows the last 3 GitHub
     releases' notes at once, same visual language as UpdateDialog above (the
     #UpdateDialog/#updateDialogTitle/#updateDialogNotes/#updateDialogSep/
-    #updateDialogLaterBtn styles are all reused as-is -- see styles.qss's
+    #updateDialogLaterBtn styles are all reused as-is -- see
     "UPDATE DIALOG" section) plus one small new left-rail control
     (#changelogVersionBtn) for picking which version to jump to. Clicking a
     version scrolls its section into view; scrolling manually keeps the

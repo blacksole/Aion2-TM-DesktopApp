@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (  # noqa: E402  (after the offscreen pin)
 )
 
 from core import fonts  # noqa: E402
+from core import theme as theme_module  # noqa: E402
 from core.theme import THEMES, build_qss  # noqa: E402
 
 
@@ -72,6 +73,11 @@ def build_gallery() -> QWidget:
     """One widget carrying every component MASTER §3 has a rule for."""
     root = QWidget()
     root.setObjectName("ContentArea")
+    # The application sheet is scoped to `QWidget[aion2="true"]` and its
+    # descendants, so that it cannot leak into the Armory's own windows
+    # (see ui/styles.template.qss §0).  The gallery stands in for one of
+    # the app's own windows, so it carries the same flag.
+    root.setProperty("aion2", True)
     root.setFixedWidth(820)
     outer = QHBoxLayout(root)
     outer.setContentsMargins(16, 16, 16, 16)
@@ -201,6 +207,9 @@ def render(out_dir: Path) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication(sys.argv[:1])
     loaded = fonts.load_fonts()
+    # Same reason as main.py: the sheet must name the families Qt really
+    # registered, not the ones the tokens hoped for.
+    theme_module.set_font_families(loaded)
     print(f"fonts: {loaded}")
 
     written: list[Path] = []

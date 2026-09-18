@@ -48,7 +48,13 @@ STATUS_TOKENS = {
 TAB_BADGE_LETTERS = {"tasks": "T", "shopping": "S"}
 
 #: schedule -> badge letter (MASTER §3: "schedule → secondary").
-SCHEDULE_BADGE_LETTERS = {"daily": "D", "weekly": "W", "season": "S"}
+#:
+#: "Se" for season, not "S": the tab badges above already use "S" for
+#: shopping, in the same colour, on rows of the same list -- one glyph for
+#: two unrelated meanings (review F-18).  Two letters is the smaller change
+#: than recolouring one of the two families, and the badge is sized by its
+#: content.
+SCHEDULE_BADGE_LETTERS = {"daily": "D", "weekly": "W", "season": "Se"}
 
 #: Built-in reset timers, by ``core.theme.data_color("timer", …)`` key.
 TIMER_COLOR_KEYS = {
@@ -398,6 +404,9 @@ class _AccordionSection(QWidget):
 class OverlayWindow(QWidget):
     def __init__(self, main_window):
         super().__init__()
+        # Parentless Qt.Tool window, so it carries the app-sheet scope
+        # itself (see MainWindow.__init__ and the template's §0 comment).
+        self.setProperty("aion2", True)
         self.main_window = main_window
         self._drag_pos = None
         self._resize_pos = None

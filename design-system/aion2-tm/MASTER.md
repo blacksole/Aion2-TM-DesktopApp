@@ -1,6 +1,13 @@
 # Aion2 TM — Design System « Aether Cockpit »
 
-**Statut** : source de vérité. Toute couleur, taille ou durée dans le code vient d'ici via `core/theme.py`. Aucun hex magique dans `ui/` ou `ItemDatabase/`.
+**Statut** : source de vérité. Toute couleur, taille ou durée dans le code vient d'ici via `core/theme.py`.
+**Portée du « aucun hex magique »** : garantie et testée pour `ui/` et `core/`
+(`tests/test_no_hex_literals_in_ui.py`, exceptions ligne par ligne dans
+`tests/fixtures/hex_allowlist.txt`) ; `core/theme.py` est le propriétaire des
+valeurs, donc exempt par construction. `ItemDatabase/` n'est pas encore
+tokenisée — sa dette est **comptée et gelée** en attendant sa vague
+(`tests/fixtures/itemdatabase_literal_baseline.txt`), parce qu'un document ne
+doit pas affirmer une garantie qu'aucun test ne fournit.
 **Décidé le** : 2026-09-18 (genjutsu paint, thèses validées par Florian).
 **Stack** : PySide6 6.11 · QSS généré depuis un template + tokens · painters via `QColor` exposés par `core/theme.py`.
 
@@ -88,7 +95,7 @@ Interdits : animer `width`/`height`/`geometry` d'un layout, animations décorati
 | `secondary.soft` | violet.900a | |
 | `ok` / `warn` / `danger` | green.400 / amber.400 / red.400 | complété, attention, MISSED / destructif |
 | `ok.soft` / `warn.soft` / `danger.soft` | alphas | fonds de badge |
-| `focus.ring` | accent, 2 px, offset 1 px | tout widget focalisable, tous les thèmes |
+| `focus.ring` | **anneau = bordure accent, dessinée sur le bord du contrôle** (2 px, le px pris est rendu en padding via `space_*_inset`) | tout widget focalisable, tous les thèmes |
 
 ### Thèmes = mêmes tokens sémantiques, autre jeu de valeurs
 
@@ -174,8 +181,8 @@ Règles de dérivation (une seule, pour que le prochain thème s'ajoute sans arb
 | Bouton secondaire / pill | fond `bg.elevated`, bordure `border`, texte `fg.secondary` ; actif : fond `accent.soft`, bordure `accent`, texte `fg` |
 | Bouton destructif | contour `danger`, texte `danger`, fond transparent ; hover fond `danger.soft` ; toujours suivi d'une confirmation ou d'un undo |
 | Carte (tâche, shopping, item) | fond `bg.elevated`, bordure `border`, rayon `md`, padding `3` ; focus : `focus.ring` ; complétée : titre `fg.muted` + coche `ok` |
-| Badge | 11 px majuscules, rayon `sm`, fond `*.soft`, texte couleur pleine ; schedule → `secondary`, MISSED → `danger`, priorité → texte seul |
-| Champ | fond `bg.input`, bordure `border`, focus `accent` ; placeholder `fg.muted` |
+| Badge | 11 px majuscules, rayon `sm`, fond `*.soft`, texte couleur pleine ; schedule → `secondary`, EVENT / NEW → `secondary` (« quel genre d'entrée », comme schedule), MISSED → `danger`, priorité → **texte seul**, couleur `ok`/`warn`/`danger` |
+| Champ | fond `bg.input`, bordure `border`, focus : bordure `accent` (via `border-color`, largeur inchangée) ; placeholder `fg.muted` |
 | Sidebar | item actif : fond `accent.soft`, barre gauche 2 px `accent`, texte `fg` ; jamais indigo fixe |
 | Onglets/pills de page | même règle que pill ; un seul style d'onglet dans toute l'app (les QTabWidget natifs adoptent ce style) |
 | Toast | fond `bg.overlay`, bordure `border.strong`, texte `fg`, bouton d'action en texte `accent` ; entrée/sortie `motion.base` |
@@ -190,8 +197,23 @@ Règles de dérivation (une seule, pour que le prochain thème s'ajoute sans arb
 2. `ui/styles.qss` disparaît au profit du template ; aucun bloc `[theme=…]` dupliqué.
 3. Les painters (overlay, flow map, tooltips Armory, delegates) prennent leurs couleurs par `theme.qcolor("…")`, jamais par littéral.
 4. `setStyleSheet(...)` inline → `setObjectName` + règle dans le template. Exception tolérée : couleur pilotée par la donnée (grade d'item, couleur de timer personnalisée), qui passe alors par `theme.data_color(...)`.
-5. Test de contraste automatique sur les 6 thèmes (paires du §2). Test de rendu : grab offscreen des pages principales par thème, pas de texte élidé en EN.
-6. Motion : un helper `ui/motion.py` (`fade_in(widget)`, `fade_out(widget, then)`, `slide_hint(widget)`) qui lit `motion.*` et respecte `motion.reduced`. Aucune autre animation ailleurs.
+5. Test de contraste automatique sur les 6 thèmes (paires du §2) :
+   `tests/test_qss_contrast.py`. Test de **rendu** : `tests/test_render_gate.py`
+   construit une MainWindow offscreen par thème, grabbe ToDo + Réglages, et
+   vérifie (a) qu'aucune exception ne sort, (b) qu'aucune zone de la page ne
+   porte un gris par défaut de Fusion (signature d'un widget que la feuille
+   n'a pas atteint), (c) que le contrôle focalisé montre bien l'accent **sur
+   son bord**. C'est le seul garde-fou qui voie des pixels plutôt que des
+   noms — et c'est son absence qui avait laissé passer l'anneau de focus
+   cassé.
+6. Motion : un helper `ui/motion.py` (`fade_in(widget)`, `fade_out(widget, then)`, `slide_hint(widget)`) qui lit `motion.*` et respecte `motion.reduced`. Aucune autre animation ailleurs. Une animation **supplantée** sur le même `(objet, propriété)` est retirée par le helper lui-même, et sa post-condition est **abandonnée** (`SUPERSEDED_POLICY`) : la plus récente exprime l'intention actuelle de l'utilisateur.
+7. La feuille est **scopée** : toute règle est préfixée `QWidget[aion2="true"]`
+   (voir « Portée de la feuille » au §2). Une règle non scopée est une fuite
+   vers l'Armory et doit être justifiée dans
+   `tests/fixtures/unscoped_selectors_allowlist.txt`.
+8. **Jamais de `color` ni de `selection-color` sur une vue d'items** — une
+   couleur QSS y écrase le `setForeground()` de chaque item. La couleur du
+   texte d'item vient de la palette.
 
 ## Journal d'implémentation
 
@@ -237,22 +259,90 @@ remplace :
   utilisé à **exactement trois endroits** (toast, suppression/annulation d'une
   carte, changement de page) ; un quatrième appel fait échouer un test.
 
-#### `focus.ring` : `outline`, pas `border` (correction 2026-09-18)
+#### `focus.ring` : bordure sur le bord du contrôle (corrigé deux fois, 2026-09-18)
 
-Le §2 dit « accent, 2 px, offset 1 px, tout widget focalisable, tous les
-thèmes ». Écrit en `border`, l'anneau ne s'affichait **jamais** sur un bouton,
-une pill, un champ ou une combo : Qt résout les conflits QSS par la
-spécificité CSS2, un sélecteur d'id (`#tabButton`) vaut 100 contre 11 pour
-`QPushButton:focus` — et 157 règles `#objectName` de ce template déclarent une
-bordure. Vérifié offscreen avant/après.
+Le §2 disait « accent, 2 px, offset 1 px ». Deux tentatives ont échoué avant
+la bonne, et les deux échecs valent d'être écrits parce qu'ils viennent de la
+même méconnaissance de Qt.
 
-L'anneau est donc un **`outline`** : aucune autre règle ne touche cette
-propriété, il n'y a plus de conflit à perdre, et un outline se dessine *à
-l'extérieur* de la bordure — ce que « offset 1 px » décrit exactement.
-`outline-offset` porte enfin le token `focus.ring.offset`, jusque-là non
-utilisé. Seule exception : un **champ** focalisé teinte aussi sa propre
-bordure en accent (§3 « Champ »), via `border-color` — pas le raccourci
-`border`, qui changerait la largeur et décalerait la ligne d'un pixel.
+1. **`border` sur un sélecteur de type** (`QPushButton:focus`). Qt résout les
+   conflits QSS par la spécificité CSS2 : un sélecteur d'id vaut 100, un
+   type + pseudo-classe 11 — et 157 règles `#objectName` de ce template
+   déclarent une bordure. L'anneau ne s'est jamais affiché.
+2. **`outline`**, choisi parce qu'aucune autre règle ne touche cette
+   propriété : plus de conflit à perdre. Mais **Qt ne peut pas peindre en
+   dehors du rect d'un widget** : sur un QWidget, `outline` ne fait que
+   recolorer le `PE_FrameFocusRect` de Fusion, un rectangle dessiné autour du
+   *sous-rect du label*, à l'intérieur du contrôle et à travers les jambages
+   du texte. `outline-offset` et le rayon de la pill sont ignorés. Visible
+   dans `docs/audit-2026-09-18/shots/aether/app_focus_ring_detail.png`
+   (deuxième boîte collée au mot « Shopping », coupant le « g »).
+
+**Règle retenue** : l'anneau est une **bordure accent dessinée sur le bord du
+contrôle**, déclarée à la spécificité d'id (`#tabButton:focus`), plus un fond
+`accent.soft` sur les contrôles non remplis. `outline: none` est posé sur la
+base pour éteindre le rect de Fusion. Deux corollaires :
+
+- passer de `border.width` à `focus.ring.width` augmente le `sizeHint` du
+  contrôle, ce qui décalerait toute sa ligne au focus. Chaque règle rend donc
+  le pixel en padding. QSS n'a pas d'arithmétique : les valeurs compensées
+  sont des tokens dérivés — `space_2_inset` = `space_2` − `focus_inset`
+  (`core/theme.py`). Un test vérifie que focaliser ne change aucune
+  géométrie ;
+- sur un contrôle **rempli en accent** (le bouton Save), un anneau accent est
+  invisible — et c'est le premier contrôle qu'atteint un utilisateur clavier.
+  Ceux-là s'entourent de `fg.on-accent`.
+
+Les contrôles bordés dont ce fichier ne fixe pas le padding prennent l'accent
+sur leur bordure existante (`border-color`), sans changement de géométrie.
+
+#### Portée de la feuille : `QWidget[aion2="true"]` (décision 2026-09-18)
+
+La feuille vit sur la `QApplication` (§4-1) — et Qt **fusionne** deux
+feuilles propriété par propriété au lieu de laisser la plus profonde
+remplacer l'autre : le poids est `(origin + depth) * 0x100000 + specificity *
+0x100 + order`, donc la profondeur écrase la spécificité d'un facteur 4096.
+Conséquence mesurée : la feuille de l'Armory (posée par `app.py` sur chacune
+de ses fenêtres) gagne toutes les propriétés qu'elle déclare, et **toutes
+celles qu'elle ne déclare pas descendent de la nôtre chez elle**. Barlow dans
+un layout calé au doigt sur la police système, du `letter-spacing` dans ses
+en-têtes de table, des fonds de badge qui suivent le thème dans une fenêtre
+par ailleurs codée en Abyss — et, le plus grave, un `color` sur les vues
+d'items qui aplatissait chaque `setForeground()` par rareté (le correctif du
+2026-08-29, avec rapport utilisateur attaché, défait en silence).
+
+Décision : **toute règle de la feuille est préfixée `QWidget[aion2="true"]`**.
+Nos trois top-levels (MainWindow, OverlayWindow, FlowMapWindow) posent la
+propriété dans `__init__`, et Qt remonte `parentWidget()` pour les sélecteurs
+de descendance — donc chaque dialogue, popup et enfant des nôtres matche,
+tandis que les fenêtres sans parent de l'Armory ne matchent jamais. Une seule
+exception, forcée par Qt : `QToolTip`, que Qt rend dans un `QTipLabel`
+top-level sans parent widget, qu'aucun sélecteur de descendance ne peut
+atteindre. Elle est allow-listée avec sa raison
+(`tests/fixtures/unscoped_selectors_allowlist.txt`), et elle est sans risque
+parce que l'Armory déclare son propre `QToolTip`, fond **et** texte.
+
+Corollaire à ne pas oublier : **aucun `color` ni `selection-color` sur une vue
+d'items**, jamais — ni en bare ni en scopé. Une couleur QSS sur une vue
+d'items écrase inconditionnellement le `setForeground()` de chaque item. La
+couleur du texte d'item vient de la palette (`QPalette::Text` /
+`::HighlightedText`, toutes deux dérivées des tokens). Nos propres popups de
+combo reçoivent leur couleur par règle `#objectName`.
+
+**Police globale = vague Armory (décision différée).** `app.setFont()` ne
+passe pas par la cascade QSS et atteindrait donc l'Armory quoi qu'il arrive :
+la police par défaut de l'application reste **inchangée** pour l'instant, et
+Barlow est posée par la règle scopée ci-dessus. Le jour où l'Armory est
+tokenisée, `app.setFont()` devient le bon véhicule et la règle scopée peut
+disparaître.
+
+**Dette Armory, comptée et gelée.** `ItemDatabase/` n'est pas tokenisée (206
+hex, 23 `QColor`, 96 `setStyleSheet`, zéro import de `core.theme`) et le
+§ « Statut » promet pourtant « aucun hex magique dans `ui/` ou
+`ItemDatabase/` ». Tant que la vague n'a pas eu lieu, la promesse tenable est
+un plancher : `tests/fixtures/itemdatabase_literal_baseline.txt` enregistre
+les comptes, et le test échoue s'ils **montent** (comme s'ils baissent sans
+mise à jour du plancher).
 
 #### Deux défauts trouvés en relisant le rendu câblé
 
@@ -273,6 +363,16 @@ n'attribuait pas. Trouvés en regardant les captures, pas les tests.
   par un clic, donc l'app s'ouvrait avec *aucun* des deux onglets marqué.
   `MainWindow` — qui détient l'onglet actif et le restaure depuis le profil —
   déplace maintenant le surlignage lui-même (`TasksPage.mark_active_tab`).
+
+### Décisions différées (posées explicitement, pas oubliées)
+
+| Sujet | Décision | Pourquoi pas maintenant |
+|---|---|---|
+| Tokenisation de l'Armory | vague dédiée | 22k lignes d'UI, 190 sélecteurs QSS, sa propre feuille, zéro import de `core.theme`. La feuille de l'app est rendue **étanche** pour elle en attendant (voir « Portée de la feuille »), et sa dette est gelée par un plancher testé. |
+| `app.setFont()` comme véhicule de la police de base | après la vague Armory | `setFont` ne passe pas par la cascade QSS : il atteindrait l'Armory quoi qu'on fasse. Barlow passe donc par la règle scopée. |
+| Emoji utilisés comme icônes (`"📋 Vorlagen"`, `"🛒 Einkauf"`, `"👤 Charaktere"`) dans `core/translations.py` | vague icônes | §3 dit « aucun emoji comme icône » et ces glyphes sont dans les chaînes traduites des trois langues. Les remplacer demande de vrais `QIcon` Lucide posés sur les boutons — un travail d'icônes, pas une retouche de chaîne. Le double sélecteur de thème du `SettingsDialog` a en revanche perdu ses emoji tout de suite (ils n'étaient pas traduits). |
+| Deux sélecteurs de thème (`SettingsDialog` + page Appearance) | à dédupliquer | Le dialogue est vivant (en-tête → `open_settings`) ; retirer un contrôle qu'un utilisateur utilise peut-être est une décision produit, pas un correctif de revue. Sa version emoji est corrigée, la duplication reste. |
+| Flèches de spinbox/combo (`assets/icons/arrow_*_orange.png`) | vague icônes | Assets PNG oranges, donc hors thème sur Abyss/Emerald/Void. Corriger demande des icônes par thème ou teintées à l'exécution. |
 
 ## Pages (overrides)
 

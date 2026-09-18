@@ -54,6 +54,20 @@ from PySide6.QtCore import QTimer, QEvent
 #: per instance, because the stylesheet it tracks is process-wide.
 _APPLIED_STYLE_KEY = None
 
+#: Theme whose palette is currently installed on the QApplication.
+#:
+#: Tracked separately from ``MainWindow.current_theme`` because the two
+#: answer different questions: ``current_theme`` is what the app WANTS,
+#: this is what has actually been rendered.  Conflating them cost a real
+#: bug (review F-1): both callers that matter -- ``__init__`` and
+#: ``load_profile`` -- assign ``current_theme`` *before* calling
+#: ``apply_theme(self.current_theme)``, so a "did the theme move?" test
+#: against ``current_theme`` was always False and the palette silently
+#: stayed on whatever ``main.py`` had set.  The sheet followed the theme,
+#: the palette did not: exactly the "navy baseline under an Inferno sheet"
+#: that ``core.theme.build_palette``'s docstring exists to prevent.
+_APPLIED_PALETTE_THEME = None
+
 THEME_LOGOS = {
     "abyss": "assets/logos/logo_abyss.png",
     "inferno": "assets/logos/logo_inferno.png",
@@ -476,6 +490,14 @@ class MainWindow(QMainWindow):
         self.flow_map_window.root_renamed.connect(self._on_flow_map_root_renamed)
         self.flow_map_window.map_overlay_changed.connect(self._on_flow_map_overlay_changed)
 
+        # The application stylesheet is scoped to `QWidget[aion2="true"]`
+        # and its descendants (ui/styles.template.qss §0).  Set before
+        # setup_ui() builds anything, so every child is polished with the
+        # scope already in place -- and so that the sheet cannot reach the
+        # Armory's parentless windows, whose 1,205-line sheet was tuned
+        # against the default font and its own per-item colours.
+        self.setProperty("aion2", True)
+
         self.setup_ui()
         # The tab pill highlight was only ever set by a click, so the app
         # opened with neither Tasks nor Shopping marked active.
@@ -606,6 +628,7 @@ class MainWindow(QMainWindow):
             action_label=tr(self.language, "undo"),
             on_action=self._undo_pending_delete,
             duration_ms=self.UNDO_WINDOW_MS,
+            action_key="undo",
         )
         # `self` as the context object: Qt drops the callback if the window
         # is destroyed before the timer fires, instead of running it against
@@ -937,6 +960,20 @@ class MainWindow(QMainWindow):
         dlg = module.TemplateItemPickerDialog(
             window._raw_items, window.icon_cache, window.detail_cache, parent=parent_widget,
         )
+        # KEPT deliberately, against review F-0e's "delete the line".
+        #
+        # This is an ItemDatabase widget: it renders the item catalog and
+        # colours each row by rarity with QStandardItem.setForeground().  It
+        # is the one Armory widget that lives INSIDE our widget tree
+        # (parent=parent_widget), so unlike the Armory's own parentless
+        # windows it does match the app sheet's `QWidget[aion2="true"]`
+        # scope.  Its own sheet is the deeper one and wins every property it
+        # declares, which is precisely what keeps its rarity colours, its
+        # font metrics and its icon-column widths intact.  Dropping it would
+        # hand this dialog to a sheet tuned for a different widget set --
+        # the same class of regression as the BLOCKER (F-0), just delivered
+        # from the other side.  It goes away with the Armory tokenization
+        # wave, together with ItemDatabase/styles.qss itself.
         dlg.setStyleSheet(module._load_qss_text())
         if dlg.exec() and dlg.selected_item:
             return dlg.selected_item
@@ -1201,6 +1238,7 @@ class MainWindow(QMainWindow):
 
         self.toast_widget.hide()
         self._toast_action = None
+        self._toast_action_key = None
         self._toast_seq = 0
     
     def _setup_sidebar(self):
@@ -2030,11 +2068,13 @@ class MainWindow(QMainWindow):
             return
 
         # Same reasoning as in load_profile: the undo window cannot outlive
-        # the session, so a pending delete is committed before the final save
-        # on every path below that actually closes the app.
-        self._commit_pending_delete()
-
+        # the session.  Committed on each path that actually CLOSES the app,
+        # not here -- hiding into the tray does not end the session, and
+        # committing before the tray branch silently ended the undo window
+        # every time the user closed the window with tray mode on (review
+        # F-8; the comment used to claim the behaviour this now has).
         if getattr(self, "_force_quit", False):
+            self._commit_pending_delete()
             self.save_profile(silent=True)
             event.accept()
             QApplication.instance().quit()
@@ -2070,11 +2110,13 @@ class MainWindow(QMainWindow):
             else:
                 self.minimize_to_tray = False
                 self._save_app_config()
+                self._commit_pending_delete()
                 self.save_profile(silent=True)
                 event.accept()
                 QApplication.instance().quit()
             return
 
+        self._commit_pending_delete()
         self.save_profile(silent=True)
         event.accept()
         QApplication.instance().quit()
@@ -3060,6 +3102,13 @@ class MainWindow(QMainWindow):
         if box.clickedButton() is not yes_btn:
             return
 
+        # Close the undo window BEFORE wiping the lists, exactly as
+        # load_profile does. Without this the pending card survives the
+        # reset in _pending_delete, and clicking Undo afterwards puts it
+        # back into a list the user just emptied -- then persists it on the
+        # next save (review F-2, reproduced offscreen).
+        self._commit_pending_delete()
+
         self.task_lists = {key: [] for key in self.tabs}
         self.refresh()
         self.save_profile(silent=True)
@@ -3073,6 +3122,10 @@ class MainWindow(QMainWindow):
         box.exec()
         if box.clickedButton() is not yes_btn:
             return
+
+        # Same reason as reset_profile: a pending delete must not be
+        # undoable across a destructive clear (review F-2).
+        self._commit_pending_delete()
 
         for tab in self.task_lists:
             self.task_lists[tab] = [
@@ -3109,7 +3162,16 @@ class MainWindow(QMainWindow):
             "high":   tr(self.language, "priority_high"),
         }
         event_text = tr(self.language, "event_badge")
-        for cards in self.task_lists.values():
+        # The pending soft-deleted card is deliberately NOT in task_lists
+        # (that exclusion is the whole point of the design), so it has to be
+        # retranslated explicitly -- otherwise Undo brings back a card still
+        # labelled in the previous language, for the rest of the session,
+        # since _apply_priority_style runs nowhere else (review F-10).
+        pending = self._pending_delete
+        card_groups = list(self.task_lists.values())
+        if pending is not None:
+            card_groups.append([pending["card"]])
+        for cards in card_groups:
             for card in cards:
                 if isinstance(card, ShoppingCard):
                     raw = card.priority
@@ -3119,6 +3181,11 @@ class MainWindow(QMainWindow):
                     card._apply_priority_style(prio_display.get(raw, raw))
                     if getattr(card, "is_event", False) and hasattr(card, "event_badge"):
                         card.event_badge.setText(event_text)
+
+        # A toast still on screen keeps its action button, so its label has
+        # to follow the switch too (review F-10).
+        if getattr(self, "_toast_action_key", None) and not self.toast_action_btn.isHidden():
+            self.toast_action_btn.setText(tr(self.language, self._toast_action_key))
 
         self.sidebar.update_language(self.language, tr)
         self.header.update_language(self.language, tr)
@@ -3142,7 +3209,11 @@ class MainWindow(QMainWindow):
         self.save_profile()
 
     def apply_theme(self, theme_name):
-        unchanged = theme_name == self.current_theme and _APPLIED_STYLE_KEY is not None
+        global _APPLIED_PALETTE_THEME
+        # Against the APPLIED theme, never against the desired one -- see
+        # the note on _APPLIED_PALETTE_THEME.  The first application always
+        # runs, whatever the profile asked for.
+        unchanged = theme_name == _APPLIED_PALETTE_THEME
         self.current_theme = theme_name
 
         # A theme is now a different set of token VALUES, not a different
@@ -3160,6 +3231,7 @@ class MainWindow(QMainWindow):
         # called on every profile load, usually with the same theme).
         if app is not None and not unchanged:
             app.setPalette(theme.build_palette(self.current_theme))
+            _APPLIED_PALETTE_THEME = theme.tokens(self.current_theme).name
 
         if hasattr(self, "background"):
             self.background.set_theme(theme_name)
@@ -3202,17 +3274,25 @@ class MainWindow(QMainWindow):
 
         self.update()
 
-    def show_toast(self, text, action_label=None, on_action=None, duration_ms=2200):
+    def show_toast(self, text, action_label=None, on_action=None, duration_ms=2200,
+                   action_key=None):
         """Bottom-of-content status line. ``action_label``/``on_action`` add a
-        single clickable action (Undo) for the lifetime of this toast."""
+        single clickable action (Undo) for the lifetime of this toast.
+
+        ``action_key`` is the translation key the label came from; keeping it
+        lets ``apply_language`` retranslate a toast that is still on screen
+        when the user switches language (review F-10).
+        """
         self.toast_label.setText(f"✓ {text}")
 
         if action_label and on_action is not None:
             self._toast_action = on_action
+            self._toast_action_key = action_key
             self.toast_action_btn.setText(action_label)
             self.toast_action_btn.show()
         else:
             self._toast_action = None
+            self._toast_action_key = None
             self.toast_action_btn.hide()
 
         self._toast_seq += 1

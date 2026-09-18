@@ -49,7 +49,10 @@ def main() -> int:
     # Register the bundled OFL faces BEFORE any stylesheet names them:
     # QSS resolves font-family at parse time, so a face registered later is
     # simply not found and every rule silently falls back (MASTER §1).
-    load_fonts()
+    # Feed the resolved families back into the tokens: the QSS asks for a
+    # family BY NAME, and Qt silently drops a name it does not know, so the
+    # sheet has to name what load_fonts() actually registered (review F-11b).
+    theme.set_font_families(load_fonts())
     # Fallback palette for everything the QSS does not explicitly cover
     # (User-reported, 2026-08-29: black-on-dark text and white list boxes
     # when the OS itself was in dark mode -- Fusion pulls those from the

@@ -30,10 +30,30 @@ from pathlib import Path
 
 from PySide6.QtGui import QColor, QPalette
 
+from utils.paths import app_root
+
 logger = logging.getLogger(__name__)
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_PATH = _REPO_ROOT / "ui" / "styles.template.qss"
+
+def template_path() -> Path:
+    """Where ``ui/styles.template.qss`` lives, resolved when it is read.
+
+    Goes through ``utils.paths.app_root()`` like every other read-only
+    resource in the repo (``ui/main_window._asset_base_path``,
+    ``ItemDatabase/app.py``, ``main.py``) instead of walking up from
+    ``__file__``.  Walking up happens to work in a PyInstaller bundle --
+    a PYZ module's ``__file__`` is synthesized under ``sys._MEIPASS`` --
+    but it worked by coincidence, it could not be monkeypatched in a
+    frozen-layout test, and a move of ``core/`` would have turned it into
+    an unhandled FileNotFoundError during MainWindow construction.
+    """
+    return app_root() / "ui" / "styles.template.qss"
+
+
+#: Back-compatible alias.  Resolved at import for the tests that read the
+#: template directly; :func:`build_qss` calls :func:`template_path` instead,
+#: so a frozen layout is resolved at read time.
+TEMPLATE_PATH = template_path()
 
 # --------------------------------------------------------------------------
 # §1 Primitives
@@ -185,6 +205,50 @@ class Tokens:
     def focus_ring(self) -> str:
         """MASTER §2 ``focus.ring`` — always this theme's accent."""
         return self.accent
+
+    # --- focus ring geometry ----------------------------------------
+    # MASTER §2 revised 2026-09-18: the ring is a BORDER on the control's
+    # own edge, not an outline around it.  Qt cannot draw outside a widget's
+    # rect -- `outline` on a QWidget only recolours Fusion's
+    # PE_FrameFocusRect, which is painted around the *label* sub-rect,
+    # inside the control and through the text (verified in
+    # docs/audit-2026-09-18/shots/aether/).
+    #
+    # Growing the border from `border_width` to `focus_ring_width` would
+    # grow the widget's sizeHint and nudge its whole row, so the focus rule
+    # also has to give back exactly that much padding.  QSS has no
+    # arithmetic, so the compensated values are tokens: `space_2_inset` is
+    # `space_2` minus `focus_inset`.
+
+    @property
+    def focus_inset(self) -> int:
+        """Pixels the focus border adds per edge over the resting border."""
+        return max(0, self.focus_ring_width - self.border_width)
+
+    @property
+    def space_1_inset(self) -> int:
+        return max(0, self.space_1 - self.focus_inset)
+
+    @property
+    def space_2_inset(self) -> int:
+        return max(0, self.space_2 - self.focus_inset)
+
+    @property
+    def space_3_inset(self) -> int:
+        return max(0, self.space_3 - self.focus_inset)
+
+    @property
+    def space_4_inset(self) -> int:
+        return max(0, self.space_4 - self.focus_inset)
+
+    @property
+    def space_6_inset(self) -> int:
+        return max(0, self.space_6 - self.focus_inset)
+
+    @property
+    def space_0_inset(self) -> int:
+        """For controls with no resting padding (e.g. the toast action)."""
+        return 0
 
 
 #: Fallback stacks (MASTER §1, typography) used when the bundled OFL faces
@@ -519,8 +583,9 @@ _GEAR_TYPE_COLORS: dict[str, str] = {
     "Neutral": "#94a3b8",
 }
 
-#: Built-in reset timers — mirror of ``ui/overlay/overlay_window.py``'s
-#: ``TIMER_COLORS`` / ``CUSTOM_TIMER_COLOR``.
+#: Built-in reset timers.  THIS is the owner (ownership was inverted on
+#: 2026-09-18): ``ui/overlay/overlay_window.py`` and ``ui/pages/timers_page.py``
+#: read from here by key.  A drift "fix" must change this table, not theirs.
 _TIMER_COLORS: dict[str, str] = {
     "daily": "#3b82f6",
     "weekly": "#8b5cf6",
@@ -529,8 +594,9 @@ _TIMER_COLORS: dict[str, str] = {
     "custom": "#14b8a6",
 }
 
-#: The eight swatches a user can pick for a custom timer — mirror of
-#: ``ui/custom_timer_dialog.py``'s ``CUSTOM_TIMER_COLORS``.
+#: The eight swatches a user can pick for a custom timer.  THIS is the
+#: owner: ``ui/custom_timer_dialog.CUSTOM_TIMER_COLORS`` is built from it
+#: (ownership inverted 2026-09-18).
 _TIMER_SWATCHES: dict[str, str] = {
     "cyan": "#22d3ee",
     "purple": "#a855f7",
@@ -581,6 +647,44 @@ def data_color_keys(kind: str) -> tuple[str, ...]:
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
 
 
+#: Families Qt actually registered, as reported by ``core.fonts.load_fonts``.
+#: Empty until someone feeds them in (``main.py``, ``scripts/theme_preview``).
+#:
+#: Why this exists: the QSS asks for ``"Barlow"`` by name, and a family Qt
+#: does not know is dropped silently -- the whole rule falls back with no
+#: warning.  ``load_fonts()`` already resolves what Qt really loaded
+#: (including the "trust Qt, not the spec" branch for a renamed upstream
+#: release), but that answer was being discarded, so the branch was dead
+#: with respect to the stylesheet (review F-11b).
+_RESOLVED_FAMILIES: dict[str, str] = {}
+
+
+def set_font_families(resolved: dict[str, str]) -> None:
+    """Record the families Qt registered, so the QSS names those."""
+    _RESOLVED_FAMILIES.clear()
+    _RESOLVED_FAMILIES.update({role: family for role, family in resolved.items() if family})
+
+
+def font_stack(tokens_or_theme: Tokens | str, role: str) -> str:
+    """The QSS ``font-family`` stack for ``role``, Qt's answer first.
+
+    Falls back to the token's own stack when nothing has been registered
+    (a headless import, a test) -- which is also the stack that carries the
+    MASTER §1 fallbacks.
+    """
+    theme_tokens = tokens_or_theme if isinstance(tokens_or_theme, Tokens) else tokens(tokens_or_theme)
+    declared = getattr(theme_tokens, f"font_{role}")
+    resolved = _RESOLVED_FAMILIES.get(role)
+    if not resolved:
+        return declared
+    entries = [part.strip() for part in declared.split(",")]
+    quoted = f'"{resolved}"'
+    if entries and entries[0] == quoted:
+        return declared
+    # Put what Qt really has in front, keep the declared stack as fallback.
+    return ", ".join([quoted] + [e for e in entries if e != quoted])
+
+
 def render_qss(template: str, theme: str = DEFAULT_THEME, asset_path: str = "") -> str:
     """Substitute ``{{token}}`` and ``ASSET_PATH`` in an in-memory template.
 
@@ -592,6 +696,10 @@ def render_qss(template: str, theme: str = DEFAULT_THEME, asset_path: str = "") 
 
     def substitute(match: re.Match[str]) -> str:
         attr = _token_attr(match.group(1))
+        if attr in ("font_display", "font_body", "font_mono"):
+            # Resolved through core.fonts so the sheet names the family Qt
+            # actually registered (see set_font_families).
+            return font_stack(theme_tokens, attr.removeprefix("font_"))
         if not hasattr(theme_tokens, attr):
             unknown.append(match.group(1))
             return match.group(0)
@@ -610,7 +718,17 @@ def build_qss(theme: str = DEFAULT_THEME, asset_path: str = "") -> str:
     exactly like the loader it supersedes (``MainWindow.load_styles``): the
     repo root in a dev checkout, ``sys._MEIPASS`` in a frozen build.
     """
-    template = TEMPLATE_PATH.read_text(encoding="utf-8")
+    path = template_path()
+    try:
+        template = path.read_text(encoding="utf-8")
+    except OSError as error:
+        # A missing template means an unstyled app, and the message must
+        # name the path that was actually tried -- this used to surface as a
+        # bare FileNotFoundError from inside MainWindow.__init__.
+        raise RuntimeError(
+            f"QSS template not found at {path} — is it bundled? "
+            f"(spec datas must carry ('ui/styles.template.qss', 'ui'))"
+        ) from error
     return render_qss(template, theme=theme, asset_path=asset_path)
 
 

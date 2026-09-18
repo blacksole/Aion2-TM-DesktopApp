@@ -348,3 +348,70 @@ def test_the_spec_ships_the_bundled_fonts():
 
 def test_the_legacy_stylesheet_is_not_in_the_tree():
     assert not (Path(__file__).resolve().parent.parent / "ui" / "styles.qss").exists()
+
+
+# ---------------------------------------------------------------------------
+# F-1: the palette must follow the theme on the path that actually runs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["inferno", "emerald", "void"])
+def test_a_profile_theme_reaches_the_palette_at_startup(qapp, tmp_path_factory, name):
+    """The regression the review found, tested through the real caller.
+
+    ``__init__`` and ``load_profile`` both assign ``current_theme`` *before*
+    calling ``apply_theme(self.current_theme)``, so a "did the theme move?"
+    guard comparing against ``current_theme`` was always True — the sheet
+    followed the profile, the palette stayed on whatever ``main.py`` set.
+    Building a window from a profile is the only way to see that; the
+    theme-picker path (``apply_theme(other)``) hides it.
+    """
+    import json
+
+    import ui.main_window as mw
+    from PySide6.QtGui import QPalette
+
+    profile_dir = tmp_path_factory.mktemp(f"palette_{name}")
+    data = json.loads(FIXTURE_PROFILE.read_text(encoding="utf-8"))
+    data["theme"] = name
+    (profile_dir / "QaProfile.json").write_text(json.dumps(data), encoding="utf-8")
+
+    patcher = pytest.MonkeyPatch()
+    patcher.setattr(mw.MainWindow, "_resolve_profile_dir", lambda self: profile_dir)
+    patcher.setattr(mw.MainWindow, "_save_app_config", lambda self: None)
+    # A fresh process-wide "nothing applied yet", so this really is the
+    # first application and not a no-op behind an earlier test's state.
+    patcher.setattr(mw, "_APPLIED_PALETTE_THEME", None)
+    patcher.setattr(mw, "_APPLIED_STYLE_KEY", None)
+
+    window = mw.MainWindow()
+    window.countdown_timer.stop()
+    try:
+        assert window.current_theme == name
+        palette = QApplication.instance().palette()
+        assert palette.color(QPalette.Highlight) == theme.qcolor(name, "accent"), (
+            f"{name}: palette Highlight is {palette.color(QPalette.Highlight).name()}"
+        )
+        assert palette.color(QPalette.Base) == theme.qcolor(name, "bg.input")
+        assert palette.color(QPalette.HighlightedText) == theme.qcolor(name, "fg.on_accent")
+        # ... and the sheet agrees with it.
+        assert theme.THEMES[name].accent in QApplication.instance().styleSheet()
+    finally:
+        destroy_window(window)
+        patcher.undo()
+
+
+def test_apply_theme_tracks_what_it_applied_not_what_was_asked(win):
+    """The guard's subject, pinned directly."""
+    import ui.main_window as mw
+
+    win.apply_theme("void")
+    assert mw._APPLIED_PALETTE_THEME == "void"
+    # Pre-assigning current_theme (what __init__/load_profile do) must not
+    # make the next apply_theme a no-op.
+    win.current_theme = "frostbite"
+    win.apply_theme("frostbite")
+    assert mw._APPLIED_PALETTE_THEME == "frostbite"
+    assert QApplication.instance().palette().color(QPalette.Highlight) == theme.qcolor(
+        "frostbite", "accent"
+    )

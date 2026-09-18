@@ -1,0 +1,18 @@
+# Colour-literal / inline-stylesheet debt in ItemDatabase/, as measured on
+# 2026-09-18 by tests/test_no_hex_literals_in_ui.py's own scanner.
+#
+# Why a baseline and not a clean scan: MASTER line 3 promises "aucun hex
+# magique dans ui/ ou ItemDatabase/", and the Armory has not been tokenized
+# yet -- that is its own wave (it has 22k lines of UI, 190 QSS selectors and
+# its own stylesheet, and it never imports core.theme). Until then the honest
+# form of the promise is a floor that may only go DOWN: adding a literal
+# fails the gate, removing some fails it too, so the number here always says
+# what the debt actually is.
+#
+# The numbers are this scanner's, not a hand count: `#` comments are stripped
+# first, so they differ slightly from a raw grep.
+
+hex = 201
+qcolor = 23
+rgb = 20
+setstylesheet = 96

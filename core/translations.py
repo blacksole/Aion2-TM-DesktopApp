@@ -603,8 +603,8 @@ TRANSLATIONS = {
         "arm_enchant_sim_note": "Nur der/die skalierende(n) Stat(s) bekommen beim Verzaubern einen Bonus (Attack bei Waffen; Defense + HP bei Rüstung) — alle anderen Main Stats bleiben unverändert, Substats sowieso (nur via Soulbinding). Der Bonus ist eine grobe, an echten API-Werten kalibrierte Schätzung — keine echten Serverwerte. Jenseits der normalen Maximalstufe (Exceed) wird sie unsicherer.",
         "arm_loading_details": "Lade Details…",
         "arm_possible_substats_html": "<b>Mögliche Substats</b> <span style='font-weight:400;'>(zufälliger Roll, unabhängig von Verzauberung — nur durch Soulbinding steigerbar{slot_hint})</span>",
-        "arm_all_substats_selected_html": "<span style='color:#4ade80;font-weight:700;'>Alle möglichen Subeigenschaften ausgewählt ({selected}/{cap}){stone_note}</span>",
-        "arm_substats_selected_count_html": "<span style='color:#94a3b8;'>{selected}/{cap} Subeigenschaften ausgewählt{stone_note}</span>",
+        "arm_all_substats_selected_html": "<span style='color:{color_ok};font-weight:700;'>Alle möglichen Subeigenschaften ausgewählt ({selected}/{cap}){stone_note}</span>",
+        "arm_substats_selected_count_html": "<span style='color:{color_muted};'>{selected}/{cap} Subeigenschaften ausgewählt{stone_note}</span>",
 
         "arm_item_details_title": "Item Details",
 
@@ -1538,8 +1538,8 @@ TRANSLATIONS = {
         "arm_enchant_sim_note": "Бонус при зачаровании получает только масштабируемая характеристика (Attack у оружия; Defense + HP у брони) — все остальные основные характеристики не меняются, доп. характеристики тем более (только через Soulbinding). Бонус — приблизительная оценка, откалиброванная по реальным данным API, не точные серверные значения. За пределами обычного максимального уровня (Exceed) оценка менее надёжна.",
         "arm_loading_details": "Загрузка данных…",
         "arm_possible_substats_html": "<b>Возможные доп. характеристики</b> <span style='font-weight:400;'>(случайный ролл, не зависит от зачарования — повышается только через Soulbinding{slot_hint})</span>",
-        "arm_all_substats_selected_html": "<span style='color:#4ade80;font-weight:700;'>Выбраны все возможные доп. характеристики ({selected}/{cap}){stone_note}</span>",
-        "arm_substats_selected_count_html": "<span style='color:#94a3b8;'>Выбрано {selected}/{cap} доп. характеристик{stone_note}</span>",
+        "arm_all_substats_selected_html": "<span style='color:{color_ok};font-weight:700;'>Выбраны все возможные доп. характеристики ({selected}/{cap}){stone_note}</span>",
+        "arm_substats_selected_count_html": "<span style='color:{color_muted};'>Выбрано {selected}/{cap} доп. характеристик{stone_note}</span>",
 
         "arm_item_details_title": "Информация о предмете",
 
@@ -2469,8 +2469,8 @@ TRANSLATIONS = {
         "arm_enchant_sim_note": "Only the scaling stat(s) get a bonus when enchanting (Attack for weapons; Defense + HP for armor) — every other main stat stays unchanged, substats even more so (Soulbinding only). The bonus is a rough estimate calibrated against real API values — not real server numbers, and less reliable beyond the normal max level (Exceed).",
         "arm_loading_details": "Loading details…",
         "arm_possible_substats_html": "<b>Possible Substats</b> <span style='font-weight:400;'>(random roll, independent of enchantment — only increasable via Soulbinding{slot_hint})</span>",
-        "arm_all_substats_selected_html": "<span style='color:#4ade80;font-weight:700;'>All possible substats selected ({selected}/{cap}){stone_note}</span>",
-        "arm_substats_selected_count_html": "<span style='color:#94a3b8;'>{selected}/{cap} substats selected{stone_note}</span>",
+        "arm_all_substats_selected_html": "<span style='color:{color_ok};font-weight:700;'>All possible substats selected ({selected}/{cap}){stone_note}</span>",
+        "arm_substats_selected_count_html": "<span style='color:{color_muted};'>{selected}/{cap} substats selected{stone_note}</span>",
 
         "arm_item_details_title": "Item Details",
 
@@ -2802,10 +2802,45 @@ TRANSLATIONS = {
 }
 
 
+#: Colour placeholders any translated string may use.  A handful of strings
+#: are rich text (``<span style='color:…'>``) that Qt renders inside a
+#: QLabel, where no stylesheet can reach them -- so the colour has to be in
+#: the string.  It used to be a literal hex (``#4ade80`` = the `ok` token,
+#: ``#94a3b8`` = `fg.muted`), frozen in three language tables at once, which
+#: meant those two spans could never follow a theme and changing `ok` was a
+#: three-file edit (review F-5).  They are named placeholders now, filled
+#: from the active theme at format time -- which also keeps every existing
+#: caller working untouched, including the ones in ItemDatabase/.
+_COLOR_PLACEHOLDERS = {
+    "color_fg": "fg",
+    "color_ok": "ok",
+    "color_warn": "warn",
+    "color_danger": "danger",
+    "color_accent": "accent",
+    "color_muted": "fg.muted",
+    "color_secondary": "secondary",
+}
+
+
+def _color_kwargs() -> dict[str, str]:
+    """``{placeholder: #rrggbb}`` for the theme currently being rendered."""
+    from core import theme  # local: keeps this module import-light
+
+    tokens = theme.current_tokens()
+    return {
+        name: theme.qcolor(tokens, token).name()
+        for name, token in _COLOR_PLACEHOLDERS.items()
+    }
+
+
 def tr(language, key, **kwargs):
     text = TRANSLATIONS.get(
         language,
         TRANSLATIONS[DEFAULT_LANGUAGE]
     ).get(key, key)
+
+    if "{color_" in text:
+        # Only pay for the lookup on the few rich-text strings that need it.
+        kwargs = {**_color_kwargs(), **kwargs}
 
     return text.format(**kwargs)

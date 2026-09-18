@@ -119,7 +119,9 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\icons\\aion2_tm_icon.ico'],
+    # Forward slashes: a backslash path is one literal filename on a
+    # Linux PyInstaller run, and the Linux port landed 2026-09-18.
+    icon=['assets/icons/aion2_tm_icon.ico'],
 )
 coll = COLLECT(
     exe,

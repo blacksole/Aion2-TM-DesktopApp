@@ -22,6 +22,8 @@ pretend to have one).
 import html
 import json
 
+from utils.paths import app_root
+
 # Real gap found + fixed (User-reported, 2026-09-04: "translations fehlen
 # hier") -- build_full_view_html() accepted a `language` argument from the
 # very first version but never actually used it anywhere; every string in
@@ -155,134 +157,23 @@ def _lt(key: str, lang: str, **kwargs) -> str:
     return text.format(**kwargs) if kwargs else text
 
 
-_STYLE = """
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
-:root{
-  --bg:#0f172a; --surface:#1b2536; --surface-2:#212d42; --panel-inferno:rgba(59,15,15,0.55);
-  --border:rgba(249,115,22,0.28); --border-soft:rgba(148,163,184,0.16);
-  --text:#e8edf5; --text-dim:#94a3b8; --text-faint:#5c6b84;
-  --accent:#fb923c; --accent-strong:#f97316;
-  --daily:#22d3ee; --weekly:#a78bfa; --season:#fb923c;
-  --low:#4ade80; --mid:#fbbf24; --high:#f87171;
-  --shadow: 0 12px 32px rgba(0,0,0,0.35);
-}
-*{box-sizing:border-box;}
-body{
-  margin:0;
-  background:
-    radial-gradient(1200px 500px at 15% -10%, rgba(249,115,22,0.10), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(167,139,250,0.06), transparent 55%),
-    var(--bg);
-  color:var(--text); font-family:'Inter',system-ui,sans-serif; min-height:100vh;
-}
-.num{font-family:'JetBrains Mono','Consolas',monospace;font-variant-numeric:tabular-nums;}
-.shell{max-width:1360px;margin:0 auto;padding:28px 32px 64px;}
-.top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:18px;}
-.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;margin:0 0 6px;}
-h1{font-family:'Cinzel',serif;font-weight:700;font-size:28px;margin:0;text-wrap:balance;color:#fbead9;}
-.subtitle{color:var(--text-dim);font-size:13px;margin-top:6px;max-width:56ch;}
-.btn{
-  border:1px solid var(--border);background:var(--panel-inferno);color:var(--text);
-  font:inherit;font-weight:600;font-size:12.5px;padding:9px 15px;border-radius:9px;
-  cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
-  text-decoration:none;
-}
-.btn:hover{border-color:var(--accent);background:rgba(249,115,22,0.16);}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px;}
-.tile{background:var(--surface);border:1px solid var(--border-soft);border-radius:12px;padding:14px 16px;}
-.tile .k{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;font-weight:600;}
-.tile .v{font-size:24px;font-weight:700;margin-top:4px;}
-.tile .v small{font-size:13px;color:var(--text-dim);font-weight:500;}
-.tile .bar{height:5px;border-radius:3px;background:rgba(148,163,184,0.16);margin-top:9px;overflow:hidden;}
-.tile .bar i{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#a855f7);}
-.tile.missed .v{color:var(--high);}
-.missed-banner{display:flex;align-items:center;gap:10px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.35);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--text-dim);}
-.missed-banner[hidden]{display:none;}
-.missed-banner .dot{width:8px;height:8px;border-radius:50%;background:var(--high);flex:none;}
-.missed-banner b{color:var(--text);font-weight:700;}
-.missed-banner .hide{margin-left:auto;background:none;border:none;color:var(--text-dim);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;white-space:nowrap;flex:none;}
-.missed-banner .hide:hover{color:var(--text);}
-.toolbar{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;
-  background:var(--surface);border:1px solid var(--border-soft);border-radius:12px;padding:10px 12px;
-}
-.chipset{display:flex;gap:6px;flex-wrap:wrap;}
-.chip{
-  border:1px solid var(--border-soft);background:transparent;color:var(--text-dim);
-  font:inherit;font-size:12px;font-weight:600;padding:6px 11px;border-radius:999px;cursor:pointer;
-}
-.chip:hover{border-color:var(--accent);color:var(--text);}
-.chip.on{background:rgba(251,146,60,0.16);border-color:var(--accent);color:#fed7aa;}
-.toolbar .sep{width:1px;align-self:stretch;background:var(--border-soft);margin:0 2px;}
-.spacer{flex:1;}
-.search{
-  display:flex;align-items:center;gap:7px;background:var(--surface-2);border:1px solid var(--border-soft);
-  border-radius:9px;padding:7px 11px;min-width:180px;
-}
-.search input{background:none;border:none;color:var(--text);font:inherit;font-size:12.5px;outline:none;width:100%;}
-.search input::placeholder{color:var(--text-faint);}
-.toolbar select{
-  background:var(--surface-2);border:1px solid var(--border-soft);color:var(--text);
-  font:inherit;font-size:12.5px;font-weight:600;padding:7px 10px;border-radius:9px;cursor:pointer;
-}
-.grid-wrap{
-  border:1px solid var(--border-soft);border-radius:14px;overflow:auto;background:var(--surface);
-  box-shadow:var(--shadow);max-height:76vh;
-}
-table{border-collapse:separate;border-spacing:0;width:100%;min-width:900px;}
-thead th{position:sticky;top:0;z-index:3;background:#151f30;padding:0;border-bottom:1px solid var(--border-soft);}
-.grp-row th{padding:9px 10px 6px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;text-align:center;border-left:1px solid rgba(255,255,255,0.04);}
-.grp-row th.g-daily{color:var(--daily);} .grp-row th.g-weekly{color:var(--weekly);} .grp-row th.g-season{color:var(--season);}
-.grp-row th.corner{background:#151f30;}
-.col-row th{padding:8px 10px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:center;min-width:104px;border-left:1px solid rgba(255,255,255,0.04);}
-.col-row th .req{display:block;font-size:10px;color:var(--text-faint);font-weight:500;margin-top:2px;}
-.col-row th.corner{position:sticky;left:0;z-index:4;background:#151f30;text-align:left;padding:8px 14px;min-width:200px;}
-tbody th{position:sticky;left:0;z-index:2;background:var(--surface);text-align:left;padding:10px 14px;border-right:1px solid var(--border-soft);border-bottom:1px solid rgba(255,255,255,0.05);min-width:200px;}
-tbody tr:nth-child(even) th{background:#1e2839;}
-tbody tr:hover th{background:#252a36;}
-tbody tr:nth-child(even) td{background-color:rgba(255,255,255,0.015);}
-tbody tr:hover td{background-color:rgba(251,146,60,0.045);}
-.char{display:flex;align-items:center;gap:10px;}
-.avatar{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none;color:#1a0d02;}
-.char b{font-size:13px;font-weight:600;}
-td{padding:8px;text-align:center;border-left:1px solid rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:middle;}
-.cell{display:inline-flex;flex-direction:column;align-items:center;gap:3px;width:100%;padding:6px 4px;border-radius:9px;border:1px solid transparent;position:relative;}
-.cell .box{width:19px;height:19px;border-radius:6px;border:1.6px solid #56637a;display:flex;align-items:center;justify-content:center;}
-.cell .frac{font-size:11px;color:var(--text-dim);font-weight:600;}
-.cell.done .box{background:var(--low);border-color:var(--low);}
-.cell.done .box:after{content:"✓";font-size:11px;color:#062e12;font-weight:700;}
-.cell.done .frac{color:var(--low);}
-.cell.na{opacity:0.28;}
-.cell .flag{position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--high);box-shadow:0 0 0 2px var(--surface);}
-.score{font-size:12px;} .score b{font-size:14px;}
-.score.hi b{color:var(--low);} .score.mid b{color:var(--mid);} .score.lo b{color:var(--high);}
-tfoot td{padding:9px 8px;text-align:center;font-size:11px;color:var(--text-faint);border-top:1px solid var(--border-soft);}
-tfoot th{position:sticky;left:0;background:#151f30;text-align:left;padding:9px 14px;font-size:11px;color:var(--text-faint);font-weight:600;border-top:1px solid var(--border-soft);}
-.legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px;font-size:12px;color:var(--text-dim);}
-.legend span{display:inline-flex;align-items:center;gap:7px;}
-.legend i{width:12px;height:12px;border-radius:4px;display:inline-block;border:1.6px solid #56637a;}
-.legend i.done{background:var(--low);border-color:var(--low);}
-.legend i.flag{border-radius:50%;background:var(--high);border:none;width:8px;height:8px;}
-.legend i.na{opacity:0.28;background:#56637a;}
-.note{margin-top:22px;padding:12px 16px;border-radius:10px;background:var(--surface);border:1px dashed var(--border-soft);color:var(--text-dim);font-size:12px;line-height:1.6;}
-.note b{color:var(--text);}
-.overlay{position:fixed;inset:0;background:rgba(6,10,18,0.55);display:flex;align-items:flex-start;justify-content:center;padding-top:9vh;z-index:20;}
-.overlay[hidden]{display:none;}
-.picker{width:420px;max-height:76vh;display:flex;flex-direction:column;background:#121b2c;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
-.picker header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border-soft);}
-.picker header h2{font-family:'Cinzel',serif;font-size:15px;margin:0;color:#fbead9;font-weight:700;}
-.picker header p{margin:2px 0 0;font-size:11.5px;color:var(--text-dim);}
-.picker .x{background:none;border:none;color:var(--text-dim);font-size:16px;cursor:pointer;padding:4px;}
-.picker-body{overflow:auto;padding:6px 8px;}
-.pgroup{padding:8px 8px 4px;}
-.pgroup h3{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;margin:4px 4px 6px;display:flex;align-items:center;justify-content:space-between;}
-.pgroup h3 span{font-weight:600;color:var(--text-faint);letter-spacing:0;text-transform:none;font-size:10.5px;}
-.pgroup.daily h3{color:var(--daily);} .pgroup.weekly h3{color:var(--weekly);} .pgroup.season h3{color:var(--season);}
-.prow{display:flex;align-items:center;gap:10px;padding:7px 6px;border-radius:8px;cursor:pointer;font-size:13px;}
-.prow:hover{background:rgba(255,255,255,0.04);}
-.prow input{accent-color:var(--accent-strong);width:15px;height:15px;flex:none;}
-.picker footer{display:flex;justify-content:space-between;gap:8px;padding:10px 14px;border-top:1px solid var(--border-soft);}
-"""
+def _export_css() -> str:
+    """CSS of the exported document, from ``assets/full_view/export.css``.
+
+    Read at export time (not import time) through ``app_root()`` so the
+    frozen bundle resolves it the same way as every other asset.  Was a
+    126-line triple-quoted string here; moving it out is what lets the
+    colour-literal gate scan this module with no file-wide exemption
+    (review F-6).
+    """
+    path = app_root() / "assets" / "full_view" / "export.css"
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(
+            f"Full View export stylesheet not found at {path} — is it "
+            f"bundled? (spec datas carry ('assets', 'assets'))"
+        ) from error
 
 _SCRIPT = """
 const TYPE_LABEL = {daily:'Daily', weekly:'Weekly', season:'Season'};
@@ -301,7 +192,7 @@ function renderHead(visibleCols){
     const th = document.createElement('th');
     th.className = 'g-'+type;
     th.colSpan = shown.length || 1;
-    th.innerHTML = TYPE_LABEL[type] + (hiddenCount ? `<br><span class="more-chip" data-open-type="${type}" style="display:inline-flex;align-items:center;gap:4px;margin-top:5px;border:1px dashed var(--border);background:rgba(255,255,255,0.03);color:var(--text-dim);font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;cursor:pointer;">+${hiddenCount} ${T.more_chip}</span>` : '');
+    th.innerHTML = TYPE_LABEL[type] + (hiddenCount ? `<br><span class="more-chip" data-open-type="${type}">+${hiddenCount} ${T.more_chip}</span>` : '');
     grpRow.appendChild(th);
   });
   grpRow.appendChild(Object.assign(document.createElement('th'), {className:'corner'}));
@@ -470,6 +361,12 @@ if(missedHideBtn){
 render();
 """
 
+# Per-character avatar colours of the EXPORTED DOCUMENT, cycled by index.
+# Deliberately the document's own palette, not the app's theme tokens: the
+# export is a standalone HTML file whose look does not change when the user
+# switches theme in the app (a file exported yesterday must not look
+# different from one exported today).  The one allow-listed colour literal
+# under ui/ -- tests/fixtures/hex_allowlist.txt names this exact line.
 _ROLE_COLORS = ["#22d3ee", "#a78bfa", "#4ade80", "#f87171", "#fb923c", "#60a5fa", "#f472b6", "#facc15"]
 
 
@@ -618,7 +515,7 @@ def build_full_view_html(
   </div>"""
 
     body = f"""<!doctype html><html><head><meta charset="utf-8">
-<title>Roster Grid</title><style>{_STYLE}</style></head><body>
+<title>Roster Grid</title><style>{_export_css()}</style></head><body>
 <div class="shell">
   <div class="top">
     <div>

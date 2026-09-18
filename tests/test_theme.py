@@ -229,7 +229,16 @@ def _dict_literal_from_app_py(name: str) -> dict[str, str]:
     return dict(re.findall(r'"([^"]+)"\s*:\s*"(#[0-9a-fA-F]{6})"', match.group(1)))
 
 
-@pytest.mark.skipif(not _APP_PY.is_file(), reason="ItemDatabase not present")
+def test_the_item_database_drift_gate_can_actually_run():
+    """The gate below used to carry a skipif, so it vanished silently rather
+    than failing when ItemDatabase/ was absent (review F-14).  A missing
+    owner file is itself the drift."""
+    assert _APP_PY.is_file(), (
+        f"{_APP_PY} is gone — it owns GRADE_COLORS/GEAR_TYPE_COLORS, which "
+        f"core/theme.py mirrors; move the tables here before deleting it"
+    )
+
+
 @pytest.mark.parametrize("kind,owner_table", [("item_grade", "GRADE_COLORS"), ("gear_type", "GEAR_TYPE_COLORS")])
 def test_data_color_mirrors_item_database(kind, owner_table):
     """Detects drift: ItemDatabase/app.py still owns these tables."""
@@ -330,11 +339,25 @@ def _legacy_selector_snapshot() -> set[str]:
     return {line.strip() for line in lines if line.strip() and not line.startswith("# ")}
 
 
+#: The prefix every rule in the template carries so the application sheet
+#: cannot reach the Armory's own windows — see tests/test_app_sheet_isolation.py.
+_SCOPE = 'QWidget[aion2="true"]'
+
+
 def test_template_keeps_every_legacy_selector():
-    """Porting must not silently drop a widget's styling."""
+    """Porting must not silently drop a widget's styling.
+
+    The scope prefix is stripped before comparing: a legacy `#taskCard` is
+    still styled when the template says `QWidget[aion2="true"] #taskCard`,
+    and requiring the snapshot to grow the prefix too would only pin the
+    prefix twice (test_app_sheet_isolation already owns that).
+    """
     legacy = _legacy_selector_snapshot()
     assert len(legacy) > 300, "the snapshot itself looks truncated"
-    ported = _selectors(theme.TEMPLATE_PATH.read_text(encoding="utf-8"))
+    ported = {
+        selector.replace(_SCOPE + " ", "").strip()
+        for selector in _selectors(theme.TEMPLATE_PATH.read_text(encoding="utf-8"))
+    }
     missing = sorted(legacy - ported)
     assert not missing, f"selectors lost in the port: {missing}"
 
@@ -347,7 +370,10 @@ def test_the_legacy_stylesheet_is_gone():
 
 def test_template_styles_the_object_names_added_this_wave():
     """Empty state + toast + focusable card, i.e. what the old QSS lacked."""
-    ported = _selectors(theme.TEMPLATE_PATH.read_text(encoding="utf-8"))
+    ported = {
+        selector.replace(_SCOPE + " ", "").strip()
+        for selector in _selectors(theme.TEMPLATE_PATH.read_text(encoding="utf-8"))
+    }
     for selector in ("#emptyState", "#emptyStateTitle", "#emptyStateHint", "#toastBar", "#taskCard:focus"):
         assert selector in ported
 
@@ -514,41 +540,138 @@ def test_borders_sit_between_the_surfaces_and_the_text(name):
 # --------------------------------------------------------------------------
 
 
-def test_the_focus_ring_is_an_outline_not_a_border():
-    """Regression guard on a real, verified defect (2026-09-18).
+def test_the_focus_ring_is_a_border_at_id_specificity():
+    """Regression guard on two defects, in the order they were found.
 
-    Qt resolves stylesheet conflicts by CSS2 specificity: `#objectName`
-    scores 100, `QPushButton:focus` scores 11.  While the ring was declared
-    as a `border`, all 157 `#objectName` rules in the template that declare
-    a border outranked it, and a focused button/pill/field/combo showed no
-    ring at all.  `outline` is set by nothing else, so it cannot lose —
-    switching the property back to `border` would silently un-do keyboard
-    accessibility everywhere.
+    First the ring was a `border` on type selectors (`QPushButton:focus`),
+    which Qt scores at 11 while an `#objectName` rule scores 100 — and 157
+    `#objectName` rules in this template declare a border, so the ring never
+    appeared.  Then it was an `outline`, which no other rule sets and so
+    cannot lose the cascade — but Qt cannot paint outside a widget's rect:
+    `outline` on a QWidget only recolours Fusion's PE_FrameFocusRect, drawn
+    around the *label* sub-rect INSIDE the control, through the text
+    (review F-4, visible in shots/aether/app_focus_ring_detail.png).
+
+    Both of those are excluded now: the ring is a border, declared at ID
+    specificity, and the type-level rules only turn Fusion's own rect off.
     """
-    # The RENDERED sheet, not the template: `{{token}}` placeholders are
-    # themselves braces and would break any rule-level parse of the source.
     rendered = _without_comments(theme.build_qss("abyss"))
     focus_rules = re.findall(r"([^{}]*:focus[^{}]*)\{([^{}]*)\}", rendered)
     assert focus_rules, "the template declares no :focus rule at all"
-    for selector, body in focus_rules:
-        # The `border` SHORTHAND is what loses to an #id rule -- and it also
-        # changes the width, which nudges the widget's row.  `border-color`
-        # is fine (a focused field tinting its own 1 px edge, MASTER §3).
-        assert not re.search(r"(^|;|\s)border\s*:", body), (
-            f"focus rule declares a border, which every #id rule outranks: {selector.strip()}"
-        )
-        assert "outline" in body or "border-color" in body, (
-            f"focus rule indicates nothing: {selector.strip()} {{{body}}}"
-        )
 
-    outlined = [selector for selector, body in focus_rules if "outline" in body]
-    assert len(outlined) >= 4, "the ring itself is gone, only field tints are left"
+    id_rules = []
+    for selector, body in focus_rules:
+        if not re.search(r"(^|;|\s)border\s*:", body):
+            # A `border-color`-only rule is a tint, not the ring: it changes
+            # no geometry and losing it to an #id rule costs nothing (the
+            # #id rules carry their own tint).  MASTER §3's "Champ: focus
+            # accent" is expressed that way on the bare input types.
+            continue
+        entries = [s.strip() for s in selector.split(",") if s.strip()]
+        # The RING itself must be ID- or sub-control-scoped: on a bare type
+        # selector it would lose to any #id border rule and never paint.
+        for entry in entries:
+            assert "#" in entry or "::" in entry, (
+                f"focus ring on a bare type selector, which #id rules outrank: {entry}"
+            )
+        id_rules.append(selector)
+
+    assert len(id_rules) >= 8, f"only {len(id_rules)} ring rules left"
+    assert "outline: none" in rendered, (
+        "Fusion's own PE_FrameFocusRect is not suppressed, so the control "
+        "will show both its rect and ours"
+    )
 
 
 @pytest.mark.parametrize("name", sorted(theme.THEMES))
-def test_the_focus_ring_uses_the_theme_accent_and_master_geometry(name):
+def test_the_focus_ring_uses_the_theme_accent_and_compensates_its_width(name):
     qss = theme.build_qss(name)
     tokens = theme.THEMES[name]
-    expected = f"outline: {tokens.focus_ring_width}px solid {tokens.focus_ring}"
+    expected = f"border: {tokens.focus_ring_width}px solid {tokens.focus_ring}"
     assert expected in qss, f"{name}: no '{expected}' in the rendered sheet"
-    assert f"outline-offset: {tokens.focus_ring_offset}px" in qss
+    # The pixel the wider border takes has to be given back as padding, or
+    # focusing a control grows it and nudges its row.
+    assert f"padding: {tokens.space_2_inset}px {tokens.space_3_inset}px" in qss
+    assert tokens.focus_inset == tokens.focus_ring_width - tokens.border_width
+    # An accent ring on an accent fill is invisible (review F-9).
+    assert f"border: {tokens.focus_ring_width}px solid {tokens.fg_on_accent}" in qss
+
+
+@pytest.mark.parametrize("name", sorted(theme.THEMES))
+def test_the_inset_tokens_give_back_exactly_the_added_border(name):
+    tokens = theme.THEMES[name]
+    for scale in (1, 2, 3, 4, 6):
+        base = getattr(tokens, f"space_{scale}")
+        inset = getattr(tokens, f"space_{scale}_inset")
+        assert inset == base - tokens.focus_inset, scale
+        assert inset >= 0
+
+
+# --------------------------------------------------------------------------
+# Resource resolution — review F-11
+# --------------------------------------------------------------------------
+
+
+def test_the_template_is_resolved_through_app_root_at_read_time(monkeypatch, tmp_path):
+    """The point of routing through ``utils.paths.app_root()``: a frozen
+    layout becomes expressible in a test.
+
+    Before, the path was ``Path(core/theme.py).parent.parent`` computed at
+    import — correct inside a PyInstaller bundle only by coincidence, and
+    impossible to exercise.
+    """
+    import utils.paths as paths
+
+    fake_root = tmp_path / "meipass"
+    (fake_root / "ui").mkdir(parents=True)
+    (fake_root / "ui" / "styles.template.qss").write_text(
+        "QWidget { color: {{fg}}; }", encoding="utf-8"
+    )
+    monkeypatch.setattr(paths, "is_frozen", lambda: True)
+    monkeypatch.setattr(paths.sys, "_MEIPASS", str(fake_root), raising=False)
+
+    assert theme.template_path() == fake_root / "ui" / "styles.template.qss"
+    assert theme.build_qss("abyss") == f"QWidget {{ color: {theme.ABYSS.fg}; }}"
+
+
+def test_a_missing_template_names_the_path_it_tried(monkeypatch, tmp_path):
+    """It used to surface as a bare FileNotFoundError from inside
+    MainWindow.__init__, with no hint about bundling."""
+    import utils.paths as paths
+
+    monkeypatch.setattr(paths, "is_frozen", lambda: True)
+    monkeypatch.setattr(paths.sys, "_MEIPASS", str(tmp_path / "nowhere"), raising=False)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        theme.build_qss("abyss")
+    message = str(excinfo.value)
+    assert "styles.template.qss" in message
+    assert "nowhere" in message
+    assert "spec datas" in message
+
+
+# --------------------------------------------------------------------------
+# Fonts — review F-11b
+# --------------------------------------------------------------------------
+
+
+def test_the_qss_names_the_family_qt_actually_registered():
+    """``load_fonts()`` resolves what Qt REALLY loaded (including its
+    "trust Qt, not the spec" branch for a renamed upstream release).  That
+    answer was being discarded, so the branch was dead with respect to the
+    stylesheet: the QSS still asked for "Barlow" by name and Qt silently
+    dropped a name it did not know."""
+    try:
+        theme.set_font_families({"body": "Barlow Renamed 2.0", "mono": "", "display": ""})
+        stack = theme.font_stack(theme.ABYSS, "body")
+        assert stack.startswith('"Barlow Renamed 2.0"'), stack
+        # The declared stack survives behind it as the fallback chain.
+        assert stack.endswith("sans-serif")
+        assert '"Barlow"' in stack
+        assert '"Barlow Renamed 2.0"' in theme.build_qss("abyss")
+
+        # An unresolved role falls back to the token's own stack untouched.
+        assert theme.font_stack(theme.ABYSS, "mono") == theme.ABYSS.font_mono
+    finally:
+        theme.set_font_families({})
+    assert theme.font_stack(theme.ABYSS, "body") == theme.ABYSS.font_body

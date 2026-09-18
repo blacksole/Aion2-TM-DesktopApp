@@ -30,8 +30,31 @@ _reduced_motion = False
 
 #: Keeps running animations alive: a QPropertyAnimation that nobody holds a
 #: reference to is garbage-collected mid-flight and the widget freezes
-#: half-faded.  Entries remove themselves when the animation finishes.
-_running: set[QPropertyAnimation] = set()
+#: half-faded.  Entries remove themselves when the animation finishes — and
+#: also when they are SUPERSEDED, which is the part that was missing:
+#:
+#: Qt stops a competing animation on the same ``(target, propertyName)``
+#: pair when a second one starts, and a *stopped* animation never emits
+#: ``finished``.  Everything this module hangs on ``finished`` — the `then`
+#: callback, the effect teardown, the removal from this set — was therefore
+#: silently dropped for every superseded animation, so the set grew without
+#: bound and each stale entry held an armed callback (and a reference to a
+#: MainWindow) that could fire inside some arbitrary later moment when the
+#: event loop next ran.  Measured at 46 armed callbacks at the end of one
+#: test module (review F-3); that timing dependence was the reported flake.
+#:
+#: :func:`_animate` now retires the previous animation for a pair itself,
+#: *before* starting the new one, so this set holds only live animations.
+_running: dict[tuple[int, bytes], "QPropertyAnimation"] = {}
+
+#: What happens to a superseded animation's ``then`` callback.  For the two
+#: things this module animates — a fade in and a fade out of the same widget
+#: — the newer animation is the one that expresses the user's latest intent,
+#: so the older one's post-condition is DROPPED rather than run: running it
+#: would hide a widget the newer fade has just shown, or re-render a list the
+#: newer state has already rendered.  Callers that need a guaranteed
+#: post-condition must not express it as a fade's `then`.
+SUPERSEDED_POLICY = "drop"
 
 _EASING = {
     "OutCubic": QEasingCurve.Type.OutCubic,
@@ -107,9 +130,50 @@ def _drop_effect(widget: QWidget) -> None:
         pass
 
 
-def _keep(animation: QPropertyAnimation) -> None:
-    _running.add(animation)
-    animation.finished.connect(lambda: _running.discard(animation))
+def _key(target: QObject, prop: bytes) -> tuple[int, bytes]:
+    """Identity of an animation slot: one property of one object."""
+    return (id(target), prop)
+
+
+def _retire(key: tuple[int, bytes]) -> None:
+    """Stop and forget the animation occupying ``key``, if any.
+
+    Called before starting a new animation on the same slot, so that the
+    stop is *ours* — with the bookkeeping done — rather than Qt's silent one.
+    """
+    previous = _running.pop(key, None)
+    if previous is None:
+        return
+    try:
+        previous.stop()
+    except RuntimeError:  # C++ side already gone
+        return
+    logger.debug("motion: superseded %s (policy=%s)", key, SUPERSEDED_POLICY)
+
+
+def _keep(animation: QPropertyAnimation, key: tuple[int, bytes]) -> None:
+    _running[key] = animation
+
+    def _release() -> None:
+        if _running.get(key) is animation:
+            del _running[key]
+
+    animation.finished.connect(_release)
+
+
+def running_count() -> int:
+    """How many animations are live.  Used by tests to pin the bound."""
+    return len(_running)
+
+
+def drain() -> None:
+    """Stop and forget every live animation (test teardown)."""
+    for animation in list(_running.values()):
+        try:
+            animation.stop()
+        except RuntimeError:
+            pass
+    _running.clear()
 
 
 def _animate(
@@ -128,6 +192,13 @@ def _animate(
             then()
         return None
 
+    # Retire the slot's previous occupant FIRST: Qt would stop it anyway
+    # when the new animation starts, but silently and without releasing its
+    # callback (see the note on _running).  `then` is dropped per
+    # SUPERSEDED_POLICY.
+    key = _key(target, prop)
+    _retire(key)
+
     animation = QPropertyAnimation(target, prop)
     animation.setDuration(ms)
     animation.setStartValue(start)
@@ -135,26 +206,44 @@ def _animate(
     animation.setEasingCurve(_curve(theme))
     if then is not None:
         animation.finished.connect(then)
-    _keep(animation)
+    _keep(animation, key)
     animation.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
     return animation
 
 
+#: Dynamic property holding a widget's fade generation.  Every fade bumps
+#: it; a fade's completion handler compares against the value it captured,
+#: so a fade that has been superseded cannot act on the widget any more.
+_GENERATION = "_aion2_motion_gen"
+
+
+def _next_generation(widget: QWidget) -> int:
+    generation = int(widget.property(_GENERATION) or 0) + 1
+    widget.setProperty(_GENERATION, generation)
+    return generation
+
+
+def _is_current(widget: QWidget, generation: int) -> bool:
+    try:
+        return int(widget.property(_GENERATION) or 0) == generation
+    except RuntimeError:  # widget destroyed
+        return False
+
+
 def fade_in(widget: QWidget, theme: str | None = None, kind: str = "base") -> QPropertyAnimation | None:
     """Show ``widget`` by fading its opacity 0 → 1 (``motion.base``)."""
+    generation = _next_generation(widget)
     effect = _opacity_effect(widget)
     effect.setOpacity(0.0)
     widget.show()
-    animation = _animate(
-        effect,
-        b"opacity",
-        0.0,
-        1.0,
-        duration(kind, theme),
-        theme,
-        then=lambda: _drop_effect(widget),
-    )
-    return animation
+
+    def finish() -> None:
+        # Only the newest fade may tear the effect down; an older one
+        # completing here would strip the effect a newer fade is animating.
+        if _is_current(widget, generation):
+            _drop_effect(widget)
+
+    return _animate(effect, b"opacity", 0.0, 1.0, duration(kind, theme), theme, then=finish)
 
 
 def fade_out(
@@ -163,17 +252,28 @@ def fade_out(
     theme: str | None = None,
     kind: str = "base",
 ) -> QPropertyAnimation | None:
-    """Fade ``widget`` 1 → 0, hide it, then call ``then`` if given."""
+    """Fade ``widget`` 1 → 0, hide it, then call ``then`` if given.
+
+    ``then`` runs only if this fade is still the widget's newest one.  A
+    superseded fade must not act: the case that matters is a toast that is
+    replaced inside its own 160 ms fade-out — the old fade's ``hide()``
+    would hide the row the new toast just showed, leaving a toast with text
+    and no widget (review F-3). Dropping the stale post-condition is the
+    documented policy (:data:`SUPERSEDED_POLICY`).
+    """
+    generation = _next_generation(widget)
     effect = _opacity_effect(widget)
     effect.setOpacity(1.0)
 
     def finish() -> None:
+        if not _is_current(widget, generation):
+            logger.debug("fade_out: superseded before completion, not hiding")
+            return
         # The widget can legitimately be gone by the time this queued
         # callback runs: a soft-deleted card whose undo window closed is
         # setParent(None) + deleteLater()'d, and hide() on a dead QWidget
         # raises from inside a Qt slot (where it becomes an unhandled
-        # traceback, not an exception a caller can see). `then` must still
-        # run either way -- MainWindow passes its refresh() through it.
+        # traceback, not an exception a caller can see).
         try:
             widget.hide()
         except RuntimeError:

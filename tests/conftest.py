@@ -11,6 +11,26 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import pytest  # noqa: E402  (must follow the sys.path insert above)
+
+
+@pytest.fixture(autouse=True)
+def _no_animation_crosses_a_test():
+    """Stop and forget every live animation at the end of each test.
+
+    An armed ``finished`` callback is a reference to a MainWindow plus a
+    post-condition (``refresh()``, ``hide()``) waiting for the event loop.
+    Tests rarely pump the loop for the full 160 ms of a fade, so without
+    this the callbacks pile up and fire inside *whichever later test happens
+    to pump* — a wall-clock dependency, and the reported 1-in-3 flake
+    (review F-3).  Draining here makes each test's animation state its own.
+    """
+    yield
+    from ui import motion
+
+    motion.drain()
+
+
 # Deliberately NOT forcing reduced motion globally here: a MainWindow calls
 # set_reduce_motion() from its own profile on every load, so a global switch
 # would be overwritten by the app under test.  The two places that assert a

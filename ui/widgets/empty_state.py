@@ -5,8 +5,8 @@ large void, the custom-timer manager shows nothing but a "+").
 Deliberately style-free: no colors, no fonts, no QSS of its own. It only
 exposes stable objectNames (``emptyState`` / ``emptyStateTitle`` /
 ``emptyStateHint`` / ``emptyStateAction``) so the later design pass can
-style it from ``ui/styles.qss`` without touching this file. Until then it
-inherits the palette like any plain widget.
+style it from ``ui/styles.template.qss`` without touching this file — it
+now does, see #emptyState / #emptyStateTitle / #emptyStateHint there.
 """
 
 from PySide6.QtCore import Qt

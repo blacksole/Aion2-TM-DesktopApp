@@ -485,3 +485,143 @@ def test_an_expired_toasts_timer_does_not_close_a_newer_toast(win):
 
     win._hide_toast(win._toast_seq)
     settled(win.toast_widget.isHidden)
+
+
+# ---------------------------------------------------------------------------
+# a DESTRUCTIVE reset must close the undo window (review F-2)
+# ---------------------------------------------------------------------------
+#
+# The three tests above cover `reset_tasks_for_tabs` -- the completed-FLAG
+# reset, which deliberately leaves the undo window open because it destroys
+# nothing.  `reset_profile` and `clear_event_entries` DO destroy: they empty
+# the lists.  Neither committed the pending delete, so Undo afterwards put a
+# card back into a list the user had just emptied, and the next save
+# persisted it.
+
+
+def _answer_confirmation(monkeypatch, role):
+    """Answer the confirmation QMessageBox by clicking the button with ``role``.
+
+    Both destructive paths build a box, ``exec()`` it, and compare
+    ``clickedButton()`` with the button they added for "yes".  Clicking a
+    real button inside the faked ``exec`` is what makes ``clickedButton()``
+    return that same object -- ``buttons()`` is ordered by ROLE, not by the
+    order they were added, so indexing it picks the wrong one.
+    """
+    from PySide6.QtWidgets import QMessageBox
+
+    def fake_exec(self):
+        for button in self.buttons():
+            if self.buttonRole(button) == role:
+                button.click()
+                return 0
+        raise AssertionError(f"no button with role {role} in the confirmation box")
+
+    monkeypatch.setattr(QMessageBox, "exec", fake_exec)
+
+
+def _accept_confirmation(monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    _answer_confirmation(monkeypatch, QMessageBox.DestructiveRole)
+
+
+def _decline_confirmation(monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    _answer_confirmation(monkeypatch, QMessageBox.RejectRole)
+
+
+def test_reset_profile_closes_the_undo_window(win, writes, monkeypatch):
+    _accept_confirmation(monkeypatch)
+    card = win.task_lists["tasks"][0]
+
+    win._delete_card(card)
+    win.reset_profile()
+
+    assert win._pending_delete is None, "the undo window survived a destructive reset"
+    assert _titles(win) == []
+
+    win._undo_pending_delete()
+    assert _titles(win) == [], "Undo resurrected a card the reset destroyed"
+    # The commit's own save (pre-reset list minus the deleted card) comes
+    # first, the reset's save last -- what must never hold the card is the
+    # state the app is left in.
+    assert writes, "the reset saves"
+    assert not writes[-1]["tasks"]["tasks"], "the reset persisted a task list"
+
+
+def test_clear_event_entries_closes_the_undo_window(win, writes, monkeypatch):
+    _accept_confirmation(monkeypatch)
+    card = win.task_lists["tasks"][0]
+
+    win._delete_card(card)
+    win.clear_event_entries()
+
+    assert win._pending_delete is None, "the undo window survived clear_event_entries"
+    before = _titles(win)
+
+    win._undo_pending_delete()
+    assert _titles(win) == before, "Undo resurrected a card after a destructive clear"
+
+
+def test_declining_the_reset_leaves_the_undo_window_open(win, monkeypatch):
+    """Committing must happen after the confirmation, not before it."""
+    _decline_confirmation(monkeypatch)
+
+    card = win.task_lists["tasks"][0]
+    title = card.title
+    win._delete_card(card)
+    win.reset_profile()
+
+    assert win._pending_delete is not None, "a declined reset consumed the undo window"
+    win._undo_pending_delete()
+    assert title in _titles(win)
+
+
+# ---------------------------------------------------------------------------
+# closing to the tray is not closing (review F-8)
+# ---------------------------------------------------------------------------
+
+
+def test_hiding_to_the_tray_keeps_the_undo_window_open(win, monkeypatch):
+    """`closeEvent` committed the pending delete before the tray branch, so
+    minimising to the tray silently ended the undo window even though the
+    app had not closed."""
+    from PySide6.QtGui import QCloseEvent
+
+    card = win.task_lists["tasks"][0]
+    title = card.title
+    win._delete_card(card)
+
+    monkeypatch.setattr(win, "minimize_to_tray", True)
+    monkeypatch.setattr(win, "_tray_ready", lambda: True)
+    monkeypatch.setattr(win, "_notify", lambda *a, **k: None)
+    # _quit_app() sets this on the shared window, and it short-circuits
+    # straight to "accept and quit".
+    monkeypatch.setattr(win, "_force_quit", False)
+
+    event = QCloseEvent()
+    win.closeEvent(event)
+
+    assert not event.isAccepted(), "the window closed instead of hiding to the tray"
+    assert win._pending_delete is not None, "the tray hide ended the undo window"
+
+    win._undo_pending_delete()
+    assert title in _titles(win)
+    win.show()
+
+
+def test_a_real_close_still_commits(win, monkeypatch):
+    from PySide6.QtGui import QCloseEvent
+
+    card = win.task_lists["tasks"][0]
+    win._delete_card(card)
+
+    monkeypatch.setattr(win, "minimize_to_tray", False)
+    monkeypatch.setattr(win, "_tray_ready", lambda: False)
+    monkeypatch.setattr(win, "_force_quit", False)
+    event = QCloseEvent()
+    win.closeEvent(event)
+
+    assert win._pending_delete is None, "a real close left the undo window open"

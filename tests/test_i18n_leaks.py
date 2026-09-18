@@ -275,14 +275,30 @@ def test_custom_countdown_uses_the_translated_day_abbreviation(language, abbrev)
     [("en", "d"), ("de", "T"), ("ru", "д")],
 )
 def test_season_countdown_uses_the_translated_day_abbreviation(language, abbrev):
+    """Real clock, but no longer clock-DEPENDENT (review F-21).
+
+    The clock is not frozen here and cannot be cheaply: unlike
+    ``check_auto_resets``, ``_get_season_countdown_text`` imports
+    ``datetime`` *inside itself* (``from datetime import datetime as _dt``),
+    so the module attribute tests/test_resets.py patches is not the seam it
+    reads -- freezing it would mean patching the stdlib.
+
+    What the review actually objected to was the dead
+    ``or startswith("1d 23:5")`` branch, which existed for a day-boundary
+    straddle.  Removed by choosing an offset that cannot straddle one: the
+    remaining time is always between 2d 11:59:00 and 2d 12:00:00 whatever
+    second the test starts on, so the day component is always 2.
+    """
     from ui.main_window import MainWindow
 
-    target = datetime.now() + timedelta(days=2, hours=18, minutes=27, seconds=30)
+    target = datetime.now() + timedelta(days=2, hours=12)
     stub = _stub(language, season_reset_datetime=target.strftime("%Y-%m-%d %H:%M"))
 
     text = MainWindow._get_season_countdown_text(stub)
 
-    assert text.startswith(f"2{abbrev} ") or text.startswith(f"1{abbrev} 23:5"), text
+    # The season countdown is formatted "<days><abbrev> HH:MM" (no seconds),
+    # so 11:59 and 12:00 are the only two possible readings of this offset.
+    assert text in (f"2{abbrev} 11:59", f"2{abbrev} 12:00"), text
 
 
 def test_countdowns_below_a_day_carry_no_day_abbreviation():

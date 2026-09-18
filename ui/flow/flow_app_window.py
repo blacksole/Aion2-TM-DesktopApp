@@ -44,6 +44,11 @@ class FlowMapWindow(QMainWindow):
     def __init__(self, parent=None, language="en", tr_func=None):
         super().__init__(parent)
 
+        # Own top-level window: carries the app-sheet scope itself, so it
+        # does not depend on being a Qt child of MainWindow (see the §0
+        # comment in ui/styles.template.qss).
+        self.setProperty("aion2", True)
+
         self.language = language
         self.tr_func = tr_func
         
@@ -395,7 +400,12 @@ class FlowMapWindow(QMainWindow):
         self.side_panel_wrapper.setVisible(False)
 
         self.content.installEventFilter(self)
-        QTimer.singleShot(0, self.position_flow_overlays)
+        # `self` as the context object: Qt drops a queued callback whose
+        # context has been destroyed, instead of running it against
+        # already-deleted C++ widgets. Without it, closing the Flow Map
+        # while a 0 ms timer is queued raises out of a Qt slot (surfaced the
+        # moment the test suite started destroying its windows for real).
+        QTimer.singleShot(0, self, self.position_flow_overlays)
 
         self.update_active_tool_label()
 
@@ -747,7 +757,7 @@ class FlowMapWindow(QMainWindow):
         if main and hasattr(main, "save_profile"):
             main.save_profile(silent=True)
 
-        QTimer.singleShot(2000, self.mark_saved)
+        QTimer.singleShot(2000, self, self.mark_saved)
 
 
     def mark_saved(self):
@@ -1052,7 +1062,7 @@ class FlowMapWindow(QMainWindow):
 
 
     def schedule_center_flow(self):
-        QTimer.singleShot(0, self.center_flow_in_viewport)
+        QTimer.singleShot(0, self, self.center_flow_in_viewport)
 
     def set_map_list(self, names: list, active_name: str):
         self.map_name_combo.blockSignals(True)

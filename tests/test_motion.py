@@ -152,3 +152,74 @@ def _drain_until(app, predicate, timeout_ms: int = 2000):
     while not predicate() and not deadline.hasExpired():
         app.processEvents(QEventLoop.AllEvents, 20)
     assert predicate(), f"condition never held within {timeout_ms} ms"
+
+
+# ---------------------------------------------------------------------------
+# Supersession — review F-3
+# ---------------------------------------------------------------------------
+
+
+def test_a_superseded_animation_releases_its_slot(app):
+    """Qt stops a competing animation on the same (target, property) without
+    emitting `finished`, so nothing hung on `finished` ever ran.  The module
+    must retire the slot itself."""
+    widget = QLabel("x")
+    first = motion.fade_out(widget)
+    assert first is not None
+    assert motion.running_count() == 1
+
+    second = motion.fade_in(widget)
+    assert second is not None
+    # Same slot: one live animation, not two.
+    assert motion.running_count() == 1
+    assert first.state() == first.State.Stopped
+
+
+def test_running_is_bounded_by_the_number_of_live_widgets(app):
+    """The set used to grow monotonically: 46 armed callbacks at the end of
+    one test module.  Ten fades of the same widget must leave one."""
+    widget = QLabel("x")
+    for _ in range(10):
+        motion.fade_in(widget)
+    assert motion.running_count() == 1
+
+    others = [QLabel(str(i)) for i in range(3)]
+    for other in others:
+        motion.fade_in(other)
+    assert motion.running_count() == 4
+
+
+def test_a_superseded_fade_out_does_not_hide_a_widget_a_newer_fade_in_showed(app):
+    """The toast case: a new toast arriving inside the old one's fade-out."""
+    widget = QLabel("x")
+    widget.show()
+
+    motion.fade_out(widget)          # toast expiring
+    motion.fade_in(widget)           # newer toast, same row
+    _drain_until(app, lambda: motion.running_count() == 0)
+
+    assert not widget.isHidden(), "the stale fade-out hid the newer toast"
+
+
+def test_a_superseded_fade_drops_its_then_per_the_documented_policy(app):
+    """MASTER/motion contract: the NEWER animation owns the widget, so the
+    older one's post-condition is dropped rather than run out of order."""
+    assert motion.SUPERSEDED_POLICY == "drop"
+    widget = QLabel("x")
+    widget.show()
+    calls = []
+
+    motion.fade_out(widget, then=lambda: calls.append("stale"))
+    motion.fade_in(widget)
+    _drain_until(app, lambda: motion.running_count() == 0)
+
+    assert calls == [], "a superseded fade ran its post-condition anyway"
+
+
+def test_drain_stops_everything(app):
+    widgets = [QLabel(str(i)) for i in range(4)]
+    for widget in widgets:
+        motion.fade_in(widget)
+    assert motion.running_count() == 4
+    motion.drain()
+    assert motion.running_count() == 0

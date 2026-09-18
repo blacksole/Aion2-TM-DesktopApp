@@ -299,7 +299,13 @@ class SettingsPage(QWidget):
         # panel's left edge with nothing in between for the fill/border to
         # visually merge; see #settingsPageSidebar/#settingsContentPanel.
         body_layout = QHBoxLayout()
-        body_layout.setSpacing(0)
+        # A real gutter (review F-19): at spacing 0 the active nav item's
+        # accent.soft fill ran straight into the content panel's
+        # border.strong edge, so the highlight read as truncated rather than
+        # as a tab joined to the panel.  _FlowingSettingsPanel still paints
+        # its square top-left corner, which is what carries the "joined"
+        # reading -- it does not need the two fills to touch.
+        body_layout.setSpacing(12)  # MASTER §1 space.3
 
         self.settings_sidebar = QFrame()
         self.settings_sidebar.setObjectName("settingsPageSidebar")
