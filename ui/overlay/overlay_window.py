@@ -5,41 +5,78 @@ from PySide6.QtWidgets import (
     QScrollArea, QSlider, QMenu, QWidgetAction, QCheckBox,
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPainter, QColor, QLinearGradient, QBrush, QActionGroup
+from PySide6.QtGui import QPainter, QColor, QActionGroup
 
-PRIORITY_COLORS = {
-    "high":   QColor(239, 68,  68),
-    "middle": QColor(245, 158, 11),
-    "low":    QColor(59,  130, 246),
+from core import theme
+from core.translations import tr
+
+# --------------------------------------------------------------------------
+# Colors (MASTER §4-3: a painter reads tokens, never a literal)
+#
+# Every table below used to be a QColor(r, g, b) literal.  Two kinds of
+# colour live here and they are resolved differently:
+#
+#   * SEMANTIC — a priority, a status, a category.  These are theme tokens
+#     (danger/warn/ok/accent/secondary/fg.muted) and follow the theme, so
+#     they are resolved LAZILY, per build, against the current theme: the
+#     overlay is rebuilt by refresh() and apply_theme() repaints it.
+#   * DATA — the built-in reset timers and a user-picked custom timer colour.
+#     Those are an identity the user recognises ("the purple one is
+#     weekly"), not a theme decision, so they stay fixed and come from
+#     core.theme.data_color (MASTER §4-4, the tolerated exception).
+# --------------------------------------------------------------------------
+
+#: priority -> semantic token.  Same mapping the task list's own
+#: #priorityLow/#priorityMiddle/#priorityHigh badges use.
+PRIORITY_TOKENS = {
+    "high": "danger",
+    "middle": "warn",
+    "low": "ok",
 }
 
-STATUS_COLORS = {
-    "active":    QColor(59,  130, 246),
-    "locked":    QColor(71,  85,  105),
-    "completed": QColor(34,  197, 94),
-    "optional":  QColor(245, 158, 11),
+#: Flow-node status -> semantic token.
+STATUS_TOKENS = {
+    "active": "accent",
+    "locked": "fg.muted",
+    "completed": "ok",
+    "optional": "warn",
 }
 
-TAB_BADGES = {
-    "tasks":    ("T",  QColor(59,  130, 246)),
-    "shopping": ("S",  QColor(6,   182, 212)),
+#: tab -> badge letter.  Both are categorisation badges, so both take
+#: MASTER §3's badge colour (secondary); the letter is what distinguishes
+#: them, exactly as in the list itself.
+TAB_BADGE_LETTERS = {"tasks": "T", "shopping": "S"}
+
+#: schedule -> badge letter (MASTER §3: "schedule → secondary").
+SCHEDULE_BADGE_LETTERS = {"daily": "D", "weekly": "W", "season": "S"}
+
+#: Built-in reset timers, by ``core.theme.data_color("timer", …)`` key.
+TIMER_COLOR_KEYS = {
+    "daily": "daily",
+    "weekly": "weekly",
+    "shugo": "shugo",
+    "rift": "rift",
 }
 
-SCHEDULE_BADGES = {
-    "daily":  ("D", QColor(59,  130, 246)),
-    "weekly": ("W", QColor(139, 92,  246)),
-    "season": ("S", QColor(245, 158, 11)),
-}
+#: Fallback for a custom timer with no colour stored.
+DEFAULT_CUSTOM_TIMER_COLOR = theme.data_color("timer", "custom")
 
-TIMER_COLORS = {
-    "daily":  QColor(59,  130, 246),
-    "weekly": QColor(139, 92,  246),
-    "shugo":  QColor(245, 158, 11),
-    "rift":   QColor(34,  211, 238),
-}
-CUSTOM_TIMER_COLOR = QColor(20,  184, 166)
-SKILL_PRIORITY_COLOR = QColor(167, 139, 250)
-GEAR_PRIORITY_COLOR = QColor(34,  197, 94)
+
+def token_color(name: str) -> QColor:
+    """A semantic token of the theme the app is currently rendering."""
+    return theme.qcolor(theme.current_tokens(), name)
+
+
+def priority_color(priority: str) -> QColor:
+    return token_color(PRIORITY_TOKENS.get(priority, PRIORITY_TOKENS["low"]))
+
+
+def status_color(status: str) -> QColor:
+    return token_color(STATUS_TOKENS.get(status, STATUS_TOKENS["locked"]))
+
+
+def timer_color(key: str) -> QColor:
+    return QColor(theme.data_color("timer", TIMER_COLOR_KEYS.get(key, key)))
 
 # (key, display label, default-on) -- drives both the gear-icon popover and
 # refresh()'s per-section visibility gate. Order here is the order sections
@@ -53,10 +90,45 @@ OVERLAY_SECTIONS = [
     ("gear_priority", "Gear Priority", False),
 ]
 
-_BG       = QColor(10, 12, 18, 225)
-_TITLE_BG = QColor(14, 16, 24, 245)
 _ROW_H    = 28
 _BORDER_W = 3
+
+# --------------------------------------------------------------------------
+# Backdrop alpha (MASTER §3, "Overlay HUD": *fond bg.window avec alpha
+# réglable par section, texte toujours opaque*)
+#
+# The slider used to drive setWindowOpacity(), which fades the WHOLE window
+# — text included.  At the bottom of its range (20 %) the HUD was a ghost:
+# unreadable, which defeats the point of a HUD you keep on top of the game.
+# It now drives the alpha of the painted section backdrops only; every
+# label keeps opacity 1.0, so the text stays crisp at any setting.
+#
+# Module-level because the rows are dozens of sibling widgets rebuilt on
+# every refresh() and each paints its own backdrop; a single value they all
+# read is one repaint away from being consistent, whereas a per-row copy
+# would have to be pushed into each one on every slider tick.
+# --------------------------------------------------------------------------
+
+#: 0.0 (invisible) … 1.0 (opaque).  Default matches the slider's own 90 %.
+_backdrop_alpha: float = 0.9
+
+
+def set_backdrop_alpha(alpha: float) -> float:
+    """Set the HUD backdrop opacity, clamped to the slider's own range."""
+    global _backdrop_alpha
+    _backdrop_alpha = max(0.0, min(1.0, float(alpha)))
+    return _backdrop_alpha
+
+
+def backdrop_alpha() -> float:
+    return _backdrop_alpha
+
+
+def backdrop_color(token: str = "bg.window") -> QColor:
+    """A surface token of the current theme at the HUD's backdrop alpha."""
+    color = token_color(token)
+    color.setAlphaF(_backdrop_alpha)
+    return color
 
 
 class _ColoredRow(QWidget):
@@ -67,22 +139,20 @@ class _ColoredRow(QWidget):
 
     def paintEvent(self, event):
         p = QPainter(self)
-        p.fillRect(self.rect(), _BG)
+        # Backdrop only — the row's own translucency. Its 3 px identity bar
+        # stays fully opaque, like the text: MASTER makes only the *fond*
+        # adjustable.  The horizontal colour-to-transparent gradient that
+        # used to wash across 62 % of every row is gone (MASTER thesis:
+        # "zéro dégradé décoratif"); the bar alone carries the colour.
+        p.fillRect(self.rect(), backdrop_color("bg.window"))
         p.fillRect(0, 0, _BORDER_W, self.height(), self._color)
-        grad = QLinearGradient(_BORDER_W, 0, int(self.width() * 0.62), 0)
-        c0 = QColor(self._color); c0.setAlpha(60)
-        c1 = QColor(self._color); c1.setAlpha(0)
-        grad.setColorAt(0.0, c0)
-        grad.setColorAt(1.0, c1)
-        p.fillRect(_BORDER_W, 0, self.width() - _BORDER_W, self.height(), QBrush(grad))
         p.end()
 
 
 class OverlayTaskRow(_ColoredRow):
     def __init__(self, tab_key: str, card_index: int, title: str, priority: str,
-                 badge: tuple | None = None):
-        color = PRIORITY_COLORS.get(priority, PRIORITY_COLORS["low"])
-        super().__init__(color)
+                 badge: str | None = None):
+        super().__init__(priority_color(priority))
         self.tab_key = tab_key
         self.card_index = card_index
 
@@ -98,13 +168,11 @@ class OverlayTaskRow(_ColoredRow):
         title_lbl = QLabel(title if len(title) <= 44 else title[:43] + "…")
         title_lbl.setObjectName("OverlayRowTitle")
 
-        badge_text, badge_color = badge if badge else TAB_BADGES.get(tab_key, ("?", QColor(100, 116, 139)))
-        badge_lbl = QLabel(badge_text)
-        badge_lbl.setStyleSheet(
-            f"background: rgba({badge_color.red()},{badge_color.green()},{badge_color.blue()},170);"
-            "color: #f8fafc; border-radius: 3px; padding: 0px 4px;"
-            "font-size: 9px; font-weight: bold;"
-        )
+        badge_lbl = QLabel(badge or TAB_BADGE_LETTERS.get(tab_key, "?"))
+        # Styled by #OverlayBadge in the template (secondary on
+        # secondary.soft, MASTER §3) -- was an inline rgba() fill built from
+        # a per-tab QColor literal plus a hardcoded near-white text.
+        badge_lbl.setObjectName("OverlayBadge")
         badge_lbl.setFixedHeight(14)
 
         layout.addWidget(self.check_btn)
@@ -114,8 +182,7 @@ class OverlayTaskRow(_ColoredRow):
 
 class OverlayGuideRow(_ColoredRow):
     def __init__(self, node_id: str, title: str, status: str):
-        color = STATUS_COLORS.get(status, STATUS_COLORS["locked"])
-        super().__init__(color)
+        super().__init__(status_color(status))
         self.node_id = node_id
 
         layout = QHBoxLayout(self)
@@ -136,10 +203,11 @@ class OverlayGuideRow(_ColoredRow):
 
         status_map = {"active": "ACTV", "locked": "LOCK", "completed": "DONE", "optional": "OPT"}
         status_lbl = QLabel(status_map.get(status, status[:4].upper()))
-        status_lbl.setStyleSheet(
-            f"color: rgba({color.red()},{color.green()},{color.blue()},180);"
-            "font-size: 9px; font-weight: bold;"
-        )
+        # #OverlayStatusLabel[status="…"] in the template carries the colour
+        # (accent / ok / warn / fg.muted -- the same semantic tokens
+        # STATUS_TOKENS maps above), so a theme switch moves it too.
+        status_lbl.setObjectName("OverlayStatusLabel")
+        status_lbl.setProperty("status", status)
         status_lbl.setFixedWidth(34)
         status_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
@@ -162,11 +230,7 @@ class OverlayInfoRow(_ColoredRow):
 
         if badge:
             badge_lbl = QLabel(badge)
-            badge_lbl.setStyleSheet(
-                f"background: rgba({color.red()},{color.green()},{color.blue()},170);"
-                "color: #f8fafc; border-radius: 3px; padding: 0px 4px;"
-                "font-size: 9px; font-weight: bold;"
-            )
+            badge_lbl.setObjectName("OverlayBadge")
             badge_lbl.setFixedHeight(14)
             layout.addWidget(badge_lbl)
 
@@ -230,12 +294,14 @@ class OverlayCountdownRow(_ColoredRow):
         self.toggle_btn.setText("Stop" if running else "Start")
         self.toggle_btn.clicked.connect(on_toggle)
         # User-Wunsch, 2026-09-07: "die Farbe, die man in den Settings des
-        # Counters einstellt, [soll] die Farbe des Buttons darstellen" --
-        # the theme-wide gradient clashed with whichever of the 8 preset
-        # colors this specific timer was actually given. Built per-instance
-        # from that same color (also driving this row's left border) rather
-        # than the shared per-theme QSS, since the source is now per-timer
-        # data, not the app theme.
+        # Counters einstellt, [soll] die Farbe des Buttons darstellen".
+        # The fill is genuinely per-timer DATA -- the colour the user picked
+        # for this one timer -- so it stays in code, which is the exception
+        # MASTER §4-4 allows. Everything else (radius, size, text colour,
+        # hover) comes from #OverlayCountdownToggleBtn in the template, and
+        # the two-stop lighter/darker gradient is gone with it (MASTER:
+        # "zéro dégradé décoratif"); a flat fill also keeps the Start/Stop
+        # label at a predictable contrast instead of a per-timer accident.
         self.toggle_btn.setStyleSheet(self._button_style_for(color))
         layout.addWidget(self.toggle_btn)
 
@@ -255,17 +321,10 @@ class OverlayCountdownRow(_ColoredRow):
 
     @staticmethod
     def _button_style_for(color: QColor) -> str:
-        light = color.lighter(135)
-        dark = color.darker(140)
+        """The ONLY property this button takes from code: its data fill."""
         return (
-            "QPushButton {"
-            f" background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {light.name()}, stop:1 {dark.name()});"
-            " color: white; border: none; border-radius: 9px;"
-            " font-size: 11px; font-weight: 700;"
-            " }"
-            "QPushButton:hover {"
-            f" background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {color.lighter(150).name()}, stop:1 {color.darker(160).name()});"
-            " }"
+            f"QPushButton {{ background-color: {color.name()}; }}"
+            f"QPushButton:hover {{ background-color: {color.lighter(115).name()}; }}"
         )
 
 
@@ -371,7 +430,7 @@ class OverlayWindow(QWidget):
         title_row.setSpacing(4)
 
         dot = QLabel("●")
-        dot.setStyleSheet("color: #3b82f6; font-size: 10px;")
+        dot.setObjectName("OverlayLiveDot")
         dot.setFixedWidth(12)
 
         self._profile_lbl = QLabel(main_window.profile_name)
@@ -385,10 +444,12 @@ class OverlayWindow(QWidget):
         self._opacity_slider.setFixedHeight(16)
         self._opacity_slider.setCursor(Qt.PointingHandCursor)
         self._opacity_slider.setToolTip("Opacity")
-        self._opacity_slider.valueChanged.connect(
-            lambda v: self.setWindowOpacity(v / 100.0)
-        )
-        self.setWindowOpacity(0.9)
+        # Same range, same handle, same meaning to the user -- but it now
+        # fades only the section backdrops, never the text (MASTER §3).
+        # setWindowOpacity() faded the whole window, which made the HUD
+        # unreadable at the low end of its own slider.
+        self._opacity_slider.valueChanged.connect(self._on_backdrop_alpha_changed)
+        set_backdrop_alpha(self._opacity_slider.value() / 100.0)
 
         # "Char" switch button (User-Wunsch, way back: "einen kleinen
         # Button 'Char' einfügen, über den man zwischen den einzelnen
@@ -441,7 +502,7 @@ class OverlayWindow(QWidget):
         # Viewport paints its own background separately from
         # #OverlayScroll's own QSS rule -- shows as a plain white box when
         # Windows itself is set to dark mode (User-reported, 2026-08-29).
-        self._scroll.viewport().setStyleSheet("background: transparent;")
+        self._scroll.viewport().setObjectName("transparentViewport")
 
         self._content = QWidget()
         self._content.setObjectName("OverlayContent")
@@ -477,16 +538,29 @@ class OverlayWindow(QWidget):
 
     def paintEvent(self, event):
         p = QPainter(self)
-        p.fillRect(0, 0, self.width(), 38, _TITLE_BG)
-        p.fillRect(0, 38, self.width(), self.height() - 44, _BG)
-        # resize handle bar
+        # Three backdrops, all at the slider's alpha (MASTER §3): the title
+        # bar one step up the surface ladder so it still reads as a bar, the
+        # body on bg.window, the resize strip on bg.elevated. Text and the
+        # rows' identity bars are painted opaque, independently of this.
+        p.fillRect(0, 0, self.width(), 38, backdrop_color("bg.surface"))
+        p.fillRect(0, 38, self.width(), self.height() - 44, backdrop_color("bg.window"))
         handle_y = self.height() - 6
-        p.fillRect(0, handle_y, self.width(), 6, QColor(20, 24, 34, 200))
-        grip_color = QColor(71, 85, 105, 180)
+        p.fillRect(0, handle_y, self.width(), 6, backdrop_color("bg.elevated"))
         grip_w = 30
         grip_x = (self.width() - grip_w) // 2
-        p.fillRect(grip_x, handle_y + 2, grip_w, 2, grip_color)
+        p.fillRect(grip_x, handle_y + 2, grip_w, 2, token_color("border.strong"))
         p.end()
+
+    def _on_backdrop_alpha_changed(self, value: int):
+        """Slider -> backdrop alpha, then repaint every painted surface.
+
+        The rows paint their own backdrop, so they each need the update();
+        a single repaint of the window would leave them at the old alpha.
+        """
+        set_backdrop_alpha(value / 100.0)
+        self.update()
+        for child in self.findChildren(_ColoredRow):
+            child.update()
 
     # public
 
@@ -603,24 +677,24 @@ class OverlayWindow(QWidget):
             rows.append(row)
 
         add_row(
-            TIMER_COLORS["daily"], "Daily Reset", "D",
+            timer_color("daily"), "Daily Reset", "D",
             lambda: (mw.get_next_daily_reset() - datetime.now()).total_seconds(),
             mw.format_reset_countdown,
         )
         add_row(
-            TIMER_COLORS["weekly"], "Weekly Reset", "W",
+            timer_color("weekly"), "Weekly Reset", "W",
             lambda: (mw.get_next_weekly_reset() - datetime.now()).total_seconds(),
             mw.format_reset_countdown,
         )
         if getattr(mw, "shugo_enabled", False):
             add_row(
-                TIMER_COLORS["shugo"], "Shugo Event", "Sh",
+                timer_color("shugo"), "Shugo Event", "Sh",
                 lambda: (mw.get_next_shugo_time() - datetime.now()).total_seconds(),
                 mw.format_countdown,
             )
         if getattr(mw, "riss_enabled", False):
             add_row(
-                TIMER_COLORS["rift"], "Rift Timer", "Rf",
+                timer_color("rift"), "Rift Timer", "Rf",
                 lambda: (mw.get_next_riss_time() - datetime.now()).total_seconds(),
                 mw.format_countdown,
             )
@@ -664,7 +738,7 @@ class OverlayWindow(QWidget):
                     return f"⟳ {text}" if phase == "delay" else text
 
                 row = OverlayCountdownRow(
-                    QColor(ct.get("color", "#22d3ee")), ct.get("name", "Timer"), compute_countdown(),
+                    QColor(ct.get("color") or DEFAULT_CUSTOM_TIMER_COLOR), ct.get("name", "Timer"), compute_countdown(),
                     running=bool(ct.get("countdown_active")),
                     on_toggle=lambda _=False, i=idx: self._on_countdown_toggled(i),
                 )
@@ -695,7 +769,7 @@ class OverlayWindow(QWidget):
                 )
                 return mw._format_custom_countdown((next_t - now).total_seconds(), "hh:mm:ss")
 
-            row = OverlayInfoRow(QColor(ct.get("color", "#22d3ee")), ct.get("name", "Timer"), compute())
+            row = OverlayInfoRow(QColor(ct.get("color") or DEFAULT_CUSTOM_TIMER_COLOR), ct.get("name", "Timer"), compute())
             self._tick_callbacks.append(lambda r=row, c=compute: r.value_lbl.setText(c()))
             rows.append(row)
 
@@ -714,7 +788,7 @@ class OverlayWindow(QWidget):
             return None
 
         rows = [
-            OverlayInfoRow(SKILL_PRIORITY_COLOR, entry["name"], f"#{i + 1}")
+            OverlayInfoRow(token_color("secondary"), entry["name"], f"#{i + 1}")
             for i, entry in enumerate(rows_data)
         ]
         section = _AccordionSection(
@@ -735,7 +809,7 @@ class OverlayWindow(QWidget):
         for section_key, item in rows_data:
             title = item.get("name", section_key)
             row = OverlayCheckRow(
-                GEAR_PRIORITY_COLOR, title,
+                token_color("ok"), title,
                 on_check=lambda _, sk=section_key: self._on_equip_priority_checked(sk),
             )
             rows.append(row)
@@ -786,7 +860,7 @@ class OverlayWindow(QWidget):
                 if character:
                     title = f"{title} · {character}"
                 schedule = getattr(card, "schedule", "daily")
-                badge = SCHEDULE_BADGES.get(schedule, SCHEDULE_BADGES["daily"])
+                badge = SCHEDULE_BADGE_LETTERS.get(schedule, SCHEDULE_BADGE_LETTERS["daily"])
                 title = f"[Shop] {title}" if tab_key == "shopping" else f"[Task] {title}"
                 row = OverlayTaskRow(tab_key, i, title, priority, badge=badge)
                 row.check_btn.clicked.connect(
@@ -802,7 +876,9 @@ class OverlayWindow(QWidget):
         for row in rows:
             section.add_row(row)
         if not rows:
-            section.add_row(self._empty_row("No active tasks ✓"))
+            section.add_row(
+                self._empty_row(tr(getattr(self.main_window, "language", "en"), "empty_overlay_tasks"))
+            )
         return section
 
     def _build_guide_section(self) -> _AccordionSection:
@@ -873,8 +949,16 @@ class OverlayWindow(QWidget):
         self.refresh()
 
     def _empty_row(self, text: str) -> QLabel:
+        """The HUD's own empty state: one hint line, no icon, no action.
+
+        Carries BOTH #OverlayEmpty (its own compact 11 px size, since it
+        sits inside a 40 px accordion row, not a whole page) and
+        #emptyStateHint, so the colour comes from the one place every other
+        empty state in the app reads it (MASTER §3, "État vide").
+        """
         lbl = QLabel(text)
         lbl.setObjectName("OverlayEmpty")
+        lbl.setProperty("class", "emptyStateHint")
         lbl.setAlignment(Qt.AlignCenter)
         lbl.setFixedHeight(40)
         return lbl

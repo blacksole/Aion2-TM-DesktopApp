@@ -15,6 +15,16 @@ _SCHEDULE_OBJECT_NAMES = {
     "season":  "scheduleSeason",
 }
 
+#: priority -> the objectName MASTER §3 colours (ok / warn / danger).  Same
+#: map as ui/main_window.PRIORITY_OBJECT_NAMES; kept local so this widget
+#: module does not import from main_window (which imports it).
+_PRIORITY_OBJECT_NAMES = {
+    "low": "priorityLow",
+    "middle": "priorityMiddle",
+    "medium": "priorityMiddle",
+    "high": "priorityHigh",
+}
+
 
 def format_currency_price(value, currency: str = "kinah") -> str:
     """Shared k/m-suffix formatting for every real in-game currency
@@ -154,7 +164,9 @@ class ShoppingCard(QFrame):
         text_box.addLayout(badge_row)
 
         self.priority_label = QLabel(priority.upper())
-        self.priority_label.setObjectName("priorityMedium")
+        # See the note in main_window.TaskCard: this was the literal
+        # "priorityMedium" for every card, so every priority rendered warn.
+        self._apply_priority_style()
 
         self.delete_btn = QPushButton("×")
         self.delete_btn.setObjectName("deleteButton")
@@ -200,7 +212,7 @@ class ShoppingCard(QFrame):
 
         self.set_title(tmpl.get("title", self.title))
         self.info_label.setText(f"{self.location} • {self.price_display}")
-        self.priority_label.setText(self.priority.upper())
+        self._apply_priority_style()
 
         schedule_text = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}.get(
             self.schedule, self.schedule.upper()
@@ -209,6 +221,18 @@ class ShoppingCard(QFrame):
         self.schedule_label.setObjectName(_SCHEDULE_OBJECT_NAMES.get(self.schedule, "scheduleDaily"))
         self.style().unpolish(self.schedule_label)
         self.style().polish(self.schedule_label)
+
+    def _apply_priority_style(self, text: str | None = None):
+        """Label text + the objectName MASTER §3's ok/warn/danger rule needs.
+
+        ``text`` is the already-translated label when the caller has one.
+        """
+        self.priority_label.setText(text if text is not None else str(self.priority or "").upper())
+        self.priority_label.setObjectName(
+            _PRIORITY_OBJECT_NAMES.get(self.priority, "priorityMiddle")
+        )
+        self.priority_label.style().unpolish(self.priority_label)
+        self.priority_label.style().polish(self.priority_label)
 
     def toggle(self):
         self.completed = not self.completed
@@ -219,16 +243,16 @@ class ShoppingCard(QFrame):
         self._apply_completed_style()
 
     def _apply_completed_style(self):
-        if self.completed:
-            self.check_btn.setText("●")
-            self.setProperty("completed", True)
-            self.title_label.setStyleSheet("color: #64748b; text-decoration: line-through;")
-        else:
-            self.check_btn.setText("○")
-            self.setProperty("completed", False)
-            self.title_label.setStyleSheet("")
-        self.style().unpolish(self)
-        self.style().polish(self)
+        self.check_btn.setText("●" if self.completed else "○")
+        self.setProperty("completed", self.completed)
+        # The muted, struck-through title and the green check come from
+        # #taskCard[completed="true"] #taskTitle / #checkButton in the
+        # template. A descendant rule keyed off an ANCESTOR's property is
+        # only re-evaluated when the child itself is repolished, hence the
+        # two extra passes below.
+        for widget in (self, self.title_label, self.check_btn):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
 
     def format_price(self, value, currency: str = "kinah") -> str:
         return format_currency_price(value, currency)

@@ -1,15 +1,17 @@
 import os
 from pathlib import Path
 from PySide6.QtGui import (
-    QIcon, QPainter, QPainterPath, QPen, QBrush, QLinearGradient, QColor, QFontDatabase,
+    QIcon, QPainter, QPainterPath, QPen, QBrush, QFontDatabase,
 )
-from PySide6.QtCore import Signal, QTime, QDate, QSize, Qt, QRectF, QPointF
+from PySide6.QtCore import Signal, QTime, QDate, QSize, Qt, QRectF
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QDateEdit, QButtonGroup, QGridLayout,
     QFileDialog, QLineEdit, QScrollArea, QTabWidget, QDialog, QPlainTextEdit, QCompleter,
+    QCheckBox,
 )
 
+from core import theme
 from core.app_logger import get_log_path
 from core.platform import open_path, platform_placeholder_exe_path, reveal_in_file_manager
 from core.sound import list_system_wavs, play_wav
@@ -79,73 +81,28 @@ def browse_for_wav(parent, combo, fallback_index: int = 0) -> str:
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
 
-# Real, confirmed root cause (2026-09-16): #dayButton[active="true"]/
-# #toggleButton[active="true"] in styles.qss are correct and DO paint
-# correctly when applied directly to a widget instance (verified: an
-# identical rule set via btn.setStyleSheet() rendered its background
-# every time) -- but the SAME rule, reaching these specific buttons only
-# through MainWindow's app-wide cascaded setStyleSheet(), never painted
-# a background (border/color/font-weight from the same rule still came
-# through fine). Rather than chase that cascade quirk further, these
-# constants + _apply_active_button_style() below apply the "active" look
-# directly on the widget instance every time its state changes, sidestepping
-# the cascade entirely for just this one property. The plain (inactive)
-# look still comes from the normal global stylesheet -- only ever
-# overridden here when active, and cleared (falling back to the cascade)
-# otherwise.
-#
-# Theme-aware (User-Wunsch, 2026-09-16: "die Buttons an das jeweilige
-# Layout anpassen") -- same two accent colors each theme's own
-# #primaryButton/#tabButton[active="true"]/etc. gradient already uses in
-# styles.qss's per-theme blocks, duplicated here since inline
-# setStyleSheet() can't read back "what would the cascade have picked".
-_THEME_GRADIENT_COLORS = {
-    "abyss":      ("#06b6d4", "#a855f7"),
-    "inferno":    ("#fb923c", "#dc2626"),
-    "emerald":    ("#34d399", "#0d9488"),
-    "frostbite":  ("#93c5fd", "#2563eb"),
-    "obsidian":   ("#fcd34d", "#b45309"),
-    "void":       ("#e879f9", "#7c3aed"),
-}
+def _apply_active_button_style(btn, active: bool, kind: str = "toggle"):
+    """Flip #dayButton/#toggleButton's ``active`` state and repolish it.
 
+    History worth keeping, because it is why this helper exists at all: a
+    2026-09-16 report ("die Buttons an das jeweilige Layout anpassen", then
+    "Buttons auf dem Inferno haben immernoch den gleichen Stil wie das
+    abyss Stil") was worked around by building a per-theme
+    ``qlineargradient`` inline stylesheet here, with its own duplicated
+    table of six theme accent pairs -- because the equivalent
+    ``QWidget[theme="…"] #dayButton[active="true"]`` rule in the old
+    stylesheet never painted its background through the cascade.
 
-def _active_button_qss(kind: str, theme: str | None) -> str:
-    color_a, color_b = _THEME_GRADIENT_COLORS.get(theme, _THEME_GRADIENT_COLORS["abyss"])
-    if kind == "day":
-        extra = "border-radius: 6px; font-size: 12px; font-weight: 700;"
-    else:
-        extra = "border-radius: 8px; padding: 6px 14px; font-size: 13px; font-weight: 600;"
-    return f"""
-        QPushButton {{
-            background: qlineargradient(
-                x1:0, y1:0, x2:1, y2:0,
-                stop:0 {color_a},
-                stop:1 {color_b}
-            );
-            color: white;
-            border: none;
-            {extra}
-        }}
+    Both halves of that are gone: the stylesheet is applied to the
+    QApplication (so there is no MainWindow-scoped cascade to lose a
+    property in) and a theme is now token values, not a
+    ``[theme="…"]``-scoped block, so ONE unscoped
+    ``#toggleButton[active="true"]`` rule -- accent.soft fill, accent
+    border, MASTER §3's pill -- serves all six themes. ``kind`` is kept in
+    the signature for the ~20 call sites; the template's own #dayButton
+    rule now owns the size difference it used to encode.
     """
-
-
-def _apply_active_button_style(btn, active: bool, kind: str):
-    """Central helper for the workaround above -- call this everywhere
-    #dayButton/#toggleButton's checked state changes, instead of relying
-    on the "active" property + QSS cascade alone. `kind` is "day" or
-    "toggle"; the actual gradient colors are resolved fresh from the
-    current theme (self.window()'s "theme" property, the same one
-    styles.qss's own QWidget[theme="..."] selectors key off) every call,
-    so a later theme switch doesn't need a separate refresh pass here --
-    the next state change (or _refresh_active_button_styles below) just
-    picks the new theme up naturally."""
     btn.setProperty("active", active)
-    if active:
-        top = btn.window()
-        theme = top.property("theme") if top else None
-        btn.setStyleSheet(_active_button_qss(kind, theme))
-    else:
-        btn.setStyleSheet("")
     btn.style().unpolish(btn)
     btn.style().polish(btn)
 
@@ -184,15 +141,20 @@ class _ScreenAwareComboBox(QComboBox):
 
 
 class _FlowingSettingsPanel(QFrame):
-    """Content panel for the Settings page's "flowing tab" sidebar (User-
-    Wunsch) -- Qt's stylesheet engine can only paint a FLAT border color,
-    never a gradient, so the browser-mockup's purple-fading-to-grey border
-    (continuing from the active nav button's own accent border) has to be
-    hand-painted here instead of in QSS. Fill/background stays whatever
-    #settingsContentPanel's QSS says (transparent, so the real window
-    gradient behind it always shows through correctly); this only adds the
-    border stroke on top, square at the top-left corner (flush against the
-    active tab) and rounded everywhere else."""
+    """Content panel for the Settings page's "flowing tab" sidebar.
+
+    What QSS cannot express is the SHAPE: three rounded corners plus a
+    square top-left one, so the panel reads as continuous with the active
+    nav button sitting flush against it. That is why the stroke is
+    hand-painted here.
+
+    What it no longer expresses is a gradient: the original stroke faded
+    purple (#a855f7) to grey (#64748b), two literals belonging to no token,
+    and MASTER's visual thesis rules out decorative gradients. It is now a
+    flat ``border.strong`` — MASTER §1 reserves that exact token for "le
+    séparateur actif", which is what this edge is. Fill still comes from
+    #settingsContentPanel in the template.
+    """
 
     _RADIUS = 10.0
 
@@ -216,14 +178,7 @@ class _FlowingSettingsPanel(QFrame):
         path.arcTo(rect.left(), rect.bottom() - 2 * r, 2 * r, 2 * r, -90, -90)
         path.lineTo(rect.left(), rect.top())
 
-        gradient = QLinearGradient(
-            rect.topLeft(),
-            QPointF(rect.left() + rect.width() * 0.35, rect.top() + rect.height() * 0.35),
-        )
-        gradient.setColorAt(0.0, QColor(168, 85, 247, 200))       # purple, matches the tab's own border
-        gradient.setColorAt(1.0, QColor(100, 116, 139, 115))      # normal app border grey
-
-        painter.setPen(QPen(QBrush(gradient), pen_width))
+        painter.setPen(QPen(QBrush(theme.qcolor(theme.current_tokens(), "border.strong")), pen_width))
         painter.drawPath(path)
 
 
@@ -257,7 +212,7 @@ class _LogViewerDialog(QDialog):
         # and naming it on Linux/macOS fell through to the proportional default,
         # which mangles the log's column alignment.
         self._text.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
-        self._text.setStyleSheet("font-size: 11px;")
+        self._text.setObjectName("logViewerText")
         layout.addWidget(self._text, 1)
 
         button_row = QHBoxLayout()
@@ -295,6 +250,9 @@ class _LogViewerDialog(QDialog):
 class SettingsPage(QWidget):
     language_changed = Signal(str)
     theme_changed = Signal(str)
+    #: MASTER §1 "motion.reduced": emitted the moment the checkbox flips, so
+    #: the next fade is already suppressed.
+    reduce_motion_changed = Signal(bool)
     daily_reset_changed = Signal(str)
     weekly_reset_day_changed = Signal(str)
     weekly_reset_time_changed = Signal(str)
@@ -407,7 +365,7 @@ class SettingsPage(QWidget):
         # real window gradient behind #settingsContentPanel. Scoped to just
         # this instance rather than editing the shared "#scrollArea" QSS rule
         # (also used by tasks_page.py/template_dialog.py).
-        scroll_area.viewport().setStyleSheet("background: transparent;")
+        scroll_area.viewport().setObjectName("transparentViewport")
 
         # Bordered panel around the content (User-Wunsch: the active nav
         # button's "flowing tab" fill/border needs a real panel to join
@@ -794,6 +752,10 @@ class SettingsPage(QWidget):
             tr_func(language, "layout")
         )
 
+        if hasattr(self, "reduce_motion_check"):
+            self.reduce_motion_check.setText(tr_func(language, "reduce_motion"))
+            self.reduce_motion_hint.setText(tr_func(language, "reduce_motion_hint"))
+
 
 
 
@@ -924,10 +886,34 @@ class SettingsPage(QWidget):
             self.theme_buttons["abyss"].setChecked(True)
 
         layout.addLayout(theme_grid)
+
+        # ── Reduce animations (MASTER §1 "motion.reduced", non négociable) ──
+        # A QCheckBox rather than the page's usual On/Off #toggleButton: this
+        # is an accessibility preference, and a checkbox is what a screen
+        # reader and a keyboard user expect for one. Emitted immediately
+        # (not on Save) so the effect is visible while the user is looking
+        # at the setting -- MainWindow persists it from the signal.
+        motion_row = QFrame()
+        motion_row.setObjectName("settingsRow")
+        motion_layout = QVBoxLayout(motion_row)
+        motion_layout.setContentsMargins(14, 12, 14, 12)
+        motion_layout.setSpacing(4)
+
+        self.reduce_motion_check = QCheckBox()
+        self.reduce_motion_check.setObjectName("eventCheckBox")
+        self.reduce_motion_check.toggled.connect(self.reduce_motion_changed.emit)
+        motion_layout.addWidget(self.reduce_motion_check)
+
+        self.reduce_motion_hint = QLabel()
+        self.reduce_motion_hint.setObjectName("settingsDescription")
+        self.reduce_motion_hint.setWordWrap(True)
+        motion_layout.addWidget(self.reduce_motion_hint)
+
+        layout.addWidget(motion_row)
         layout.addStretch()
 
         return page
-    
+
     def _emit_theme_changed(self):
         theme = self.theme_combo.currentData()
 
@@ -1284,6 +1270,7 @@ class SettingsPage(QWidget):
             "notification_riss_enabled": self.notif_riss_enabled_btn.isChecked(),
             "notification_riss_warn_minutes": self.notif_riss_warn_combo.currentData(),
             "notification_sound": self.notif_sound_combo.currentData() or "",
+            "reduce_motion": self.reduce_motion_check.isChecked(),
         }
 
         self.settings_save_requested.emit(data)
@@ -1770,6 +1757,15 @@ class SettingsPage(QWidget):
             index = self.language_combo.findData(language)
             if index >= 0:
                 self.language_combo.setCurrentIndex(index)
+
+        if hasattr(self, "reduce_motion_check"):
+            reduce_motion = bool(data.get("reduce_motion", False))
+            # blockSignals: set_values() is a pure "show me the stored
+            # state" call. Without this it would emit, and MainWindow would
+            # save the profile back while it is still being loaded.
+            self.reduce_motion_check.blockSignals(True)
+            self.reduce_motion_check.setChecked(reduce_motion)
+            self.reduce_motion_check.blockSignals(False)
 
         # Theme Buttons
         if hasattr(self, "theme_buttons"):

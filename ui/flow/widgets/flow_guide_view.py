@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBu
 from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QRadialGradient
 
+from core import theme
 from core.flow_model import FlowNode
 
 
@@ -10,19 +11,37 @@ NODE_SPACING_H = 160
 BRANCH_OFFSET_Y = 85
 LABEL_MAX_CHARS = 14
 
-STATUS_COLORS = {
-    "completed": QColor(34, 197, 94),
-    "active":    QColor(59, 130, 246),
-    "optional":  QColor(245, 158, 11),
-    "locked":    QColor(71, 85, 105),
+#: Node status -> semantic token (MASTER §2).  Was two tables of QColor
+#: literals: the solid dot, and a second copy of each at alpha 20-55 for the
+#: glow.  One mapping now, with the glow derived from it, so a status can
+#: only ever have one colour.
+STATUS_TOKENS = {
+    "completed": "ok",
+    "active": "accent",
+    "optional": "warn",
+    "locked": "fg.muted",
 }
 
-GLOW_COLORS = {
-    "completed": QColor(34, 197, 94, 45),
-    "active":    QColor(59, 130, 246, 55),
-    "optional":  QColor(245, 158, 11, 45),
-    "locked":    QColor(71, 85, 105, 20),
-}
+#: Alpha of the radial glow behind a node, per status (the "locked" one is
+#: deliberately fainter -- it must not draw the eye).
+_GLOW_ALPHA = {"completed": 45, "active": 55, "optional": 45, "locked": 20}
+
+
+def status_color(status: str) -> QColor:
+    """Solid dot colour for a node status, from the current theme."""
+    token = STATUS_TOKENS.get(status, STATUS_TOKENS["locked"])
+    return theme.qcolor(theme.current_tokens(), token)
+
+
+def glow_color(status: str) -> QColor:
+    """The same colour, at this status's glow alpha."""
+    color = status_color(status)
+    color.setAlpha(_GLOW_ALPHA.get(status, _GLOW_ALPHA["locked"]))
+    return color
+
+
+def token_color(name: str) -> QColor:
+    return theme.qcolor(theme.current_tokens(), name)
 
 
 class FlowGuideCanvas(QWidget):
@@ -69,7 +88,8 @@ class FlowGuideCanvas(QWidget):
         pos = self._node_positions.get(node_id)
         if not pos:
             return
-        painter.setPen(QPen(QColor(71, 85, 105, 160), 2, Qt.SolidLine))
+        # A connection is a line -> MASTER §1 gives lines `border.strong`.
+        painter.setPen(QPen(token_color("border.strong"), 2, Qt.SolidLine))
         for child_id in node.children:
             child_pos = self._node_positions.get(child_id)
             if child_pos:
@@ -78,8 +98,8 @@ class FlowGuideCanvas(QWidget):
 
     def _draw_node(self, painter, node: FlowNode, pos: QPoint):
         status = node.status
-        color = STATUS_COLORS.get(status, STATUS_COLORS["locked"])
-        glow_color = GLOW_COLORS.get(status, GLOW_COLORS["locked"])
+        color = status_color(status)
+        glow = glow_color(status)
         is_hovered = node.id == self._hovered_id
         is_selected = node.id == self.parent_view._selected_node_id
 
@@ -87,8 +107,10 @@ class FlowGuideCanvas(QWidget):
         glow_r = r + 12 if (is_hovered or is_selected) else r + 6
 
         gradient = QRadialGradient(pos.x(), pos.y(), glow_r)
-        gradient.setColorAt(0.0, glow_color)
-        gradient.setColorAt(1.0, QColor(0, 0, 0, 0))
+        gradient.setColorAt(0.0, glow)
+        transparent = QColor(glow)
+        transparent.setAlpha(0)
+        gradient.setColorAt(1.0, transparent)
         painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(pos, glow_r, glow_r)
@@ -110,7 +132,9 @@ class FlowGuideCanvas(QWidget):
             font.setPixelSize(13)
             font.setBold(True)
             painter.setFont(font)
-            painter.setPen(QPen(QColor(255, 255, 255, 220), 2))
+            check = token_color("fg")
+            check.setAlpha(220)
+            painter.setPen(QPen(check, 2))
             painter.drawText(
                 QRect(pos.x() - r, pos.y() - r, r * 2, r * 2),
                 Qt.AlignCenter,
@@ -129,12 +153,14 @@ class FlowGuideCanvas(QWidget):
         font.setBold(node.id == self.parent_view._selected_node_id)
         painter.setFont(font)
 
+        # MASTER §2 text ladder: selected = fg, locked = fg.muted,
+        # everything else = fg.secondary.
         if node.id == self.parent_view._selected_node_id:
-            color = QColor(248, 250, 252)
+            color = token_color("fg")
         elif node.status == "locked":
-            color = QColor(100, 116, 139)
+            color = token_color("fg.muted")
         else:
-            color = QColor(148, 163, 184)
+            color = token_color("fg.secondary")
 
         painter.setPen(QPen(color))
         label_y = pos.y() + NODE_RADIUS + 6
@@ -349,11 +375,11 @@ class FlowGuideView(QWidget):
             self.clear_node_info()
 
     def show_node_info(self, node: FlowNode, hover: bool = False):
-        color = STATUS_COLORS.get(node.status, STATUS_COLORS["locked"])
+        # The dot's colour is the node's STATUS, i.e. semantic -- so it is
+        # set as a property and coloured by #FlowInfoIcon[status="…"] in the
+        # template rather than by an inline stylesheet.
         self.info_icon_label.setText("●")
-        self.info_icon_label.setStyleSheet(
-            f"color: {color.name()}; font-size: 22px;"
-        )
+        self._set_info_icon_status(node.status)
         self.info_title.setText(node.title)
         self.info_desc.setText(node.description)
 
@@ -368,8 +394,18 @@ class FlowGuideView(QWidget):
         else:
             self.done_btn.setText(self._tr("flow_mark_done"))
 
+    def _set_info_icon_status(self, status: str):
+        """Tag the info dot with a node status so the QSS can colour it.
+
+        ``"none"`` is the no-selection state (previously an inline
+        ``color: #334155``, a literal belonging to no token).
+        """
+        self.info_icon_label.setProperty("status", status)
+        self.info_icon_label.style().unpolish(self.info_icon_label)
+        self.info_icon_label.style().polish(self.info_icon_label)
+
     def clear_node_info(self):
-        self.info_icon_label.setStyleSheet("color: #334155; font-size: 22px;")
+        self._set_info_icon_status("none")
         self.info_title.setText("—")
         self.info_desc.setText("")
         self.done_btn.setVisible(False)

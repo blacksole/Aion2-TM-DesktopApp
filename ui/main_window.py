@@ -30,6 +30,8 @@ from core.app_logger import get_logger
 from core.platform import launch_external, tray_available
 from core.sound import play_wav
 from core.translations import tr
+from core import theme
+from . import motion
 from core.update_checker import UpdateChecker
 from core.version import ARMORY_ENABLED
 from utils import paths
@@ -37,7 +39,7 @@ from utils import paths
 logger = get_logger("main_window")
 from PySide6.QtWidgets import QTimeEdit
 from PySide6.QtGui import (
-    QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap, QKeySequence, QShortcut,
+    QIcon, QPainter, Qt, QPixmap, QKeySequence, QShortcut,
 )
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -46,6 +48,11 @@ from PySide6.QtWidgets import (
 )
 from datetime import datetime, timedelta
 from PySide6.QtCore import QTimer, QEvent
+
+#: ``(theme, asset_base)`` currently installed on the QApplication by
+#: :meth:`MainWindow.load_styles` — see the note there.  Module level, not
+#: per instance, because the stylesheet it tracks is process-wide.
+_APPLIED_STYLE_KEY = None
 
 THEME_LOGOS = {
     "abyss": "assets/logos/logo_abyss.png",
@@ -57,36 +64,40 @@ THEME_LOGOS = {
 }
 
 
-class GradientBackground(QWidget):
-    THEMES = {
-        "abyss": ["#0f172a", "#111827", "#121212", "#2e0f28"],
-        "inferno": ["#140f0f", "#1f1111", "#281212", "#3b0f0f"],
-        "emerald": ["#07130f", "#0b1f17", "#10261f", "#132d26"],
-        "frostbite": ["#0b1120", "#111827", "#172554", "#1e3a8a"],
-        "obsidian": ["#111111", "#171717", "#1f1f1f", "#262626"],
-        "void": ["#120c1c", "#1b1028", "#231236", "#2f1547"],
-    }
+#: priority -> the objectName MASTER §3 colours (ok / warn / danger).  Shared
+#: with ui/widgets/shopping_card.py and mirrored by template_dialog's own map.
+PRIORITY_OBJECT_NAMES = {
+    "low": "priorityLow",
+    "middle": "priorityMiddle",
+    "medium": "priorityMiddle",
+    "high": "priorityHigh",
+}
+
+
+class ThemedBackground(QWidget):
+    """The window's ground: a flat ``bg.window`` fill from the active theme.
+
+    Was ``GradientBackground``, a hand-rolled 4-stop diagonal gradient with
+    its own per-theme hex table (24 literals that had to be kept in step
+    with the QSS by hand, and were not: Frostbite's last stop was a bright
+    ``#1e3a8a`` that no token anywhere used). MASTER's visual thesis is
+    explicit — "zéro dégradé décoratif" — and §2 names ``bg.window`` as the
+    fond of the main window and the overlay, so the ground is now one token,
+    read live from ``core.theme``. Depth comes from the surface ladder
+    (window → surface → elevated → overlay), not from a gradient.
+    """
 
     def __init__(self):
         super().__init__()
-        self.theme = "abyss"
+        self.theme = theme.DEFAULT_THEME
 
-    def set_theme(self, theme):
-        self.theme = theme
+    def set_theme(self, theme_name):
+        self.theme = theme_name
         self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
-
-        colors = self.THEMES.get(self.theme, self.THEMES["abyss"])
-
-        gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor(colors[0]))
-        gradient.setColorAt(0.35, QColor(colors[1]))
-        gradient.setColorAt(0.75, QColor(colors[2]))
-        gradient.setColorAt(1.0, QColor(colors[3]))
-
-        painter.fillRect(self.rect(), gradient)
+        painter.fillRect(self.rect(), theme.qcolor(self.theme, "bg.window"))
 
 class TaskCard(QFrame):
     def __init__(self, title, description="", priority="low", is_event=False,
@@ -199,7 +210,13 @@ class TaskCard(QFrame):
 
         self.priority_value = priority
         self.priority = QLabel(priority.upper())
-        self.priority.setObjectName("priorityMedium")
+        # Real bug, found while reviewing the wired-up render (2026-09-18):
+        # this objectName was the LITERAL "priorityMedium" for every card, so
+        # every priority came out warn-coloured -- a HIGH task looked exactly
+        # like a MIDDLE one, and the ok/warn/danger mapping MASTER §3
+        # specifies only ever worked in the Templates dialog (which has had
+        # its own _PRIO_NAMES map all along).
+        self._apply_priority_style()
 
         self.delete_btn = QPushButton("×")
         self.delete_btn.setObjectName("deleteButton")
@@ -213,39 +230,38 @@ class TaskCard(QFrame):
 
     def toggle(self):
         self.completed = not self.completed
-
-        if self.completed:
-            self.check_btn.setText("●")
-            self.setProperty("completed", True)
-
-            self.title_label.setStyleSheet(
-                "color: #64748b; text-decoration: line-through;"
-            )
-
-        else:
-            self.check_btn.setText("○")
-            self.setProperty("completed", False)
-            self.title_label.setStyleSheet("")
-
-        self.style().unpolish(self)
-        self.style().polish(self)
+        self._apply_completed_style()
 
     def set_completed(self, value):
         self.completed = value
+        self._apply_completed_style()
 
-        if self.completed:
-            self.check_btn.setText("●")
-            self.setProperty("completed", True)
-            self.title_label.setStyleSheet(
-                "color: #64748b; text-decoration: line-through;"
-            )
-        else:
-            self.check_btn.setText("○")
-            self.setProperty("completed", False)
-            self.title_label.setStyleSheet("")
+    def _apply_completed_style(self):
+        """Muted struck-through title + green check, entirely from the QSS.
 
-        self.style().unpolish(self)
-        self.style().polish(self)
+        ``#taskCard[completed="true"] #taskTitle`` / ``#checkButton`` in
+        ui/styles.template.qss own the look now (it used to be an inline
+        ``color: #64748b`` literal here). A descendant rule keyed off an
+        ANCESTOR's dynamic property is only re-evaluated when the child
+        itself is repolished, hence the two extra passes.
+        """
+        self.check_btn.setText("●" if self.completed else "○")
+        self.setProperty("completed", self.completed)
+        for widget in (self, self.title_label, self.check_btn):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+
+    def _apply_priority_style(self, text: str | None = None):
+        """Label text + the objectName MASTER §3's ok/warn/danger rule needs.
+
+        ``text`` is the already-translated label (the edit form and the
+        language switch both have it); without it the plain English
+        uppercase value is used, as at construction.
+        """
+        self.priority.setText(text if text is not None else str(self.priority_value or "").upper())
+        self.priority.setObjectName(PRIORITY_OBJECT_NAMES.get(self.priority_value, "priorityMiddle"))
+        self.priority.style().unpolish(self.priority)
+        self.priority.style().polish(self.priority)
 
     def set_missed(self, value: bool):
         self.missed_badge.setVisible(value)
@@ -276,7 +292,7 @@ class TaskCard(QFrame):
         self.set_title(tmpl.get("title", self.title))
         self.location_label.setText(self.location)
         self.location_label.setVisible(bool(self.location))
-        self.priority.setText(self.priority_value.upper())
+        self._apply_priority_style()
 
         description = tmpl.get("description", self.desc_label.text())
         self.desc_label.setText(description)
@@ -315,6 +331,10 @@ class MainWindow(QMainWindow):
 
         self.language = "en"
         self.current_theme = "abyss"
+        # MASTER §1 "motion.reduced" -- an accessibility switch, so it is a
+        # per-profile setting, not a hidden constant. Pushed into
+        # ui.motion (a module-level flag) on every load and on every toggle.
+        self.reduce_motion = False
 
         self.active_tab = "tasks"
         self.active_filter = "all"
@@ -457,6 +477,9 @@ class MainWindow(QMainWindow):
         self.flow_map_window.map_overlay_changed.connect(self._on_flow_map_overlay_changed)
 
         self.setup_ui()
+        # The tab pill highlight was only ever set by a click, so the app
+        # opened with neither Tasks nor Shopping marked active.
+        self.tasks_page.mark_active_tab(self.active_tab)
         self.overlay = OverlayWindow(self)
         self.load_styles()
         self.apply_language()
@@ -468,6 +491,13 @@ class MainWindow(QMainWindow):
             self._show_first_run_dialog()
         else:
             self.load_last_profile()
+
+        # The startup theme belongs to the profile, which is only known once
+        # the two branches above have run -- so the stylesheet AND the Fusion
+        # fallback palette are (re)built here rather than guessed in main.py.
+        # A profile that carries no theme leaves current_theme at its default
+        # and this is simply a no-op re-render.
+        self.apply_theme(self.current_theme)
 
         # Pre-create the native OS window handle so first show() has no flash
         if self.flow_map_window:
@@ -562,8 +592,14 @@ class MainWindow(QMainWindow):
         }
 
         # refresh() re-renders from task_lists, which no longer holds the
-        # card -- render_tasks hides and unparents it for us.
-        self.refresh()
+        # card -- render_tasks hides and unparents it for us, which is why
+        # the fade has to COMPLETE first: a card already unparented has
+        # nothing left to fade. `task_lists` was mutated synchronously
+        # above, so every count, serialization and reset already sees the
+        # card as gone while it is still fading (MASTER §3, motion.base).
+        # With reduced motion the duration is 0 and ui.motion applies the
+        # end state and calls `then` inline, i.e. exactly the old behaviour.
+        motion.fade_out(card, then=self.refresh, theme=self.current_theme)
 
         self.show_toast(
             tr(self.language, "toast_task_removed"),
@@ -571,7 +607,11 @@ class MainWindow(QMainWindow):
             on_action=self._undo_pending_delete,
             duration_ms=self.UNDO_WINDOW_MS,
         )
-        QTimer.singleShot(self.UNDO_WINDOW_MS, lambda: self._commit_pending_delete(seq))
+        # `self` as the context object: Qt drops the callback if the window
+        # is destroyed before the timer fires, instead of running it against
+        # already-deleted C++ widgets (a real RuntimeError, surfaced the
+        # moment the test suite started destroying its windows for real).
+        QTimer.singleShot(self.UNDO_WINDOW_MS, self, lambda: self._commit_pending_delete(seq))
 
     def _template_delete_side_effects(self, card):
         """The template mutation the old ``_delete_card`` did inline, frozen
@@ -624,6 +664,9 @@ class MainWindow(QMainWindow):
         cards.insert(index, pending["card"])
         self._hide_toast()
         self.refresh()
+        # refresh() has re-parented and shown the card; fade it back in so
+        # the restore reads as the inverse of the delete.
+        motion.fade_in(pending["card"], theme=self.current_theme)
 
     def _set_card_selected(self, card, selected: bool):
         card.setProperty("selected", selected)
@@ -690,7 +733,7 @@ class MainWindow(QMainWindow):
         prio_text = tr(self.language, prio_map.get(priority, priority))
         if isinstance(card, ShoppingCard):
             card.priority = priority
-            card.priority_label.setText(prio_text)
+            card._apply_priority_style(prio_text)
             card.set_title(title)
             card.set_amount(p.amount_input.text().strip() or "1")
             card.location = p.location_input.text().strip()
@@ -709,7 +752,7 @@ class MainWindow(QMainWindow):
                 card.schedule_label.style().polish(card.schedule_label)
         else:
             card.priority_value = priority
-            card.priority.setText(prio_text)
+            card._apply_priority_style(prio_text)
             card.set_title(title)
             card.set_amount(p.amount_input.text().strip() or "1")
             desc = p.desc_input.text().strip()
@@ -1108,7 +1151,7 @@ class MainWindow(QMainWindow):
 
 
     def _setup_central_widget(self):
-        self.background = GradientBackground()
+        self.background = ThemedBackground()
         self.background.set_theme(self.current_theme)
         self.setCentralWidget(self.background)
 
@@ -1263,6 +1306,11 @@ class MainWindow(QMainWindow):
                 self.apply_settings_from_page
             )
 
+        if hasattr(self.settings_page, "reduce_motion_changed"):
+            self.settings_page.reduce_motion_changed.connect(
+                self.set_reduce_motion
+            )
+
         if hasattr(self.settings_page, "save_profile_btn"):
             self.settings_page.save_profile_btn.clicked.connect(
                 self.save_profile_from_profile_page
@@ -1332,7 +1380,7 @@ class MainWindow(QMainWindow):
         # Without it, any event-loop pump 2 s after construction starts a real
         # network QThread that can still be running at interpreter exit.
         if not os.environ.get("AION2TM_NO_UPDATE_CHECK"):
-            QTimer.singleShot(2000, self.run_update_check)
+            QTimer.singleShot(2000, self, self.run_update_check)
 
     def open_main_menu(self):
         menu = QMenu(self)
@@ -1659,6 +1707,10 @@ class MainWindow(QMainWindow):
 
     def select_tab(self, tab):
         self.active_tab = tab
+        # MainWindow is the authority on which tab is active (it restores it
+        # from the profile), so it has to move the highlight too -- see
+        # TasksPage.mark_active_tab.
+        self.tasks_page.mark_active_tab(tab)
         self._update_task_reset_hint()
         self.refresh()
 
@@ -1830,25 +1882,53 @@ class MainWindow(QMainWindow):
         if hasattr(self, "overlay") and self.overlay.isVisible():
             self.overlay.refresh()
 
-    def load_styles(self):
+    @staticmethod
+    def _asset_base_path() -> Path:
+        """Root the QSS's ``url(ASSET_PATH/...)`` references resolve against.
+
+        ``sys._MEIPASS`` when frozen (PyInstaller extracts the bundled datas
+        there), the repo root in a dev checkout.
+        """
         if hasattr(sys, "_MEIPASS"):
-            base_path = Path(sys._MEIPASS)
-            style_path = base_path / "ui" / "styles.qss"
-        else:
-            style_path = Path(__file__).resolve().parent / "styles.qss"
-            base_path = Path(__file__).resolve().parent.parent
+            return Path(sys._MEIPASS)
+        return Path(__file__).resolve().parent.parent
 
-        with open(style_path, "r", encoding="utf-8") as f:
-            styles = f.read()
+    def load_styles(self):
+        """Render the token template for the active theme onto the *application*.
 
-        styles = styles.replace("ASSET_PATH", base_path.as_posix())
-        self.setStyleSheet(styles)
-        # OverlayWindow has no Qt parent (it's a standalone Qt.Tool window, see
-        # its __init__), so it never receives this stylesheet through normal
-        # widget-tree cascade -- it needs its own copy applied directly.
-        if hasattr(self, "overlay"):
-            self.overlay.setStyleSheet(styles)
-        logger.debug("Stylesheet loaded: %s (%d bytes)", style_path, len(styles))
+        One sheet for the whole process, not one per window: OverlayWindow,
+        FlowMapWindow and the ItemDatabase window are all parentless
+        top-levels, so a ``MainWindow.setStyleSheet`` never reached them
+        through the widget-tree cascade and each needed its own hand-pushed
+        copy (three delivery paths, three chances to drift).
+        ``QApplication.setStyleSheet`` reaches every one of them, including
+        windows created later (MASTER §4-1).
+        """
+        app = QApplication.instance()
+        if app is None:  # a widget built without an app cannot be styled anyway
+            logger.warning("load_styles(): no QApplication — stylesheet not applied")
+            return ""
+
+        theme.set_current(self.current_theme)
+        base = self._asset_base_path().as_posix()
+
+        # QApplication.setStyleSheet re-resolves the sheet against EVERY
+        # widget of EVERY open window, so it is by far the most expensive
+        # call in a theme switch -- and apply_theme() runs on every profile
+        # load, which usually means "the same theme again".  Re-applying an
+        # identical sheet is pure cost, so it is skipped; the key is global
+        # because the sheet is (one QApplication per process).
+        global _APPLIED_STYLE_KEY
+        if _APPLIED_STYLE_KEY == (self.current_theme, base) and app.styleSheet():
+            return app.styleSheet()
+
+        styles = theme.build_qss(self.current_theme, base)
+        app.setStyleSheet(styles)
+        _APPLIED_STYLE_KEY = (self.current_theme, base)
+        logger.debug(
+            "Stylesheet rendered for theme %r (%d bytes)", self.current_theme, len(styles)
+        )
+        return styles
 
     def toggle_events(self):
         self.tasks_page.set_event_features_visible(
@@ -2347,6 +2427,9 @@ class MainWindow(QMainWindow):
             self.missed_daily_activities = settings.get("missed_daily_activities", [])
 
             self.show_events = settings.get("show_events", True)
+            # Straight into ui.motion: the profile's own preference has to be
+            # live before the first fade this load could trigger.
+            self.set_reduce_motion(settings.get("reduce_motion", False), save=False)
             self.auto_save = settings.get("auto_save", True)
             self.notification_enabled = settings.get("notification_enabled", False)
             self.notification_warn_minutes = settings.get("notification_warn_minutes", 1)
@@ -2659,6 +2742,7 @@ class MainWindow(QMainWindow):
                 "season_enabled": self.season_enabled,
 
                 "show_events": self.show_events,
+                "reduce_motion": self.reduce_motion,
 
                 "shugo_enabled": self.shugo_enabled,
                 "shugo_start_minute": self.shugo_start_minute,
@@ -3029,10 +3113,10 @@ class MainWindow(QMainWindow):
             for card in cards:
                 if isinstance(card, ShoppingCard):
                     raw = card.priority
-                    card.priority_label.setText(prio_display.get(raw, raw))
+                    card._apply_priority_style(prio_display.get(raw, raw))
                 else:
                     raw = card.priority_value
-                    card.priority.setText(prio_display.get(raw, raw))
+                    card._apply_priority_style(prio_display.get(raw, raw))
                     if getattr(card, "is_event", False) and hasattr(card, "event_badge"):
                         card.event_badge.setText(event_text)
 
@@ -3057,47 +3141,64 @@ class MainWindow(QMainWindow):
                 return
         self.save_profile()
 
-    def apply_theme(self, theme):
-        self.current_theme = theme
+    def apply_theme(self, theme_name):
+        unchanged = theme_name == self.current_theme and _APPLIED_STYLE_KEY is not None
+        self.current_theme = theme_name
 
-        # Real bug found + fixed (User-reported, 2026-09-08, screenshot:
-        # Templates dialog's "Add Task"/"Close" buttons stayed cyan/purple
-        # on Inferno) -- the theme property only ever lived on
-        # self.background (the central widget), so the `QWidget[theme=...]
-        # #selector` rules only ever matched widgets nested INSIDE it. Any
-        # QDialog(parent=self) -- Templates, Custom Timer manager, etc. --
-        # is a QObject child of MainWindow itself, not of self.background,
-        # so it was never a descendant of anything carrying the property.
-        # Setting it here too (self is the one common ancestor of both)
-        # covers every such dialog in one place instead of one at a time.
-        self.setProperty("theme", theme)
+        # A theme is now a different set of token VALUES, not a different
+        # QSS block: re-rendering the sheet IS the theme switch (MASTER
+        # §4-2).  This replaces the ~100 `QWidget[theme="…"] #selector`
+        # rules and the three `setProperty("theme", …)` calls that used to
+        # feed them -- nothing selects on that property any more, so a
+        # dialog can no longer miss the switch by not descending from
+        # whichever widget happened to carry it (the 2026-09-08 bug:
+        # Templates buttons stayed cyan on Inferno).
+        self.load_styles()
+        app = QApplication.instance()
+        # setPalette also walks every widget of every window, so it is
+        # skipped when the theme did not actually move (apply_theme is
+        # called on every profile load, usually with the same theme).
+        if app is not None and not unchanged:
+            app.setPalette(theme.build_palette(self.current_theme))
 
         if hasattr(self, "background"):
-            self.background.set_theme(theme)
+            self.background.set_theme(theme_name)
             if hasattr(self, "theme_logo_label"):
                 self.update_theme_logo()
-            self.background.setProperty("theme", theme)
 
         if self.item_database_window is not None and hasattr(self.item_database_window, "set_theme"):
-            self.item_database_window.set_theme(theme)
+            self.item_database_window.set_theme(theme_name)
 
+        if unchanged:
+            # Nothing was re-rendered, so there is nothing to re-resolve.
+            # This matters: the walk below touches every widget in the
+            # window (thousands), and apply_theme() is called on every
+            # profile load, almost always with the theme already active.
+            self.update()
+            return
+
+        # A re-rendered stylesheet is not re-evaluated against widgets that
+        # already computed their style, and property-based rules
+        # (#taskCard[completed="true"], #settingsNavButton[active="true"]…)
+        # need a repolish regardless.
         for widget in self.findChildren(QWidget):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
 
-        # OverlayWindow has no Qt parent (standalone Qt.Tool window), so it's
-        # invisible to self.findChildren() above and never picked up the
-        # theme property that drives the per-theme QSS -- its own buttons
-        # (Overlay*, including the Countdown Timer's Start/Stop) stayed
-        # whatever the unscoped/Abyss style said regardless of the active
-        # theme until now.
+        # OverlayWindow has no Qt parent (standalone Qt.Tool window), so it
+        # is invisible to self.findChildren() above.  It reads the app-wide
+        # sheet now, but its own children still need the repolish, and its
+        # painters need a repaint for the new token colors.
         if hasattr(self, "overlay"):
-            self.overlay.setProperty("theme", theme)
             self.overlay.style().unpolish(self.overlay)
             self.overlay.style().polish(self.overlay)
             for widget in self.overlay.findChildren(QWidget):
                 widget.style().unpolish(widget)
                 widget.style().polish(widget)
+            self.overlay.update()
+
+        if self.flow_map_window is not None:
+            self.flow_map_window.update()
 
         self.update()
 
@@ -3116,9 +3217,13 @@ class MainWindow(QMainWindow):
 
         self._toast_seq += 1
         seq = self._toast_seq
-        self.toast_widget.show()
+        # MASTER §3 "Toast": entrée/sortie motion.base. One of the exactly
+        # three places in the app that animates.
+        motion.fade_in(self.toast_widget, theme=self.current_theme)
 
-        QTimer.singleShot(duration_ms, lambda: self._hide_toast(seq))
+        # See _delete_card: `self` as the context so a pending toast timer
+        # cannot outlive the window it would touch.
+        QTimer.singleShot(duration_ms, self, lambda: self._hide_toast(seq))
 
     def _on_toast_action(self):
         action = self._toast_action
@@ -3134,7 +3239,7 @@ class MainWindow(QMainWindow):
             return
         self._toast_action = None
         self.toast_action_btn.hide()
-        self.toast_widget.hide()
+        motion.fade_out(self.toast_widget, theme=self.current_theme)
 
     # ── Keyboard (UX audit 2026-09-18, C1) ────────────────────────────────
 
@@ -4059,6 +4164,12 @@ class MainWindow(QMainWindow):
 
         if page_key in self.page_indexes:
             self.page_stack.setCurrentIndex(self.page_indexes[page_key])
+            # MASTER §1: motion.slow, "changement de page (opacité seule)".
+            # No slide -- a stacked page is layout-managed, and animating
+            # its geometry fights the layout (see ui/motion.py).
+            motion.fade_in(
+                self.page_stack.currentWidget(), theme=self.current_theme, kind="slow"
+            )
 
         # No "Tasks opened"/"Plan opened"/"Settings opened" toast here any
         # more (UX audit 2026-09-18, M4): confirming a navigation the sidebar
@@ -4078,7 +4189,7 @@ class MainWindow(QMainWindow):
             # Windows shows the new window's bare frame (no content
             # painted yet) for a moment before it either gets its real
             # size/content or gets misread as something to dismiss.
-            QTimer.singleShot(0, self.open_flow_map_window)
+            QTimer.singleShot(0, self, self.open_flow_map_window)
 
         elif page_key == "about":
             self.about_page.update_language(self.language, tr)
@@ -4257,6 +4368,9 @@ class MainWindow(QMainWindow):
             self.show_events
         )
 
+        if "reduce_motion" in data:
+            self.set_reduce_motion(data["reduce_motion"], save=False)
+
         self.toggle_events()
 
         self.update_countdowns()
@@ -4328,6 +4442,22 @@ class MainWindow(QMainWindow):
 
         self.save_profile(silent=True)
 
+    def set_reduce_motion(self, enabled: bool, save: bool = True):
+        """Store MASTER §1's ``motion.reduced`` preference and apply it now.
+
+        ``ui.motion`` keeps the flag module-level (MASTER calls the setting
+        "non négociable", so it has to reach every animation, and threading
+        it through each call site would mean it could be forgotten in one).
+        ``save=False`` is the profile-load path: the value came FROM the
+        file, so writing it straight back would be a pointless write — and
+        would happen while the profile is still half-restored.
+        """
+        self.reduce_motion = bool(enabled)
+        motion.set_reduced_motion(self.reduce_motion)
+        logger.debug("Reduced motion: %s", self.reduce_motion)
+        if save and self.auto_save:
+            self.save_profile(silent=True)
+
     def change_theme_from_page(self, theme: str):
         self.apply_theme(theme)
         self.save_profile()
@@ -4341,6 +4471,7 @@ class MainWindow(QMainWindow):
             "theme": self.current_theme,
 
             "show_events": self.show_events,
+            "reduce_motion": self.reduce_motion,
 
             "daily_reset_time": self.daily_reset_time,
             "weekly_reset_day": self.weekly_reset_day,

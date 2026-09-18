@@ -44,6 +44,17 @@ QLabel {
    theme).  Scoped per widget type rather than a bare `*:focus` so that
    container widgets (scroll areas, panels, the window itself) don't draw
    a ring when a child takes focus.
+
+   `outline`, NOT `border` — and that is load-bearing, not a style
+   preference.  Qt's stylesheet engine resolves conflicts by CSS2
+   specificity: an ID selector scores 100, a type + pseudo-class
+   (`QPushButton:focus`) scores 11.  So every single `#objectName` rule in
+   this file that declares a border — 157 of them — silently OUTRANKED the
+   focus ring, and the ring simply never appeared on a button, a pill, a
+   field or a combo: verified offscreen before the fix (a focused
+   #tabButton kept its 1 px `border` line).  `outline` is a property no
+   other rule here sets, so there is no conflict to lose, and it draws
+   OUTSIDE the border — which is what MASTER §2's "offset 1 px" describes.
    ------------------------------------------------------------------ */
 
 QPushButton:focus,
@@ -59,23 +70,24 @@ QAbstractSpinBox:focus,
 QSlider:focus,
 QCheckBox:focus,
 QRadioButton:focus {
-    border: {{focus_ring_width}}px solid {{accent}};
+    outline: {{focus_ring_width}}px solid {{accent}};
+    outline-offset: {{focus_ring_offset}}px;
 }
 
 QCheckBox::indicator:focus,
 QRadioButton::indicator:focus {
-    border: {{focus_ring_width}}px solid {{accent}};
+    outline: {{focus_ring_width}}px solid {{accent}};
 }
 
 QListWidget::item:focus,
 QListView::item:focus,
 QTreeView::item:focus,
 QTableView::item:focus {
-    border: {{focus_ring_width}}px solid {{accent}};
+    outline: {{focus_ring_width}}px solid {{accent}};
 }
 
 QTabBar::tab:focus {
-    border: {{focus_ring_width}}px solid {{accent}};
+    outline: {{focus_ring_width}}px solid {{accent}};
 }
 
 /* #taskCard is the objectName of BOTH the task card (main_window.TaskCard)
@@ -86,7 +98,8 @@ QTabBar::tab:focus {
 #timerCard:focus,
 #armoryCardRow:focus,
 #FlowNodeCard:focus {
-    border: {{focus_ring_width}}px solid {{accent}};
+    outline: {{focus_ring_width}}px solid {{accent}};
+    outline-offset: {{focus_ring_offset}}px;
 }
 
 /* ---------------------------------------------------------------------
@@ -467,6 +480,7 @@ QToolTip {
 
 #taskCard[completed="true"] #taskTitle {
     color: {{fg_muted}};
+    text-decoration: line-through;
 }
 
 #taskCard[completed="true"] #checkButton {
@@ -541,10 +555,14 @@ QDateTimeEdit {
     placeholder-text-color: {{fg_muted}};
 }
 
+/* MASTER §3 "Champ": a focused field's own border goes accent, on top of
+   the outline ring above.  border-COLOR, not the `border` shorthand: the
+   shorthand would also change the width, so the field would grow 1 px and
+   nudge its whole row on focus. */
 QLineEdit:focus,
 QTextEdit:focus,
 QPlainTextEdit:focus {
-    border: {{focus_ring_width}}px solid {{accent}};
+    border-color: {{accent}};
 }
 
 QLineEdit:disabled,
@@ -1032,23 +1050,41 @@ QCheckBox::indicator:checked {
 }
 
 #eventBadge,
-#newBadge,
-#priorityMedium,
-#priorityMiddle {
+#newBadge {
     color: {{warn}};
     background-color: {{warn_soft}};
 }
 
 #missedBadge,
-#priorityHigh,
 #changelogHotfixBadge {
     color: {{danger}};
     background-color: {{danger_soft}};
 }
 
+/* MASTER §3, Badge: "priorité → texte seul".  A priority is on every single
+   row, so a filled pill three rows deep turns the list into a colour chart
+   -- the three that DO get a fill (schedule, MISSED, EVENT) are the ones
+   that mean "not like the others".  Colour still carries the meaning
+   (ok / warn / danger), the fill does not. */
+#priorityLow,
+#priorityMedium,
+#priorityMiddle,
+#priorityHigh {
+    background-color: transparent;
+    padding: {{space_1}}px 0px;
+}
+
+#priorityMedium,
+#priorityMiddle {
+    color: {{warn}};
+}
+
+#priorityHigh {
+    color: {{danger}};
+}
+
 #priorityLow {
     color: {{ok}};
-    background-color: {{ok_soft}};
 }
 
 /* Schedule / priority / currency toggles — pill rules, colored by meaning
@@ -2304,4 +2340,222 @@ QListView::item:selected {
     background: {{bg_elevated}};
     border-radius: {{radius_sm}}px;
     padding: 1px {{space_1}}px;
+}
+
+/* ---------------------------------------------------------------------
+   14. Migrated inline styles  (wave 2026-09-18)
+
+   Every rule below replaces a `setStyleSheet(...)` call that used to live
+   in a widget (MASTER §4-4).  Grouped here, with the call site named, so
+   the next person can see at a glance what the widgets stopped doing for
+   themselves.
+   ------------------------------------------------------------------ */
+
+/* QAbstractScrollArea paints its viewport from QPalette::Base, which the
+   outer widget's own rule never reaches -- it showed as a light grey box
+   under a dark theme (User-reported, 2026-08-29).  Nine call sites used to
+   push `background: transparent` onto the viewport directly; they now name
+   it instead. */
+#transparentViewport {
+    background: transparent;
+}
+
+/* HeaderWidget._apply_avatar_pixmap: a real (already circle-clipped)
+   picture must not sit on the accent disc the initials state uses. */
+#profileAvatar[hasAvatar="true"] {
+    background: transparent;
+}
+
+/* Big numbers — MASTER §3 ("gros chiffres" in font.display/mono): the
+   Timers page cards and the custom-timer dialog's preview.  The COLOUR is
+   still set per widget, because it is the timer's own data colour
+   (MASTER §4-4). */
+#bigValue {
+    font-family: {{font_mono}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+    background: transparent;
+}
+
+/* settings_page._LogViewerDialog: app.log is column-aligned output. */
+#logViewerText {
+    font-family: {{font_mono}};
+    font-size: {{text_xs}}px;
+}
+
+/* custom_timer_dialog: the 8 colour swatches.  Fill = the swatch's own
+   colour (data); the ring is the theme's (it was a hardcoded white). */
+#ctColorSwatch {
+    border: {{focus_ring_width}}px solid transparent;
+    border-radius: {{radius_md}}px;
+}
+
+#ctColorSwatch:hover {
+    border-color: {{fg_muted}};
+}
+
+#ctColorSwatch:checked {
+    border-color: {{fg}};
+}
+
+/* custom_timer_manager_dialog: a category marker (theme) and a timer's own
+   colour dot (data -- colour set in code, size here). */
+#ctCategoryDot {
+    color: {{accent}};
+    font-size: {{text_md}}px;
+    background: transparent;
+}
+
+#ctTimerColorDot {
+    font-size: {{text_lg}}px;
+    background: transparent;
+}
+
+/* template_dialog._h_separator */
+#dialogSeparator {
+    color: {{border}};
+    background: {{border}};
+    max-height: {{border_width}}px;
+    border: none;
+}
+
+/* tasks_page._show_char_filter_popover: a rounded popup, matching the
+   overlay's own filter menu (User-Wunsch, 2026-09-16).  Was an inline
+   sheet because a QMenu did not inherit MainWindow's stylesheet; it
+   inherits the QApplication's. */
+#charFilterMenu {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_1}}px;
+}
+
+#charFilterMenu::item {
+    padding: {{space_2}}px {{space_6}}px;
+    border-radius: {{radius_sm}}px;
+}
+
+#charFilterMenu::item:selected {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+#charFilterMenu::separator {
+    height: {{border_width}}px;
+    background: {{border}};
+    margin: {{space_1}}px {{space_2}}px;
+}
+
+/* flow_node_card: three discrete zoom steps, previously three inline
+   font-size literals (18/16/15 and 13/12/1 px, none of them on MASTER
+   §1's scale). */
+#FlowNodeTitle[zoomStep="full"] {
+    font-size: {{text_lg}}px;
+}
+
+#FlowNodeTitle[zoomStep="mid"] {
+    font-size: {{text_md}}px;
+}
+
+#FlowNodeTitle[zoomStep="small"] {
+    font-size: {{text_sm}}px;
+}
+
+#FlowNodeDescription[zoomStep="full"] {
+    font-size: {{text_base}}px;
+}
+
+#FlowNodeDescription[zoomStep="mid"] {
+    font-size: {{text_sm}}px;
+}
+
+#FlowNodeDescription[zoomStep="small"] {
+    font-size: {{text_xs}}px;
+}
+
+/* flow_guide_view.show_node_info: the info dot IS the node's status. */
+#FlowInfoIcon[status="completed"] {
+    color: {{ok}};
+    border-color: {{ok}};
+}
+
+#FlowInfoIcon[status="active"] {
+    color: {{accent}};
+    border-color: {{accent}};
+}
+
+#FlowInfoIcon[status="optional"] {
+    color: {{warn}};
+    border-color: {{warn}};
+}
+
+#FlowInfoIcon[status="locked"],
+#FlowInfoIcon[status="none"] {
+    color: {{fg_muted}};
+    border-color: {{border}};
+}
+
+/* Overlay -------------------------------------------------------------- */
+
+/* The tab / schedule letter on a HUD row (MASTER §3 badge: full-colour
+   text on its own soft fill).  Was an inline rgba() built from a per-tab
+   QColor literal, with near-white text on a saturated fill. */
+#OverlayBadge {
+    color: {{secondary}};
+    background-color: {{secondary_soft}};
+    border-radius: {{radius_sm}}px;
+    padding: 0px {{space_1}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* OverlayGuideRow's ACTV / LOCK / DONE / OPT label. */
+#OverlayStatusLabel {
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    background: transparent;
+}
+
+#OverlayStatusLabel[status="completed"] {
+    color: {{ok}};
+}
+
+#OverlayStatusLabel[status="active"] {
+    color: {{accent}};
+}
+
+#OverlayStatusLabel[status="optional"] {
+    color: {{warn}};
+}
+
+#OverlayStatusLabel[status="locked"] {
+    color: {{fg_muted}};
+}
+
+/* The "this profile is live" dot in the HUD's title bar. */
+#OverlayLiveDot {
+    color: {{accent}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+/* The Countdown Timer's Start/Stop button carries a per-timer DATA fill
+   (set in code), so it needs on-accent text and no border -- unlike the
+   plain #OverlayCountdownToggleBtn rule above, which assumes a
+   transparent background. */
+#OverlayCountdownToggleBtn[running="true"],
+#OverlayCountdownToggleBtn[running="false"] {
+    color: {{fg_on_accent}};
+    border: none;
+    border-radius: {{radius_md}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* MASTER §3 "État vide" — one place the hint colour is defined, reachable
+   by widgets that already own their objectName (the overlay's empty row
+   carries this as a `class` property). */
+QLabel[class="emptyStateHint"] {
+    color: {{fg_muted}};
 }

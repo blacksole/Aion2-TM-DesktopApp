@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 
 import pytest
+
+from tests.conftest import destroy_window
 from PySide6.QtWidgets import QMessageBox
 
 from core.translations import tr
@@ -47,7 +49,7 @@ def window(qapp, tmp_path_factory):
     win = mw.MainWindow()
     win.countdown_timer.stop()
     yield win
-    win.close()
+    destroy_window(win)
     patcher.undo()
 
 

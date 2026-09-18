@@ -98,3 +98,66 @@ def test_import_and_call_without_a_qapplication_does_not_raise():
     )
     assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
     assert "ok" in result.stdout
+
+
+def test_the_qss_font_stacks_name_the_families_qt_actually_registers(app):
+    """MASTER §1: the QSS must not name a face Qt never loaded.
+
+    QSS resolves ``font-family`` at parse time -- a family Qt does not know
+    is silently dropped and the whole rule falls back, with no warning
+    anywhere.  So the first entry of each token's stack has to be exactly
+    what ``load_fonts()`` reports, and the rest has to stay a real fallback
+    chain for the machines where the bundled files fail to register.
+    """
+    from PySide6.QtGui import QFont, QFontInfo
+
+    from core import theme
+
+    resolved = fonts.load_fonts(force=True)
+    stacks = {
+        "display": theme.ABYSS.font_display,
+        "body": theme.ABYSS.font_body,
+        "mono": theme.ABYSS.font_mono,
+    }
+    for role, stack in stacks.items():
+        entries = [part.strip().strip('"').strip("'") for part in stack.split(",")]
+        assert entries[0] == resolved[role], f"{role}: QSS names {entries[0]!r}, Qt loaded {resolved[role]!r}"
+        assert len(entries) >= 2, f"{role} has no fallback after {entries[0]!r}"
+        assert entries[-1] in {"sans-serif", "serif", "monospace"}, (
+            f"{role}'s stack must end in a generic family, got {entries[-1]!r}"
+        )
+        # And the face really is installed, not merely named.
+        assert QFontInfo(QFont(resolved[role])).exactMatch(), role
+
+
+def _rule_body(qss: str, selector: str) -> str:
+    start = qss.index(selector + " {")
+    return qss[start:qss.index("}", start)]
+
+
+@pytest.mark.parametrize(
+    "selector,role",
+    [
+        # MASTER §1: font.mono is for "timers, GearScore, colonnes de stats".
+        ("#bigValue", "mono"),          # Timers page cards + custom-timer preview
+        ("#OverlayRowValue", "mono"),   # HUD countdowns
+        ("#OverlaySectionCount", "mono"),
+        # ... and font.display for "titres de page, gros chiffres (résumé)".
+        ("#ProgressTotalVal", "display"),
+        ("#PageTitle", "display"),
+        ("#OverlaySectionTitle", "display"),
+    ],
+)
+def test_the_big_numbers_and_titles_use_the_right_face(app, selector, role):
+    """MASTER §1/§3 split: mono for anything counting, display for headings
+    and the summary figure.  A big number in the body face is the tell that
+    a rule was written without the token."""
+    from core import theme
+
+    expected = {
+        "mono": theme.ABYSS.font_mono,
+        "display": theme.ABYSS.font_display,
+    }[role].split(",")[0].strip()
+    body = _rule_body(theme.build_qss("abyss"), selector)
+    assert "font-family" in body, f"{selector} declares no font-family"
+    assert expected in body, f"{selector} should be {role}: {body}"

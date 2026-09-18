@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PySide6.QtGui import QColor
+from core import theme
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -18,11 +18,13 @@ from ui.full_view_import import ParsedImport, parse_full_view_csv, parse_full_vi
 
 _TYPE_LABEL = {"daily": "Daily", "weekly": "Weekly", "season": "Season"}
 _ACTION_ORDER = {"new": 0, "done": 1, "open": 2, "unchanged": 3}
-_ACTION_COLORS = {
-    "new": QColor("#38bdf8"),
-    "done": QColor("#4ade80"),
-    "open": QColor("#f87171"),
-    "unchanged": QColor("#64748b"),
+#: Import-plan action -> semantic token (MASTER §2).  Was four QColor hex
+#: literals; "new" was a sky blue that matched no token at all.
+_ACTION_TOKENS = {
+    "new": "accent",
+    "done": "ok",
+    "open": "danger",
+    "unchanged": "fg.muted",
 }
 
 
@@ -211,7 +213,8 @@ class FullViewImportDialog(QDialog):
             char_display = row["character"] or self._t("char_unassigned")
             action_key = f"full_view_import_action_{row['action']}"
             values = [char_display, _TYPE_LABEL.get(row["schedule"], row["schedule"]), row["title"], self._t(action_key)]
-            color = _ACTION_COLORS.get(row["action"])
+            token = _ACTION_TOKENS.get(row["action"])
+            color = theme.qcolor(theme.current_tokens(), token) if token else None
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if c == 3 and color is not None:

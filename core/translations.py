@@ -935,6 +935,8 @@ TRANSLATIONS = {
         "empty_timers_title": "Keine eigenen Timer",
         "empty_timers_hint": "Mit + den ersten Timer anlegen",
         "empty_overlay_tasks": "Keine offenen Aufgaben",
+        "reduce_motion": "Animationen reduzieren",
+        "reduce_motion_hint": "Ein- und Ausblenden abschalten — Zustandswechsel erfolgen sofort.",
     },
 
     "ru": {
@@ -1863,6 +1865,8 @@ TRANSLATIONS = {
         "empty_timers_title": "Нет своих таймеров",
         "empty_timers_hint": "Создайте первый таймер кнопкой +",
         "empty_overlay_tasks": "Нет активных задач",
+        "reduce_motion": "Уменьшить анимации",
+        "reduce_motion_hint": "Отключить появление и исчезновение — состояние меняется сразу.",
     },
 
     "en": {
@@ -2792,6 +2796,8 @@ TRANSLATIONS = {
         "empty_timers_title": "No custom timers",
         "empty_timers_hint": "Create your first timer with +",
         "empty_overlay_tasks": "No active tasks",
+        "reduce_motion": "Reduce animations",
+        "reduce_motion_hint": "Turn off fades — state changes happen instantly.",
     }
 }
 

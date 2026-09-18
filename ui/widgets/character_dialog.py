@@ -93,7 +93,7 @@ class CharacterManagerDialog(QDialog):
         # own QSS rule -- can show up as a plain white box when Windows
         # itself is set to dark mode (same fix already applied elsewhere,
         # e.g. TemplateDialog's own lists).
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
         layout.addWidget(scroll, 1)
 
         close_btn = QPushButton(self._t("close"))

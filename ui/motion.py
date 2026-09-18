@@ -86,6 +86,27 @@ def _opacity_effect(widget: QWidget) -> QGraphicsOpacityEffect:
     return effect
 
 
+def _drop_effect(widget: QWidget) -> None:
+    """Uninstall the opacity effect once the fade is over.
+
+    Not tidiness — cost.  A QGraphicsOpacityEffect makes Qt render the whole
+    widget subtree into an offscreen buffer on EVERY repaint, for as long as
+    it is installed.  Leaving one on a page of the QStackedWidget (or on the
+    toast row) after a 220 ms fade therefore taxes every later paint of that
+    page forever; measured on the test suite, which fades the same pages
+    repeatedly, it was the difference between ~30 s and several minutes.
+
+    Guarded: the widget may already be deleted by the time a queued
+    ``finished`` handler runs (a soft-deleted card commits and calls
+    ``deleteLater``), and touching a dead QWidget raises.
+    """
+    try:
+        if isinstance(widget.graphicsEffect(), QGraphicsOpacityEffect):
+            widget.setGraphicsEffect(None)
+    except RuntimeError:  # the C++ object is gone; nothing left to clean up
+        pass
+
+
 def _keep(animation: QPropertyAnimation) -> None:
     _running.add(animation)
     animation.finished.connect(lambda: _running.discard(animation))
@@ -124,7 +145,16 @@ def fade_in(widget: QWidget, theme: str | None = None, kind: str = "base") -> QP
     effect = _opacity_effect(widget)
     effect.setOpacity(0.0)
     widget.show()
-    return _animate(effect, b"opacity", 0.0, 1.0, duration(kind, theme), theme)
+    animation = _animate(
+        effect,
+        b"opacity",
+        0.0,
+        1.0,
+        duration(kind, theme),
+        theme,
+        then=lambda: _drop_effect(widget),
+    )
+    return animation
 
 
 def fade_out(
@@ -138,7 +168,18 @@ def fade_out(
     effect.setOpacity(1.0)
 
     def finish() -> None:
-        widget.hide()
+        # The widget can legitimately be gone by the time this queued
+        # callback runs: a soft-deleted card whose undo window closed is
+        # setParent(None) + deleteLater()'d, and hide() on a dead QWidget
+        # raises from inside a Qt slot (where it becomes an unhandled
+        # traceback, not an exception a caller can see). `then` must still
+        # run either way -- MainWindow passes its refresh() through it.
+        try:
+            widget.hide()
+        except RuntimeError:
+            logger.debug("fade_out: widget was destroyed mid-fade")
+        else:
+            _drop_effect(widget)
         if then is not None:
             then()
 

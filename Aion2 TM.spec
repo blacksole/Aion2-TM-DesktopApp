@@ -7,7 +7,17 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
-        ('ui/styles.qss', 'ui'),
+        # The bundled OFL faces core/fonts.py registers at startup. Already
+        # inside ('assets', 'assets') above -- named again on purpose so that
+        # trimming the broad assets entry (it also carries icons/logos/banner)
+        # can never silently ship a build with no typography: MASTER §1 makes
+        # Barlow/Barlow Condensed/JetBrains Mono part of the design system,
+        # not decoration. PyInstaller de-duplicates identical TOC entries.
+        ('assets/fonts', 'assets/fonts'),
+        # ui/styles.qss is gone (2026-09-18): the app renders its stylesheet
+        # from this template via core/theme.build_qss(), so the TEMPLATE is
+        # what has to reach _MEIPASS/ui/.
+        ('ui/styles.template.qss', 'ui'),
         ('ItemDatabase/app.py', 'ItemDatabase'),
         ('ItemDatabase/styles.qss', 'ItemDatabase'),
         ('ItemDatabase/assets', 'ItemDatabase/assets'),

@@ -58,7 +58,12 @@ def test_fade_in_reduced_motion_applies_the_end_state_instantly(app):
     motion.set_reduced_motion(True)
     widget = QLabel("x")
     assert motion.fade_in(widget) is None
-    assert widget.graphicsEffect().opacity() == pytest.approx(1.0)
+    assert not widget.isHidden()
+    # The effect is uninstalled the moment the fade is over -- instantly,
+    # here -- because an installed QGraphicsOpacityEffect makes Qt re-render
+    # the widget through an offscreen buffer on every later repaint. Fully
+    # opaque and no effect is the same thing on screen, and cheaper.
+    assert widget.graphicsEffect() is None
 
 
 def test_fade_out_reduced_motion_hides_and_calls_back(app):
@@ -67,8 +72,8 @@ def test_fade_out_reduced_motion_hides_and_calls_back(app):
     widget.show()
     calls = []
     assert motion.fade_out(widget, then=lambda: calls.append(1)) is None
-    assert widget.graphicsEffect().opacity() == pytest.approx(0.0)
     assert widget.isHidden()
+    assert widget.graphicsEffect() is None
     assert calls == [1]
 
 
@@ -121,3 +126,29 @@ def test_fade_in_reuses_an_existing_opacity_effect(app):
     widget.setGraphicsEffect(effect)
     motion.fade_in(widget)
     assert widget.graphicsEffect() is effect
+
+
+def test_the_opacity_effect_does_not_outlive_the_fade(app):
+    """A QGraphicsOpacityEffect left installed taxes every later repaint of
+    the widget's whole subtree, forever.  Both fades must clean up."""
+    widget = QLabel("x")
+
+    animation = motion.fade_in(widget)
+    assert animation is not None
+    assert isinstance(widget.graphicsEffect(), QGraphicsOpacityEffect), "no effect mid-fade"
+    _drain_until(app, lambda: widget.graphicsEffect() is None)
+
+    widget.show()
+    animation = motion.fade_out(widget)
+    assert animation is not None
+    _drain_until(app, lambda: widget.graphicsEffect() is None)
+    assert widget.isHidden()
+
+
+def _drain_until(app, predicate, timeout_ms: int = 2000):
+    from PySide6.QtCore import QDeadlineTimer, QEventLoop
+
+    deadline = QDeadlineTimer(timeout_ms)
+    while not predicate() and not deadline.hasExpired():
+        app.processEvents(QEventLoop.AllEvents, 20)
+    assert predicate(), f"condition never held within {timeout_ms} ms"

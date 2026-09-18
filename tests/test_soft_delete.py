@@ -29,11 +29,31 @@ import shutil
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import destroy_window
+from PySide6.QtCore import QDeadlineTimer, QEventLoop
 from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import QApplication
 
 from core.translations import tr
 
 FIXTURE_PROFILE = Path(__file__).resolve().parent / "fixtures" / "reset_profile.json"
+
+
+def settled(predicate, timeout_ms: int = 2000):
+    """Pump the event loop until ``predicate()`` or the deadline.
+
+    Two of the transitions below now finish on an animation callback, not
+    inline: MASTER §3 gives the toast and the soft-deleted card a
+    ``motion.base`` (160 ms) fade, so ``toast_widget.hide()`` and the
+    post-delete ``refresh()`` run when the fade ends.  Waiting on the
+    OUTCOME rather than on a fixed sleep keeps these tests deterministic and
+    independent of the duration token's value.
+    """
+    deadline = QDeadlineTimer(timeout_ms)
+    while not predicate() and not deadline.hasExpired():
+        QApplication.processEvents(QEventLoop.AllEvents, 20)
+    assert predicate(), f"condition never held within {timeout_ms} ms"
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +79,7 @@ def main_window(qapp, tmp_path_factory):
 
     yield win
 
-    win.close()
+    destroy_window(win)
     patcher.undo()
 
 
@@ -155,7 +175,11 @@ def test_pending_card_is_excluded_from_counts_and_rendering(win):
 
     win._delete_card(card)
 
-    assert win.tasks_page._rendered_count == before - 1
+    # The card is out of task_lists the instant _delete_card returns (that is
+    # the invariant this module exists for, see the header) -- the re-RENDER
+    # waits for its fade to finish.
+    assert card not in win.task_lists["tasks"]
+    settled(lambda: win.tasks_page._rendered_count == before - 1)
     # render_tasks hides and unparents everything it no longer renders.
     assert card.isHidden()
     assert card.parentWidget() is None
@@ -460,4 +484,4 @@ def test_an_expired_toasts_timer_does_not_close_a_newer_toast(win):
     assert not win.toast_widget.isHidden()
 
     win._hide_toast(win._toast_seq)
-    assert win.toast_widget.isHidden()
+    settled(win.toast_widget.isHidden)

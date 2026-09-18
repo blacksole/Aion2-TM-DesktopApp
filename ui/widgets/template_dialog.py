@@ -29,9 +29,13 @@ _SORT_LABELS = {"name": "Name", "priority": "Prio", "schedule": "Schedule", "loc
 
 
 def _h_separator() -> QFrame:
+    # A 1 px rule, coloured by #dialogSeparator in the template.  Was an
+    # inline rgba(100, 116, 139, 0.3) -- slate.500 at 30 %, a value in no
+    # token table, repeated in three places in this file with two different
+    # spellings.  The other two call sites now come here instead.
     line = QFrame()
     line.setFrameShape(QFrame.HLine)
-    line.setStyleSheet("color: rgba(100, 116, 139, 0.3);")
+    line.setObjectName("dialogSeparator")
     return line
 
 
@@ -229,7 +233,7 @@ class TemplateDialog(QDialog):
         # Viewport paints its own background separately from #scrollArea's
         # own QSS rule -- can show up as a plain white box when Windows
         # itself is set to dark mode (User-reported, 2026-08-29).
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
         vl.addWidget(scroll, 1)
 
         self._rebuild_shop_list()
@@ -308,7 +312,7 @@ class TemplateDialog(QDialog):
         scroll.setObjectName("scrollArea")
         # Same viewport-background fix as the shop-list scroll area above
         # (User-reported Windows-dark-mode white box, 2026-08-29).
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
         vl.addWidget(scroll, 1)
 
         self._rebuild_task_list()
@@ -1135,7 +1139,7 @@ class _StandardTemplatePickerDialog(QDialog):
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.NoFrame)
             scroll.setObjectName("scrollArea")
-            scroll.viewport().setStyleSheet("background: transparent;")
+            scroll.viewport().setObjectName("transparentViewport")
             layout.addWidget(scroll, 1)
 
         btn_row = QHBoxLayout()
@@ -1271,7 +1275,7 @@ class _StandardSyncDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setObjectName("scrollArea")
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
         layout.addWidget(scroll, 1)
 
         btn_row = QHBoxLayout()
@@ -1567,10 +1571,7 @@ class _AmountDialog(QDialog):
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color: rgba(100,116,139,0.3);")
-        layout.addWidget(sep)
+        layout.addWidget(_h_separator())
 
         amount_row = QHBoxLayout()
         amount_lbl = QLabel(self._t("amount_label"))
@@ -1623,10 +1624,7 @@ class _AmountDialog(QDialog):
         ).setChecked(True)
         layout.addLayout(sched_row)
 
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.HLine)
-        sep2.setStyleSheet("color: rgba(100,116,139,0.3);")
-        layout.addWidget(sep2)
+        layout.addWidget(_h_separator())
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()

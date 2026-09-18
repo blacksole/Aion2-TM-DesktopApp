@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QWidget, QInputDialog,
 )
-from ui.custom_timer_dialog import CustomTimerDialog
+from ui.custom_timer_dialog import DEFAULT_TIMER_COLOR, CustomTimerDialog
 from ui.widgets.empty_state import EmptyStateWidget
 
 
@@ -115,7 +115,10 @@ class CustomTimerManagerDialog(QDialog):
         rl.setSpacing(8)
         dot = QLabel("●")
         dot.setFixedWidth(16)
-        dot.setStyleSheet("color: #22d3ee; font-size: 14px;")
+        # A category marker, not a timer colour: the accent, from the
+        # template (#ctCategoryDot), instead of the old literal cyan --
+        # which was Abyss's accent hardcoded, so it stayed cyan on Inferno.
+        dot.setObjectName("ctCategoryDot")
         name_lbl = QLabel(cat_name)
         name_lbl.setObjectName("settingsLabel")
         rename_btn = QPushButton(self._tr(self._language, "ct_manager_rename_button"))
@@ -200,7 +203,7 @@ class CustomTimerManagerDialog(QDialog):
         cfg = self._custom_timer_configs[idx]
         dlg = CustomTimerDialog(
             name=cfg.get("name", ""),
-            color=cfg.get("color", "#22d3ee"),
+            color=cfg.get("color") or DEFAULT_TIMER_COLOR,
             timer_mode=cfg.get("timer_mode", "hourly"),
             reset_time=cfg.get("reset_time", "09:00"),
             reset_day=cfg.get("reset_day", "Mo"),
@@ -277,7 +280,10 @@ class CustomTimerManagerDialog(QDialog):
 
         color_dot = QLabel("●")
         color_dot.setFixedWidth(18)
-        color_dot.setStyleSheet(f"color: {cfg['color']}; font-size: 18px;")
+        # This dot IS the timer's own colour -- data, so it stays in code
+        # (MASTER §4-4); the size comes from #ctTimerColorDot.
+        color_dot.setObjectName("ctTimerColorDot")
+        color_dot.setStyleSheet(f"color: {cfg.get('color') or DEFAULT_TIMER_COLOR};")
 
         name_lbl = QLabel(cfg["name"])
         name_lbl.setObjectName("settingsLabel")

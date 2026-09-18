@@ -12,15 +12,11 @@ class AvatarLabel(QLabel):
         self.avatar_size = size
         self.setFixedSize(size, size)
         self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet(f"""
-            QLabel {{
-                background-color: #5865F2;
-                color: white;
-                border-radius: {size // 2}px;
-                font-weight: bold;
-                font-size: 18px;
-            }}
-        """)
+        # Styled by #profileAvatar in ui/styles.template.qss (accent fill,
+        # fg.on-accent text, radius.full) -- the same rule HeaderWidget's own
+        # avatar uses, instead of the Discord-blurple literal + hardcoded
+        # 18 px this carried (MASTER §4-4: no hex in ui/).
+        self.setObjectName("profileAvatar")
 
     def set_initials(self, username: str):
         initials = username[:2].upper() if username else "?"

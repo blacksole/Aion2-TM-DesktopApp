@@ -109,7 +109,7 @@ class AboutPage(QWidget):
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.viewport().setStyleSheet("background: transparent;")
+        scroll_area.viewport().setObjectName("transparentViewport")
         root_layout.addWidget(scroll_area)
 
         content = QWidget()

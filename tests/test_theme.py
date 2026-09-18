@@ -2,6 +2,7 @@
 
 import dataclasses
 import re
+from pathlib import Path
 
 import pytest
 
@@ -243,39 +244,42 @@ _TIMER_DIALOG_PY = theme.TEMPLATE_PATH.parent / "custom_timer_dialog.py"
 
 
 @pytest.mark.skipif(not _OVERLAY_PY.is_file(), reason="overlay module not present")
-def test_timer_colors_mirror_the_overlay_module():
-    """``TIMER_COLORS`` there is QColor(r, g, b); here it is hex."""
-    source = _OVERLAY_PY.read_text(encoding="utf-8")
-    block = re.search(r"^TIMER_COLORS\s*=\s*\{(.*?)^\}", source, flags=re.S | re.M)
-    assert block, "TIMER_COLORS not found"
-    owner = {
-        key: "#%02x%02x%02x" % (int(red), int(green), int(blue))
-        for key, red, green, blue in re.findall(
-            r'"(\w+)"\s*:\s*QColor\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)', block.group(1)
-        )
-    }
-    assert owner, "TIMER_COLORS parsed empty"
-    for key, hex_value in owner.items():
-        assert theme.data_color("timer", key) == hex_value, key
+def test_the_overlay_reads_timer_colors_from_here():
+    """Ownership inverted on 2026-09-18.
 
-    custom = re.search(r"^CUSTOM_TIMER_COLOR\s*=\s*QColor\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)", source, flags=re.M)
-    assert custom, "CUSTOM_TIMER_COLOR not found"
-    expected = "#%02x%02x%02x" % tuple(int(group) for group in custom.groups())
-    assert theme.data_color("timer", "custom") == expected
+    ``ui/overlay/overlay_window.py`` used to OWN ``TIMER_COLORS`` as
+    ``QColor(r, g, b)`` literals and this module mirrored them, so the test
+    checked the mirror for drift.  The literals are gone from ``ui/`` (see
+    tests/test_no_hex_literals_in_ui.py), core/theme.py is the owner, and
+    what needs pinning now is that the overlay still resolves the same four
+    built-in timers plus the custom fallback through it.
+    """
+    from ui.overlay import overlay_window
+
+    for key in ("daily", "weekly", "shugo", "rift"):
+        assert overlay_window.timer_color(key).name() == theme.data_color("timer", key), key
+    assert overlay_window.DEFAULT_CUSTOM_TIMER_COLOR == theme.data_color("timer", "custom")
+
+    source = _OVERLAY_PY.read_text(encoding="utf-8")
+    assert "QColor(59," not in source and "QColor(59 " not in source, "a colour literal came back"
 
 
 @pytest.mark.skipif(not _TIMER_DIALOG_PY.is_file(), reason="timer dialog not present")
-def test_timer_swatches_mirror_the_dialog_palette():
-    source = _TIMER_DIALOG_PY.read_text(encoding="utf-8")
-    block = re.search(r"^CUSTOM_TIMER_COLORS\s*=\s*\[(.*?)^\]", source, flags=re.S | re.M)
-    assert block, "CUSTOM_TIMER_COLORS not found"
-    owner = {
-        name: hex_value
-        for hex_value, name in re.findall(r'\(\s*"(#[0-9a-fA-F]{6})"\s*,\s*"ct_color_(\w+)"\s*\)', block.group(1))
-    }
-    assert owner, "CUSTOM_TIMER_COLORS parsed empty"
-    mirrored = {key: theme.data_color("timer_swatch", key) for key in theme.data_color_keys("timer_swatch")}
-    assert mirrored == owner
+def test_the_timer_dialog_builds_its_swatches_from_here():
+    """Same inversion: the dialog's 8 swatches are now a view of the table.
+
+    Order matters — the grid lays them out 4 × 2 and the user learns
+    positions — so this pins the sequence, not just the set.
+    """
+    from ui import custom_timer_dialog
+
+    expected = [
+        (theme.data_color("timer_swatch", key), f"ct_color_{key}")
+        for key in theme.data_color_keys("timer_swatch")
+    ]
+    assert custom_timer_dialog.CUSTOM_TIMER_COLORS == expected
+    assert len(expected) == 8
+    assert custom_timer_dialog.DEFAULT_TIMER_COLOR == expected[0][0]
 
 
 def test_data_color_unknown_key_is_muted_not_an_error():
@@ -302,7 +306,10 @@ def test_every_data_color_parses(kind):
 # The template still styles everything the app relies on
 # --------------------------------------------------------------------------
 
-_LEGACY_QSS = theme.TEMPLATE_PATH.parent / "styles.qss"
+#: Snapshot of every selector the deleted ``ui/styles.qss`` carried.  The
+#: guarantee has to outlive the file it was taken from, so it lives in a
+#: fixture rather than being diffed against a sheet that no longer exists.
+_LEGACY_SELECTORS_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "legacy_selectors.txt"
 
 
 def _selectors(text: str) -> set[str]:
@@ -316,13 +323,26 @@ def _selectors(text: str) -> set[str]:
     return found
 
 
-@pytest.mark.skipif(not _LEGACY_QSS.is_file(), reason="legacy stylesheet already removed")
+def _legacy_selector_snapshot() -> set[str]:
+    """Read the fixture.  A comment is ``"# "`` — with the space, because
+    almost every line in the file is an ``#objectName`` selector."""
+    lines = _LEGACY_SELECTORS_FIXTURE.read_text(encoding="utf-8").splitlines()
+    return {line.strip() for line in lines if line.strip() and not line.startswith("# ")}
+
+
 def test_template_keeps_every_legacy_selector():
     """Porting must not silently drop a widget's styling."""
-    legacy = {s for s in _selectors(_LEGACY_QSS.read_text(encoding="utf-8")) if "[theme=" not in s}
+    legacy = _legacy_selector_snapshot()
+    assert len(legacy) > 300, "the snapshot itself looks truncated"
     ported = _selectors(theme.TEMPLATE_PATH.read_text(encoding="utf-8"))
     missing = sorted(legacy - ported)
     assert not missing, f"selectors lost in the port: {missing}"
+
+
+def test_the_legacy_stylesheet_is_gone():
+    """MASTER §4-2: one sheet, generated.  A reappearing styles.qss means
+    two sources of truth and the [theme=…] duplication coming back."""
+    assert not (theme.TEMPLATE_PATH.parent / "styles.qss").exists()
 
 
 def test_template_styles_the_object_names_added_this_wave():
@@ -330,3 +350,205 @@ def test_template_styles_the_object_names_added_this_wave():
     ported = _selectors(theme.TEMPLATE_PATH.read_text(encoding="utf-8"))
     for selector in ("#emptyState", "#emptyStateTitle", "#emptyStateHint", "#toastBar", "#taskCard:focus"):
         assert selector in ported
+
+
+# --------------------------------------------------------------------------
+# current() — the accessor painters use instead of plumbing (MASTER §4-3)
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _restore_current_theme():
+    """set_current() is process-wide state; don't leak it into other tests."""
+    before = theme.current()
+    yield
+    theme.set_current(before)
+
+
+def test_current_defaults_to_the_default_theme():
+    assert theme.current() == theme.DEFAULT_THEME
+    assert theme.current_tokens() is theme.THEMES[theme.DEFAULT_THEME]
+
+
+@pytest.mark.parametrize("name", sorted(theme.THEMES))
+def test_set_current_round_trips(name):
+    assert theme.set_current(name) == name
+    assert theme.current() == name
+    assert theme.current_tokens() is theme.THEMES[name]
+
+
+def test_set_current_normalises_instead_of_storing_garbage(caplog):
+    """A profile from a future version must not leave current() unusable."""
+    with caplog.at_level("WARNING"):
+        stored = theme.set_current("chartreuse")
+    assert stored == theme.DEFAULT_THEME
+    assert theme.current() == theme.DEFAULT_THEME
+
+
+def test_set_current_is_case_insensitive():
+    theme.set_current("  VOID ")
+    assert theme.current() == "void"
+
+
+# --------------------------------------------------------------------------
+# build_palette — the Fusion fallback, from the tokens
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", sorted(theme.THEMES))
+def test_build_palette_follows_the_theme(qapp, name):
+    from PySide6.QtGui import QPalette
+
+    tokens = theme.THEMES[name]
+    palette = theme.build_palette(name)
+
+    assert palette.color(QPalette.Window) == theme.qcolor(tokens, "bg.surface")
+    assert palette.color(QPalette.Base) == theme.qcolor(tokens, "bg.input")
+    assert palette.color(QPalette.AlternateBase) == theme.qcolor(tokens, "bg.elevated")
+    assert palette.color(QPalette.Text) == theme.qcolor(tokens, "fg")
+    assert palette.color(QPalette.Highlight) == theme.qcolor(tokens, "accent")
+
+
+def test_build_palette_accepts_tokens_or_a_name(qapp):
+    assert theme.build_palette(theme.THEMES["void"]) == theme.build_palette("void")
+
+
+@pytest.mark.parametrize("name", sorted(theme.THEMES))
+def test_palette_highlight_text_is_never_white_on_the_accent(qapp, name):
+    """Audit D/C3's regression, at the palette level this time.
+
+    QPalette::HighlightedText is what Qt paints over a selection, and Fusion's
+    own default for it is white -- which on Abyss's cyan accent is 1.81:1.
+    """
+    from PySide6.QtGui import QPalette
+
+    palette = theme.build_palette(name)
+    tokens = theme.THEMES[name]
+    assert palette.color(QPalette.HighlightedText) == theme.qcolor(tokens, "fg.on_accent")
+    ratio = theme.contrast_ratio(tokens.fg_on_accent, tokens.accent)
+    assert ratio >= 4.5, f"{name}: {ratio:.2f}:1"
+
+
+def test_palette_placeholder_is_the_muted_foreground(qapp):
+    """Qt paints placeholders from the palette, not from the QSS (audit D/C3)."""
+    from PySide6.QtGui import QPalette
+
+    palette = theme.build_palette("abyss")
+    assert palette.color(QPalette.PlaceholderText) == theme.qcolor(theme.ABYSS, "fg.muted")
+    assert theme.contrast_ratio(theme.ABYSS.fg_muted, theme.ABYSS.bg_input) >= 4.5
+
+
+@pytest.mark.parametrize("name", sorted(theme.THEMES))
+def test_palette_has_no_light_role_left(qapp, name):
+    """Every one of the six themes is dark; a light role means Fusion's own
+    (OS-following) default leaked through — the 2026-08-29 bug."""
+    from PySide6.QtGui import QPalette
+
+    palette = theme.build_palette(name)
+    for role in (QPalette.Window, QPalette.Base, QPalette.AlternateBase, QPalette.Button):
+        luminance = theme._relative_luminance(
+            (palette.color(role).red(), palette.color(role).green(), palette.color(role).blue())
+        )
+        assert luminance < 0.2, f"{name}: {role} is light ({luminance:.3f})"
+
+
+# --------------------------------------------------------------------------
+# Theme decisions recorded in MASTER on 2026-09-18
+# --------------------------------------------------------------------------
+
+
+def test_emerald_accent_and_secondary_are_not_more_greens():
+    """Accent, ok and secondary were a green, a green and a lime.
+
+    Hue distance, not a hardcoded hex, so a later re-tune still has to keep
+    the three apart.
+    """
+    tokens = theme.THEMES["emerald"]
+    accent_hue = theme.QColor(tokens.accent).hue()
+    ok_hue = theme.QColor(tokens.ok).hue()
+    secondary_hue = theme.QColor(tokens.secondary).hue()
+
+    def apart(first, second):
+        delta = abs(first - second) % 360
+        return min(delta, 360 - delta)
+
+    assert apart(accent_hue, ok_hue) >= 25, "accent still reads as the ok green"
+    assert apart(secondary_hue, ok_hue) >= 60, "secondary still reads as a green"
+
+
+def test_inferno_accent_is_distinguishable_from_warn():
+    tokens = theme.THEMES["inferno"]
+    accent_hue = theme.QColor(tokens.accent).hue()
+    warn_hue = theme.QColor(tokens.warn).hue()
+    assert abs(accent_hue - warn_hue) >= 12, "accent and warn are the same orange"
+
+
+@pytest.mark.parametrize("name", sorted(set(theme.THEMES) - {"abyss"}))
+def test_every_theme_brings_its_own_borders(name):
+    """MASTER §2 (2026-09-18): a border belongs to its theme's bg family.
+
+    Inherited from Abyss they were a navy line on an Inferno-red surface.
+    """
+    tokens = theme.THEMES[name]
+    assert tokens.border != theme.ABYSS.border, f"{name} still uses Abyss's border"
+    assert tokens.border_strong != theme.ABYSS.border_strong
+
+
+@pytest.mark.parametrize("name", sorted(theme.THEMES))
+def test_borders_sit_between_the_surfaces_and_the_text(name):
+    """A border has to be visible against the card it outlines, and must not
+    be mistaken for text."""
+    tokens = theme.THEMES[name]
+    surface = theme._relative_luminance(theme.parse_color(tokens.bg_elevated)[:3])
+    border = theme._relative_luminance(theme.parse_color(tokens.border)[:3])
+    strong = theme._relative_luminance(theme.parse_color(tokens.border_strong)[:3])
+    muted = theme._relative_luminance(theme.parse_color(tokens.fg_muted)[:3])
+    assert surface < border < strong < muted, (
+        f"{name}: surface {surface:.3f} border {border:.3f} "
+        f"strong {strong:.3f} muted {muted:.3f}"
+    )
+
+
+# --------------------------------------------------------------------------
+# MASTER §2 focus.ring — and the specificity trap that hid it
+# --------------------------------------------------------------------------
+
+
+def test_the_focus_ring_is_an_outline_not_a_border():
+    """Regression guard on a real, verified defect (2026-09-18).
+
+    Qt resolves stylesheet conflicts by CSS2 specificity: `#objectName`
+    scores 100, `QPushButton:focus` scores 11.  While the ring was declared
+    as a `border`, all 157 `#objectName` rules in the template that declare
+    a border outranked it, and a focused button/pill/field/combo showed no
+    ring at all.  `outline` is set by nothing else, so it cannot lose —
+    switching the property back to `border` would silently un-do keyboard
+    accessibility everywhere.
+    """
+    # The RENDERED sheet, not the template: `{{token}}` placeholders are
+    # themselves braces and would break any rule-level parse of the source.
+    rendered = _without_comments(theme.build_qss("abyss"))
+    focus_rules = re.findall(r"([^{}]*:focus[^{}]*)\{([^{}]*)\}", rendered)
+    assert focus_rules, "the template declares no :focus rule at all"
+    for selector, body in focus_rules:
+        # The `border` SHORTHAND is what loses to an #id rule -- and it also
+        # changes the width, which nudges the widget's row.  `border-color`
+        # is fine (a focused field tinting its own 1 px edge, MASTER §3).
+        assert not re.search(r"(^|;|\s)border\s*:", body), (
+            f"focus rule declares a border, which every #id rule outranks: {selector.strip()}"
+        )
+        assert "outline" in body or "border-color" in body, (
+            f"focus rule indicates nothing: {selector.strip()} {{{body}}}"
+        )
+
+    outlined = [selector for selector, body in focus_rules if "outline" in body]
+    assert len(outlined) >= 4, "the ring itself is gone, only field tints are left"
+
+
+@pytest.mark.parametrize("name", sorted(theme.THEMES))
+def test_the_focus_ring_uses_the_theme_accent_and_master_geometry(name):
+    qss = theme.build_qss(name)
+    tokens = theme.THEMES[name]
+    expected = f"outline: {tokens.focus_ring_width}px solid {tokens.focus_ring}"
+    assert expected in qss, f"{name}: no '{expected}' in the rendered sheet"
+    assert f"outline-offset: {tokens.focus_ring_offset}px" in qss

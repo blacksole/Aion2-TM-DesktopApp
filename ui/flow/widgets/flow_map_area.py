@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QPolygonF
+from PySide6.QtGui import QPainter, QPen, QPainterPath, QPolygonF
 
 from ui.flow.flow_layout import NODE_WIDTH, NODE_HEIGHT
+from core import theme
 
 
 class FlowMapArea(QWidget):
@@ -28,7 +29,10 @@ class FlowMapArea(QWidget):
         node_w = NODE_WIDTH * zoom
         node_h = NODE_HEIGHT * zoom
 
-        color = QColor(95, 170, 255, 210)
+        # MASTER §2: the Flow Map is the `secondary` colour's own
+        # territory ("badges de schedule, Flow Map, liens"). Was a
+        # QColor(95, 170, 255, 210) literal belonging to no token.
+        color = theme.qcolor(theme.current_tokens(), "secondary")
         pen = QPen(color)
         pen.setWidth(max(2, int(3 * zoom)))
         pen.setCapStyle(Qt.RoundCap)

@@ -1,52 +1,13 @@
 import sys
 from pathlib import Path
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPalette
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QApplication
 
+from core import theme
 from core.app_logger import get_logger
+from core.fonts import load_fonts
 from ui.main_window import MainWindow
-
-
-def _dark_palette() -> QPalette:
-    """App-wide fallback palette (User-reported, 2026-08-29: on a system
-    with Windows set to dark mode, several screens showed black text on a
-    dark background, or plain white boxes where a list/panel should be
-    dark) -- without this, Qt/Fusion falls back to the OS's OWN palette
-    for any widget/sub-control our QSS doesn't explicitly cover, and on
-    Windows that palette now auto-syncs to the system dark/light setting.
-    Every one of the app's 6 named themes (Abyss/Inferno/Emerald/
-    Frostbite/Obsidian/Void) is dark, so a single dark baseline here,
-    layered under the per-theme QSS, keeps every unstyled corner legible
-    regardless of the OS's own light/dark setting -- the QSS already
-    layered on top (see ui/styles.qss, apply_theme()) still fully
-    controls the actual per-theme look; this only replaces what Fusion
-    would otherwise pull from Windows."""
-    palette = QPalette()
-    window = QColor("#0f172a")
-    base = QColor("#0b1120")
-    alt_base = QColor("#1f2937")
-    text = QColor("#e5e7eb")
-    disabled_text = QColor("#64748b")
-    accent = QColor("#22d3ee")
-
-    palette.setColor(QPalette.Window, window)
-    palette.setColor(QPalette.WindowText, text)
-    palette.setColor(QPalette.Base, base)
-    palette.setColor(QPalette.AlternateBase, alt_base)
-    palette.setColor(QPalette.ToolTipBase, alt_base)
-    palette.setColor(QPalette.ToolTipText, text)
-    palette.setColor(QPalette.Text, text)
-    palette.setColor(QPalette.Button, alt_base)
-    palette.setColor(QPalette.ButtonText, text)
-    palette.setColor(QPalette.BrightText, QColor("#f87171"))
-    palette.setColor(QPalette.Link, accent)
-    palette.setColor(QPalette.Highlight, accent)
-    palette.setColor(QPalette.HighlightedText, window)
-    palette.setColor(QPalette.Disabled, QPalette.WindowText, disabled_text)
-    palette.setColor(QPalette.Disabled, QPalette.Text, disabled_text)
-    palette.setColor(QPalette.Disabled, QPalette.ButtonText, disabled_text)
-    return palette
 
 
 def main() -> int:
@@ -85,7 +46,17 @@ def main() -> int:
     app.setApplicationName("Aion2 TM")
     app.setDesktopFileName("aion2-tm")
     app.setStyle("Fusion")
-    app.setPalette(_dark_palette())
+    # Register the bundled OFL faces BEFORE any stylesheet names them:
+    # QSS resolves font-family at parse time, so a face registered later is
+    # simply not found and every rule silently falls back (MASTER §1).
+    load_fonts()
+    # Fallback palette for everything the QSS does not explicitly cover
+    # (User-reported, 2026-08-29: black-on-dark text and white list boxes
+    # when the OS itself was in dark mode -- Fusion pulls those from the
+    # SYSTEM palette otherwise). Built from the tokens now, and rebuilt per
+    # theme by MainWindow.apply_theme(); this call is only the baseline that
+    # covers the window's own construction, before the profile is read.
+    app.setPalette(theme.build_palette(theme.DEFAULT_THEME))
     if getattr(sys, "frozen", False):
         _base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
     else:

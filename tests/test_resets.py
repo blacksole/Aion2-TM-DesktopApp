@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import destroy_window
+
 FIXTURE_PROFILE = Path(__file__).resolve().parent / "fixtures" / "reset_profile.json"
 
 # A Wednesday. Weekly boundary for "Mo" 09:00 is then 2026-09-14 09:00.
@@ -94,7 +96,7 @@ def main_window(qapp, tmp_path_factory):
 
     yield win
 
-    win.close()
+    destroy_window(win)
     patcher.undo()
 
 

@@ -105,7 +105,12 @@ class HeaderWidget(QWidget):
         painter.end()
         self.avatar_label.setPixmap(result)
         self.avatar_label.setText("")
-        self.avatar_label.setStyleSheet("background: transparent; border-radius: 21px;")
+        # A real picture must not sit on the accent disc the initials-only
+        # state uses; #profileAvatar[hasAvatar="true"] drops the fill (the
+        # pixmap is already clipped to a circle just above).
+        self.avatar_label.setProperty("hasAvatar", True)
+        self.avatar_label.style().unpolish(self.avatar_label)
+        self.avatar_label.style().polish(self.avatar_label)
         self._has_avatar = True
 
     def set_avatar(self, b64: str):

@@ -28,7 +28,7 @@ import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPalette
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,13 @@ PRIMITIVES: dict[str, str] = {
 }
 
 #: Keys a non-Abyss theme is allowed to redefine (MASTER §2, "Thèmes").
+#:
+#: ``border`` / ``border_strong`` joined the list on 2026-09-18 (MASTER §2,
+#: "Bordures par thème"): inherited from Abyss they were a navy line drawn on
+#: an Inferno red or Emerald green surface — visible as a cold seam around
+#: every card.  A border belongs to its own theme's bg family, so it has to
+#: be overridable; the contrast gate is unaffected (no §2 pair involves a
+#: border, they are non-text 1 px lines).
 THEME_OVERRIDABLE_KEYS: frozenset[str] = frozenset(
     {
         "accent",
@@ -77,6 +84,8 @@ THEME_OVERRIDABLE_KEYS: frozenset[str] = frozenset(
         "bg_elevated",
         "bg_overlay",
         "bg_input",
+        "border",
+        "border_strong",
     }
 )
 
@@ -251,9 +260,13 @@ THEMES: dict[str, Tokens] = {
     "inferno": replace(
         ABYSS,
         name="inferno",
-        accent="#fb923c",
+        # 2026-09-18: was #fb923c (orange.400), only ΔE≈14 from warn
+        # (#fbbf24) — "attention" and "actif" read as the same colour on a
+        # badge row.  Deeper orange.500 pulls the accent away from warn
+        # while keeping fg.on-accent at 6.72:1 (was 8.44:1, still ≥ 4.5).
+        accent="#f97316",
         accent_hover="#fdba74",
-        accent_soft="rgba(251, 146, 60, 0.14)",
+        accent_soft="rgba(249, 115, 22, 0.14)",
         secondary="#fda4af",
         secondary_soft="rgba(253, 164, 175, 0.16)",
         bg_window="#140c0c",
@@ -261,20 +274,28 @@ THEMES: dict[str, Tokens] = {
         bg_elevated="#241616",
         bg_overlay="#2e1c1c",
         bg_input="#140c0c",
+        border="#3a2222",
+        border_strong="#4f2e2e",
     ),
     "emerald": replace(
         ABYSS,
         name="emerald",
-        accent="#34d399",
-        accent_hover="#6ee7b7",
-        accent_soft="rgba(52, 211, 153, 0.14)",
-        secondary="#a3e635",
-        secondary_soft="rgba(163, 230, 53, 0.16)",
+        # 2026-09-18: was accent #34d399 (a green) + secondary #a3e635 (a
+        # lime) on top of ok=#4ade80 — three greens, so "completed",
+        # "active" and "schedule" were indistinguishable.  Teal accent +
+        # lavender secondary keep one hue each for accent / ok / secondary.
+        accent="#2dd4bf",
+        accent_hover="#5eead4",
+        accent_soft="rgba(45, 212, 191, 0.14)",
+        secondary="#c4b5fd",
+        secondary_soft="rgba(196, 181, 253, 0.16)",
         bg_window="#081410",
         bg_surface="#0c1a15",
         bg_elevated="#11231c",
         bg_overlay="#172d24",
         bg_input="#081410",
+        border="#173026",
+        border_strong="#224536",
     ),
     "frostbite": replace(
         ABYSS,
@@ -289,6 +310,8 @@ THEMES: dict[str, Tokens] = {
         bg_elevated="#17233b",
         bg_overlay="#1e2c49",
         bg_input="#0b1220",
+        border="#223354",
+        border_strong="#2f4670",
     ),
     "obsidian": replace(
         ABYSS,
@@ -303,6 +326,8 @@ THEMES: dict[str, Tokens] = {
         bg_elevated="#18181c",
         bg_overlay="#212126",
         bg_input="#0a0a0c",
+        border="#26262c",
+        border_strong="#3a3a44",
     ),
     "void": replace(
         ABYSS,
@@ -317,10 +342,42 @@ THEMES: dict[str, Tokens] = {
         bg_elevated="#1a1528",
         bg_overlay="#231c34",
         bg_input="#0c0a14",
+        border="#2a2140",
+        border_strong="#3b2f5c",
     ),
 }
 
 DEFAULT_THEME = "abyss"
+
+
+#: The theme the app is currently rendering.  Painters need the active
+#: theme's colors (MASTER §4-3) but a QPainter lives deep inside a widget
+#: that has no reference to MainWindow — plumbing the name through every
+#: constructor would be ~15 signatures.  :func:`set_current` is called from
+#: exactly one place (``MainWindow.apply_theme``), which is also the only
+#: place that re-renders the stylesheet, so the two can never disagree.
+_current_theme: str = DEFAULT_THEME
+
+
+def set_current(theme: str) -> str:
+    """Record the theme the app is rendering; returns the name stored.
+
+    An unknown name is normalised to the fallback rather than stored as-is,
+    so :func:`current` always names a real theme.
+    """
+    global _current_theme
+    _current_theme = tokens(theme).name
+    return _current_theme
+
+
+def current() -> str:
+    """Name of the theme the app is currently rendering."""
+    return _current_theme
+
+
+def current_tokens() -> Tokens:
+    """Shorthand for ``tokens(current())`` — what painters actually want."""
+    return tokens(_current_theme)
 
 
 def tokens(theme: str) -> Tokens:
@@ -555,6 +612,49 @@ def build_qss(theme: str = DEFAULT_THEME, asset_path: str = "") -> str:
     """
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
     return render_qss(template, theme=theme, asset_path=asset_path)
+
+
+def build_palette(tokens_or_theme: Tokens | str = DEFAULT_THEME) -> QPalette:
+    """The Fusion fallback palette for one theme, from the tokens.
+
+    Everything the QSS *doesn't* explicitly cover (a sub-control, a native
+    dialog, a widget nobody thought to style) is painted by Qt from the
+    application palette, and Fusion's default palette follows the OS's own
+    light/dark setting — which is how a system in light mode used to produce
+    black-on-dark text and plain white list boxes inside this all-dark app
+    (User-reported, 2026-08-29; the literal-hex version of this function
+    used to live in ``main.py``).
+
+    Derived from the same tokens as the stylesheet so that a theme switch
+    moves both together instead of leaving a navy baseline under an Inferno
+    sheet.
+    """
+    theme_tokens = tokens_or_theme if isinstance(tokens_or_theme, Tokens) else tokens(tokens_or_theme)
+
+    def color(name: str) -> QColor:
+        return qcolor(theme_tokens, name)
+
+    palette = QPalette()
+    palette.setColor(QPalette.Window, color("bg.surface"))
+    palette.setColor(QPalette.WindowText, color("fg"))
+    palette.setColor(QPalette.Base, color("bg.input"))
+    palette.setColor(QPalette.AlternateBase, color("bg.elevated"))
+    palette.setColor(QPalette.ToolTipBase, color("bg.overlay"))
+    palette.setColor(QPalette.ToolTipText, color("fg"))
+    palette.setColor(QPalette.Text, color("fg"))
+    palette.setColor(QPalette.Button, color("bg.elevated"))
+    palette.setColor(QPalette.ButtonText, color("fg"))
+    palette.setColor(QPalette.BrightText, color("danger"))
+    palette.setColor(QPalette.Link, color("accent"))
+    palette.setColor(QPalette.Highlight, color("accent"))
+    # MASTER §2: text on the accent is fg.on-accent — never white on cyan.
+    palette.setColor(QPalette.HighlightedText, color("fg.on_accent"))
+    # Qt paints QLineEdit/QComboBox placeholders from this role, not from
+    # the QSS (audit D/C3: the old placeholder sat at 2.48:1).
+    palette.setColor(QPalette.PlaceholderText, color("fg.muted"))
+    for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+        palette.setColor(QPalette.Disabled, role, color("fg.muted"))
+    return palette
 
 
 def apply(app, theme: str = DEFAULT_THEME, asset_path: str = "") -> str:

@@ -28,6 +28,8 @@ import shutil
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import destroy_window
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLineEdit
@@ -61,7 +63,7 @@ def main_window(qapp, tmp_path_factory):
     yield win
 
     win.overlay.hide()
-    win.close()
+    destroy_window(win)
     patcher.undo()
 
 

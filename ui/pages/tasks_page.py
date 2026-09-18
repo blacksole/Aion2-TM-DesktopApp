@@ -4,8 +4,9 @@ from PySide6.QtWidgets import (
     QComboBox, QCheckBox, QButtonGroup, QCompleter, QMenu
 )
 from PySide6.QtCore import Signal, QRect, Qt
-from PySide6.QtGui import QIntValidator, QPainter, QColor, QLinearGradient, QBrush, QActionGroup
+from PySide6.QtGui import QIntValidator, QPainter, QBrush, QActionGroup
 
+from core import theme
 from ui.widgets.empty_state import EmptyStateWidget
 
 class TaskProgressBar(QFrame):
@@ -113,20 +114,23 @@ class TaskProgressBar(QFrame):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        # track
-        p.setBrush(QBrush(QColor(15, 23, 42, 180)))
-        p.setPen(Qt.NoPen)
-        p.drawRoundedRect(bar, 4, 4)
+        tokens = theme.current_tokens()
 
-        # fill
+        # Track: one step down the surface ladder (was a QColor(15,23,42,180)
+        # literal -- navy.900 at 70 % alpha, i.e. Abyss hardcoded, so the
+        # track stayed navy on Inferno).
+        p.setBrush(QBrush(theme.qcolor(tokens, "bg.input")))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(bar, tokens.radius_sm, tokens.radius_sm)
+
+        # Fill: flat accent. Was a cyan-to-purple gradient, which MASTER's
+        # visual thesis rules out ("zéro dégradé décoratif") and which also
+        # ignored the theme entirely.
         if self._total > 0 and self._done > 0:
             fill_w = max(8, int(bar.width() * self._done / self._total))
             fill = QRect(bar.x(), bar.y(), fill_w, bar.height())
-            grad = QLinearGradient(fill.left(), 0, fill.right(), 0)
-            grad.setColorAt(0.0, QColor(6, 182, 212))
-            grad.setColorAt(1.0, QColor(168, 85, 247))
-            p.setBrush(QBrush(grad))
-            p.drawRoundedRect(fill, 4, 4)
+            p.setBrush(QBrush(theme.qcolor(tokens, "accent")))
+            p.drawRoundedRect(fill, tokens.radius_sm, tokens.radius_sm)
 
         p.end()
 
@@ -645,7 +649,7 @@ class TasksPage(QWidget):
         # reported, 2026-08-29) instead of picking up the app's dark theme.
         # Same fix already applied throughout ItemDatabase/app.py and
         # settings_page.py.
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
 
         self.list_container = QWidget()
 
@@ -723,15 +727,26 @@ class TasksPage(QWidget):
 
         self._add_row_2.setVisible(wrapped)
 
-    def set_active_tab(self, tab_key: str):
-        self.active_tab = tab_key
-        self.update_input_mode()
+    def mark_active_tab(self, tab_key: str):
+        """Paint ``tab_key``'s pill as the active one — no signal.
 
+        Split out of ``set_active_tab`` (2026-09-18) because MainWindow owns
+        the authoritative ``active_tab`` and sets it from the profile at
+        startup and on every tab switch, but had no way to move the
+        highlight without re-emitting ``tab_changed`` back at itself. The
+        visible symptom: the ToDo page opened with NEITHER Tasks nor
+        Shopping marked active, because the property was only ever set by a
+        click.
+        """
+        self.active_tab = tab_key
         for key, btn in self.tab_buttons.items():
-            btn.setProperty("active", key == self.active_tab)
+            btn.setProperty("active", key == tab_key)
             btn.style().unpolish(btn)
             btn.style().polish(btn)
 
+    def set_active_tab(self, tab_key: str):
+        self.mark_active_tab(tab_key)
+        self.update_input_mode()
         self.tab_changed.emit(tab_key)
 
     def set_events_visible(self, visible: bool):
@@ -825,9 +840,15 @@ class TasksPage(QWidget):
 
     def set_reset_hint(self, prefix: str, countdown: str, visible: bool):
         if visible:
+            # Rich text, so QSS cannot reach the two spans -- the colours are
+            # read from the tokens instead of written as literals (they were
+            # Abyss's fg.muted and accent, hardcoded, on every theme).
+            tokens = theme.current_tokens()
+            muted = theme.qcolor(tokens, "fg.muted").name()
+            accent = theme.qcolor(tokens, "accent").name()
             self._reset_hint_label.setText(
-                f'<span style="color:#64748b;font-weight:500;">{prefix}</span>'
-                f' <span style="color:#22d3ee;font-weight:700;">{countdown}</span>'
+                f'<span style="color:{muted};font-weight:{tokens.font_weight_medium};">{prefix}</span>'
+                f' <span style="color:{accent};font-weight:{tokens.font_weight_bold};">{countdown}</span>'
             )
         self._reset_hint_label.setVisible(visible)
         self._manual_reset_btn.setVisible(visible)
@@ -1093,41 +1114,14 @@ class TasksPage(QWidget):
 
     def _show_char_filter_popover(self):
         menu = QMenu(self)
-        # QMenu is a real top-level popup, not a normal cascading child --
-        # it does NOT reliably inherit MainWindow's setStyleSheet() the way
-        # a plain child widget would (User-reported, 2026-09-16, screenshot:
-        # rendered in the plain light native menu style instead of this
-        # app's dark theme, even though a global unscoped "QMenu {...}" rule
-        # already exists in styles.qss). Setting it explicitly here
-        # guarantees it regardless of that cascade gap -- same colors as
-        # that global rule.
-        # Same palette as OverlayWindow's own character-filter menu (this
-        # feature's own direct inspiration) instead of the plain square
-        # global QMenu colors (User-Wunsch, 2026-09-16: "den Stil von dem
-        # kantigen Dropdown anpassen") -- rounded corners, softer border,
-        # rounded item highlight on hover/selection to match the rest of
-        # this app's pill/rounded-card look instead of sharp edges.
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: rgba(14, 16, 24, 0.98);
-                color: #e5e7eb;
-                border: 1px solid rgba(100, 116, 139, 0.35);
-                border-radius: 10px;
-                padding: 6px;
-            }
-            QMenu::item {
-                padding: 8px 20px;
-                border-radius: 6px;
-            }
-            QMenu::item:selected {
-                background-color: rgba(255, 255, 255, 0.08);
-            }
-            QMenu::separator {
-                height: 1px;
-                background: rgba(100, 116, 139, 0.35);
-                margin: 6px 8px;
-            }
-        """)
+        # Styled by the template's own QMenu / #charFilterMenu rules.
+        # The inline sheet that used to live here existed because a
+        # QMenu is a top-level popup and did NOT inherit MainWindow's
+        # setStyleSheet (User-reported, 2026-09-16: the menu rendered in
+        # the light native style). The sheet is on the QApplication now,
+        # which every popup DOES inherit, so the workaround -- and its
+        # four rgba() literals -- is gone.
+        menu.setObjectName("charFilterMenu")
         group = QActionGroup(menu)
         group.setExclusive(True)
 

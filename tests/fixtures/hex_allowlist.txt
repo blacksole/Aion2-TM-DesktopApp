@@ -1,0 +1,15 @@
+# Colour literals tests/test_no_hex_literals_in_ui.py tolerates under ui/.
+#
+# MASTER §4-3/§4-4 ("aucun hex magique dans ui/") admits exactly one class of
+# exception: a colour the DATA decides rather than the theme. Those already
+# live in core/theme.py's data_color() tables and are referenced by key from
+# ui/, so they need no entry here -- which is why this file holds no colour
+# values at all.
+#
+# What it does hold is two whole files that are not Qt styling, one per line
+# as "<path>  # <reason>". Anything else -- a new hex in a widget, a painter,
+# a setStyleSheet -- fails the test, and the fix is a token, never a line
+# here.
+
+ui/full_view_export.py  # Emits a STANDALONE HTML document for a browser (Full View export), not Qt UI: its CSS custom properties, @font-face imports and print styles are that document's own design system and have no QSS/QColor counterpart. Migrating them would mean rendering an HTML theme from the Qt tokens, which MASTER does not ask for and which nothing in the app reads back.
+ui/pages/about_page.py  # Holds third-party BRAND glyphs as inline SVG (Simple Icons, CC0) whose fill is the brand's own registered colour -- Discord blurple #5865F2. A brand mark is not a theme decision: recolouring it to an accent token would misrepresent the platform it links to.
