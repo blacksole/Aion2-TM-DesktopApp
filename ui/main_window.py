@@ -460,6 +460,9 @@ class MainWindow(QMainWindow):
         # was last loaded/saved even while neither window exists yet this
         # session -- handed off to the LoadoutWindow the moment it's
         # actually created, and refreshed from it (if open) on every save.
+        # Written here directly (the page does not exist yet); every LATER
+        # write goes through _set_build_planner_state(), which is also what
+        # keeps the Armory dashboard in step -- see its docstring.
         self._build_planner_state: dict | None = None
 
         # In-game overlay: which accordion sections are shown (User-Wunsch,
@@ -896,6 +899,61 @@ class MainWindow(QMainWindow):
         self.flow_map_window.raise_()
         self.flow_map_window.activateWindow()
 
+    # ── Armory state: ONE writer (review G/M1) ───────────────────────────
+    # `_build_planner_state` used to be assigned at four sites and only two
+    # of them told the dashboard, so the Armory landing page went stale and
+    # stayed stale: the Build Planner is a PARENTLESS, MODELESS top-level
+    # (ItemDatabase/app.py, `create_window(parent=None)`), so the dashboard
+    # sits *visible behind it* -- closing the planner fires neither hide nor
+    # show on the page, and nothing re-read the dict.  Every write now goes
+    # through the setter below, which is the only place that knows the page
+    # has to be told.
+
+    def _set_build_planner_state(self, state: dict | None):
+        """The single writer of ``_build_planner_state``.
+
+        Pushes to the Armory dashboard as well, so the page can never
+        disagree with the dict.  ``getattr`` because ``__init__`` assigns the
+        attribute (as None) before ``_setup_pages()`` builds the page.
+        """
+        self._build_planner_state = state
+        page = getattr(self, "armory_page", None)
+        if page is not None:
+            page.set_build_planner_state(state)
+
+    def _refresh_armory_summary(self):
+        """Re-read the live Build Planner into the dict, then the page.
+
+        Reads only: nothing is written to disk, so this is safe to call from
+        an event handler and on a template profile alike.  Falls back to the
+        persisted dict when the Armory was never opened this session
+        (``get_loadout_state`` does that itself, ItemDatabase/app.py).
+        Skipped while a profile is loading -- the live window still holds the
+        PREVIOUS profile's state at that moment, and pulling it would
+        clobber what load_profile just restored.
+        """
+        if getattr(self, "_profile_loading", False):
+            return
+        window = getattr(self, "item_database_window", None)
+        if window is not None and hasattr(window, "get_loadout_state"):
+            pulled = window.get_loadout_state()
+            if pulled:
+                self._set_build_planner_state(pulled)
+                return
+        self._set_build_planner_state(self._build_planner_state)
+
+    def changeEvent(self, event):
+        """Refresh the dashboard when the app regains focus (review G/M1).
+
+        The user path the review named: dashboard on screen -> CTA -> edit
+        gear in the parentless planner -> close it.  No Qt show/hide reaches
+        this window, but its activation DOES change, and that is exactly the
+        moment the numbers behind the planner became wrong.
+        """
+        if event.type() == QEvent.ActivationChange and self.isActiveWindow():
+            self._refresh_armory_summary()
+        super().changeEvent(event)
+
     def _ensure_item_database_window(self):
         if self.item_database_window is None:
             import importlib.util
@@ -924,7 +982,9 @@ class MainWindow(QMainWindow):
                 self.item_database_window.set_theme(self.current_theme)
             if self._build_planner_state and hasattr(self.item_database_window, "set_pending_loadout_state"):
                 self.item_database_window.set_pending_loadout_state(self._build_planner_state)
-            self.armory_page.set_build_planner_state(self._build_planner_state)
+            # Through the setter like every other path, so there is exactly
+            # one line in this file that knows the page must be told.
+            self._set_build_planner_state(self._build_planner_state)
             if hasattr(self.item_database_window, "add_to_templates_requested"):
                 self.item_database_window.add_to_templates_requested.connect(
                     self._add_item_database_item_to_templates
@@ -1121,7 +1181,7 @@ class MainWindow(QMainWindow):
         )
         if live_matches:
             live_loadout.advance_equip_priority(section_key)
-            self._build_planner_state = window.get_loadout_state()
+            self._set_build_planner_state(window.get_loadout_state())
         else:
             build = state.get("equip_builds_data", {}).get(class_name, {}).get(build_name)
             if build is not None:
@@ -1317,13 +1377,12 @@ class MainWindow(QMainWindow):
 
         self.timers_page = TimersPage()
         self.todo_page = TodoTabsPage(self.tasks_page, self.timers_page)
-        # The Armory page is a dashboard over the persisted Build Planner
-        # state (Phase 4c).  The provider lets it re-derive its own summary
-        # whenever it is shown, so the save-time refresh of
-        # `_build_planner_state` (save_profile pulls `get_loadout_state()`)
-        # needs no notification of its own; the explicit push below in
-        # load_profile covers the profile-load case.
-        self.armory_page = ArmoryPage(state_provider=lambda: self._build_planner_state)
+        # State is PUSHED in, by _set_build_planner_state() -- the page
+        # pulls nothing and holds no callable of ours (review G/m10: the
+        # `state_provider=lambda: self._build_planner_state` this replaces
+        # re-created the MainWindow->page->lambda->MainWindow cycle the
+        # same batch removed from the task cards).
+        self.armory_page = ArmoryPage()
         self.settings_page = SettingsPage()
         self.about_page = AboutPage()
 
@@ -2678,10 +2737,10 @@ class MainWindow(QMainWindow):
                 for node in self.flow_map_window.nodes.values():
                     if node.icon == "character" and node.character_items:
                         self._sync_character_items_to_shopping(node.title, node.character_items)
-            self._build_planner_state = data.get("build_planner")
+            # The setter pushes to the Armory dashboard itself.
+            self._set_build_planner_state(data.get("build_planner"))
             if self.item_database_window and hasattr(self.item_database_window, "set_pending_loadout_state"):
                 self.item_database_window.set_pending_loadout_state(self._build_planner_state)
-            self.armory_page.set_build_planner_state(self._build_planner_state)
 
             self._rebuild_characters()
             if hasattr(self.header, "set_profile"):
@@ -2821,11 +2880,17 @@ class MainWindow(QMainWindow):
         # every other call site keeps working exactly as before for any
         # real (non-template) profile, since this guard only ever applies
         # while the CURRENT profile is still one of the three templates.
+        # Pulled BEFORE the template guard below (review G/M2): the pull
+        # only reads the live planner into memory and pushes it to the
+        # dashboard -- it writes no file, so it must not be skipped for a
+        # template profile.  It was, and the consequence was the first-run
+        # path: a new user on "Default" equipped a full set and the Armory
+        # page still said "No build yet" until they renamed the profile.
+        if self.item_database_window and hasattr(self.item_database_window, "get_loadout_state"):
+            self._set_build_planner_state(self.item_database_window.get_loadout_state())
+
         if not explicit and self._is_lang_default(self.profile_dir / f"{self.profile_name}.json"):
             return
-
-        if self.item_database_window and hasattr(self.item_database_window, "get_loadout_state"):
-            self._build_planner_state = self.item_database_window.get_loadout_state()
 
         data = {
             "profile_name": self.profile_name,

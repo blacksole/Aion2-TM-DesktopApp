@@ -15,10 +15,10 @@ Two halves, deliberately separated:
 
 Seams these tests depend on (KEEP THEM STABLE):
   * ``summarize_build_planner`` / ``ArmorySummary`` / ``ARMORY_EQUIP_SLOTS``
-  * ``ArmoryPage.set_build_planner_state`` (the host hook, called from
-    ``load_profile`` and from ``_ensure_item_database_window``),
-    ``ArmoryPage(state_provider=…)`` (the show-time pull),
-    ``ArmoryPage.update_language``
+  * ``ArmoryPage.set_build_planner_state`` — the ONE host hook, called by
+    ``MainWindow._set_build_planner_state`` (the single writer of
+    ``_build_planner_state``), plus ``MainWindow._refresh_armory_summary``
+    and ``ArmoryPage.update_language``
   * objectNames ``armoryCard`` / ``armoryCardTitle`` / ``armoryCardValue`` /
     ``armoryCardHint`` / ``armoryCardCta``
 """
@@ -29,7 +29,7 @@ from array import array
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QDeadlineTimer, QEventLoop, Qt
+from PySide6.QtCore import QDeadlineTimer, QEvent, QEventLoop, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
 
@@ -102,7 +102,7 @@ def test_summary_of_none_is_the_no_build_case():
     assert summary == ArmorySummary()
     assert summary.has_state is False
     assert summary.is_empty is True
-    assert summary.total_slots == len(ARMORY_EQUIP_SLOTS) == 22
+    assert summary.total_slots == len(ARMORY_EQUIP_SLOTS) == 20
     assert summary.enchant_min is None and summary.enchant_max is None
 
 
@@ -238,7 +238,7 @@ def test_the_subtitle_no_longer_says_coming_soon(language):
 
 
 def test_the_counted_keys_format_with_their_placeholders():
-    assert tr("en", "armory_card_slots", equipped=11, total=22) == "11/22 slots equipped"
+    assert tr("en", "armory_card_slots", equipped=11, total=20) == "11/20 slots equipped"
     assert tr("en", "armory_card_enchant", min=12, max=15) == "Enchant +12–+15"
     assert tr("en", "armory_card_daevanion_value", count=47) == "47 nodes active"
 
@@ -384,23 +384,6 @@ def test_a_language_switch_retranslates_the_empty_state(page):
     assert not page.empty_state.isHidden()
 
 
-def test_the_state_provider_is_pulled_on_show(qapp):
-    """The save-time refresh needs no host notification: MainWindow hands
-    the page a provider, and the page re-derives whenever it is shown."""
-    box = {"state": None}
-    widget = ArmoryPage(state_provider=lambda: box["state"])
-    widget.update_language("en", tr)
-    assert widget.summary.is_empty is True
-
-    box["state"] = _synthetic_state()
-    widget.show()
-    _settle(qapp, 80)
-    assert widget.summary.character_class == "Gladiator"
-
-    widget.close()
-    widget.deleteLater()
-
-
 # ---------------------------------------------------------------------------
 # 4. rendered, per theme (offscreen grabs -- MASTER §4-5 render gate)
 # ---------------------------------------------------------------------------
@@ -426,18 +409,205 @@ def win(qapp, tmp_path_factory):
     patcher.undo()
 
 
-def test_the_host_pushes_the_state_into_the_page(win, qapp):
-    """The two host hooks: ``load_profile`` pushes, and the page's provider
-    reads the very same attribute MainWindow keeps."""
-    state = json.loads(REAL_PROFILE.read_text(encoding="utf-8"))["build_planner"]
-    win._build_planner_state = state
-    win.armory_page.set_build_planner_state(win._build_planner_state)
-    assert win.armory_page.summary.character_class == "Chanter"
+def _real_state() -> dict:
+    return json.loads(REAL_PROFILE.read_text(encoding="utf-8"))["build_planner"]
 
-    win._build_planner_state = None
-    win.sidebar.set_active_page("armory")
-    _settle(qapp, 200)
-    assert win.armory_page.summary.is_empty is True
+
+class _FakeArmoryWindow:
+    """The two methods MainWindow calls across the Armory seam.
+
+    Standing in for the real ItemDatabase window so the writer paths can be
+    driven without loading the 23k-line module (and without a second
+    top-level window, parentless and modeless, in the test process).
+    """
+
+    def __init__(self, state, loadout=None):
+        self.state = state
+        self.pending = None
+        self._loadout = loadout
+
+    def get_loadout_state(self):
+        return self.state
+
+    def set_pending_loadout_state(self, state):
+        self.pending = state
+
+    def get_loadout_window_if_open(self):
+        return self._loadout
+
+
+@pytest.fixture
+def host(win):
+    """``win`` with its Armory seam reset after the test.
+
+    The fixture is function-scoped over the module-scoped window: each
+    writer-path test installs its own fake Armory window and its own
+    profile name, and hands both back.
+    """
+    original_window = win.item_database_window
+    original_state = win._build_planner_state
+    original_name = win.profile_name
+    win.item_database_window = None
+    win._set_build_planner_state(None)
+    yield win
+    win.item_database_window = original_window
+    win.profile_name = original_name
+    win._set_build_planner_state(original_state)
+
+
+def test_the_single_writer_pushes_to_the_page(host):
+    """M1: ``_build_planner_state`` has exactly one writer, and it tells the
+    page.  Every other path below goes through this one."""
+    host._set_build_planner_state(_real_state())
+    assert host._build_planner_state is not None
+    assert host.armory_page.summary.character_class == "Chanter"
+
+    host._set_build_planner_state(None)
+    assert host.armory_page.summary.is_empty is True
+
+
+def test_writer_path_load_profile_refreshes_the_dashboard(host, tmp_path):
+    """Writer 1/4: ``load_profile``."""
+    profile = tmp_path / "LoadedProfile.json"
+    profile.write_text(
+        json.dumps({"profile_name": "LoadedProfile", "build_planner": _real_state()}),
+        encoding="utf-8",
+    )
+    host.load_profile(profile)
+    assert host.armory_page.summary.character_class == "Chanter"
+
+    blank = tmp_path / "BlankProfile.json"
+    blank.write_text(json.dumps({"profile_name": "BlankProfile"}), encoding="utf-8")
+    host.load_profile(blank)
+    assert host.armory_page.summary.is_empty is True
+
+
+def test_writer_path_save_profile_refreshes_the_dashboard(host):
+    """Writer 2/4: the ``get_loadout_state()`` pull inside ``save_profile``."""
+    host.item_database_window = _FakeArmoryWindow(_real_state())
+    host.save_profile(silent=True)
+    assert host.armory_page.summary.character_class == "Chanter"
+
+
+def test_writer_path_advance_equip_priority_refreshes_the_dashboard(host):
+    """Writer 3/4: the overlay's Gear-Priority check button, live-window
+    branch — it re-pulls the state, so the page must follow."""
+    state = _real_state()
+    edited = json.loads(json.dumps(state))
+    edited["character_class"] = "Gladiator"
+
+    class _FakeLoadout:
+        _current_equip_build_name = state["current_build_name"]
+
+        class character_class_combo:  # noqa: N801 - mirrors the real widget name
+            @staticmethod
+            def currentText():
+                return state["character_class"]
+
+        def advance_equip_priority(self, section_key):
+            self.advanced = section_key
+
+    loadout = _FakeLoadout()
+    host.item_database_window = _FakeArmoryWindow(edited, loadout=loadout)
+    host._set_build_planner_state(state)
+    assert host.armory_page.summary.character_class == "Chanter"
+
+    host.advance_equip_priority("weapon")
+    assert loadout.advanced == "weapon"
+    assert host.armory_page.summary.character_class == "Gladiator"
+
+
+def test_the_dashboard_refreshes_when_the_app_regains_focus(host):
+    """M1's own user path: the Build Planner is parentless and modeless, so
+    closing it fires no show/hide on the page — only an activation change on
+    the window."""
+    host.item_database_window = _FakeArmoryWindow(_real_state())
+    assert host.armory_page.summary.is_empty is True
+
+    # isActiveWindow() is False for an offscreen window, so shadow it: the
+    # gate under test is "activation changed AND we are the active window".
+    host.isActiveWindow = lambda: True
+    try:
+        host.changeEvent(QEvent(QEvent.ActivationChange))
+    finally:
+        del host.isActiveWindow
+    assert host.armory_page.summary.character_class == "Chanter"
+
+
+def test_a_refresh_is_skipped_while_a_profile_is_loading(host):
+    """The live window still holds the PREVIOUS profile at that moment."""
+    host.item_database_window = _FakeArmoryWindow(_real_state())
+    host._profile_loading = True
+    try:
+        host._refresh_armory_summary()
+    finally:
+        host._profile_loading = False
+    assert host.armory_page.summary.is_empty is True
+
+
+def test_a_template_profile_populates_the_dashboard_without_writing(host, tmp_path):
+    """M2: ``save_profile`` returns early on a template profile — the pull
+    now happens BEFORE that return, so the first-run path populates.  And it
+    still writes nothing: that guard exists for a real data-loss reason."""
+    host.profile_name = "Default"
+    template = host.profile_dir / "Default.json"
+    assert not template.exists()
+
+    host.item_database_window = _FakeArmoryWindow(_real_state())
+    host.save_profile(silent=True)
+
+    assert host.armory_page.summary.character_class == "Chanter"
+    assert not template.exists(), "a template profile must not be written to"
+
+
+# ---------------------------------------------------------------------------
+# 5. the slot mirror (M3) -- drift against the real Armory fails loudly
+# ---------------------------------------------------------------------------
+
+
+def test_the_active_slot_mirror_matches_the_armory():
+    """``ARMORY_EQUIP_SLOTS`` is the ACTIVE paperdoll, recomputed here from
+    ItemDatabase's own section tables.
+
+    The page mirrors the slot ids instead of importing the 23k-line module
+    (module docstring), so this is the test that makes the mirror safe: add
+    Brooch back to the paperdoll over there and this fails, instead of the
+    dashboard quietly reading "20/22 slots equipped" forever (review G/M3).
+    """
+    import ItemDatabase.app as ida
+
+    active = [
+        slot
+        for _label, slots in (*ida._LEFT_EQUIP_SECTIONS, *ida._RIGHT_EQUIP_SECTIONS)
+        for slot in slots
+    ]
+    assert tuple(active) == ARMORY_EQUIP_SLOTS
+    assert len(active) == 20
+
+    # The definition table is longer -- that difference is the whole finding.
+    defined = {slot for slot, _key, _cats in ida.SLOT_LAYOUT}
+    assert defined - set(active) == {"Brooch1", "Brooch2"}
+
+
+def test_a_filled_unknown_slot_grows_the_denominator():
+    """So the ratio can never exceed 1 if the Armory gains a slot first."""
+    state = _synthetic_state()
+    equipped = state["equip_builds_data"]["gladiator"]["PvE t1"]["equipped"]
+    equipped.update({f"Extra{index}": {"id": index} for index in range(len(ARMORY_EQUIP_SLOTS))})
+    summary = summarize_build_planner(state)
+    assert summary.equipped_slots == len(ARMORY_EQUIP_SLOTS) + 2
+    assert summary.total_slots == summary.equipped_slots
+
+
+def test_an_empty_unknown_slot_does_not_grow_the_denominator():
+    """A profile written by an older build can hold an empty Brooch entry."""
+    state = _synthetic_state()
+    state["equip_builds_data"]["gladiator"]["PvE t1"]["equipped"].update(
+        {"Brooch1": None, "Brooch2": {}}
+    )
+    summary = summarize_build_planner(state)
+    assert summary.equipped_slots == 2
+    assert summary.total_slots == len(ARMORY_EQUIP_SLOTS)
 
 
 @pytest.mark.parametrize("name", ("abyss", "inferno"))

@@ -28,7 +28,6 @@ contains no colour and no font.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt, Signal
@@ -46,19 +45,33 @@ from PySide6.QtWidgets import (
 from core.translations import DEFAULT_LANGUAGE, tr as _default_tr
 from ui.widgets.empty_state import EmptyStateWidget
 
-#: Equip slot ids of the Build Planner, mirrored from ``SLOT_LAYOUT``
-#: (ItemDatabase/app.py:2816) plus the Wings slot appended right below it.
-#: Mirrored rather than imported on purpose (see module docstring); the
-#: count (22) is only ever used as the denominator of "n/22 slots equipped",
-#: so a future slot added over there shows up as a slightly optimistic
-#: ratio, never as a crash.
+#: The **active** equip slots of the Build Planner paperdoll, in paperdoll
+#: order: ``_LEFT_EQUIP_SECTIONS`` (weapon + armor + wings) then
+#: ``_RIGHT_EQUIP_SECTIONS`` (accessory) — ItemDatabase/app.py:3007-3033,
+#: consumed at :19549/:19558.
+#:
+#: NOT ``SLOT_LAYOUT``, which is the *definition* table and two slots longer
+#: (review G/M3).  ``Brooch1``/``Brooch2`` are defined there but excluded
+#: from the paperdoll ("Brooch doesn't exist yet at global release",
+#: app.py:3021), so no widget can ever fill them and a fully geared
+#: character read "20/22 slots equipped" forever.
+#:
+#: Mirrored rather than imported on purpose (see module docstring); drift is
+#: not left to a comment —
+#: ``tests/test_armory_dashboard.py::test_the_active_slot_mirror_matches_the_armory``
+#: loads app.py and recomputes the active set, so adding Brooch back over
+#: there fails loudly here.  The denominator also grows on its own if a
+#: state carries a filled slot this tuple does not know
+#: (``summarize_build_planner``), so the ratio can never exceed 1.
 ARMORY_EQUIP_SLOTS: tuple[str, ...] = (
+    # left column: weapon, armor, wings
     "MainHand", "SubHand",
     "Helmet", "Shoulder", "Torso", "Gloves", "Pants", "Boots", "Cloak",
+    "Wings1",
+    # right column: accessory
     "Earring1", "Earring2", "Necklace", "Amulet",
     "Ring1", "Ring2", "Bracelet1", "Bracelet2",
-    "Brooch1", "Brooch2", "Rune1", "Rune2",
-    "Wings1",
+    "Rune1", "Rune2",
 )
 
 
@@ -189,7 +202,11 @@ def summarize_build_planner(state: dict | None) -> ArmorySummary:
         character_race=_as_text(state.get("character_race")),
         build_name=build_name if build else "",
         equipped_slots=equipped_slots,
-        total_slots=max(len(ARMORY_EQUIP_SLOTS), len(equipped)),
+        # Counting FILLED unknown slots, not every key: a profile written
+        # by an older build can hold an empty `Brooch1` entry, which must
+        # not inflate the denominator -- but a slot that really carries an
+        # item always does, so equipped_slots <= total_slots holds.
+        total_slots=max(len(ARMORY_EQUIP_SLOTS), equipped_slots),
         enchant_min=min(levels) if levels else None,
         enchant_max=max(levels) if levels else None,
         gear_types=tuple(_as_text(gear) for gear in _as_list(state.get("active_gear_types")) if _as_text(gear)),
@@ -313,25 +330,22 @@ class ArmoryCard(QFrame):
 class ArmoryPage(QWidget):
     """Armory dashboard: build summary cards + the two tool launchers.
 
-    The three signals are unchanged, so MainWindow's existing wiring
-    (ui/main_window.py:1322-1324) keeps working.  State reaches the page two
-    ways, both of which end in ``set_build_planner_state``:
-
-    * pushed by the host after a profile load (``load_profile``);
-    * pulled from ``state_provider`` — an optional zero-argument callable
-      handed in at construction — whenever the page is shown or
-      retranslated, which covers the save-time refresh of the state dict
-      without the host having to notify anything.
+    The three signals are unchanged, so MainWindow's existing wiring keeps
+    working.  State only ever arrives **pushed**, through
+    ``set_build_planner_state`` — MainWindow routes every write of
+    ``_build_planner_state`` through its own ``_set_build_planner_state``,
+    which calls it (review G/M1).  The page therefore holds no callable
+    belonging to the host: the earlier ``state_provider=lambda: …`` made a
+    MainWindow -> page -> lambda -> MainWindow cycle (review G/m10).
     """
 
     open_item_database_requested = Signal()
     open_crafting_calculator_requested = Signal()
     open_build_planner_requested = Signal()
 
-    def __init__(self, state_provider: Callable[[], dict | None] | None = None):
+    def __init__(self):
         super().__init__()
 
-        self._state_provider = state_provider
         self._language = DEFAULT_LANGUAGE
         self._tr = _default_tr
         self._summary = ArmorySummary()
@@ -422,24 +436,11 @@ class ArmoryPage(QWidget):
         self._summary = summarize_build_planner(state)
         self._render()
 
-    def _pull_state(self):
-        if self._state_provider is not None:
-            self._summary = summarize_build_planner(self._state_provider())
-
-    def showEvent(self, event):
-        # Covers the save-time pull: MainWindow refreshes
-        # `_build_planner_state` from the live Build Planner window inside
-        # save_profile, and the user comes back to this page afterwards.
-        self._pull_state()
-        self._render()
-        super().showEvent(event)
-
     # ── language ──────────────────────────────────────────────────────────
 
     def update_language(self, language: str, tr_func):
         self._language = language
         self._tr = tr_func
-        self._pull_state()
         self._render()
 
     # ── render ────────────────────────────────────────────────────────────
