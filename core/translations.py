@@ -254,7 +254,7 @@ TRANSLATIONS = {
 
         # ================= ARMORY =================
         "armory": "Armory",
-        "armory_subtitle": "Items, Crafting, Fraktion & Buildplaner — in Vorbereitung",
+        "armory_subtitle": "Dein aktueller Build auf einen Blick — Ausrüstung, Daevanion, Skills und die Werkzeuge dazu",
         "armory_roadmap_items_title": "Item-Datenbank",
         "armory_roadmap_items_desc": "Alle Items durchsuchbar, mit Filter- und Sortiermöglichkeiten — u. a. nach Fraktion (Asmodae/Elyos).",
         "armory_open_btn": "Öffnen",
@@ -262,6 +262,21 @@ TRANSLATIONS = {
         "armory_roadmap_crafting_desc": "Rezepte und benötigte Ressourcen auf einen Blick.",
         "armory_roadmap_builds_title": "Buildplaner",
         "armory_roadmap_builds_desc": "Charakterverwaltung mit Gearscore-Anzeige und Charakternamen.",
+
+        # Dashboard-Karten (Phase 4c)
+        "armory_card_build_title": "Buildplaner",
+        "armory_card_build_empty": "Noch kein Build",
+        "armory_card_slots": "{equipped}/{total} Slots belegt",
+        "armory_card_enchant": "Verzauberung +{min}–+{max}",
+        "armory_card_daevanion_title": "Daevanion",
+        "armory_card_daevanion_value": "{count} Knoten aktiv",
+        "armory_card_skills_title": "Skillplaner",
+        "armory_card_skills_value": "{count} Skills erfasst",
+        "armory_card_open_build": "Buildplaner öffnen",
+        "armory_card_open_items": "Item-Datenbank öffnen",
+        "armory_card_open_crafting": "Crafting-Kalkulator öffnen",
+        "armory_empty_title": "Noch kein Build",
+        "armory_empty_hint": "Öffne den Buildplaner, um einen anzulegen — danach steht hier deine Zusammenfassung.",
 
         "flow_title": "Ablaufplan",
         "flow_window_title": "Ablaufplan Map",
@@ -1189,7 +1204,7 @@ TRANSLATIONS = {
 
         # ================= ARMORY =================
         "armory": "Armory",
-        "armory_subtitle": "Предметы, крафт, фракция и планировщик билдов — скоро",
+        "armory_subtitle": "Текущий билд на одном экране — экипировка, Daevanion, умения и инструменты к ним",
         "armory_roadmap_items_title": "База предметов",
         "armory_roadmap_items_desc": "Все предметы с фильтрацией и сортировкой — в том числе по фракции (Асмодиане/Элиос).",
         "armory_open_btn": "Открыть",
@@ -1197,6 +1212,21 @@ TRANSLATIONS = {
         "armory_roadmap_crafting_desc": "Рецепты и необходимые ресурсы на одном экране.",
         "armory_roadmap_builds_title": "Планировщик билдов",
         "armory_roadmap_builds_desc": "Управление персонажами с отображением GearScore и именами персонажей.",
+
+        # Карточки дашборда (этап 4c)
+        "armory_card_build_title": "Планировщик билдов",
+        "armory_card_build_empty": "Билда пока нет",
+        "armory_card_slots": "{equipped}/{total} слотов занято",
+        "armory_card_enchant": "Заточка +{min}–+{max}",
+        "armory_card_daevanion_title": "Daevanion",
+        "armory_card_daevanion_value": "{count} узлов активно",
+        "armory_card_skills_title": "Планировщик умений",
+        "armory_card_skills_value": "{count} умений отмечено",
+        "armory_card_open_build": "Открыть планировщик билдов",
+        "armory_card_open_items": "Открыть базу предметов",
+        "armory_card_open_crafting": "Открыть калькулятор крафта",
+        "armory_empty_title": "Билда пока нет",
+        "armory_empty_hint": "Откройте планировщик билдов и создайте билд — затем здесь появится сводка.",
 
         "flow_title": "Блок-схема",
         "flow_window_title": "Карта блок-схемы",
@@ -2119,7 +2149,7 @@ TRANSLATIONS = {
 
         # ================= ARMORY =================
         "armory": "Armory",
-        "armory_subtitle": "Items, crafting, faction & build planner — coming soon",
+        "armory_subtitle": "Your current build at a glance — gear, Daevanion, skills and the tools behind them",
         "armory_roadmap_items_title": "Item Database",
         "armory_roadmap_items_desc": "Browse all items with filtering and sorting — including by faction (Asmodae/Elyos).",
         "armory_open_btn": "Open",
@@ -2127,6 +2157,21 @@ TRANSLATIONS = {
         "armory_roadmap_crafting_desc": "Recipes and required resources at a glance.",
         "armory_roadmap_builds_title": "Build Planner",
         "armory_roadmap_builds_desc": "Character management with GearScore display and character names.",
+
+        # Dashboard cards (Phase 4c)
+        "armory_card_build_title": "Build Planner",
+        "armory_card_build_empty": "No build yet",
+        "armory_card_slots": "{equipped}/{total} slots equipped",
+        "armory_card_enchant": "Enchant +{min}–+{max}",
+        "armory_card_daevanion_title": "Daevanion",
+        "armory_card_daevanion_value": "{count} nodes active",
+        "armory_card_skills_title": "Skill Planner",
+        "armory_card_skills_value": "{count} skills tracked",
+        "armory_card_open_build": "Open Build Planner",
+        "armory_card_open_items": "Open Item Database",
+        "armory_card_open_crafting": "Open Crafting Calculator",
+        "armory_empty_title": "No build yet",
+        "armory_empty_hint": "Open the Build Planner to create one — your summary then shows up here.",
 
         "flow_title": "Flow",
         "flow_window_title": "Flow Map",

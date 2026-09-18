@@ -2723,3 +2723,87 @@ QWidget[aion2="true"] #OverlayCountdownToggleBtn[running="false"] {
 QWidget[aion2="true"] QLabel[class="emptyStateHint"] {
     color: {{fg_muted}};
 }
+
+/* ---------------------------------------------------------------------
+   15. Armory dashboard  (MASTER §3 "Carte" + "Champ"/badge type scale —
+   audit §3 Phase 4c: the Armory landing page is a summary of the
+   persisted Build Planner state, so its cards need the card surface, the
+   caps title, the display-face figure and the muted hint line.
+
+   Appended as one block on purpose (the section numbering above is the
+   file's own history, not a sort key): every rule here is new, none of
+   the rules above is touched.  `#armoryCardRow` in §0b/§4 is the old
+   launcher row this page no longer builds — left in place because those
+   are shared selector lists.
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #armoryCard {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    min-height: 84px;
+}
+
+QWidget[aion2="true"] #armoryCard:hover {
+    background-color: {{bg_overlay}};
+    border-color: {{accent}};
+}
+
+/* Same shape as every other card's focus rule (§0b): the card carries a
+   1 px resting border and no QSS padding of its own, so the ring IS the
+   edge colour and nothing moves when focus lands. */
+QWidget[aion2="true"] #armoryCard:focus {
+    border-color: {{accent}};
+}
+
+/* MASTER §3 card title: caps, muted, semibold — the label of the figure
+   below it, never competing with it. */
+QWidget[aion2="true"] #armoryCardTitle {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+/* The one big figure per card, in the display face (MASTER §1). */
+QWidget[aion2="true"] #armoryCardValue {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #armoryCardHint {
+    color: {{fg_secondary}};
+    font-size: {{text_sm}}px;
+}
+
+/* The CTA is a link-weight action inside a card that is itself clickable,
+   so it reads as accent text, not as a second primary button fighting the
+   card for the eye (MASTER §3: one primary per surface). */
+QWidget[aion2="true"] #armoryCardCta {
+    background: transparent;
+    color: {{accent}};
+    border: {{border_width}}px solid transparent;
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #armoryCardCta:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{accent}};
+}
+
+QWidget[aion2="true"] #armoryCardCta:pressed {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #armoryCardCta:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1_inset}}px {{space_2_inset}}px;
+}
