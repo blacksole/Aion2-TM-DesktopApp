@@ -1,6 +1,9 @@
 name: Build and Release Aion2
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -30,14 +33,34 @@ jobs:
         run: |
           powershell Compress-Archive -Path "dist/Aion2 TM/*" -DestinationPath Aion2_TM.zip
 
+      - name: Create SHA-256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash Aion2_TM.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  Aion2_TM.zip" | Set-Content -Path Aion2_TM.zip.sha256 -Encoding ascii
+
       - name: Extract changelog section
         shell: python
         run: |
           import re
           import os
 
-          tag = os.environ["GITHUB_REF_NAME"]
-          version = tag.lstrip("v")
+          # GITHUB_REF_NAME is the TAG on a tag push but the BRANCH under
+          # workflow_dispatch -- taking the version from it unconditionally
+          # made every manual run look for a "feat/xyz" changelog section and
+          # fall back to a bare "Release <branch>". core/version.py is the
+          # single source of truth whenever the ref is not a tag.
+          ref_type = os.environ.get("GITHUB_REF_TYPE", "")
+          ref_name = os.environ.get("GITHUB_REF_NAME", "")
+
+          if ref_type == "tag":
+              version = ref_name.lstrip("v")
+          else:
+              source = open("core/version.py", encoding="utf-8").read()
+              match = re.search(r"""^APP_VERSION\s*=\s*["']([^"']+)["']""", source, re.M)
+              version = match.group(1) if match else ref_name.lstrip("v")
+
+          tag = f"v{version}"
 
           text = open("CHANGELOG.md", encoding="utf-8").read()
           sections = re.split(r"(?m)^#\s+(?:Version\s+|Changelog\s+[–-]\s+Version\s+)", text)
@@ -57,9 +80,17 @@ jobs:
           with open("release_notes.md", "w", encoding="utf-8") as f:
               f.write(notes)
 
+          # Same derived tag for the release itself -- otherwise a manual run
+          # would name (and tag) the release after the branch too.
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+              f.write(f"RELEASE_TAG={tag}\n")
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "Aion2 Task Manager ${{ github.ref_name }}"
+          name: "Aion2 Task Manager ${{ env.RELEASE_TAG }}"
+          tag_name: ${{ env.RELEASE_TAG }}
           body_path: release_notes.md
-          files: Aion2_TM.zip
+          files: |
+            Aion2_TM.zip
+            Aion2_TM.zip.sha256

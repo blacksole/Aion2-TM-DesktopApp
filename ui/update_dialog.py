@@ -1,7 +1,6 @@
 import os
 import sys
 import shutil
-import zipfile
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +14,13 @@ from PySide6.QtWidgets import (
     QPushButton, QTextBrowser, QFrame, QScrollArea, QWidget, QButtonGroup,
 )
 
+from core.app_logger import get_logger
+from core.update_checker import (
+    parse_sha256_sidecar, safe_extract, sha256_sidecar_url, verify_sha256,
+)
 from core.version import GITHUB_USER, GITHUB_REPO
+
+logger = get_logger("update_dialog")
 
 _RELEASES_LIST_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases"
 
@@ -94,11 +99,36 @@ class _InstallerThread(QThread):
             with urllib.request.urlopen(req, timeout=120) as resp:
                 zip_path.write_bytes(resp.read())
 
+            # Integrity check before anything from this archive touches the
+            # installed app (audit §5): the release publishes a
+            # "<asset>.sha256" sidecar, so a swapped/truncated/MITM'd
+            # download is caught here instead of being robocopy'd over the
+            # user's installation. Releases predating the sidecar have none
+            # -- those still install, with a warning in app.log.
+            self.status.emit("Download prüfen...")
+            expected = self._fetch_expected_sha256(download_url)
+            if expected:
+                if not verify_sha256(zip_path, expected):
+                    zip_path.unlink(missing_ok=True)
+                    logger.error("SHA-256 mismatch for %s -- download deleted", download_url)
+                    self.failed.emit(
+                        "Prüfsumme des Downloads stimmt nicht überein.\n"
+                        "Das Update wurde abgebrochen und die Datei gelöscht.\n"
+                        "Bitte später erneut versuchen."
+                    )
+                    return
+                logger.info("Update archive SHA-256 verified: %s", download_url)
+            else:
+                logger.warning(
+                    "No usable SHA-256 sidecar for %s -- installing unverified", download_url
+                )
+
             self.status.emit("Entpacken...")
             extract_dir = tmp_dir / "extracted"
             extract_dir.mkdir()
-            with zipfile.ZipFile(zip_path) as zf:
-                zf.extractall(extract_dir)
+            # Zip-Slip guard: reject any member resolving outside extract_dir
+            # before a single byte is written.
+            safe_extract(zip_path, extract_dir)
 
             if is_frozen:
                 # EXE-Modus: prüfen ob ZIP einen Unterordner hat (z.B. "Aion2 TM v0.8.4/")
@@ -131,6 +161,24 @@ class _InstallerThread(QThread):
             self.finished.emit()
         except Exception as e:
             self.failed.emit(str(e))
+
+    def _fetch_expected_sha256(self, download_url: str) -> str:
+        """Digest published alongside the asset, or "" when the release has
+        no (usable) sidecar -- backward compatibility with releases built
+        before the checksum step existed."""
+        sidecar_url = sha256_sidecar_url(download_url)
+        if not sidecar_url:
+            return ""
+        try:
+            req = urllib.request.Request(
+                sidecar_url, headers={"User-Agent": "Aion2-TM-Updater"}
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                text = resp.read().decode("utf-8", "replace")
+        except Exception as e:
+            logger.warning("Could not fetch checksum sidecar %s: %s", sidecar_url, e)
+            return ""
+        return parse_sha256_sidecar(text)
 
     def _copy_dir(self, src: Path, dest: Path):
         dest.mkdir(exist_ok=True)

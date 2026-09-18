@@ -287,6 +287,10 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.auto_save = True
+        # Structural guard for the 2.0.5 data-loss class: True while
+        # load_profile is still restoring fields, so nothing can serialize
+        # half-restored state over the file on disk (see load_profile/save_profile).
+        self._profile_loading: bool = False
         self._pending_update = None
         self._checker = None
 
@@ -2125,199 +2129,228 @@ class MainWindow(QMainWindow):
                 self.save_profile(silent=True)
 
     def load_profile(self, profile_path):
+        # Self-healing load (audit §2): a truncated/corrupt profile is no
+        # longer silently turned into {} -- load_json_with_fallback tries the
+        # <name>.json.bak copy atomic_write_json keeps, and tells us which
+        # copy we actually got so the user can be warned (and so a file that
+        # is beyond rescue never gets overwritten).
+        from core.persistence import load_json_with_fallback
+
+        profile_path = Path(profile_path)
+        data, status = load_json_with_fallback(profile_path)
+
+        # Nothing may save while the fields below are still half-restored
+        # (see save_profile's guard and the call-order note at the end).
+        self._profile_loading = True
+
+        # Both the profile AND its backup are unreadable: keep the guard on
+        # past this method so no auto-save buries whatever is still on disk.
+        # Only a deliberate "Save Profile" click writes from here on.
+        unrecoverable = status == "empty" and profile_path.exists()
+        if unrecoverable:
+            logger.error(
+                "Profile %s and its backup are both unreadable -- loaded as empty; "
+                "auto-save stays disabled so the file on disk is not overwritten.",
+                profile_path,
+            )
+
         try:
-            with open(profile_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
-            data = {}
-        except FileNotFoundError:
-            data = {}
+            self.profile_name = profile_path.stem
+            if not isinstance(data, dict):
+                data = {}
 
-        self.profile_name = profile_path.stem
-        if not isinstance(data, dict):
-            data = {}
+            self.current_theme = data.get("theme", "abyss")
+            self.apply_theme(self.current_theme)
 
-        self.current_theme = data.get("theme", "abyss")
-        self.apply_theme(self.current_theme)
+            self.language = data.get("language", "en")
+            self.apply_language()
 
-        self.language = data.get("language", "en")
-        self.apply_language()
+            settings = data.get("settings", {})
 
-        settings = data.get("settings", {})
+            self.daily_reset_time = settings.get("daily_reset_time", "09:00")
+            self.weekly_reset_day = settings.get("weekly_reset_day", "Mo")
+            self.weekly_reset_time = settings.get("weekly_reset_time", "09:00")
+            self.season_reset_datetime = settings.get("season_reset_datetime", "")
+            self.season_enabled = settings.get("season_enabled", False)
 
-        self.daily_reset_time = settings.get("daily_reset_time", "09:00")
-        self.weekly_reset_day = settings.get("weekly_reset_day", "Mo")
-        self.weekly_reset_time = settings.get("weekly_reset_time", "09:00")
-        self.season_reset_datetime = settings.get("season_reset_datetime", "")
-        self.season_enabled = settings.get("season_enabled", False)
+            from datetime import date as _date
+            _d = settings.get("last_daily_reset_date")
+            self.last_daily_reset_date = _date.fromisoformat(_d) if _d else None
+            _w = settings.get("last_weekly_reset_date")
+            self.last_weekly_reset_date = _date.fromisoformat(_w) if _w else None
+            self.last_season_reset_datetime = settings.get("last_season_reset_datetime")
+            self.missed_daily_activities = settings.get("missed_daily_activities", [])
 
-        from datetime import date as _date
-        _d = settings.get("last_daily_reset_date")
-        self.last_daily_reset_date = _date.fromisoformat(_d) if _d else None
-        _w = settings.get("last_weekly_reset_date")
-        self.last_weekly_reset_date = _date.fromisoformat(_w) if _w else None
-        self.last_season_reset_datetime = settings.get("last_season_reset_datetime")
-        self.missed_daily_activities = settings.get("missed_daily_activities", [])
+            self.show_events = settings.get("show_events", True)
+            self.auto_save = settings.get("auto_save", True)
+            self.notification_enabled = settings.get("notification_enabled", False)
+            self.notification_warn_minutes = settings.get("notification_warn_minutes", 1)
+            self.notification_sync = settings.get("notification_sync", True)
+            self.notification_shugo_enabled = settings.get("notification_shugo_enabled", False)
+            self.notification_shugo_warn_minutes = settings.get("notification_shugo_warn_minutes", 1)
+            self.notification_riss_enabled = settings.get("notification_riss_enabled", False)
+            self.notification_riss_warn_minutes = settings.get("notification_riss_warn_minutes", 1)
+            self.notification_sound = settings.get("notification_sound", "")
+            self.shugo_enabled = settings.get("shugo_enabled", False)
+            self.shugo_start_minute = settings.get("shugo_start_minute", 15)
+            self.shugo_interval_text = settings.get("shugo_interval_text", "30 min")
+            self.shugo_interval_minutes = self.interval_text_to_minutes(
+                self.shugo_interval_text
+            )
 
-        self.show_events = settings.get("show_events", True)
-        self.auto_save = settings.get("auto_save", True)
-        self.notification_enabled = settings.get("notification_enabled", False)
-        self.notification_warn_minutes = settings.get("notification_warn_minutes", 1)
-        self.notification_sync = settings.get("notification_sync", True)
-        self.notification_shugo_enabled = settings.get("notification_shugo_enabled", False)
-        self.notification_shugo_warn_minutes = settings.get("notification_shugo_warn_minutes", 1)
-        self.notification_riss_enabled = settings.get("notification_riss_enabled", False)
-        self.notification_riss_warn_minutes = settings.get("notification_riss_warn_minutes", 1)
-        self.notification_sound = settings.get("notification_sound", "")
-        self.shugo_enabled = settings.get("shugo_enabled", False)
-        self.shugo_start_minute = settings.get("shugo_start_minute", 15)
-        self.shugo_interval_text = settings.get("shugo_interval_text", "30 min")
-        self.shugo_interval_minutes = self.interval_text_to_minutes(
-            self.shugo_interval_text
-        )
+            self.riss_enabled = settings.get("riss_enabled", False)
+            self.riss_anchor_hour = settings.get("riss_anchor_hour", 0)
+            self.riss_interval_text = settings.get("riss_interval_text", "1 Stunde")
+            self.riss_interval_hours = self.interval_text_to_hours(
+                self.riss_interval_text
+            )
 
-        self.riss_enabled = settings.get("riss_enabled", False)
-        self.riss_anchor_hour = settings.get("riss_anchor_hour", 0)
-        self.riss_interval_text = settings.get("riss_interval_text", "1 Stunde")
-        self.riss_interval_hours = self.interval_text_to_hours(
-            self.riss_interval_text
-        )
+            self.timers_page.set_shugo_visible(self.shugo_enabled)
+            self.timers_page.set_riss_visible(self.riss_enabled)
+            self.timers_page.set_season_visible(bool(self.season_enabled and self._get_season_countdown_text()))
 
-        self.timers_page.set_shugo_visible(self.shugo_enabled)
-        self.timers_page.set_riss_visible(self.riss_enabled)
-        self.timers_page.set_season_visible(bool(self.season_enabled and self._get_season_countdown_text()))
+            self.timer_categories = settings.get("timer_categories", ["Custom Timer"]) or ["Custom Timer"]
+            self.custom_timers = settings.get("custom_timers", [])[:8]
+            for ct in self.custom_timers:
+                if "timer_mode" not in ct:
+                    ct["timer_mode"] = "hourly"
+            self._custom_notified = [False] * 8
+            self.timers_page.rebuild_custom_sections(self.timer_categories, self.custom_timers)
 
-        self.timer_categories = settings.get("timer_categories", ["Custom Timer"]) or ["Custom Timer"]
-        self.custom_timers = settings.get("custom_timers", [])[:8]
-        for ct in self.custom_timers:
-            if "timer_mode" not in ct:
-                ct["timer_mode"] = "hourly"
-        self._custom_notified = [False] * 8
-        self.timers_page.rebuild_custom_sections(self.timer_categories, self.custom_timers)
+            saved_overlay_sections = settings.get("overlay_visible_sections")
+            if isinstance(saved_overlay_sections, dict):
+                self.overlay_visible_sections.update(saved_overlay_sections)
+            self.overlay_char_filter = settings.get("overlay_char_filter", "")
+            self.todo_char_filter = settings.get("todo_char_filter", "")
+            self.tasks_page.set_char_filter_value(self.todo_char_filter)
 
-        saved_overlay_sections = settings.get("overlay_visible_sections")
-        if isinstance(saved_overlay_sections, dict):
-            self.overlay_visible_sections.update(saved_overlay_sections)
-        self.overlay_char_filter = settings.get("overlay_char_filter", "")
-        self.todo_char_filter = settings.get("todo_char_filter", "")
-        self.tasks_page.set_char_filter_value(self.todo_char_filter)
+            self.toggle_events()
 
-        self.toggle_events()
+            self.settings_page.set_profile_name(self.profile_name)
+            self.sync_settings_page()
 
-        self.settings_page.set_profile_name(self.profile_name)
-        self.sync_settings_page()
+            # Aktuelle Listen immer leeren
+            self.task_lists = {key: [] for key in self.tabs}
 
-        # Aktuelle Listen immer leeren
-        self.task_lists = {key: [] for key in self.tabs}
+            if isinstance(data, dict):
+                saved_tasks = data.get("tasks", {})
 
-        if isinstance(data, dict):
-            saved_tasks = data.get("tasks", {})
+            # ===== MIGRATION: old event tabs → tasks =====
+            old_event_tasks = saved_tasks.get("eventTasks", [])
+            old_event_shopping = saved_tasks.get("eventShopping", [])
 
-        # ===== MIGRATION: old event tabs → tasks =====
-        old_event_tasks = saved_tasks.get("eventTasks", [])
-        old_event_shopping = saved_tasks.get("eventShopping", [])
+            if old_event_tasks:
+                for item in old_event_tasks:
+                    item["event"] = True
+                    item.setdefault("schedule", "daily")
+                saved_tasks.setdefault("tasks", []).extend(old_event_tasks)
 
-        if old_event_tasks:
-            for item in old_event_tasks:
-                item["event"] = True
-                item.setdefault("schedule", "daily")
-            saved_tasks.setdefault("tasks", []).extend(old_event_tasks)
+            if old_event_shopping:
+                for item in old_event_shopping:
+                    item.setdefault("schedule", "season")
+                    item["type"] = "shopping"
+                saved_tasks.setdefault("shopping", []).extend(old_event_shopping)
 
-        if old_event_shopping:
-            for item in old_event_shopping:
-                item.setdefault("schedule", "season")
-                item["type"] = "shopping"
-            saved_tasks.setdefault("shopping", []).extend(old_event_shopping)
+            # ===== MIGRATION: dailyTasks / weeklyTasks → tasks =====
+            for old_tab, default_schedule in (("dailyTasks", "daily"), ("weeklyTasks", "weekly")):
+                for item in saved_tasks.get(old_tab, []):
+                    if item.get("type") != "shopping":
+                        item.setdefault("schedule", default_schedule)
+                        saved_tasks.setdefault("tasks", []).append(item)
 
-        # ===== MIGRATION: dailyTasks / weeklyTasks → tasks =====
-        for old_tab, default_schedule in (("dailyTasks", "daily"), ("weeklyTasks", "weekly")):
-            for item in saved_tasks.get(old_tab, []):
-                if item.get("type") != "shopping":
+            # ===== MIGRATION: dailyShopping + weeklyShopping → shopping =====
+            for old_tab, default_schedule in (("dailyShopping", "daily"), ("weeklyShopping", "weekly")):
+                for item in saved_tasks.get(old_tab, []):
                     item.setdefault("schedule", default_schedule)
-                    saved_tasks.setdefault("tasks", []).append(item)
+                    item["type"] = "shopping"
+                    saved_tasks.setdefault("shopping", []).append(item)
 
-        # ===== MIGRATION: dailyShopping + weeklyShopping → shopping =====
-        for old_tab, default_schedule in (("dailyShopping", "daily"), ("weeklyShopping", "weekly")):
-            for item in saved_tasks.get(old_tab, []):
-                item.setdefault("schedule", default_schedule)
-                item["type"] = "shopping"
-                saved_tasks.setdefault("shopping", []).append(item)
+            for tab, items in saved_tasks.items():
+                if tab not in self.task_lists:
+                    continue
 
-        for tab, items in saved_tasks.items():
-            if tab not in self.task_lists:
-                continue
+                for item in items:
+                    if item.get("type") == "shopping":
+                        card = ShoppingCard(
+                            priority=item.get("priority", "middle"),
+                            amount=str(item.get("amount", "1")),
+                            title=item.get("title", ""),
+                            location=item.get("location", ""),
+                            price=item.get("price", "0"),
+                            schedule=item.get("schedule", "daily"),
+                            is_event=item.get("event", False),
+                            currency=item.get("currency", "kinah"),
+                            character=item.get("character", ""),
+                            template_id=item.get("template_id", ""),
+                            card_id=item.get("card_id", ""),
+                        )
+                    else:
+                        card = TaskCard(
+                            item.get("title", ""),
+                            item.get("description", ""),
+                            item.get("priority", "middle"),
+                            item.get("event", False),
+                            schedule=item.get("schedule", "daily"),
+                            character=item.get("character", ""),
+                            template_id=item.get("template_id", ""),
+                            location=item.get("location", ""),
+                            card_id=item.get("card_id", ""),
+                            amount=item.get("amount", "1"),
+                        )
 
-            for item in items:
-                if item.get("type") == "shopping":
-                    card = ShoppingCard(
-                        priority=item.get("priority", "middle"),
-                        amount=str(item.get("amount", "1")),
-                        title=item.get("title", ""),
-                        location=item.get("location", ""),
-                        price=item.get("price", "0"),
-                        schedule=item.get("schedule", "daily"),
-                        is_event=item.get("event", False),
-                        currency=item.get("currency", "kinah"),
-                        character=item.get("character", ""),
-                        template_id=item.get("template_id", ""),
-                        card_id=item.get("card_id", ""),
-                    )
-                else:
-                    card = TaskCard(
-                        item.get("title", ""),
-                        item.get("description", ""),
-                        item.get("priority", "middle"),
-                        item.get("event", False),
-                        schedule=item.get("schedule", "daily"),
-                        character=item.get("character", ""),
-                        template_id=item.get("template_id", ""),
-                        location=item.get("location", ""),
-                        card_id=item.get("card_id", ""),
-                        amount=item.get("amount", "1"),
-                    )
+                    if item.get("completed", False):
+                        card.set_completed(True)
 
-                if item.get("completed", False):
-                    card.set_completed(True)
+                    self._wire_card(card)
+                    self.task_lists[tab].append(card)
 
-                self._wire_card(card)
-                self.task_lists[tab].append(card)
+            self.item_templates = data.get("item_templates", [])
+            self.task_templates = data.get("task_templates", [])
+            self.standard_templates = data.get("standard_templates", {"tasks": [], "shopping": []})
+            self.tasks_page.update_templates(self.item_templates)
+            self.tasks_page.update_task_templates(self.task_templates)
+            self.tasks_page.update_standard_templates(self.standard_templates)
 
-        self.item_templates = data.get("item_templates", [])
-        self.task_templates = data.get("task_templates", [])
-        self.standard_templates = data.get("standard_templates", {"tasks": [], "shopping": []})
-        self.tasks_page.update_templates(self.item_templates)
-        self.tasks_page.update_task_templates(self.task_templates)
-        self.tasks_page.update_standard_templates(self.standard_templates)
+            # Reconcile: add missing cards for templates that are still is_general=True
+            self._sync_shopping_from_templates({})
+            self._sync_tasks_from_templates({})
 
-        # Reconcile: add missing cards for templates that are still is_general=True
-        self._sync_shopping_from_templates({})
-        self._sync_tasks_from_templates({})
+            self.refresh()
+            raw_maps = data.get("flow_maps")
+            old_map = data.get("flow_map", {})
+            if raw_maps:
+                self.flow_maps = raw_maps
+                self.active_flow_map_name = data.get("active_flow_map", next(iter(raw_maps)))
+            elif old_map:
+                self.flow_maps = {"Map 1": old_map}
+                self.active_flow_map_name = "Map 1"
+            else:
+                self.flow_maps = {}
+                self.active_flow_map_name = "Map 1"
+            if self.flow_map_window:
+                self.flow_map_window.load_flow_data(self.flow_maps.get(self.active_flow_map_name, {}))
+                self.flow_map_window.set_map_list(list(self.flow_maps.keys()) or ["Map 1"], self.active_flow_map_name)
+                for node in self.flow_map_window.nodes.values():
+                    if node.icon == "character" and node.character_items:
+                        self._sync_character_items_to_shopping(node.title, node.character_items)
+            self._build_planner_state = data.get("build_planner")
+            if self.item_database_window and hasattr(self.item_database_window, "set_pending_loadout_state"):
+                self.item_database_window.set_pending_loadout_state(self._build_planner_state)
 
-        self.refresh()
-        raw_maps = data.get("flow_maps")
-        old_map = data.get("flow_map", {})
-        if raw_maps:
-            self.flow_maps = raw_maps
-            self.active_flow_map_name = data.get("active_flow_map", next(iter(raw_maps)))
-        elif old_map:
-            self.flow_maps = {"Map 1": old_map}
-            self.active_flow_map_name = "Map 1"
-        else:
-            self.flow_maps = {}
-            self.active_flow_map_name = "Map 1"
-        if self.flow_map_window:
-            self.flow_map_window.load_flow_data(self.flow_maps.get(self.active_flow_map_name, {}))
-            self.flow_map_window.set_map_list(list(self.flow_maps.keys()) or ["Map 1"], self.active_flow_map_name)
-            for node in self.flow_map_window.nodes.values():
-                if node.icon == "character" and node.character_items:
-                    self._sync_character_items_to_shopping(node.title, node.character_items)
-        self._build_planner_state = data.get("build_planner")
-        if self.item_database_window and hasattr(self.item_database_window, "set_pending_loadout_state"):
-            self.item_database_window.set_pending_loadout_state(self._build_planner_state)
+            self._rebuild_characters()
+            if hasattr(self.header, "set_profile"):
+                self.header.set_profile(self.profile_name)
+        finally:
+            # Restore finished -- releasing the guard HERE, before
+            # update_countdowns() below, deliberately keeps that call's
+            # documented behaviour intact (a reset that is due at load time
+            # still persists itself), while everything above it is now
+            # structurally unable to save stale state. The guard stays on
+            # only when the file on disk could not be read at all.
+            self._profile_loading = unrecoverable
 
-        self._rebuild_characters()
-        if hasattr(self.header, "set_profile"):
-            self.header.set_profile(self.profile_name)
+        if status == "bak":
+            self.show_toast("Profile restored from backup")
 
         # Real, confirmed data-loss bug found + fixed (User-reported,
         # 2026-09-10, screenshot: a 122 KB profile got reduced to 23 KB just
@@ -2402,6 +2435,21 @@ class MainWindow(QMainWindow):
             self.save_profile(silent=True)
 
     def save_profile(self, silent=False, explicit=False):
+        # Re-entrancy guard, the STRUCTURAL half of the 2.0.5 data-loss fix
+        # (the other half is the call ORDER documented at the end of
+        # load_profile). While load_profile is restoring, every attribute
+        # read below may still hold the PREVIOUS profile's value (or None),
+        # so any save triggered from inside that window -- most famously
+        # update_countdowns() -> check_auto_resets() -> save_profile() when a
+        # daily/weekly reset is due -- would write stale data straight over
+        # the real file. The flag also stays True after a load that found
+        # BOTH the profile and its .bak unreadable, so a corrupt file is
+        # never overwritten by a background auto-save; a deliberate
+        # "Save Profile" click (explicit=True) is the user's way out.
+        if self._profile_loading and not explicit:
+            logger.debug("save_profile skipped: profile load in progress / profile file unreadable")
+            return
+
         # "Default"/"Default_de"/"Default_ru" are the language-picker starter
         # templates (see _is_lang_default), not a real ongoing profile --
         # renaming away from "Default" already re-creates a fresh template
@@ -2487,8 +2535,14 @@ class MainWindow(QMainWindow):
 
         profile_path = self.profile_dir / f"{self.profile_name}.json"
 
-        with open(profile_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        # Local import, mirroring this file's existing in-method imports --
+        # keeps the new dependency next to the only two places that use it.
+        from core.persistence import atomic_write_json, stamp_schema
+
+        # tmp + fsync + .bak rotation + os.replace: a crash mid-write can no
+        # longer truncate the profile (audit §2, "non-atomic writes"), and the
+        # previous good content always survives one write as <name>.json.bak.
+        atomic_write_json(profile_path, stamp_schema(data))
 
         self.save_last_profile(profile_path)
 
