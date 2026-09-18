@@ -23,3 +23,5 @@ ItemDatabase/data/
 
 # Discord announcement draft — internal, not part of the repo
 DISCORD.md
+# CodeGraph local index (per-repo, never committed)
+.codegraph/
