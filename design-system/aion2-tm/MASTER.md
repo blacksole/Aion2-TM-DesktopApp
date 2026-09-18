@@ -105,6 +105,27 @@ Chaque thème redéfinit **au plus** : `accent`, `accent.hover`, `accent.soft`, 
 
 Valeurs de départ : reprises des blocs QSS actuels, à ajuster **uniquement** si le test de contraste échoue (`fg.on-accent` sur `accent` ≥ 4.5:1, `fg.muted` sur `bg.surface` ≥ 4.5:1, `fg` sur `bg.elevated` ≥ 7:1).
 
+#### Valeurs complètes par thème (ajout 2026-09-18, implémentation `core/theme.py`)
+
+Le tableau ci-dessus ne fixait que `accent`, `secondary`, `bg.window` et `bg.surface` : les quatre tokens restants du périmètre autorisé (`accent.hover`, `accent.soft`, `secondary.soft`, et le reste de la famille `bg.*`) manquaient. Complétés ici plutôt qu'inventés en ligne dans le code.
+
+| Thème | accent.hover | accent.soft | secondary.soft | bg.elevated | bg.overlay | bg.input |
+|---|---|---|---|---|---|---|
+| Abyss | `#67e8f9` | `rgba(34,211,238,0.14)` | `rgba(167,139,250,0.16)` | `#151e33` | `#1c2740` | `#0b1120` |
+| Inferno | `#fdba74` | `rgba(251,146,60,0.14)` | `rgba(253,164,175,0.16)` | `#241616` | `#2e1c1c` | `#140c0c` |
+| Emerald | `#6ee7b7` | `rgba(52,211,153,0.14)` | `rgba(163,230,53,0.16)` | `#11231c` | `#172d24` | `#081410` |
+| Frostbite | `#bae6fd` | `rgba(125,211,252,0.14)` | `rgba(196,181,253,0.16)` | `#17233b` | `#1e2c49` | `#0b1220` |
+| Obsidian | `#f8fafc` | `rgba(229,231,235,0.14)` | `rgba(148,163,184,0.16)` | `#18181c` | `#212126` | `#0a0a0c` |
+| Void | `#d8b4fe` | `rgba(192,132,252,0.14)` | `rgba(244,114,182,0.16)` | `#1a1528` | `#231c34` | `#0c0a14` |
+
+Règles de dérivation (une seule, pour que le prochain thème s'ajoute sans arbitrage) : `accent.hover` = la teinte 300 de l'accent ; `accent.soft` = l'accent à alpha 0.14, `secondary.soft` = le secondaire à alpha 0.16 (mêmes alphas qu'Abyss) ; `bg.elevated` et `bg.overlay` prolongent l'échelle propre au thème avec les mêmes écarts de luminance qu'Abyss (950→900→850→800) ; `bg.input` = `bg.window`, comme Abyss.
+
+**Note contraste (vérifiée le 2026-09-18, `tests/test_qss_contrast.py`)** : aucune valeur n'a eu besoin d'être ajustée — les six thèmes passent les cinq paires du §2 avec de la marge (minimum observé : 4.53:1 pour `danger` sur `danger.soft` en Frostbite, seuil 3:1 ; `fg.on-accent` sur `accent` va de 7.13:1 en Void à 15.21:1 en Obsidian). `fg.on-accent` reste `navy.950` dans les six thèmes, y compris Obsidian dont l'accent est quasi blanc.
+
+#### Typographie — fichiers réellement embarqués (ajout 2026-09-18)
+
+`assets/fonts/` contient les statiques Barlow 400/500/600 et Barlow Condensed 600/700 depuis `google/fonts`. **JetBrains Mono n'existe pas en statique dans `google/fonts`** (le dépôt ne publie que la variable `JetBrainsMono[wght].ttf`, axe 100–800) : c'est ce fichier qui est embarqué, il couvre 400 et 500. URLs exactes et licences OFL dans `assets/fonts/SOURCES.md`.
+
 ## 3. Composants (règles, pas de nouveaux widgets)
 
 | Composant | Règle |

@@ -1,0 +1,2307 @@
+/* =====================================================================
+   Aion2 TM — QSS TEMPLATE  (« Aether Cockpit », design-system/aion2-tm/MASTER.md)
+
+   ONE set of rules.  A theme is not another block, it is another set of
+   token values: core/theme.build_qss(theme) substitutes every "curly-curly"
+   placeholder below from core.theme.THEMES[theme].  There is deliberately no
+   QWidget[theme="…"] selector left anywhere in this file — the 100 of them
+   the old ui/styles.qss carried are exactly what made an accent change a
+   six-place edit (audit A §7-1, D/M5).
+
+   ASSET_PATH is replaced by the loader with the repo root (dev) or
+   sys._MEIPASS (frozen), same as before.
+
+   Conventions, all from MASTER:
+     §3 primary   = accent fill + fg_on_accent text, never a gradient
+     §3 pill      = bg_elevated / border / fg_secondary,
+                    active accent_soft + accent border + fg
+     §3 destructive = transparent + danger outline/text, hover danger_soft
+     §2 focus.ring  = focus_ring_width px accent on every focusable widget
+     §1 radii     = radius_sm inputs/pills/badges, radius_md cards/panels
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   0. Base
+   ------------------------------------------------------------------ */
+
+QWidget {
+    font-family: {{font_body}};
+    font-size: {{text_base}}px;
+    color: {{fg}};
+}
+
+QMainWindow,
+QDialog {
+    background-color: {{bg_window}};
+}
+
+QLabel {
+    background: transparent;
+}
+
+/* ---------------------------------------------------------------------
+   0b. Focus ring (MASTER §2 focus.ring — every focusable widget, every
+   theme).  Scoped per widget type rather than a bare `*:focus` so that
+   container widgets (scroll areas, panels, the window itself) don't draw
+   a ring when a child takes focus.
+   ------------------------------------------------------------------ */
+
+QPushButton:focus,
+QToolButton:focus,
+QComboBox:focus,
+QLineEdit:focus,
+QTextEdit:focus,
+QPlainTextEdit:focus,
+QSpinBox:focus,
+QTimeEdit:focus,
+QDateTimeEdit:focus,
+QAbstractSpinBox:focus,
+QSlider:focus,
+QCheckBox:focus,
+QRadioButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+}
+
+QCheckBox::indicator:focus,
+QRadioButton::indicator:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+}
+
+QListWidget::item:focus,
+QListView::item:focus,
+QTreeView::item:focus,
+QTableView::item:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+}
+
+QTabBar::tab:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+}
+
+/* #taskCard is the objectName of BOTH the task card (main_window.TaskCard)
+   and the shopping card (ui/widgets/shopping_card.py:97) — there is no
+   separate #shoppingCard in the app, so this one rule covers both. */
+#taskCard:focus,
+#statCard:focus,
+#timerCard:focus,
+#armoryCardRow:focus,
+#FlowNodeCard:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+}
+
+/* ---------------------------------------------------------------------
+   1. Menus, scrollbars, tooltips
+   ------------------------------------------------------------------ */
+
+QMenuBar {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    padding: {{space_1}}px;
+    border-bottom: {{border_width}}px solid {{border}};
+}
+
+QMenuBar::item {
+    padding: {{space_1}}px {{space_3}}px;
+    border-radius: {{radius_sm}}px;
+}
+
+QMenuBar::item:selected {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+QMenu {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+}
+
+QMenu::item {
+    padding: {{space_2}}px {{space_6}}px;
+}
+
+QMenu::item:selected {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+/* Flat scrollbars, no arrow buttons — the platform's native ones clash
+   with every one of the app's dark themes. */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: {{border_strong}};
+    border-radius: 5px;
+    min-height: 24px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: {{accent}};
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+    background: none;
+    border: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: {{border_strong}};
+    border-radius: 5px;
+    min-width: 24px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: {{accent}};
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+    background: none;
+    border: none;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}
+
+/* MASTER §1: the single allowed shadow surface. */
+QToolTip {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_medium}};
+}
+
+/* ---------------------------------------------------------------------
+   2. Header / titles / page chrome
+   ------------------------------------------------------------------ */
+
+#appIcon {
+    background-color: {{accent}};
+    color: {{fg_on_accent}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_2}}px;
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#mainTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_display}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#subtitle {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+}
+
+#PageTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#PageSubtitle,
+#sectionTitle {
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#userLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    padding-right: {{space_2}}px;
+}
+
+#loginTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#loginInfo {
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+}
+
+#footer {
+    color: {{fg_muted}};
+    border-top: {{border_width}}px solid {{border}};
+    padding-top: {{space_3}}px;
+}
+
+#scrollArea,
+#OverlayScroll {
+    background: transparent;
+    border: none;
+}
+
+#TopBar {
+    background: transparent;
+    border: none;
+}
+
+/* ---------------------------------------------------------------------
+   3. Nav pills / tabs  (MASTER §3 "pill" — one tab style app-wide)
+   ------------------------------------------------------------------ */
+
+#tabButton,
+#topTabButton,
+#filterButton,
+#sortButton,
+#templateSourceTab,
+#toggleButton,
+#dayButton,
+#minuteToggleButton,
+#themeToggleButton,
+#GeniusSegBtn,
+#GeniusBoardTabBtn,
+#SkillFilterButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#tabButton:hover,
+#topTabButton:hover,
+#filterButton:hover,
+#sortButton:hover,
+#templateSourceTab:hover,
+#toggleButton:hover,
+#dayButton:hover,
+#minuteToggleButton:hover,
+#themeToggleButton:hover,
+#GeniusSegBtn:hover,
+#GeniusBoardTabBtn:hover,
+#SkillFilterButton:hover {
+    border-color: {{border_strong}};
+    color: {{fg}};
+}
+
+#tabButton[active="true"],
+#topTabButton[active="true"],
+#filterButton[active="true"],
+#toggleButton[active="true"],
+#dayButton[active="true"],
+#sortButton:checked,
+#templateSourceTab:checked,
+#minuteToggleButton:checked,
+#themeToggleButton:checked,
+#GeniusSegBtn:checked,
+#GeniusBoardTabBtn:checked,
+#SkillFilterButton:checked {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{accent}};
+    font-weight: {{font_weight_bold}};
+}
+
+#topTabButton {
+    font-size: {{text_lg}}px;
+    padding: {{space_3}}px {{space_6}}px;
+}
+
+#dayButton {
+    font-size: {{text_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+#themeToggleButton {
+    padding: {{space_3}}px {{space_4}}px;
+    font-size: {{text_md}}px;
+    text-align: left;
+}
+
+#pageIconButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
+}
+
+#pageIconButton:hover {
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#pageIconButton:pressed {
+    background-color: {{accent_soft}};
+}
+
+/* QTabWidget natives adopt the same pill style (MASTER §3). */
+#settingsTabWidget,
+#timerModeTabWidget {
+    border: none;
+    background: transparent;
+}
+
+#settingsTabWidget QTabBar::tab,
+#timerModeTabWidget QTabBar::tab {
+    background: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-bottom: none;
+    border-radius: {{radius_sm}}px {{radius_sm}}px 0 0;
+    padding: {{space_2}}px {{space_6}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-width: 110px;
+}
+
+#timerModeTabWidget QTabBar::tab {
+    padding: {{space_1}}px {{space_3}}px;
+    min-width: 60px;
+}
+
+#settingsTabWidget QTabBar::tab:selected,
+#timerModeTabWidget QTabBar::tab:selected {
+    background: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{accent}};
+    border-bottom: none;
+}
+
+#settingsTabWidget QTabBar::tab:hover:!selected,
+#timerModeTabWidget QTabBar::tab:hover:!selected {
+    background: {{bg_overlay}};
+    color: {{fg}};
+}
+
+#settingsTabWidget::pane,
+#timerModeTabWidget::pane {
+    border: {{border_width}}px solid {{border}};
+    border-radius: 0 {{radius_md}}px {{radius_md}}px {{radius_md}}px;
+    background: transparent;
+    padding: {{space_1}}px;
+}
+
+/* ---------------------------------------------------------------------
+   4. Cards  (MASTER §3 "Carte": bg.elevated, 1 px border, radius md,
+   padding 3 — a card has a surface LEVEL, never a shadow)
+   ------------------------------------------------------------------ */
+
+#statCard,
+#addPanel,
+#taskCard,
+#timerCard,
+#settingsRow,
+#armoryCardRow,
+#settingsThemeContainer,
+#TaskProgressBar,
+#profileCard,
+#SkillDescCard,
+#GeniusOwnedTile,
+#DaevanionAccordionSection {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+#settingsRow,
+#armoryCardRow {
+    min-height: 52px;
+}
+
+#armoryCardRow:hover {
+    background-color: {{bg_overlay}};
+    border-color: {{accent}};
+}
+
+#timerCard {
+    max-width: 190px;
+    min-height: 72px;
+}
+
+#taskCard[selected="true"] {
+    border: {{focus_ring_width}}px solid {{accent}};
+    background-color: {{accent_soft}};
+}
+
+/* Completed: title goes muted and the check goes ok (MASTER §3).  The
+   old rule here was `opacity: 0.6`, which QSS silently ignores on a
+   widget — the state simply never showed. */
+#taskCard[completed="true"] {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+}
+
+#taskCard[completed="true"] #taskTitle {
+    color: {{fg_muted}};
+}
+
+#taskCard[completed="true"] #checkButton {
+    color: {{ok}};
+}
+
+#statTitle {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+#taskTitle {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#taskDescription {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+#taskSection {
+    background: transparent;
+    border: none;
+}
+
+#checkButton {
+    color: {{fg_muted}};
+    background: transparent;
+    border: none;
+    font-size: {{text_2xl}}px;
+}
+
+#checkButton:hover {
+    color: {{ok}};
+}
+
+/* MASTER §3 "Bouton destructif": outline + text danger, no fill. */
+#deleteButton {
+    background: transparent;
+    color: {{danger}};
+    border: none;
+    font-size: {{text_lg}}px;
+}
+
+#deleteButton:hover {
+    color: {{danger}};
+    background-color: {{danger_soft}};
+    border-radius: {{radius_sm}}px;
+}
+
+/* ---------------------------------------------------------------------
+   5. Fields  (MASTER §3 "Champ": bg.input, border, focus accent,
+   placeholder fg.muted — fixes audit D/C3's 2.48:1 placeholder)
+   ------------------------------------------------------------------ */
+
+QLineEdit,
+QTextEdit,
+QPlainTextEdit,
+QSpinBox,
+QTimeEdit,
+QDateTimeEdit {
+    background-color: {{bg_input}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    placeholder-text-color: {{fg_muted}};
+}
+
+QLineEdit:focus,
+QTextEdit:focus,
+QPlainTextEdit:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+}
+
+QLineEdit:disabled,
+QTextEdit:disabled,
+QPlainTextEdit:disabled {
+    color: {{fg_muted}};
+    background-color: {{bg_surface}};
+    border-color: {{border}};
+}
+
+#profileInput {
+    background-color: {{bg_input}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    min-width: 220px;
+    max-width: 320px;
+}
+
+#settingsLineEditReadOnly {
+    background-color: {{bg_surface}};
+    color: {{fg_muted}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    font-family: {{font_mono}};
+    font-size: {{text_sm}}px;
+}
+
+#settingsPathLabel {
+    background-color: {{bg_input}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+    font-family: {{font_mono}};
+    font-size: {{text_sm}}px;
+}
+
+QComboBox {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    selection-background-color: {{accent_soft}};
+    selection-color: {{fg}};
+}
+
+QComboBox QAbstractItemView::item {
+    padding: {{space_2}}px;
+}
+
+QComboBox#priorityInput {
+    font-weight: {{font_weight_bold}};
+}
+
+#priorityInput,
+#settingsCombo,
+#ItemSetCombo,
+#BuildSwitcherCombo,
+#GeniusLineCombo {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_8}}px {{space_2}}px {{space_3}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 20px;
+}
+
+#priorityInput:hover,
+#settingsCombo:hover {
+    border-color: {{accent}};
+}
+
+#priorityInput:disabled {
+    color: {{fg_muted}};
+    background-color: {{bg_surface}};
+    border-color: {{border}};
+}
+
+#priorityInput QLineEdit {
+    background: transparent;
+    color: {{fg}};
+    border: none;
+    padding: 0;
+}
+
+#priorityInput::drop-down,
+#FlowMapCombo::drop-down {
+    border: none;
+    width: 24px;
+    background: transparent;
+}
+
+#priorityInput QAbstractItemView {
+    background-color: {{bg_overlay}};
+    border: {{border_width}}px solid {{border}};
+    selection-background-color: {{accent_soft}};
+    selection-color: {{fg}};
+    color: {{fg}};
+    padding: {{space_1}}px;
+}
+
+#priorityInput::down-arrow,
+#settingsCombo::down-arrow,
+#FlowZoomCombo::down-arrow,
+#FlowSymbolCombo::down-arrow {
+    image: url(ASSET_PATH/assets/icons/arrow_down_orange.png);
+    width: 14px;
+    height: 14px;
+    border: none;
+    background: transparent;
+}
+
+#settingsTimeEdit,
+#settingsComboBox {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    min-height: 34px;
+    font-size: {{text_md}}px;
+}
+
+#settingsTimeEdit {
+    min-width: 90px;
+    font-family: {{font_mono}};
+}
+
+#settingsComboBox {
+    min-width: 140px;
+}
+
+#settingsComboBox QAbstractItemView {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    selection-background-color: {{accent_soft}};
+    selection-color: {{fg}};
+}
+
+#settingsTimeInput {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    font-family: {{font_mono}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 20px;
+}
+
+#settingsTimeInput::up-button,
+#settingsTimeInput::down-button {
+    width: 22px;
+    border: none;
+    background: transparent;
+}
+
+#settingsTimeInput::up-button:hover,
+#settingsTimeInput::down-button:hover {
+    background-color: {{accent_soft}};
+    border-radius: {{radius_sm}}px;
+}
+
+#settingsTimeInput::up-arrow {
+    image: url(ASSET_PATH/assets/icons/arrow_up_orange.png);
+    width: 10px;
+    height: 10px;
+}
+
+#settingsTimeInput::down-arrow {
+    image: url(ASSET_PATH/assets/icons/arrow_down_orange.png);
+    width: 10px;
+    height: 10px;
+}
+
+/* Checkbox indicator — checked reads as the accent, MASTER §3. */
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_sm}}px;
+    background: {{bg_input}};
+}
+
+QCheckBox::indicator:hover {
+    border: {{border_width}}px solid {{accent}};
+}
+
+QCheckBox::indicator:checked {
+    background: {{accent}};
+    border: {{border_width}}px solid {{accent}};
+}
+
+#settingsCheckbox,
+#eventCheckBox {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    padding: {{space_2}}px;
+    min-height: 34px;
+}
+
+#settingsLabel,
+#settingsInlineLabel,
+#FieldLabel {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    min-height: 28px;
+}
+
+#settingsDescription,
+#settingsSectionDescription,
+#resetHintLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    padding-right: {{space_1}}px;
+}
+
+/* ---------------------------------------------------------------------
+   6. Buttons
+   ------------------------------------------------------------------ */
+
+/* MASTER §3 primary: flat accent + fg_on_accent.  This is the
+   single fix for audit D/C3's 1.81:1 white-on-cyan. */
+#primaryButton,
+#FlowSaveButton,
+#emptyStateAction,
+#toastActionButton {
+    background-color: {{accent}};
+    color: {{fg_on_accent}};
+    border: {{border_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_4}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#primaryButton:hover,
+#FlowSaveButton:hover,
+#emptyStateAction:hover,
+#toastActionButton:hover {
+    background-color: {{accent_hover}};
+    border-color: {{accent_hover}};
+    color: {{fg_on_accent}};
+}
+
+#primaryButton:pressed,
+#FlowSaveButton:pressed,
+#emptyStateAction:pressed,
+#toastActionButton:pressed {
+    background-color: {{accent}};
+    border-color: {{accent}};
+}
+
+#primaryButton:disabled,
+#FlowSaveButton:disabled {
+    background-color: {{bg_elevated}};
+    border-color: {{border}};
+    color: {{fg_muted}};
+}
+
+/* MASTER §3 secondary. */
+#secondaryButton,
+#iconButton,
+#smallIconButton,
+#ManualResetBtn,
+#helpButton,
+#templateButton,
+#FlowCancelButton,
+#GuideEditButton,
+#profileSwitchButton,
+#PanelNavButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_3}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#secondaryButton:hover,
+#iconButton:hover,
+#smallIconButton:hover,
+#ManualResetBtn:hover,
+#helpButton:hover,
+#templateButton:hover,
+#GuideEditButton:hover,
+#profileSwitchButton:hover {
+    background-color: {{bg_overlay}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#secondaryButton:pressed,
+#ManualResetBtn:pressed,
+#helpButton:pressed,
+#profileSwitchButton:pressed {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+#iconButton,
+#smallIconButton {
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#helpButton {
+    background-color: transparent;
+    color: {{fg_muted}};
+    border-radius: {{radius_full}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px;
+}
+
+#ManualResetBtn {
+    font-size: {{text_md}}px;
+    padding: 0px;
+}
+
+#templateButton {
+    background-color: {{accent_soft}};
+    color: {{accent}};
+    border-color: {{accent}};
+    padding: {{space_2}}px {{space_3}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* MASTER §3 destructive. */
+#DeleteDialogDangerBtn,
+#FlowDeleteMapBtn,
+#FlowResetMapBtn {
+    background-color: transparent;
+    color: {{danger}};
+    border: {{border_width}}px solid {{danger}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_4}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#DeleteDialogDangerBtn:hover,
+#FlowDeleteMapBtn:hover,
+#FlowResetMapBtn:hover {
+    background-color: {{danger_soft}};
+    color: {{danger}};
+    border-color: {{danger}};
+}
+
+#linkButton {
+    background: transparent;
+    border: none;
+    color: {{secondary}};
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_1}}px 0;
+    text-align: left;
+}
+
+#linkButton:hover {
+    color: {{accent}};
+    text-decoration: underline;
+}
+
+#donateButton {
+    background-color: {{ok_soft}};
+    border: {{border_width}}px solid {{ok}};
+    border-radius: {{radius_sm}}px;
+    color: {{ok}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+#donateButton:hover {
+    background-color: {{ok_soft}};
+    border-color: {{ok}};
+    color: {{fg}};
+}
+
+#donateQrButton {
+    background: transparent;
+    border: {{border_width}}px solid {{ok}};
+    border-radius: {{radius_sm}}px;
+    color: {{ok}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#donateQrButton:hover {
+    background-color: {{ok_soft}};
+    color: {{ok}};
+}
+
+#donateQrHint {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+#updateAvailableButton {
+    background-color: {{warn_soft}};
+    border: {{border_width}}px solid {{warn}};
+    border-radius: {{radius_sm}}px;
+    color: {{warn}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+#updateAvailableButton:hover {
+    background-color: {{warn_soft}};
+    border-color: {{warn}};
+    color: {{fg}};
+}
+
+#overlayToggleBtn {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    color: {{fg_secondary}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_1}}px {{space_2}}px;
+    text-align: left;
+}
+
+#overlayToggleBtn:hover {
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#overlayToggleBtn:checked {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+/* ---------------------------------------------------------------------
+   7. Badges  (MASTER §3: 11 px caps, radius sm, *.soft fill, full-color
+   text; schedule → secondary, MISSED → danger)
+   ------------------------------------------------------------------ */
+
+#scheduleDaily,
+#scheduleWeekly,
+#scheduleSeason,
+#eventBadge,
+#missedBadge,
+#newBadge,
+#priorityLow,
+#priorityMedium,
+#priorityMiddle,
+#priorityHigh,
+#ArcanaGradePill,
+#GeniusLvlBadge,
+#changelogHotfixBadge {
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: {{letter_spacing_caps}};
+    border: {{border_width}}px solid transparent;
+}
+
+#scheduleDaily,
+#scheduleWeekly,
+#scheduleSeason,
+#ArcanaGradePill,
+#GeniusLvlBadge {
+    color: {{secondary}};
+    background-color: {{secondary_soft}};
+}
+
+#eventBadge,
+#newBadge,
+#priorityMedium,
+#priorityMiddle {
+    color: {{warn}};
+    background-color: {{warn_soft}};
+}
+
+#missedBadge,
+#priorityHigh,
+#changelogHotfixBadge {
+    color: {{danger}};
+    background-color: {{danger_soft}};
+}
+
+#priorityLow {
+    color: {{ok}};
+    background-color: {{ok_soft}};
+}
+
+/* Schedule / priority / currency toggles — pill rules, colored by meaning
+   when checked. */
+#scheduleToggleBtn,
+#priorityToggleLow,
+#priorityToggleMiddle,
+#priorityToggleHigh,
+#currencyToggleKinah,
+#currencyToggleAbyss {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#scheduleToggleBtn:checked,
+#currencyToggleAbyss:checked {
+    background-color: {{secondary_soft}};
+    color: {{secondary}};
+    border-color: {{secondary}};
+}
+
+#scheduleToggleBtn:disabled,
+#scheduleToggleBtn:checked:disabled {
+    background-color: {{bg_surface}};
+    color: {{fg_muted}};
+    border-color: {{border}};
+}
+
+#priorityToggleLow:checked {
+    background-color: {{ok_soft}};
+    color: {{ok}};
+    border-color: {{ok}};
+}
+
+#priorityToggleMiddle:checked,
+#currencyToggleKinah:checked {
+    background-color: {{warn_soft}};
+    color: {{warn}};
+    border-color: {{warn}};
+}
+
+#priorityToggleHigh:checked {
+    background-color: {{danger_soft}};
+    color: {{danger}};
+    border-color: {{danger}};
+}
+
+#sortLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#sortSeparator {
+    color: {{border_strong}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* ---------------------------------------------------------------------
+   8. Toast  (MASTER §3: bg.overlay, border.strong, action in accent text)
+   ------------------------------------------------------------------ */
+
+#toastBar {
+    background-color: {{bg_overlay}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_2}}px {{space_3}}px;
+}
+
+#toastLabel {
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_medium}};
+    background: transparent;
+}
+
+#toastActionButton {
+    background: transparent;
+    border: none;
+    color: {{accent}};
+    font-weight: {{font_weight_bold}};
+    padding: 0px {{space_2}}px;
+}
+
+#toastActionButton:hover {
+    background: transparent;
+    border: none;
+    color: {{accent_hover}};
+    text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------
+   9. Empty state  (MASTER §3: 24 px muted icon, secondary-weight title,
+   muted hint, secondary-button action)
+   ------------------------------------------------------------------ */
+
+#emptyState {
+    background: transparent;
+    border: none;
+}
+
+#emptyStateTitle {
+    color: {{fg_secondary}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_medium}};
+}
+
+#emptyStateHint {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+}
+
+/* ---------------------------------------------------------------------
+   10. Sidebar  (MASTER §3: active = accent.soft fill + 2 px left bar
+   accent + fg text.  Audit D/M5: this is the element that never
+   rethemed — it was a fixed indigo in every theme.)
+   ------------------------------------------------------------------ */
+
+#SidebarWidget {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_3}}px;
+}
+
+#sidebarButton {
+    text-align: left;
+    padding: {{space_3}}px {{space_3}}px;
+    border: {{border_width}}px solid transparent;
+    border-left: {{focus_ring_width}}px solid transparent;
+    border-radius: {{radius_sm}}px;
+    background: transparent;
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#sidebarButton:hover {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+}
+
+#sidebarButton:checked {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid transparent;
+    border-left: {{focus_ring_width}}px solid {{accent}};
+}
+
+#ContentArea {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_4}}px;
+}
+
+#leftPanel,
+#LoadoutBackground {
+    background: transparent;
+    border: none;
+}
+
+/* ---------------------------------------------------------------------
+   11. Settings
+   ------------------------------------------------------------------ */
+
+#settingsTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#settingsSectionTitle {
+    color: {{accent}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+    margin-top: {{space_2}}px;
+}
+
+#aboutH1 {
+    color: {{accent}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+    margin-top: {{space_1}}px;
+}
+
+#aboutH2 {
+    color: {{fg}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#aboutH3 {
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#aboutSeparator {
+    background-color: {{border}};
+    border: none;
+    max-height: 1px;
+}
+
+#settingsSidebar {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    min-width: 160px;
+    max-width: 180px;
+    padding: {{space_2}}px;
+}
+
+#settingsPageSidebar {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+/* Both settings nav flavors (the dialog's :checked buttons and the page's
+   [active="true"] ones) now share the sidebar rule of MASTER §3 — the
+   "flowing tab" gradient is gone with every other decorative gradient. */
+#settingsSidebarButton,
+#settingsNavButton {
+    background-color: transparent;
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid transparent;
+    border-left: {{focus_ring_width}}px solid transparent;
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    text-align: left;
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#settingsSidebarButton:hover,
+#settingsNavButton:hover {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+}
+
+#settingsSidebarButton:checked,
+#settingsNavButton[active="true"],
+#settingsNavButton[active="true"]:hover {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid transparent;
+    border-left: {{focus_ring_width}}px solid {{accent}};
+}
+
+#settingsContentPanel,
+#settingsContentStack {
+    background-color: transparent;
+    border: none;
+    border-radius: {{radius_md}}px;
+}
+
+#themeButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_3}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 52px;
+}
+
+#themeButton:hover {
+    border-color: {{border_strong}};
+    color: {{fg}};
+}
+
+#themeButton:checked {
+    background-color: {{accent_soft}};
+    border: {{border_width}}px solid {{accent}};
+    color: {{fg}};
+}
+
+#themeLogo {
+    background: transparent;
+    border: none;
+}
+
+/* ---------------------------------------------------------------------
+   12. Profile card / header widgets
+   ------------------------------------------------------------------ */
+
+#profileAvatar {
+    background-color: {{accent}};
+    border-radius: {{radius_full}}px;
+    color: {{fg_on_accent}};
+    font-family: {{font_display}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#profileUsername {
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#profileVersion {
+    color: {{fg_muted}};
+    font-family: {{font_mono}};
+    font-size: {{text_xs}}px;
+}
+
+#smallTimerLabel {
+    color: {{warn}};
+    font-family: {{font_mono}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_bold}};
+    padding-left: {{space_1}}px;
+}
+
+#systemTimeLabel {
+    color: {{warn}};
+    font-family: {{font_mono}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+    padding-bottom: {{space_1}}px;
+}
+
+/* ---------------------------------------------------------------------
+   13. Progress bar  (MASTER §1: big numbers in the display face, the
+   semantic colors, no per-metric palette of its own)
+   ------------------------------------------------------------------ */
+
+#ProgressDoneIcon,
+#ProgressOpenIcon,
+#ProgressMissedIcon,
+#ProgressTotalIcon {
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#ProgressDoneVal,
+#ProgressOpenVal,
+#ProgressMissedVal,
+#ProgressTotalVal {
+    font-family: {{font_display}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#ProgressDoneSub,
+#ProgressOpenSub,
+#ProgressMissedSub,
+#ProgressTotalSub {
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+#ProgressDoneIcon,
+#ProgressDoneVal,
+#ProgressDoneSub {
+    color: {{ok}};
+}
+
+#ProgressOpenIcon,
+#ProgressOpenVal,
+#ProgressOpenSub {
+    color: {{warn}};
+}
+
+#ProgressMissedIcon,
+#ProgressMissedVal,
+#ProgressMissedSub {
+    color: {{danger}};
+}
+
+#ProgressTotalIcon,
+#ProgressTotalVal,
+#ProgressTotalSub {
+    color: {{accent}};
+}
+
+#ProgressExtra {
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#ProgressPct {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+#ProgressPctSub {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+/* ---------------------------------------------------------------------
+   14. Tables  (MASTER §3: caps muted headers, alternating surface levels,
+   mono right-aligned numbers)
+   ------------------------------------------------------------------ */
+
+QHeaderView::section {
+    background-color: {{bg_surface}};
+    color: {{fg_muted}};
+    border: none;
+    border-bottom: {{border_width}}px solid {{border}};
+    padding: {{space_2}}px {{space_3}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+QTableView,
+QTreeView,
+QListView {
+    background-color: {{bg_surface}};
+    alternate-background-color: {{bg_elevated}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    gridline-color: {{border}};
+    selection-background-color: {{accent_soft}};
+    selection-color: {{fg}};
+}
+
+QTableView::item,
+QTreeView::item,
+QListView::item {
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+QTableView::item:selected,
+QTreeView::item:selected,
+QListView::item:selected {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+#StatRowCell,
+#DetailInfoValue,
+#DetailEnchantValue,
+#GearScoreHeaderLabel,
+#GeniusLineValue,
+#GeniusOwnedValue,
+#SkillLevelValue {
+    font-family: {{font_mono}};
+    font-size: {{text_base}}px;
+}
+
+/* ---------------------------------------------------------------------
+   15. Dialogs
+   ------------------------------------------------------------------ */
+
+#DeleteConfirmDialog,
+#UpdateDialog,
+#DonateQrDialog,
+#TemplateItemPickerDialog,
+#ItemPickerPopup,
+#GeniusStatPopup {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+}
+
+#DeleteDialogTitle,
+#updateDialogTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#DeleteDialogDesc,
+#updateDialogStatus,
+#updateDialogNotesLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+}
+
+#DeleteDialogOptionBtn {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_4}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#DeleteDialogOptionBtn:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#DeleteDialogCancelBtn,
+#updateDialogLaterBtn {
+    background-color: transparent;
+    color: {{fg_muted}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_4}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#DeleteDialogCancelBtn:hover,
+#updateDialogLaterBtn:hover {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+    border-color: {{border_strong}};
+}
+
+#updateDialogNotes {
+    background-color: {{bg_input}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+    padding: {{space_3}}px;
+}
+
+#updateDialogSep {
+    color: {{border}};
+}
+
+#changelogVersionBtn {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_2}}px {{space_3}}px;
+    text-align: left;
+    min-width: 160px;
+}
+
+#changelogVersionBtn:hover {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+}
+
+#changelogVersionBtn:checked {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#changelogVersionBtnTitle {
+    background: transparent;
+    border: none;
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#changelogVersionBtnDate {
+    background: transparent;
+    border: none;
+    color: {{fg_muted}};
+    font-family: {{font_mono}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_regular}};
+}
+
+#changelogVersionHeader {
+    background: transparent;
+    border: none;
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* ---------------------------------------------------------------------
+   16. Flow Map  (MASTER §2: the Flow Map reads in secondary, not in a
+   separate blue palette)
+   ------------------------------------------------------------------ */
+
+#FlowCanvas,
+#FlowMapViewport,
+#FlowGuideView,
+#FlowContentOverlay {
+    background-color: {{bg_window}};
+}
+
+#FlowGuideView,
+#FlowContentOverlay {
+    background-color: transparent;
+}
+
+#FlowTopbar {
+    background-color: {{bg_surface}};
+    border-bottom: {{border_width}}px solid {{border}};
+}
+
+#FlowPlanTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#FlowModeTabs {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+#FlowModeButton,
+#FlowModeTabs #FlowModeButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_8}}px;
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#FlowModeTabs #FlowModeButton {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+#FlowModeButton:checked,
+#FlowModeTabs #FlowModeButton:checked {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{accent}};
+}
+
+#FlowNodeCard {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+#FlowNodeCard[status="active"] {
+    border: {{border_width}}px solid {{secondary}};
+}
+
+#FlowNodeCard[status="optional"] {
+    border: {{border_width}}px solid {{warn}};
+}
+
+#FlowNodeCard[status="locked"] {
+    border: {{border_width}}px solid {{border}};
+}
+
+#FlowNodeCard[multiSelected="true"] {
+    border: {{focus_ring_width}}px solid {{accent}};
+    background-color: {{accent_soft}};
+}
+
+#FlowNodeCard[status="completed"] #FlowDoneButton {
+    color: {{ok}};
+    border-color: {{ok}};
+}
+
+#FlowNodeIcon {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+#FlowNodeTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#FlowNodeDescription,
+#NodeItemLabel,
+#FlowInfoText,
+#FlowProgressHint,
+#StatusText {
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+}
+
+#FlowNodeAddButton {
+    background-color: transparent;
+    color: {{fg_secondary}};
+    border: none;
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px;
+    margin: 0px;
+}
+
+#FlowNodeAddButton:hover {
+    color: {{accent}};
+}
+
+#FlowNodeAddButton:pressed {
+    color: {{accent_hover}};
+}
+
+#FlowNodeAddHintButton,
+#FlowNodeAddHintButton[visibleState="true"] {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+#FlowNodeAddHintButton[visibleState="false"] {
+    icon: none;
+}
+
+#FlowDoneButton {
+    background-color: transparent;
+    color: {{fg_muted}};
+    border: {{focus_ring_width}}px solid {{border_strong}};
+    border-radius: {{radius_full}}px;
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#FlowDoneButton:hover {
+    color: {{ok}};
+    border-color: {{ok}};
+}
+
+#FlowConnectorLine,
+#FlowConnectorArrow {
+    color: {{border_strong}};
+    font-size: {{text_xl}}px;
+    padding: 0px;
+    margin: 0px;
+}
+
+#FlowConnectorPlus {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_full}}px;
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px;
+}
+
+#NodeEditorPanel,
+#StatusPanel,
+#FlowInfoBar,
+#ChainSidePanel,
+#DaevanionCanvasFrame,
+#StatsPane {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+#PanelTitle {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+#PanelCloseButton {
+    background: transparent;
+    color: {{fg_muted}};
+    border: none;
+    font-size: {{text_2xl}}px;
+}
+
+#PanelCloseButton:hover {
+    color: {{fg}};
+}
+
+#FlowInput,
+#FlowTextEdit,
+#FlowSymbolCombo,
+#FlowZoomCombo,
+#FlowMapCombo {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px;
+    font-size: {{text_md}}px;
+}
+
+#FlowSymbolCombo {
+    min-height: 58px;
+}
+
+#FlowZoomCombo {
+    padding: {{space_1}}px {{space_3}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 38px;
+}
+
+#FlowMapCombo {
+    padding: {{space_1}}px {{space_2}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 32px;
+}
+
+#FlowIconButton {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_display}}px;
+}
+
+#FlowIconButton:checked {
+    border: {{border_width}}px solid {{accent}};
+    background-color: {{accent_soft}};
+}
+
+#FlowMoveChildrenCb,
+#FlowOverlayCb,
+#FlowOptionalCheck {
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+    spacing: {{space_2}}px;
+}
+
+#FlowMoveChildrenCb::indicator,
+#FlowOverlayCb::indicator,
+#FlowOptionalCheck::indicator {
+    width: 16px;
+    height: 16px;
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_sm}}px;
+    background-color: {{bg_input}};
+}
+
+#FlowMoveChildrenCb::indicator:checked {
+    background-color: {{accent}};
+    border-color: {{accent}};
+}
+
+#FlowOverlayCb::indicator:checked {
+    background-color: {{secondary}};
+    border-color: {{secondary}};
+}
+
+#FlowOptionalCheck::indicator:checked {
+    background-color: {{warn}};
+    border-color: {{warn}};
+}
+
+#FlowOptionalCheck::indicator:hover {
+    border-color: {{warn}};
+}
+
+#FlowToolBar {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+#FlowToolButton,
+#FlowHomeBtn,
+#FlowResetMapBtn {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+    min-width: 44px;
+    max-width: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    padding: 0px;
+}
+
+#FlowToolButton:hover,
+#FlowHomeBtn:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#FlowToolButton:checked,
+#FlowHomeBtn:pressed {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{accent}};
+}
+
+#FlowToolSeparator {
+    background-color: {{border}};
+    border: none;
+    max-height: 1px;
+}
+
+#FlowNewMapBtn,
+#FlowDeleteMapBtn {
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_semibold}};
+    min-width: 34px;
+    max-width: 34px;
+    min-height: 34px;
+    max-height: 34px;
+    padding: 0px;
+}
+
+#FlowNewMapBtn {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    color: {{fg_secondary}};
+}
+
+#FlowNewMapBtn:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#FlowCancelButton {
+    padding: {{space_3}}px;
+    font-size: {{text_md}}px;
+}
+
+#FlowSaveButton {
+    padding: {{space_3}}px;
+    font-size: {{text_md}}px;
+}
+
+#FlowSaveStatusLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: 0px {{space_2}}px;
+}
+
+#FlowSaveStatusLabel[state="saving"] {
+    color: {{warn}};
+}
+
+#FlowSaveStatusLabel[state="saved"] {
+    color: {{ok}};
+}
+
+#FlowEditorBottomToggle {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#FlowEditorBottomToggle:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#FlowInfoIcon {
+    color: {{secondary}};
+    border: {{focus_ring_width}}px solid {{secondary}};
+    border-radius: {{radius_full}}px;
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#FlowZoomHintLabel,
+#FlowMouseDebugLabel,
+#FlowActiveToolLabel {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding-left: {{space_1}}px;
+}
+
+#StatusDot_green {
+    color: {{ok}};
+    font-size: {{text_xl}}px;
+}
+
+#StatusDot_blue {
+    color: {{secondary}};
+    font-size: {{text_xl}}px;
+}
+
+#StatusDot_yellow {
+    color: {{warn}};
+    font-size: {{text_xl}}px;
+}
+
+#StatusDot_gray {
+    color: {{fg_muted}};
+    font-size: {{text_xl}}px;
+}
+
+#FooterStatusTitle {
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#FooterStatusCompleted {
+    color: {{ok}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#FooterStatusActive {
+    color: {{secondary}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#FooterStatusOptional {
+    color: {{warn}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#FooterStatusLocked {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+/* ----- Guide mode ----- */
+
+#GuideInfoBar {
+    background-color: {{bg_surface}};
+    border-top: {{border_width}}px solid {{border}};
+}
+
+#GuideInfoTitle {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#GuideInfoDesc {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+#GuideInfoIcon {
+    font-size: {{text_xl}}px;
+    color: {{fg_muted}};
+}
+
+#GuideDoneButton {
+    background-color: {{ok_soft}};
+    color: {{ok}};
+    border: {{border_width}}px solid {{ok}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px {{space_3}}px;
+}
+
+#GuideDoneButton:hover {
+    background-color: {{ok_soft}};
+    border-color: {{ok}};
+    color: {{fg}};
+}
+
+#GuideEditButton {
+    padding: 0px {{space_2}}px;
+}
+
+/* ---------------------------------------------------------------------
+   17. Overlay HUD  (MASTER §3: bg.window, section heads in the display
+   face, timers in mono, text always opaque)
+   ------------------------------------------------------------------ */
+
+#OverlayContent {
+    background: transparent;
+}
+
+#OverlayProfileName {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_bold}};
+    background: transparent;
+}
+
+#OverlayIconBtn {
+    background: transparent;
+    border: none;
+    color: {{fg_muted}};
+    font-size: {{text_lg}}px;
+    padding: 0px;
+    border-radius: {{radius_sm}}px;
+}
+
+#OverlayIconBtn:hover {
+    background: {{accent_soft}};
+    color: {{fg}};
+}
+
+#OverlayCharBtn {
+    background: {{accent_soft}};
+    border: {{border_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    color: {{accent}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+#OverlayCharBtn:hover {
+    background: {{accent_soft}};
+    border: {{border_width}}px solid {{accent_hover}};
+    color: {{accent_hover}};
+}
+
+#OverlayCheckBtn,
+#OverlayCountdownToggleBtn {
+    background: transparent;
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_sm}}px;
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    padding: 0px;
+}
+
+#OverlayCheckBtn:hover,
+#OverlayCountdownToggleBtn:hover {
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+#OverlayOpacitySlider {
+    background: transparent;
+}
+
+#OverlayOpacitySlider::groove:horizontal {
+    height: 3px;
+    background: {{border}};
+    border-radius: 2px;
+}
+
+#OverlayOpacitySlider::sub-page:horizontal {
+    background: {{accent}};
+    border-radius: 2px;
+}
+
+#OverlayOpacitySlider::handle:horizontal {
+    background: {{fg_secondary}};
+    border-radius: {{radius_sm}}px;
+    width: 8px;
+    height: 8px;
+    margin: -3px 0;
+}
+
+#OverlayOpacitySlider::handle:horizontal:hover {
+    background: {{accent}};
+}
+
+#OverlayResizeHandle {
+    background: transparent;
+    border: none;
+}
+
+#OverlayRowTitle {
+    color: {{fg_secondary}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+#OverlayRowTitleDim {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+#OverlayRowValue {
+    color: {{fg}};
+    font-family: {{font_mono}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_medium}};
+    background: transparent;
+}
+
+#OverlayMenu {
+    background: {{bg_overlay}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_1}}px 0px;
+}
+
+#OverlayMenu QCheckBox {
+    color: {{fg_secondary}};
+    font-size: {{text_sm}}px;
+    padding: {{space_1}}px {{space_3}}px;
+    background: transparent;
+}
+
+#OverlayMenu QCheckBox:hover {
+    background: {{accent_soft}};
+    color: {{fg}};
+}
+
+#OverlayEmpty {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+#OverlaySectionHead {
+    background: {{bg_surface}};
+    border-top: {{border_width}}px solid {{border}};
+    border-bottom: {{border_width}}px solid {{border}};
+}
+
+#OverlaySectionHead:hover {
+    background: {{bg_elevated}};
+}
+
+#OverlayChevron {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+#OverlaySectionTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+    background: transparent;
+}
+
+#OverlaySectionCount {
+    color: {{fg_muted}};
+    font-family: {{font_mono}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    background: {{bg_elevated}};
+    border-radius: {{radius_sm}}px;
+    padding: 1px {{space_1}}px;
+}
