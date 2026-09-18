@@ -1,12 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
+# The standalone Armory viewer (`python app.py`'s packaged twin).  It now
+# needs three things the hand-written styles.qss used to make unnecessary:
+#
+#   * the TEMPLATE instead of the sheet -- app.py renders it per theme;
+#   * core/theme.py, which owns every token and data colour in it.  app.py
+#     imports it optionally (see its "Design tokens" block) and falls back
+#     to plain Abyss without it, so this is what keeps the standalone build
+#     on the real six-theme engine rather than the fallback;
+#   * assets/, for the one url() in the sheet (the combo dropdown arrow).
+#     That was already missing before this wave -- the arrow silently did
+#     not load in this build.
 a = Analysis(
     ['app.py'],
-    pathex=[],
+    pathex=['..'],
     binaries=[],
-    datas=[('styles.qss', '.')],
-    hiddenimports=[],
+    datas=[
+        ('styles.template.qss', '.'),
+        ('assets', 'assets'),
+    ],
+    hiddenimports=['core.theme'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

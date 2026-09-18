@@ -1,0 +1,1926 @@
+/* ItemDatabase (Armory) stylesheet TEMPLATE — rendered by
+   core.theme.build_qss_from() through ItemDatabase/app.py's
+   _load_qss_text(), once per theme.  `{token}` is a MASTER §2 semantic
+   token, `{data.<kind>.<key>}` a MASTER §4-4 data colour, and
+   `{token|alpha}` that colour at a given alpha (see core/theme.py's
+   _PLACEHOLDER_RE for why the alpha form exists).  This block spells
+   placeholders with SINGLE braces: a real double-brace one written in a comment is
+   still substituted (the renderer reads the whole file), and an example
+   token name is not a token.
+
+   WHY THIS FILE IS NOT SCOPED.  The application sheet prefixes every rule
+   with `QWidget[aion2="true"]` so it cannot reach in here
+   (tests/test_app_sheet_isolation.py).  The Armory's windows are
+   parentless, own this sheet outright (window.setStyleSheet), and nothing
+   else in the process ever receives it — so a scope here would only be a
+   prefix with nothing on the other side of it.
+
+   NEAREST-TOKEN MAP.  The hand-written ancestor of this file (1,205 lines,
+   190 selectors, "Abyss, copied intentionally") predates the token system,
+   so most of its values are near a token rather than on one.  Every
+   substitution that was NOT exact is listed here; everything not listed
+   rendered byte-identical for Abyss.
+
+     legacy value                     token                      why
+     ------------------------------   ------------------------   ---------------------------------
+     white                            {fg}                     MASTER §2: text is slate.100, never pure white
+     #e2e8f0 #e6ecf5 #e7ebf3          {fg}                     three spellings of "the main text colour"
+     #cbd5e1                          {fg.secondary}           slate.300
+     #8b96ac                          {fg.muted}               slate.400
+     #64748b #57637c #475569 #3d465a  {fg.muted|0.65 .5 .45 .3} the four dim/disabled greys, as one
+                                                                 colour at four alphas (each composite
+                                                                 lands within ~4/255 of the legacy hex)
+     rgba(100,116,139, ≤0.45)         {border}                 slate-500 wash on panels/tables/dividers
+     rgba(100,116,139, ≥0.5)          {border.strong}          the same wash on interactive controls
+     rgba(30,41,59, a)                {bg.overlay|a}           navy.800 is (28,39,64): same wash
+     rgba(11,18,32, a)                {bg.window|a}            navy.950 is (11,17,32)
+     rgba(15,21,34, a)                {bg.surface|a}           navy.900 is (15,23,42)
+     rgba(71,85,105,0.5) (#DetailIcon){fg.muted|0.25}          same composite, keeps the plate a wash
+     #1e293b  #17233a                 {bg.overlay}             the two popup grounds
+     #0b1220 (Daevanion canvas)       {bg.window}              navy.950
+     #facc15 #f59e0b #f2a33e #d8a253  {warn} / {warn|0.8}    one amber for gold/estimate/Genius text
+     rgba(250,204,21,a) rgba(245,158,11,a)  {warn|a}           the same, as a wash
+     rgba(41,32,10,0.4)               {warn|0.12}              a "gold-tinted card" wash, now derived
+     #22c55e                          {ok}                     green.400
+     #38bdf8 (#SkillTileName)         {accent}                 was Abyss-sky, which is also Legend's
+                                                                 grade colour — the tile name is not a grade
+     #c084fc (#SlotEnchantLabel)      {accent}                 app.py already overrode this per theme with
+                                                                 ENCHANT_ACCENT_BY_THEME; the accent IS that
+                                                                 table's intent, so the table is gone
+     rgba(192,132,252,0.18)           {secondary|0.18}         violet.400 wash
+     #fb923c #60a5fa #4ade80          {data.role.*}            the three Rolle accents are DATA (MASTER
+     rgba(251,146,60,a) &c            {data.role.*|a}          §4-4), owned by core/theme.ROLE_COLORS
+
+   NOT tokenised, on purpose:
+     * font-family — nothing.  MASTER's deferred decision "app.setFont() as
+       the base-font vehicle, after the Armory wave" is the host's call, and
+       retyping 22k lines of layout tuned to the system font is not a
+       colour migration.  Font SIZES/WEIGHTS are tokens where a legacy value
+       sits exactly on the scale (11/12/13/14/16/20/26 px, 600/700); 9.5,
+       10, 10.5, 15, 18, 22, 28 px and `800`/`bold` stay literal.
+     * radii, padding, widths — geometry.  This wave changed no metric.
+     * `selection-color` on the item views — kept, because the Armory paints
+       per-rarity item foregrounds itself and the *selected* row is the one
+       place a fixed colour is correct.  `color` on an item view stays
+       forbidden (MASTER §4-8). */
+QWidget {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+}
+
+/* Tooltips otherwise render as a plain native OS tooltip (white/black,
+   one long unwrapped line) -- User-reported, 2026-08-29, re: the
+   Estimated Damage button's tooltip. Matches the app's own dark panel
+   look instead. */
+QToolTip {
+    background-color: {{bg_surface}};
+    color: {{fg}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: {{text_sm}}px;
+}
+
+QCheckBox::indicator {
+    width: 14px;
+    height: 14px;
+    border: 1px solid {{fg_muted|0.6}};
+    border-radius: 3px;
+    background-color: {{bg_surface|0.75}};
+}
+
+QCheckBox::indicator:checked {
+    background-color: {{accent|0.85}};
+    border: 1px solid {{accent}};
+}
+
+#PageTitle {
+    color: {{fg}};
+    font-size: {{text_2xl}}px;
+    font-weight: bold;
+}
+
+#PageSubtitle {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+}
+
+#TopBar {
+    background-color: {{bg_overlay|0.55}};
+    border: 1px solid {{border}};
+    border-radius: 10px;
+}
+
+QLineEdit {
+    background-color: {{bg_surface|0.75}};
+    border: 1px solid {{border_strong}};
+    border-radius: 9px;
+    padding: 8px 12px;
+    color: {{fg}};
+    font-size: {{text_md}}px;
+}
+
+QLineEdit:focus {
+    border: 1px solid {{accent|0.8}};
+}
+
+QComboBox {
+    background-color: {{bg_surface|0.92}};
+    color: {{fg}};
+    border: 1px solid {{border}};
+    border-radius: 8px;
+    padding: 8px 30px 8px 12px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 20px;
+}
+
+QComboBox:hover {
+    border: 1px solid {{accent|0.7}};
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+
+/* No down-arrow rule existed before -- drop-down reserved 22px of empty
+   space but never drew anything into it, so every combo box (Grade/
+   Category/Class filter row) rendered as a plain borderless field with no
+   visual "this opens a dropdown" affordance. A CSS-only border-triangle
+   was tried first but rendered as a solid grey square instead of a
+   triangle (Qt's ::down-arrow subcontrol sizing doesn't cooperate with the
+   web border-trick) -- using a real small PNG asset instead, same pattern
+   as every other bundled image in this app.  ASSET_PATH is substituted
+   with an absolute directory path at render time (core.theme's renderer
+   does it for both sheets now, in place of this file's own
+   __DROPDOWN_ARROW_URL__ marker); absolute, not relative, so the url()
+   also resolves from inside the PyInstaller-bundled exe, whose _MEIPASS
+   differs run to run. */
+QComboBox::down-arrow {
+    image: url(ASSET_PATH/assets/ui/dropdown_arrow.png);
+    width: 10px;
+    height: 10px;
+    margin-right: 10px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: {{bg_surface}};
+    border: 1px solid {{border}};
+    selection-background-color: {{accent|0.25}};
+    selection-color: {{fg}};
+    /* No blanket "color" here (removed 2026-08-29, User-reported: Grade/
+       Rarity dropdown items showed plain white instead of their per-
+       rarity color) -- a QSS color on an item view overrides each
+       QStandardItem's own setForeground() unconditionally, the same
+       cascade quirk already documented elsewhere this session (Round 20,
+       see project_arcana_planner.md). Falls back to the app-wide dark
+       QPalette's Text role (#e5e7eb, main.py's _dark_palette) for any
+       combo that doesn't color its own items -- visually identical to
+       the #e2e8f0 this used to hardcode. */
+    padding: 4px;
+}
+
+/* Popup list item padding only -- the hover HIGHLIGHT itself is painted in
+   Python (_ComboHoverDelegate in app.py), not here: a "::item:hover" QSS
+   rule was tried first (User-reported, 2026-09-02) but never took visible
+   effect, the same class of "app-wide stylesheet overrides native per-item
+   painting" issue _RoleColorDelegate's own docstring already documents for
+   per-item text color. */
+QComboBox QAbstractItemView::item {
+    padding: 4px 8px;
+}
+
+
+#ResultLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+}
+
+QTableView {
+    background-color: {{bg_surface|0.55}};
+    alternate-background-color: {{bg_overlay|0.45}};
+    border: 1px solid {{border}};
+    border-radius: 10px;
+    gridline-color: {{border}};
+    color: {{fg}};
+    selection-background-color: {{accent|0.25}};
+    selection-color: {{fg}};
+}
+
+QTableView::item {
+    padding: 6px 10px;
+    border: none;
+}
+
+QHeaderView::section {
+    background-color: {{bg_overlay|0.9}};
+    color: {{fg_secondary}};
+    padding: 8px 10px;
+    border: none;
+    border-right: 1px solid {{border}};
+    border-bottom: 1px solid {{border}};
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_sm}}px;
+}
+
+QHeaderView::section:hover {
+    background-color: {{accent|0.18}};
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: {{border_strong}};
+    border-radius: 6px;
+    min-height: 24px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: {{fg_muted|0.7}};
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background: {{border_strong}};
+    border-radius: 6px;
+    min-width: 24px;
+}
+
+/* Grade badge colors used in the Grade column via Qt.ForegroundRole per-item,
+   kept here only as reference values used directly in app.py:
+   Common #94a3b8, Rare #38bdf8, Unique #a855f7, Epic #f59e0b, Legend #facc15 */
+
+QPushButton {
+    background-color: {{bg_overlay|0.75}};
+    color: {{fg}};
+    border: 1px solid {{border_strong}};
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QPushButton:hover {
+    border: 1px solid {{accent|0.7}};
+}
+
+QPushButton:pressed {
+    background-color: {{accent|0.2}};
+}
+
+/* Stat Priority editor's gear icon button (QToolButton, no default styling
+   of its own unlike QPushButton above) -- matches the surrounding buttons'
+   card look instead of Qt's flat native ToolButton chrome. */
+#StatPriorityEditBtn {
+    background-color: {{bg_overlay|0.75}};
+    border: 1px solid {{border_strong}};
+    border-radius: 8px;
+}
+
+#StatPriorityEditBtn:hover {
+    border: 1px solid {{accent|0.7}};
+}
+
+#StatPriorityEditBtn:pressed {
+    background-color: {{accent|0.2}};
+}
+
+/* Per-skill level -/+ buttons (Skill Description cards) -- same card look
+   as the default QPushButton rule above, just without its 8px/14px padding,
+   which would otherwise crush a 26x26 icon-only button down to almost
+   nothing. */
+#SkillLevelStepBtn {
+    padding: 0px;
+}
+
+#SkillLevelValue {
+    color: {{fg}};
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_md}}px;
+}
+
+/* Arcana wish -/+ counter (User-Wunsch, 2026-08-28/29) -- same icon-only
+   sizing fix as #SkillLevelStepBtn, plus a subtle purple hover so it reads
+   as a distinct, secondary control from the main level counter above it. */
+#ArcanaWishStepBtn {
+    padding: 0px;
+    border-radius: 10px;
+}
+
+#ArcanaWishStepBtn:hover {
+    background-color: {{secondary|0.18}};
+}
+
+#DetailIcon {
+    background-color: {{fg_muted|0.25}};
+    border: 1px solid {{fg_muted|0.4}};
+    border-radius: 12px;
+}
+
+#DetailName {
+    color: {{fg}};
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_md}}px;
+}
+
+#DetailHeader {
+    color: {{fg}};
+    font-size: 18px;
+    font-weight: {{font_weight_bold}};
+}
+
+#GearScoreHeaderLabel {
+    color: {{accent}};
+    font-size: {{text_xl}}px;
+    font-weight: 800;
+}
+
+#DetailInfo {
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+}
+
+/* Substat card value, right-aligned opposite its #DetailInfo label (User-
+   approved mockup, 2026-09-11) -- browse-only Item Database popup only. */
+#DetailInfoValue {
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* Header-band / body divider in the redesigned browse-only gear popup. */
+#DetailHeaderDivider {
+    background-color: {{border}};
+    max-height: 1px;
+    border: none;
+}
+
+#DetailEnchantValue {
+    color: {{warn}};
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_md}}px;
+}
+
+#EquipPriorityArrow {
+    color: {{accent}};
+    font-weight: 800;
+    font-size: 28px;
+}
+
+#ChainNode {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: {{fg_muted}};
+    font-size: 9.5px;
+    padding: 4px;
+}
+#ChainNode:hover:enabled {
+    background: {{fg_muted|0.08}};
+}
+#ChainNode[expanded="true"] {
+    background: {{accent|0.14}};
+    border-color: {{accent|0.4}};
+}
+#ChainNode:disabled {
+    color: {{fg_muted|0.65}};
+}
+
+#ExpandableMaterialHeader {
+    background: transparent;
+    border: none;
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    text-align: left;
+    padding: 4px 0;
+}
+#ExpandableMaterialHeader:hover {
+    color: {{accent}};
+}
+#ExpandableMaterialHeader[expanded="true"] {
+    color: {{accent}};
+}
+
+#ChainArrow {
+    color: {{accent}};
+    font-weight: {{font_weight_bold}};
+    font-size: 15px;
+    padding-top: 14px;
+}
+
+#ChainSidePanel {
+    background: {{bg_surface|0.6}};
+    border: 1px solid {{fg_muted|0.14}};
+    border-radius: 8px;
+}
+
+#ChainSideLabel {
+    color: {{accent}};
+    font-size: 10.5px;
+}
+
+#DetailDisclaimer {
+    color: {{warn}};
+    font-size: {{text_xs}}px;
+    font-style: italic;
+}
+
+#SlotIconButton {
+    background-color: {{bg_surface|0.75}};
+    border: 1px solid {{border_strong}};
+    border-radius: 14px;
+    color: {{fg_muted}};
+    font-size: 10px;
+    font-weight: {{font_weight_semibold}};
+    padding: 4px;
+}
+
+#SlotIconButton:hover {
+    border: 1px solid {{accent|0.8}};
+    background-color: {{accent|0.1}};
+}
+
+#SlotIconButton:pressed {
+    background-color: {{accent|0.25}};
+}
+
+/* Pantheon board (User-Wunsch, 2026-09-04) -- radially-positioned slots
+   drawn straight onto #PantheonCanvas (no layout manager, see
+   _build_pantheon_tab), so this panel needs its own explicit dark
+   background rather than inheriting one from a layout container. Artwork
+   keeps #SlotIconButton's rounded-rect look; Statue/Colossus get a real
+   circular radius (half their own fixed size) to match the sketch, with
+   Colossus additionally gold-accented since it's the board's centerpiece. */
+#PantheonCanvas {
+    background-color: {{bg_window|0.55}};
+    border: 1px solid {{fg_muted|0.14}};
+    border-radius: 16px;
+}
+
+#PantheonArtworkSlot,
+#PantheonStatueSlot,
+#PantheonColossusSlot {
+    background-color: {{bg_surface|0.85}};
+    border: 1px solid {{border_strong}};
+    color: {{fg_muted}};
+}
+
+#PantheonArtworkSlot {
+    border-radius: 12px;
+}
+
+#PantheonStatueSlot {
+    border-radius: 33px;
+}
+
+#PantheonColossusSlot {
+    border-radius: 54px;
+    border: 2px solid {{warn|0.55}};
+}
+
+#PantheonArtworkSlot:hover,
+#PantheonStatueSlot:hover {
+    border-color: {{accent|0.8}};
+    background-color: {{accent|0.1}};
+}
+
+#PantheonColossusSlot:hover {
+    border-color: {{warn|0.9}};
+    background-color: {{warn|0.12}};
+}
+
+#PantheonArtworkSlot:pressed,
+#PantheonStatueSlot:pressed {
+    background-color: {{accent|0.25}};
+}
+
+#PantheonColossusSlot:pressed {
+    background-color: {{warn|0.25}};
+}
+
+/* "Active" slot -- the one the left inventory panel is currently assigning
+   into (User-Wunsch, 2026-09-05, replacing the per-slot popup picker).
+   Set via a dynamic property (see _on_pantheon_slot_clicked), not :checked,
+   since QToolButton here isn't checkable -- only ever one slot at a time. */
+#PantheonArtworkSlot[pantheonActive="true"],
+#PantheonStatueSlot[pantheonActive="true"] {
+    border: 2px solid {{accent}};
+    background-color: {{accent|0.22}};
+}
+
+#PantheonColossusSlot[pantheonActive="true"] {
+    border: 2px solid {{warn}};
+    background-color: {{warn|0.22}};
+}
+
+#SlotEnchantLabel {
+    background: transparent;
+    border: none;
+    color: {{accent}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 1px;
+}
+
+#EquipSectionLabel {
+    color: {{accent}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: 1px;
+}
+
+#SkillFilterButton {
+    background-color: {{bg_overlay|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 8px;
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: 4px 10px;
+}
+
+#SkillFilterButton:hover {
+    border: 1px solid {{accent|0.6}};
+    color: {{fg}};
+}
+
+#SkillFilterButton:checked {
+    background-color: {{accent|0.22}};
+    border: 1px solid {{accent|0.9}};
+    color: {{accent}};
+}
+
+/* "Estimated Damage" toggle -- same base look as SkillFilterButton, but
+   with the damage-number orange accent (User-Wunsch, 2026-08-29: "leicht
+   von den anderen Filtern abheben ... leicht orange faerben") so it reads
+   as a different KIND of toggle (an estimate, not a filter) rather than
+   blending into the Favorites/Checked-only pills next to it. Own
+   #-scoped rule, not #SkillFilterButton directly, so this doesn't affect
+   any other SkillFilterButton in the app. */
+#SkillEstimatedDamageButton {
+    background-color: {{bg_overlay|0.6}};
+    border: 1px solid {{warn|0.35}};
+    border-radius: 8px;
+    color: {{warn|0.8}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: 4px 10px;
+}
+
+#SkillEstimatedDamageButton:hover {
+    border: 1px solid {{warn|0.7}};
+    color: {{warn}};
+}
+
+#SkillEstimatedDamageButton:checked {
+    background-color: {{warn|0.2}};
+    border: 1px solid {{warn|0.9}};
+    color: {{warn}};
+}
+
+/* "EQ Priority" button, bottom-right of the Jewelry column -- same base
+   look as SkillFilterButton but bigger font/padding since the plain
+   12px/4-10px version still read as too small/easy to miss there
+   (User-Wunsch, 2026-08-27: "der Button unten Rechts wird sonst
+   übersehen ... einen längeren Button ... Schriftgröße anpassen"). Own
+   #-scoped rule, not #SkillFilterButton directly, so this doesn't affect
+   any other SkillFilterButton in the app. */
+#EqPriorityButton {
+    background-color: {{bg_overlay|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 9px;
+    color: {{fg_muted}};
+    font-size: 15px;
+    font-weight: {{font_weight_bold}};
+    padding: 8px 20px;
+}
+
+#EqPriorityButton:hover {
+    border: 1px solid {{accent|0.6}};
+    color: {{fg}};
+}
+
+/* Back-arrow/X pair on a full-panel takeover page (EQ Priority, and reused
+   by any future one) -- plain QToolButtons had no styling at all before
+   this, just bare native icon chrome (User-Wunsch, 2026-08-28: "den
+   Backpfeil und das 'X' an den Stil anpassen"). Same dark-card/cyan-hover
+   language as #SlotIconButton, just round for a 32px icon button instead
+   of square for a slot tile. */
+#PanelNavButton {
+    background-color: {{bg_surface|0.75}};
+    border: 1px solid {{border_strong}};
+    border-radius: 16px;
+}
+
+#PanelNavButton:hover {
+    border: 1px solid {{accent|0.8}};
+    background-color: {{accent|0.1}};
+}
+
+#PanelNavButton:pressed {
+    background-color: {{accent|0.25}};
+}
+
+/* Small "x" overlay badge on a filled Skill Priority List slot (User-Wunsch,
+   2026-08-28: "die Möglichkeit ... Skills zu entfernen"). */
+#PrioritySlotRemoveBtn {
+    background-color: {{bg_surface|0.85}};
+    border: 1px solid {{border_strong}};
+    border-radius: 9px;
+}
+
+#PrioritySlotRemoveBtn:hover {
+    border: 1px solid {{danger|0.8}};
+    background-color: {{danger|0.2}};
+}
+
+/* Eigenschaften-Priorität Rolle buttons -- same base look as
+   SkillFilterButton, but each role gets its own accent color when checked
+   (User-Wunsch: "Angreifer 'Orange', Verteidiger 'Blau' und Support
+   'Grün'... bei Auswahl des Reiters eine entsprechende Farbkombi"). Own
+   #-scoped rules instead of reusing #SkillFilterButton so this doesn't
+   affect any other SkillFilterButton in the app. */
+#RoleButtonAngreifer, #RoleButtonVerteidiger, #RoleButtonSupport {
+    background-color: {{bg_overlay|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 8px;
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: 4px 10px;
+}
+
+#RoleButtonAngreifer:hover { border: 1px solid {{data.role.Angreifer|0.6}}; color: {{fg}}; }
+#RoleButtonVerteidiger:hover { border: 1px solid {{data.role.Verteidiger|0.6}}; color: {{fg}}; }
+#RoleButtonSupport:hover { border: 1px solid {{data.role.Support|0.6}}; color: {{fg}}; }
+
+#RoleButtonAngreifer:checked {
+    background-color: {{data.role.Angreifer|0.22}};
+    border: 1px solid {{data.role.Angreifer|0.9}};
+    color: {{data.role.Angreifer}};
+}
+#RoleButtonVerteidiger:checked {
+    background-color: {{data.role.Verteidiger|0.22}};
+    border: 1px solid {{data.role.Verteidiger|0.9}};
+    color: {{data.role.Verteidiger}};
+}
+#RoleButtonSupport:checked {
+    background-color: {{data.role.Support|0.22}};
+    border: 1px solid {{data.role.Support|0.9}};
+    color: {{data.role.Support}};
+}
+
+#SkillTileIcon {
+    background-color: {{bg_surface|0.75}};
+    border: 2px solid {{accent|0.6}};
+    border-radius: 10px;
+}
+
+#SkillTileIcon:hover {
+    border: 2px solid {{accent|0.9}};
+}
+
+#SkillTileIcon:checked {
+    background-color: {{warn|0.18}};
+    border: 2px solid {{warn|0.9}};
+}
+
+#SkillTileName {
+    color: {{accent}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#SkillRowIcon {
+    background-color: {{bg_surface|0.75}};
+    border: 2px solid {{accent|0.5}};
+    border-radius: 8px;
+}
+
+#ItemPickerPopup {
+    /* No longer a real Qt.Popup (2026-08-29, see ItemPickerPopup's
+       docstring) -- lost the native window's own edge against the page
+       behind it, which happened to be the exact same #0f172a. Lighter
+       slate background (matches #SubstatRow's rgba(30,41,59,...) tone)
+       + a solid, thicker border give it a visible boundary again
+       (User-reported: "brauchen wir jetzt farblich einen Unterschied"). */
+    background-color: {{bg_overlay}};
+    border: 2px solid {{accent|0.9}};
+    border-radius: 10px;
+}
+
+#ArcanaCardButton {
+    background-color: {{bg_surface|0.75}};
+    border: 1px solid {{border_strong}};
+    border-radius: 14px;
+}
+
+#ArcanaCardButton:hover {
+    border: 1px solid {{accent|0.7}};
+}
+
+#ArcanaCardButton[state="themed"] {
+    background-color: {{warn|0.12}};
+    border: 2px solid {{warn|0.55}};
+}
+
+#ArcanaCardButton[state="themed"]:hover {
+    border: 2px solid {{warn}};
+}
+
+#ArcanaCardButton[state="unavailable"] {
+    background-color: {{bg_surface|0.4}};
+    border: 2px dashed {{border}};
+}
+
+#ArcanaCardName {
+    color: {{fg}};
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_base}}px;
+}
+
+#ArcanaCardInfo {
+    font-size: {{text_xs}}px;
+}
+
+#ArcanaCardHint {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* One of the 4 fixed skill-slot boxes on a Sets-tab card (User-Wunsch,
+   2026-08-29, rough mockup screenshot) -- plain bordered box, blank when
+   that slot isn't filled yet. */
+#ArcanaEquipSkillSlot {
+    background-color: {{bg_overlay|0.4}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    font-size: {{text_xs}}px;
+}
+
+/* Now clickable (manual per-slot skill/level editing, 2026-08-29) --
+   hover affordance so it reads as interactive, matching #SubstatRow etc. */
+#ArcanaEquipSkillSlot:hover {
+    border: 1px solid {{accent|0.6}};
+    background-color: {{accent|0.06}};
+}
+
+/* Gated behind picking a Set first (User-Wunsch, 2026-08-29: "Wenn keine
+   Karte hinterlegt ist, sollte keine Eigenschaft waehlbar sein") --
+   visibly inert instead of just silently not responding to clicks. */
+#ArcanaEquipSkillSlot:disabled {
+    background-color: {{bg_surface|0.3}};
+    border: 1px dashed {{border}};
+}
+
+/* Card-level rarity pills (manual grade selection, 2026-08-29) -- each
+   pill's own text color comes from GRADE_COLORS via an inline
+   setStyleSheet (per-grade, set in _ArcanaCardButton), this only
+   provides the shared pill chrome/checked state. */
+#ArcanaGradePill {
+    background-color: {{bg_surface|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: {{font_weight_bold}};
+    padding: 2px 6px;
+}
+
+#ArcanaGradePill:checked {
+    background-color: {{fg_muted|0.18}};
+    border: 1px solid {{fg_muted|0.6}};
+}
+
+#ArcanaGradePill:disabled {
+    color: {{fg_muted|0.45}};
+    border: 1px dashed {{border}};
+}
+
+#ArcanaNoneButton {
+    background-color: {{bg_overlay|0.6}};
+    border: 2px solid {{border_strong}};
+    border-radius: 10px;
+    color: {{fg_muted}};
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_base}}px;
+}
+
+#ArcanaNoneButton:checked {
+    border: 2px solid {{accent}};
+    color: {{accent}};
+    background-color: {{accent|0.1}};
+}
+
+/* #ArcanaSetBanner is now a fully custom-painted widget (_ArcanaSetBanner
+   in app.py, Round 21) -- background photo/gradient, overlay, border and
+   text are all drawn directly in paintEvent, so no QSS rule for it
+   actually applies (paintEvent never calls the default button painting). */
+
+#ArcanaLordBar {
+    background-color: {{bg_overlay|0.55}};
+    border: 1px solid {{border}};
+    border-radius: 12px;
+}
+
+#EquipItemComboButton {
+    background-color: {{bg_surface|0.75}};
+    color: {{fg}};
+    border: 1px solid {{border_strong}};
+    border-radius: 9px;
+    padding: 8px 12px;
+    font-weight: {{font_weight_semibold}};
+    text-align: left;
+}
+
+#EquipItemComboButton:hover {
+    border: 1px solid {{accent|0.7}};
+}
+
+#SubstatRow {
+    background-color: {{bg_overlay|0.4}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    text-align: left;
+}
+
+#SubstatRow:hover {
+    border: 1px solid {{accent|0.6}};
+    background-color: {{accent|0.06}};
+}
+
+#SubstatRow:checked {
+    background-color: {{warn|0.1}};
+    border: 1px solid {{warn|0.6}};
+}
+
+#SubstatRow:disabled {
+    color: {{fg_muted|0.45}};
+}
+
+/* Browse-only variant (plain Item Database popup, non-clickable rows) --
+   same look as #SubstatRow minus the hover/checked interaction states,
+   since these rows aren't selectable there. */
+#SubstatRowCompact {
+    background-color: {{bg_overlay|0.4}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    text-align: left;
+}
+
+#SkillDescCard {
+    background-color: {{bg_overlay|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 10px;
+    text-align: left;
+}
+
+#SkillDescCard:hover {
+    border: 1px solid {{warn|0.5}};
+}
+
+#SkillRow {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+}
+
+#SkillRow:hover {
+    background-color: {{accent|0.06}};
+}
+
+#SkillSectionHeader {
+    color: {{fg}};
+    font-size: 15px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: 1px;
+    text-align: left;
+    padding: 4px 2px;
+    border: none;
+    background: transparent;
+}
+
+#SkillSectionHeader:hover {
+    color: {{accent}};
+}
+
+#ClassSelectButton {
+    background-color: {{bg_surface|0.75}};
+    border: 1px solid {{border}};
+    border-radius: 12px;
+}
+
+#ClassSelectButton:hover {
+    border: 1px solid {{accent|0.8}};
+    background-color: {{accent|0.08}};
+}
+
+#ClassSelectButton:pressed {
+    background-color: {{accent|0.2}};
+}
+
+#LoadoutBackground {
+    background-color: {{bg_surface}};
+}
+
+/* Substats/Skills tab pages (ItemDetailWidget) -- explicit background
+   instead of relying on QPalette fallback, matching #LoadoutBackground's
+   pattern; without this the page widget's own unstyled background paints
+   over QTabWidget::pane's dark color, showing as a plain white/grey box
+   when Windows itself is set to dark mode (User-reported, 2026-08-29). */
+#StatsPane {
+    background-color: {{bg_surface}};
+}
+
+#StatRowCell {
+    border: none;
+    border-bottom: 1px solid {{border}};
+}
+
+QTabWidget::pane {
+    background-color: {{bg_surface}};
+    border: 1px solid {{border}};
+    border-top: none;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background: {{bg_surface|0.5}};
+    color: {{fg_muted}};
+    padding: 8px 16px;
+    border: 1px solid {{border}};
+    border-bottom: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background-color: {{bg_surface}};
+    color: {{accent}};
+    border: 1px solid {{accent|0.6}};
+    border-bottom: none;
+}
+
+QTabBar::tab:hover:!selected {
+    color: {{fg}};
+}
+
+QListWidget {
+    background-color: {{bg_surface|0.75}};
+    border: 1px solid {{border}};
+    border-radius: 8px;
+    color: {{fg}};
+}
+
+QListWidget::item {
+    padding: 6px 8px;
+}
+
+QListWidget::item:selected {
+    background-color: {{accent|0.25}};
+    color: {{fg}};
+}
+
+/* Daevanion Board tab (2026-08-28) -- functional-first styling, visuals to
+   be revisited once the board itself is confirmed working (User-Wunsch:
+   "dann schauen wir, wie wir die Optik anpassen müssen"). */
+#DaevanionCanvasFrame {
+    background-color: {{bg_window}};
+    border: 1px solid {{border}};
+    border-radius: 12px;
+}
+
+/* Sidebar accordion -- real card background per section (not just an
+   outline against the bare window background) + collapsible header
+   (User-Wunsch, 2026-08-28: "hier bitte nochmal den Hintergrund anpassen
+   und Accordions bauen"). */
+#DaevanionAccordionSection {
+    background-color: {{bg_overlay|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 10px;
+}
+
+#DaevanionAccordionHeader {
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    color: {{accent}};
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_base}}px;
+    text-align: left;
+    padding: 10px 12px;
+}
+
+#DaevanionAccordionHeader:hover {
+    background-color: {{accent|0.08}};
+}
+
+#DaevanionAccordionBody {
+    background: transparent;
+}
+
+/* ── "Genius Insight" tab ─────────────────────────────────────────────── */
+
+#GeniusSectionTitle {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#GeniusHint {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+}
+
+#GeniusOwnedTotalNote {
+    color: {{accent}};
+    font-size: {{text_xs}}px;
+}
+
+#GeniusSegBtn {
+    background-color: {{bg_surface|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: 5px 0;
+}
+
+#GeniusSegBtn:hover {
+    color: {{fg}};
+}
+
+#GeniusSegBtn:checked {
+    background-color: {{fg_muted|0.16}};
+    border: 1px solid {{fg_muted|0.55}};
+    color: {{fg}};
+}
+
+#GeniusOwnedGroupTitle {
+    color: {{fg_muted|0.5}};
+    font-size: 10px;
+    font-weight: {{font_weight_bold}};
+    padding-top: 4px;
+}
+
+#GeniusOwnedTile {
+    background-color: {{bg_surface|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+}
+
+#GeniusOwnedName {
+    color: {{warn}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#GeniusOwnedValue {
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#GeniusPetTitle {
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#GeniusBoardTabBtn {
+    background-color: {{bg_surface|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: 6px 14px;
+}
+
+#GeniusBoardTabBtn:hover {
+    color: {{fg}};
+}
+
+#GeniusBoardTabBtn:checked {
+    background-color: {{accent|0.12}};
+    border: 1px solid {{accent|0.55}};
+    color: {{accent}};
+}
+
+#GeniusBoardTitle {
+    color: {{fg}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+#GeniusLvlBadge {
+    color: {{accent}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#GeniusLineIndex {
+    color: {{fg_muted|0.5}};
+    font-size: 10px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#GeniusLockToggle {
+    background: transparent;
+    border: none;
+    font-size: {{text_sm}}px;
+    padding: 0;
+}
+
+#GeniusLineName {
+    color: {{warn}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#GeniusLineCombo {
+    background-color: {{bg_surface|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+}
+
+#GeniusLineComboText {
+    color: {{warn}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#GeniusLineComboRange {
+    color: {{warn}};
+    font-size: {{text_xs}}px;
+}
+
+#GeniusLineCombo:hover {
+    border: 1px solid {{fg_muted|0.55}};
+}
+
+#GeniusLineCombo:disabled {
+    border: 1px dashed {{border}};
+}
+
+#GeniusLineComboText:disabled {
+    color: {{fg_muted|0.5}};
+}
+
+#GeniusLineComboRange:disabled {
+    color: {{fg_muted|0.3}};
+}
+
+#GeniusStatPopup {
+    background-color: {{bg_overlay}};
+    border: 1px solid {{fg_muted|0.5}};
+    border-radius: 8px;
+}
+
+#GeniusStatPopupSearch {
+    background-color: {{bg_surface|0.7}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    color: {{fg}};
+    font-size: {{text_sm}}px;
+    padding: 5px 8px;
+}
+
+#GeniusStatPopupList {
+    background-color: transparent;
+    border: none;
+    color: {{fg}};
+    font-size: {{text_sm}}px;
+    outline: none;
+}
+
+#GeniusStatPopupList::item {
+    padding: 0;
+    border-radius: 5px;
+}
+
+#GeniusStatPopupList::item:hover {
+    background-color: {{accent|0.1}};
+}
+
+#GeniusStatPopupList::item:selected {
+    background-color: {{accent|0.18}};
+}
+
+#GeniusStatPopupItemName {
+    color: {{warn}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    background: transparent;
+}
+
+#GeniusStatPopupItemRange {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+#GeniusLineValue {
+    background-color: {{bg_surface|0.6}};
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    color: {{fg}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: 3px 6px;
+}
+
+#GeniusLineValue:disabled {
+    color: {{fg_muted|0.5}};
+    border: 1px dashed {{border}};
+}
+
+/* Same "✓ Saved" convention already established for the main app's Flow
+   Map (ui/styles.qss) -- ported here since this file is its own separate
+   stylesheet scope (Property Priority editor's Save confirmation). */
+#FlowSaveStatusLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px 8px;
+}
+
+#FlowSaveStatusLabel[state="saving"] {
+    color: {{warn}};
+}
+
+#FlowSaveStatusLabel[state="saved"] {
+    color: {{ok}};
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   PART 2 — the rules that replaced this module's inline stylesheets
+   (tokenization wave, 2026-09-18).
+
+   ItemDatabase/app.py used to push 96 `setStyleSheet(...)` calls onto
+   widgets at build time.  Three are left, and all three deliver THIS file
+   to a window (create_window / ensure_loadout_window /
+   open_crafting_calculator).  Everything else became an objectName, a
+   dynamic property, and a rule here — which is what MASTER §4-4 asks for,
+   and also what makes a theme switch work at all: an inline sheet is the
+   deepest sheet Qt knows, so it won a property outright and no re-render
+   could reach it.
+
+   Two conventions carry most of it:
+
+     [variant="…"]   a sub-shape of a widget that already has an
+                     objectName (a smaller #DetailInfo, a bigger
+                     #DetailHeader).  Specificity 110 beats the id rule's
+                     100, so the variant refines instead of replacing.
+
+     [dataColor="<kind>:<key>"]  a MASTER §4-4 data colour, set by
+                     app.py's _set_data_color().  The generic
+                     `*[dataColor=…]` rules at the end of this block carry
+                     the colour; a widget whose own id rule declares a
+                     `color` (#SkillFilterButton, #DetailInfo, …) gets an
+                     id-qualified copy, and those copies are LAST in the
+                     file on purpose: they tie with `#id:hover` /
+                     `#id:checked` at 110 and win on order, which is how
+                     the legacy inline sheet behaved (it beat every state
+                     rule, so a checked rarity pill kept its rarity
+                     colour rather than turning accent).
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* QAbstractScrollArea's viewport paints its own QPalette::Base ground
+   under Fusion — a light grey no outer rule reaches, which is why twelve
+   call sites set `background: transparent` on the viewport by hand.  One
+   objectName, one rule.  Also used for the two plain containers that
+   needed the same thing. */
+#TransparentPane {
+    background: transparent;
+}
+
+/* ── item tiles and material rows ──────────────────────────────────── */
+
+#GradeTileName {
+    font-weight: {{font_weight_semibold}};
+    font-size: {{text_xs}}px;
+}
+
+#TileMetaLabel {
+    color: {{fg_muted}};
+    font-size: 10px;
+}
+
+#MaterialQtyHighlight {
+    color: {{ok}};
+    font-weight: {{font_weight_bold}};
+}
+
+#SimGradeLabel {
+    font-weight: {{font_weight_bold}};
+}
+
+/* Clickable rows of the "which recipe?" context menu. */
+#CraftMenuRow {
+    padding: 4px 20px;
+    background: transparent;
+}
+
+#CraftMenuRow:hover {
+    background-color: {{accent|0.12}};
+}
+
+/* The 12-tier combo's own popup.  Restated instead of inherited: the
+   generic `QComboBox QAbstractItemView` rules are two selectors deep and
+   this popup needs roomier rows than the 4-row filters it shares them
+   with (User-reported, 2026-09-12: the 12-tier list looked cramped). */
+#TierComboPopup {
+    background-color: {{bg_surface}};
+    border: 1px solid {{border}};
+    selection-background-color: {{accent|0.25}};
+    padding: 4px;
+}
+
+#TierComboPopup::item {
+    padding: 6px 10px;
+}
+
+/* ── two title variants of #DetailHeader ───────────────────────────── */
+
+#DetailHeader[variant="large"] {
+    font-size: 22px;
+}
+
+#DetailHeader[variant="medium"] {
+    font-size: {{text_xl}}px;
+}
+
+#DetailInfo[variant="compact"] {
+    font-size: {{text_xs}}px;
+}
+
+#DetailInfo[variant="dim"] {
+    font-size: {{text_xs}}px;
+    color: {{fg_muted|0.65}};
+}
+
+#EquipSectionLabel[variant="compact"] {
+    font-size: 10px;
+}
+
+/* ── class picker ──────────────────────────────────────────────────── */
+
+#ClassPickerEmoji {
+    font-size: 48px;
+    background: transparent;
+}
+
+#ClassPickerName {
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_md}}px;
+    background: transparent;
+}
+
+/* ── skill lists ───────────────────────────────────────────────────── */
+
+#SkillTypeLabel {
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_xs}}px;
+}
+
+#SkillListDivider {
+    background-color: {{fg_muted|0.25}};
+    border: none;
+}
+
+#SkillCardTypeLabel {
+    font-size: 10px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: 1px;
+}
+
+/* Kind-of-skill / kind-of-damage badge (_make_type_badge). */
+#SkillTypeBadge {
+    border-radius: 8px;
+    padding: 2px 10px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* ── substat accordion headers ─────────────────────────────────────── */
+/* Four buckets, four accents.  They used to be four rgb() triplets passed
+   as strings through a nested function; offensive/defensive/pvp/skills are
+   OUR categories, not game data, so they are tokens, not a data table. */
+
+#SubstatSectionHeader {
+    padding: 4px 10px;
+    border: none;
+    border-radius: 6px;
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_xs}}px;
+    text-align: left;
+}
+
+#SubstatSectionHeader[bucket="offensive"] {
+    background-color: {{accent|0.18}};
+    color: {{accent}};
+}
+
+#SubstatSectionHeader[bucket="defensive"] {
+    background-color: {{ok|0.18}};
+    color: {{ok}};
+}
+
+#SubstatSectionHeader[bucket="pvp"] {
+    background-color: {{secondary|0.18}};
+    color: {{secondary}};
+}
+
+#SubstatSectionHeader[bucket="skills"] {
+    background-color: {{warn|0.18}};
+    color: {{warn}};
+}
+
+/* ── the four translucent card tooltips ────────────────────────────── */
+/* Daevanion node, skill, Arcana card, Arcana set bonus.  All four are
+   custom-painted popups (_TranslucentCardTooltip) whose *contents* were
+   styled inline, label by label. */
+
+#TooltipTitle {
+    font-size: 15px;
+    font-weight: {{font_weight_bold}};
+    color: {{fg}};
+    background: transparent;
+    border: none;
+}
+
+#TooltipMeta,
+#TooltipStats {
+    font-size: {{text_sm}}px;
+    color: {{fg_muted}};
+    background: transparent;
+    border: none;
+    border-top: 1px solid {{fg_muted|0.24}};
+    padding-top: 8px;
+}
+
+#TooltipDesc {
+    font-size: {{text_sm}}px;
+    color: {{fg_secondary}};
+    background: transparent;
+    border: none;
+}
+
+#TooltipLordLine {
+    font-size: {{text_xs}}px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid {{fg_muted|0.24}};
+    padding-bottom: 8px;
+}
+
+#TooltipEffectRow {
+    background: {{bg_surface|0.6}};
+    border: 1px solid {{fg_muted|0.2}};
+    border-radius: 8px;
+}
+
+#TooltipEffectLabel {
+    font-size: {{text_sm}}px;
+    color: {{fg_secondary}};
+    background: transparent;
+    border: none;
+}
+
+#TooltipEffectValue {
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_bold}};
+    color: {{accent}};
+    background: transparent;
+    border: none;
+}
+
+#TooltipColumnHead {
+    font-size: 10px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: 1px;
+    background: transparent;
+    border: none;
+}
+
+#TooltipSkillRow {
+    font-size: {{text_xs}}px;
+    background: transparent;
+    border: none;
+}
+
+/* Grade / skill-type pill at the top of a tooltip.  Chrome here, colour
+   from [dataColor] below. */
+#TooltipGradePill,
+#TooltipTypePill {
+    font-size: 10.5px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 9px;
+    border: none;
+}
+
+/* Node status, five states (was a (colour, alpha) table in Python). */
+#TooltipStatusPill {
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    border-radius: 8px;
+    padding: 8px 10px;
+    border: none;
+}
+
+#TooltipStatusPill[status="start"],
+#TooltipStatusPill[status="active"] {
+    background: {{accent|0.15}};
+    color: {{accent}};
+}
+
+#TooltipStatusPill[status="available"] {
+    background: {{ok|0.14}};
+    color: {{ok}};
+}
+
+#TooltipStatusPill[status="locked"] {
+    background: {{fg_muted|0.12}};
+    color: {{fg_muted}};
+}
+
+#TooltipStatusPill[status="no_points"] {
+    background: {{danger|0.14}};
+    color: {{danger}};
+}
+
+/* ── Arcana ────────────────────────────────────────────────────────── */
+
+#ArcanaSetBonusTitle {
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+    color: {{accent}};
+    background: transparent;
+    border: none;
+}
+
+#ArcanaSetBonusLine {
+    font-size: {{text_sm}}px;
+    color: {{fg}};
+    background: transparent;
+    border: none;
+}
+
+#ArcanaSetInfoDot {
+    border: 1.5px solid {{fg_muted}};
+    border-radius: 7px;
+    color: {{fg_muted}};
+    font-size: 9px;
+    font-weight: 800;
+    background: transparent;
+}
+
+#ArcanaCardTypeTile {
+    background: {{bg_surface|0.75}};
+    border: 2px solid {{border_strong}};
+    border-radius: 8px;
+}
+
+#ArcanaCardTypeTile[assigned="true"] {
+    border-color: {{accent|0.7}};
+}
+
+#ArcanaThemeOption {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+}
+
+#ArcanaThemeOption:hover {
+    background: {{fg_muted|0.1}};
+}
+
+#ArcanaThemeRadio::indicator {
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    border: 2px solid {{fg_muted|0.65}};
+    background: transparent;
+}
+
+#ArcanaThemeRadio::indicator:disabled {
+    border-color: {{fg_muted|0.35}};
+}
+
+#ArcanaThemeOptionLord {
+    font-size: 12.5px;
+    font-weight: {{font_weight_semibold}};
+    color: {{fg}};
+    background: transparent;
+    border: none;
+}
+
+#ArcanaSeasonButton {
+    background: {{bg_elevated}};
+    border: 1px solid {{border}};
+    border-radius: 9px;
+    padding: 9px 8px;
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    color: {{fg}};
+}
+
+#ArcanaSeasonButton:checked {
+    background: {{accent|0.1}};
+    border-color: {{accent}};
+    color: {{accent}};
+}
+
+#ArcanaSeasonButton:disabled {
+    color: {{fg_muted|0.65}};
+}
+
+#ArcanaThemeHint {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+#ArcanaSeasonLabel,
+#ArcanaThemeColumnHead {
+    font-weight: {{font_weight_bold}};
+    font-size: {{text_xs}}px;
+    letter-spacing: 1px;
+    color: {{fg_muted|0.65}};
+}
+
+#ArcanaCardTypeName {
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#ArcanaReasonLabel {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+}
+
+#ArcanaLeftoverHeader {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    margin-top: 4px;
+}
+
+#ArcanaMaxHint {
+    color: {{fg_muted|0.65}};
+    font-size: 10px;
+}
+
+/* ── Genius Insight ────────────────────────────────────────────────── */
+
+#GeniusOwnedName[variant="plain"] {
+    color: {{fg}};
+}
+
+#GeniusPetTitle[active="false"] {
+    font-weight: {{font_weight_semibold}};
+}
+
+/* ── Build Compare ─────────────────────────────────────────────────── */
+
+#CompareValueBetter {
+    color: {{ok}};
+    font-weight: {{font_weight_bold}};
+}
+
+#CompareValueWorse {
+    color: {{danger}};
+    font-weight: {{font_weight_bold}};
+}
+
+/* ── Equip panel: the item plate, ringed in the item's rarity ──────── */
+
+#EquipItemIconLabel {
+    background-color: {{bg_surface|0.75}};
+    border: 2px solid {{border_strong}};
+    border-radius: 8px;
+}
+
+#EquipItemIconLabel[variant="empty"] {
+    background: transparent;
+    border: none;
+}
+
+/* Sidebar filter rows that call out a rarity present in that group. */
+#DaevanionFilterCheck {
+    font-weight: {{font_weight_semibold}};
+}
+
+/* ── MASTER §4-4 data colours ──────────────────────────────────────── */
+/* Generic first: every table entry app.py can ask _set_data_color() for. */
+
+*[dataColor="item_grade:Common"] { color: {{data.item_grade.Common}}; }
+*[dataColor="item_grade:Rare"] { color: {{data.item_grade.Rare}}; }
+*[dataColor="item_grade:Unique"] { color: {{data.item_grade.Unique}}; }
+*[dataColor="item_grade:Epic"] { color: {{data.item_grade.Epic}}; }
+*[dataColor="item_grade:Legend"] { color: {{data.item_grade.Legend}}; }
+
+*[dataColor="gear_type:PvP"] { color: {{data.gear_type.PvP}}; }
+*[dataColor="gear_type:PvE"] { color: {{data.gear_type.PvE}}; }
+*[dataColor="gear_type:Neutral"] { color: {{data.gear_type.Neutral}}; }
+
+*[dataColor="skill_type:active"] { color: {{data.skill_type.active}}; }
+*[dataColor="skill_type:passive"] { color: {{data.skill_type.passive}}; }
+*[dataColor="skill_type:stigma"] { color: {{data.skill_type.stigma}}; }
+
+*[dataColor="craft_method:Transfer"] { color: {{data.craft_method.Transfer}}; }
+*[dataColor="craft_method:Herstellung"] { color: {{data.craft_method.Herstellung}}; }
+
+*[dataColor="arcana_theme:Vigor"] { color: {{data.arcana_theme.Vigor}}; }
+*[dataColor="arcana_theme:Magic"] { color: {{data.arcana_theme.Magic}}; }
+*[dataColor="arcana_theme:Frenzy"] { color: {{data.arcana_theme.Frenzy}}; }
+*[dataColor="arcana_theme:Purity"] { color: {{data.arcana_theme.Purity}}; }
+*[dataColor="arcana_theme:Punishment"] { color: {{data.arcana_theme.Punishment}}; }
+*[dataColor="arcana_theme:Protection"] { color: {{data.arcana_theme.Protection}}; }
+*[dataColor="arcana_theme:Indomitability"] { color: {{data.arcana_theme.Indomitability}}; }
+
+*[dataColor="arcana_category:pve"] { color: {{data.arcana_category.pve}}; }
+*[dataColor="arcana_category:pvp"] { color: {{data.arcana_category.pvp}}; }
+*[dataColor="arcana_category:offense"] { color: {{data.arcana_category.offense}}; }
+*[dataColor="arcana_category:defence"] { color: {{data.arcana_category.defence}}; }
+*[dataColor="arcana_category:cure"] { color: {{data.arcana_category.cure}}; }
+
+*[dataColor="genius_board:Cogni"] { color: {{data.genius_board.Cogni}}; }
+*[dataColor="genius_board:Fera"] { color: {{data.genius_board.Fera}}; }
+*[dataColor="genius_board:Natura"] { color: {{data.genius_board.Natura}}; }
+*[dataColor="genius_board:Varian"] { color: {{data.genius_board.Varian}}; }
+*[dataColor="genius_board:Special"] { color: {{data.genius_board.Special}}; }
+
+*[dataColor="damage_type:physic"] { color: {{data.damage_type.physic}}; }
+*[dataColor="damage_type:magic"] { color: {{data.damage_type.magic}}; }
+
+*[dataColor="role:Angreifer"] { color: {{data.role.Angreifer}}; }
+*[dataColor="role:Verteidiger"] { color: {{data.role.Verteidiger}}; }
+*[dataColor="role:Support"] { color: {{data.role.Support}}; }
+
+/* Then the fills: a data colour that is a badge, not text. */
+
+#TooltipGradePill[dataColor="item_grade:Common"] { background: {{data.item_grade.Common|0.2}}; color: {{data.item_grade.Common}}; }
+#TooltipGradePill[dataColor="item_grade:Rare"] { background: {{data.item_grade.Rare|0.2}}; color: {{data.item_grade.Rare}}; }
+#TooltipGradePill[dataColor="item_grade:Unique"] { background: {{data.item_grade.Unique|0.2}}; color: {{data.item_grade.Unique}}; }
+#TooltipGradePill[dataColor="item_grade:Epic"] { background: {{data.item_grade.Epic|0.2}}; color: {{data.item_grade.Epic}}; }
+#TooltipGradePill[dataColor="item_grade:Legend"] { background: {{data.item_grade.Legend|0.2}}; color: {{data.item_grade.Legend}}; }
+
+#TooltipTypePill[dataColor="skill_type:active"] { background: {{data.skill_type.active|0.2}}; color: {{data.skill_type.active}}; }
+#SkillTypeBadge[dataColor="skill_type:active"] { background-color: {{data.skill_type.active|0.16}}; color: {{data.skill_type.active}}; border: 1px solid {{data.skill_type.active|0.5}}; }
+#TooltipTypePill[dataColor="skill_type:passive"] { background: {{data.skill_type.passive|0.2}}; color: {{data.skill_type.passive}}; }
+#SkillTypeBadge[dataColor="skill_type:passive"] { background-color: {{data.skill_type.passive|0.16}}; color: {{data.skill_type.passive}}; border: 1px solid {{data.skill_type.passive|0.5}}; }
+#TooltipTypePill[dataColor="skill_type:stigma"] { background: {{data.skill_type.stigma|0.2}}; color: {{data.skill_type.stigma}}; }
+#SkillTypeBadge[dataColor="skill_type:stigma"] { background-color: {{data.skill_type.stigma|0.16}}; color: {{data.skill_type.stigma}}; border: 1px solid {{data.skill_type.stigma|0.5}}; }
+#TooltipTypePill[dataColor="damage_type:physic"] { background: {{data.damage_type.physic|0.2}}; color: {{data.damage_type.physic}}; }
+#SkillTypeBadge[dataColor="damage_type:physic"] { background-color: {{data.damage_type.physic|0.16}}; color: {{data.damage_type.physic}}; border: 1px solid {{data.damage_type.physic|0.5}}; }
+#TooltipTypePill[dataColor="damage_type:magic"] { background: {{data.damage_type.magic|0.2}}; color: {{data.damage_type.magic}}; }
+#SkillTypeBadge[dataColor="damage_type:magic"] { background-color: {{data.damage_type.magic|0.16}}; color: {{data.damage_type.magic}}; border: 1px solid {{data.damage_type.magic|0.5}}; }
+
+#ArcanaSetInfoDot[dataColor="arcana_theme:Vigor"] { border-color: {{data.arcana_theme.Vigor}}; color: {{data.arcana_theme.Vigor}}; }
+#ArcanaThemeOption[selected="true"][dataColor="arcana_theme:Vigor"] { background: {{data.arcana_theme.Vigor|0.1}}; border-color: {{data.arcana_theme.Vigor|0.35}}; }
+#ArcanaThemeRadio[dataColor="arcana_theme:Vigor"]::indicator:checked { border-color: {{data.arcana_theme.Vigor}}; background: {{data.arcana_theme.Vigor}}; }
+#ArcanaThemeOptionLord[selected="true"][dataColor="arcana_theme:Vigor"] { color: {{data.arcana_theme.Vigor}}; }
+#ArcanaSetInfoDot[dataColor="arcana_theme:Magic"] { border-color: {{data.arcana_theme.Magic}}; color: {{data.arcana_theme.Magic}}; }
+#ArcanaThemeOption[selected="true"][dataColor="arcana_theme:Magic"] { background: {{data.arcana_theme.Magic|0.1}}; border-color: {{data.arcana_theme.Magic|0.35}}; }
+#ArcanaThemeRadio[dataColor="arcana_theme:Magic"]::indicator:checked { border-color: {{data.arcana_theme.Magic}}; background: {{data.arcana_theme.Magic}}; }
+#ArcanaThemeOptionLord[selected="true"][dataColor="arcana_theme:Magic"] { color: {{data.arcana_theme.Magic}}; }
+#ArcanaSetInfoDot[dataColor="arcana_theme:Frenzy"] { border-color: {{data.arcana_theme.Frenzy}}; color: {{data.arcana_theme.Frenzy}}; }
+#ArcanaThemeOption[selected="true"][dataColor="arcana_theme:Frenzy"] { background: {{data.arcana_theme.Frenzy|0.1}}; border-color: {{data.arcana_theme.Frenzy|0.35}}; }
+#ArcanaThemeRadio[dataColor="arcana_theme:Frenzy"]::indicator:checked { border-color: {{data.arcana_theme.Frenzy}}; background: {{data.arcana_theme.Frenzy}}; }
+#ArcanaThemeOptionLord[selected="true"][dataColor="arcana_theme:Frenzy"] { color: {{data.arcana_theme.Frenzy}}; }
+#ArcanaSetInfoDot[dataColor="arcana_theme:Purity"] { border-color: {{data.arcana_theme.Purity}}; color: {{data.arcana_theme.Purity}}; }
+#ArcanaThemeOption[selected="true"][dataColor="arcana_theme:Purity"] { background: {{data.arcana_theme.Purity|0.1}}; border-color: {{data.arcana_theme.Purity|0.35}}; }
+#ArcanaThemeRadio[dataColor="arcana_theme:Purity"]::indicator:checked { border-color: {{data.arcana_theme.Purity}}; background: {{data.arcana_theme.Purity}}; }
+#ArcanaThemeOptionLord[selected="true"][dataColor="arcana_theme:Purity"] { color: {{data.arcana_theme.Purity}}; }
+#ArcanaSetInfoDot[dataColor="arcana_theme:Punishment"] { border-color: {{data.arcana_theme.Punishment}}; color: {{data.arcana_theme.Punishment}}; }
+#ArcanaThemeOption[selected="true"][dataColor="arcana_theme:Punishment"] { background: {{data.arcana_theme.Punishment|0.1}}; border-color: {{data.arcana_theme.Punishment|0.35}}; }
+#ArcanaThemeRadio[dataColor="arcana_theme:Punishment"]::indicator:checked { border-color: {{data.arcana_theme.Punishment}}; background: {{data.arcana_theme.Punishment}}; }
+#ArcanaThemeOptionLord[selected="true"][dataColor="arcana_theme:Punishment"] { color: {{data.arcana_theme.Punishment}}; }
+#ArcanaSetInfoDot[dataColor="arcana_theme:Protection"] { border-color: {{data.arcana_theme.Protection}}; color: {{data.arcana_theme.Protection}}; }
+#ArcanaThemeOption[selected="true"][dataColor="arcana_theme:Protection"] { background: {{data.arcana_theme.Protection|0.1}}; border-color: {{data.arcana_theme.Protection|0.35}}; }
+#ArcanaThemeRadio[dataColor="arcana_theme:Protection"]::indicator:checked { border-color: {{data.arcana_theme.Protection}}; background: {{data.arcana_theme.Protection}}; }
+#ArcanaThemeOptionLord[selected="true"][dataColor="arcana_theme:Protection"] { color: {{data.arcana_theme.Protection}}; }
+#ArcanaSetInfoDot[dataColor="arcana_theme:Indomitability"] { border-color: {{data.arcana_theme.Indomitability}}; color: {{data.arcana_theme.Indomitability}}; }
+#ArcanaThemeOption[selected="true"][dataColor="arcana_theme:Indomitability"] { background: {{data.arcana_theme.Indomitability|0.1}}; border-color: {{data.arcana_theme.Indomitability|0.35}}; }
+#ArcanaThemeRadio[dataColor="arcana_theme:Indomitability"]::indicator:checked { border-color: {{data.arcana_theme.Indomitability}}; background: {{data.arcana_theme.Indomitability}}; }
+#ArcanaThemeOptionLord[selected="true"][dataColor="arcana_theme:Indomitability"] { color: {{data.arcana_theme.Indomitability}}; }
+
+#EquipItemIconLabel[dataColor="item_grade:Common"] { border-color: {{data.item_grade.Common}}; }
+#EquipItemIconLabel[dataColor="item_grade:Rare"] { border-color: {{data.item_grade.Rare}}; }
+#EquipItemIconLabel[dataColor="item_grade:Unique"] { border-color: {{data.item_grade.Unique}}; }
+#EquipItemIconLabel[dataColor="item_grade:Epic"] { border-color: {{data.item_grade.Epic}}; }
+#EquipItemIconLabel[dataColor="item_grade:Legend"] { border-color: {{data.item_grade.Legend}}; }
+
+/* Last: the id-qualified copies.  These tie with `#id:hover` /
+   `#id:checked` at specificity 110 and win on ORDER, which is what
+   keeps a checked rarity pill its own rarity colour — the behaviour
+   the inline sheet used to get for free by being inline. */
+
+#SkillFilterButton[dataColor="item_grade:Common"] { color: {{data.item_grade.Common}}; }
+#SkillFilterButton[dataColor="item_grade:Rare"] { color: {{data.item_grade.Rare}}; }
+#SkillFilterButton[dataColor="item_grade:Unique"] { color: {{data.item_grade.Unique}}; }
+#SkillFilterButton[dataColor="item_grade:Epic"] { color: {{data.item_grade.Epic}}; }
+#SkillFilterButton[dataColor="item_grade:Legend"] { color: {{data.item_grade.Legend}}; }
+#SkillFilterButton[dataColor="craft_method:Transfer"] { color: {{data.craft_method.Transfer}}; }
+#SkillFilterButton[dataColor="craft_method:Herstellung"] { color: {{data.craft_method.Herstellung}}; }
+
+#ArcanaGradePill[dataColor="item_grade:Common"] { color: {{data.item_grade.Common}}; }
+#ArcanaGradePill[dataColor="item_grade:Rare"] { color: {{data.item_grade.Rare}}; }
+#ArcanaGradePill[dataColor="item_grade:Unique"] { color: {{data.item_grade.Unique}}; }
+#ArcanaGradePill[dataColor="item_grade:Epic"] { color: {{data.item_grade.Epic}}; }
+#ArcanaGradePill[dataColor="item_grade:Legend"] { color: {{data.item_grade.Legend}}; }
+
+#DetailInfo[dataColor="item_grade:Common"] { color: {{data.item_grade.Common}}; }
+#DetailInfo[dataColor="item_grade:Rare"] { color: {{data.item_grade.Rare}}; }
+#DetailInfo[dataColor="item_grade:Unique"] { color: {{data.item_grade.Unique}}; }
+#DetailInfo[dataColor="item_grade:Epic"] { color: {{data.item_grade.Epic}}; }
+#DetailInfo[dataColor="item_grade:Legend"] { color: {{data.item_grade.Legend}}; }
+
+#CraftMenuRow[dataColor="item_grade:Common"] { color: {{data.item_grade.Common}}; }
+#CraftMenuRow[dataColor="item_grade:Rare"] { color: {{data.item_grade.Rare}}; }
+#CraftMenuRow[dataColor="item_grade:Unique"] { color: {{data.item_grade.Unique}}; }
+#CraftMenuRow[dataColor="item_grade:Epic"] { color: {{data.item_grade.Epic}}; }
+#CraftMenuRow[dataColor="item_grade:Legend"] { color: {{data.item_grade.Legend}}; }
+
+#GradeTileName[dataColor="item_grade:Common"] { color: {{data.item_grade.Common}}; }
+#GradeTileName[dataColor="item_grade:Rare"] { color: {{data.item_grade.Rare}}; }
+#GradeTileName[dataColor="item_grade:Unique"] { color: {{data.item_grade.Unique}}; }
+#GradeTileName[dataColor="item_grade:Epic"] { color: {{data.item_grade.Epic}}; }
+#GradeTileName[dataColor="item_grade:Legend"] { color: {{data.item_grade.Legend}}; }
+
+#SimGradeLabel[dataColor="item_grade:Common"] { color: {{data.item_grade.Common}}; }
+#SimGradeLabel[dataColor="item_grade:Rare"] { color: {{data.item_grade.Rare}}; }
+#SimGradeLabel[dataColor="item_grade:Unique"] { color: {{data.item_grade.Unique}}; }
+#SimGradeLabel[dataColor="item_grade:Epic"] { color: {{data.item_grade.Epic}}; }
+#SimGradeLabel[dataColor="item_grade:Legend"] { color: {{data.item_grade.Legend}}; }
+
+#SkillTypeLabel[dataColor="skill_type:active"] { color: {{data.skill_type.active}}; }
+#SkillTypeLabel[dataColor="skill_type:passive"] { color: {{data.skill_type.passive}}; }
+#SkillTypeLabel[dataColor="skill_type:stigma"] { color: {{data.skill_type.stigma}}; }
+
+#SkillCardTypeLabel[dataColor="skill_type:active"] { color: {{data.skill_type.active}}; }
+#SkillCardTypeLabel[dataColor="skill_type:passive"] { color: {{data.skill_type.passive}}; }
+#SkillCardTypeLabel[dataColor="skill_type:stigma"] { color: {{data.skill_type.stigma}}; }
+
+#TooltipColumnHead[dataColor="skill_type:active"] { color: {{data.skill_type.active}}; }
+#TooltipColumnHead[dataColor="skill_type:passive"] { color: {{data.skill_type.passive}}; }
+#TooltipColumnHead[dataColor="skill_type:stigma"] { color: {{data.skill_type.stigma}}; }
+
+#ArcanaSetBonusTitle[dataColor="arcana_theme:Vigor"] { color: {{data.arcana_theme.Vigor}}; }
+#ArcanaSetBonusTitle[dataColor="arcana_theme:Magic"] { color: {{data.arcana_theme.Magic}}; }
+#ArcanaSetBonusTitle[dataColor="arcana_theme:Frenzy"] { color: {{data.arcana_theme.Frenzy}}; }
+#ArcanaSetBonusTitle[dataColor="arcana_theme:Purity"] { color: {{data.arcana_theme.Purity}}; }
+#ArcanaSetBonusTitle[dataColor="arcana_theme:Punishment"] { color: {{data.arcana_theme.Punishment}}; }
+#ArcanaSetBonusTitle[dataColor="arcana_theme:Protection"] { color: {{data.arcana_theme.Protection}}; }
+#ArcanaSetBonusTitle[dataColor="arcana_theme:Indomitability"] { color: {{data.arcana_theme.Indomitability}}; }
+
+#ArcanaThemeColumnHead[dataColor="arcana_theme:Vigor"] { color: {{data.arcana_theme.Vigor}}; }
+#ArcanaThemeColumnHead[dataColor="arcana_theme:Magic"] { color: {{data.arcana_theme.Magic}}; }
+#ArcanaThemeColumnHead[dataColor="arcana_theme:Frenzy"] { color: {{data.arcana_theme.Frenzy}}; }
+#ArcanaThemeColumnHead[dataColor="arcana_theme:Purity"] { color: {{data.arcana_theme.Purity}}; }
+#ArcanaThemeColumnHead[dataColor="arcana_theme:Punishment"] { color: {{data.arcana_theme.Punishment}}; }
+#ArcanaThemeColumnHead[dataColor="arcana_theme:Protection"] { color: {{data.arcana_theme.Protection}}; }
+#ArcanaThemeColumnHead[dataColor="arcana_theme:Indomitability"] { color: {{data.arcana_theme.Indomitability}}; }
+
+#GeniusOwnedName[dataColor="genius_board:Cogni"] { color: {{data.genius_board.Cogni}}; }
+#GeniusOwnedName[dataColor="genius_board:Fera"] { color: {{data.genius_board.Fera}}; }
+#GeniusOwnedName[dataColor="genius_board:Natura"] { color: {{data.genius_board.Natura}}; }
+#GeniusOwnedName[dataColor="genius_board:Varian"] { color: {{data.genius_board.Varian}}; }
+#GeniusOwnedName[dataColor="genius_board:Special"] { color: {{data.genius_board.Special}}; }
+
+#GeniusOwnedValue[dataColor="genius_board:Cogni"] { color: {{data.genius_board.Cogni}}; }
+#GeniusOwnedValue[dataColor="genius_board:Fera"] { color: {{data.genius_board.Fera}}; }
+#GeniusOwnedValue[dataColor="genius_board:Natura"] { color: {{data.genius_board.Natura}}; }
+#GeniusOwnedValue[dataColor="genius_board:Varian"] { color: {{data.genius_board.Varian}}; }
+#GeniusOwnedValue[dataColor="genius_board:Special"] { color: {{data.genius_board.Special}}; }
+
+#GeniusPetTitle[dataColor="genius_board:Cogni"] { color: {{data.genius_board.Cogni}}; }
+#GeniusPetTitle[dataColor="genius_board:Fera"] { color: {{data.genius_board.Fera}}; }
+#GeniusPetTitle[dataColor="genius_board:Natura"] { color: {{data.genius_board.Natura}}; }
+#GeniusPetTitle[dataColor="genius_board:Varian"] { color: {{data.genius_board.Varian}}; }
+#GeniusPetTitle[dataColor="genius_board:Special"] { color: {{data.genius_board.Special}}; }
+
+#DaevanionFilterCheck[dataColor="item_grade:Common"] { color: {{data.item_grade.Common}}; }
+#DaevanionFilterCheck[dataColor="item_grade:Rare"] { color: {{data.item_grade.Rare}}; }
+#DaevanionFilterCheck[dataColor="item_grade:Unique"] { color: {{data.item_grade.Unique}}; }
+#DaevanionFilterCheck[dataColor="item_grade:Epic"] { color: {{data.item_grade.Epic}}; }
+#DaevanionFilterCheck[dataColor="item_grade:Legend"] { color: {{data.item_grade.Legend}}; }
+

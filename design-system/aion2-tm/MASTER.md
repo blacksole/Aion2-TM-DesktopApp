@@ -4,10 +4,16 @@
 **Portée du « aucun hex magique »** : garantie et testée pour `ui/` et `core/`
 (`tests/test_no_hex_literals_in_ui.py`, exceptions ligne par ligne dans
 `tests/fixtures/hex_allowlist.txt`) ; `core/theme.py` est le propriétaire des
-valeurs, donc exempt par construction. `ItemDatabase/` n'est pas encore
-tokenisée — sa dette est **comptée et gelée** en attendant sa vague
-(`tests/fixtures/itemdatabase_literal_baseline.txt`), parce qu'un document ne
-doit pas affirmer une garantie qu'aucun test ne fournit.
+valeurs, donc exempt par construction. `ItemDatabase/` est tokenisée depuis le
+2026-09-18 (wave 3) : son plancher compté
+(`tests/fixtures/itemdatabase_literal_baseline.txt`) est passé de 201 hex /
+96 `setStyleSheet` à **18 hex / 2 `setStyleSheet`**, et ce qui reste n'est pas
+de la dette — 19 valeurs forment la table de repli Abyss utilisée uniquement
+si `core.theme` est introuvable (build standalone), la 20ᵉ est le
+`#FCC78B` du **format de l'API amont** (`_HIGHLIGHT_SPAN_RE`), et les deux
+`setStyleSheet` sont les points de livraison de sa feuille. Le plancher reste
+testé dans les deux sens : il ne peut ni monter, ni baisser sans être mis à
+jour.
 **Décidé le** : 2026-09-18 (genjutsu paint, thèses validées par Florian).
 **Stack** : PySide6 6.11 · QSS généré depuis un template + tokens · painters via `QColor` exposés par `core/theme.py`.
 
@@ -343,6 +349,8 @@ hex, 23 `QColor`, 96 `setStyleSheet`, zéro import de `core.theme`) et le
 un plancher : `tests/fixtures/itemdatabase_literal_baseline.txt` enregistre
 les comptes, et le test échoue s'ils **montent** (comme s'ils baissent sans
 mise à jour du plancher).
+*(Fermé le jour même par la wave 3 — voir l'entrée « tokenisation de
+l'Armory » ci-dessous. Le mécanisme du plancher, lui, reste en place.)*
 
 #### Deux défauts trouvés en relisant le rendu câblé
 
@@ -364,12 +372,74 @@ n'attribuait pas. Trouvés en regardant les captures, pas les tests.
   `MainWindow` — qui détient l'onglet actif et le restaure depuis le profil —
   déplace maintenant le surlignage lui-même (`TasksPage.mark_active_tab`).
 
+### 2026-09-18 — tokenisation de l'Armory (wave 3)
+
+L'`ItemDatabase/` était la dernière zone hors du système : sa propre feuille
+écrite à la main (1 205 lignes, 190 sélecteurs, « Abyss, copié
+volontairement »), 201 littéraux de couleur, 96 `setStyleSheet`, zéro import
+de `core.theme`. Elle restait navy pendant que l'app changeait de thème.
+
+- **§4-2** — `ItemDatabase/styles.qss` disparaît au profit de
+  `ItemDatabase/styles.template.qss`, rendu **par thème** via un renderer
+  générique (`core.theme.build_qss_from`). La garantie « le template couvre
+  les 190 sélecteurs de l'ancienne feuille » survit à la suppression sous
+  forme de snapshot : `tests/fixtures/armory_legacy_selectors.txt`.
+- **Portée** — cette feuille n'est **pas** scopée en `QWidget[aion2="true"]`,
+  au contraire de celle de l'app : les fenêtres de l'Armory sont sans parent
+  et la reçoivent directement (`window.setStyleSheet`), donc un préfixe n'y
+  aurait rien à sélectionner. L'étanchéité décrite dans « Portée de la
+  feuille » reste donc exacte et nécessaire dans les deux sens.
+- **§4-4** — 96 `setStyleSheet` → **2**, et ce sont des points de livraison
+  (`_style_window` pour une fenêtre neuve, `apply_theme` pour celles déjà
+  ouvertes), pas du style. Les couleurs pilotées par la donnée passent par
+  une propriété dynamique `dataColor="<kind>:<key>"` + une règle par entrée
+  de table : la couleur reste dans la feuille (donc suit le thème) au lieu
+  d'être figée sur le widget — une feuille inline est la plus profonde que
+  Qt connaisse, elle gagnait la propriété et aucun re-rendu ne la
+  rattrapait.
+- **§4-4, propriétaire** — les **tables de données** montent dans
+  `core/theme.py` (rareté d'item, type de gear, type de skill, méthode de
+  craft, thème/catégorie d'Arcana, board Genius, rôle, type de dégâts, état
+  de spécialisation). `ItemDatabase/app.py` n'en garde aucune copie ; le
+  gate anti-dérive de `tests/test_theme.py` est inversé en conséquence.
+- **Deux tables par thème supprimées** : `LAYOUT_THEMES` (6 × 4 hex, le fond
+  en dégradé diagonal — contraire à la thèse « zéro dégradé décoratif », et
+  déjà retiré côté app à la wave 2) devient le token `bg.window` ;
+  `ENCHANT_ACCENT_BY_THEME` (6 hex choisis à la main pour ne pas collider
+  avec une couleur de rareté) était la copie privée de « l'accent du thème
+  courant » et devient `{{accent}}` dans `#SlotEnchantLabel`.
+- **Nouvelle forme de placeholder** : `{{token|alpha}}`
+  (`{{accent|0.06}}`). L'ancêtre de cette feuille était construit en couches
+  translucides — 60 règles en `rgba(34, 211, 238, 0.06 … 0.25)` — et le jeu
+  sémantique n'a qu'un seul alpha par rôle (`accent.soft` = 0.14). Sans
+  modificateur, porter ces couches imposait soit de les aplatir sur un seul
+  token *soft* (visiblement différent), soit d'inventer douze tokens
+  `*.soft-er` dont personne d'autre n'aurait l'usage.
+- **Correspondances non exactes** : chaque valeur de l'ancienne feuille qui
+  n'était pas *sur* un token est documentée ligne par ligne dans le bloc
+  d'en-tête de `ItemDatabase/styles.template.qss` (les quatre gris
+  éteints/désactivés deviennent `fg.muted` à quatre alphas ; les traits
+  slate-500 deviennent `border` sur les surfaces et `border.strong` sur les
+  contrôles ; les quatre ors deviennent `warn`). Pour le thème Abyss, tout
+  ce qui n'est pas dans cette liste rend **octet pour octet** comme avant.
+- **Contraste (`tests/test_armory_theme.py`)** : aucune couleur de rareté n'a
+  eu besoin d'être adoucie. Sur les six thèmes, chaque rareté est à ≥ 6,1:1
+  sur `bg.elevated` (min. 6,11 — Common sur Frostbite ; max. 11,60 — Unique
+  sur Void), et la pire de **toutes** les couleurs de donnée est à 3,96:1
+  (`skill_type:passive` sur Frostbite, seuil 3:1). Une couleur de rareté est
+  de la **donnée de jeu** : si l'une échouait un jour, le correctif serait
+  une puce `*.soft` derrière le texte, jamais une autre teinte.
+- **§4-5** — garde-fou de rendu propre à l'Armory : les trois fenêtres
+  (Item Database, Build Planner, Crafting) construites offscreen et grabbées
+  par thème (18 captures), zéro gris Fusion, plus une vérification en
+  **pixels** que le `setForeground()` par rareté survit à la feuille (le
+  défaut du 2026-08-29, re-garanti du bon côté de la suppression du fichier).
+
 ### Décisions différées (posées explicitement, pas oubliées)
 
 | Sujet | Décision | Pourquoi pas maintenant |
 |---|---|---|
-| Tokenisation de l'Armory | vague dédiée | 22k lignes d'UI, 190 sélecteurs QSS, sa propre feuille, zéro import de `core.theme`. La feuille de l'app est rendue **étanche** pour elle en attendant (voir « Portée de la feuille »), et sa dette est gelée par un plancher testé. |
-| `app.setFont()` comme véhicule de la police de base | après la vague Armory | `setFont` ne passe pas par la cascade QSS : il atteindrait l'Armory quoi qu'on fasse. Barlow passe donc par la règle scopée. |
+| `app.setFont()` comme véhicule de la police de base | **toujours différé** (l'Armory est tokenisée, mais pas re-typographiée) | `setFont` ne passe pas par la cascade QSS : il atteindrait l'Armory quoi qu'on fasse. La vague Armory (2026-09-18) a migré ses **couleurs**, pas ses métriques — sa feuille ne déclare toujours aucune `font-family`, et ses 22k lignes de layout sont calées au doigt sur la police système. Barlow reste posée par la règle scopée. Le jour où l'Armory est re-typographiée, `setFont` devient le bon véhicule. |
 | Emoji utilisés comme icônes (`"📋 Vorlagen"`, `"🛒 Einkauf"`, `"👤 Charaktere"`) dans `core/translations.py` | vague icônes | §3 dit « aucun emoji comme icône » et ces glyphes sont dans les chaînes traduites des trois langues. Les remplacer demande de vrais `QIcon` Lucide posés sur les boutons — un travail d'icônes, pas une retouche de chaîne. Le double sélecteur de thème du `SettingsDialog` a en revanche perdu ses emoji tout de suite (ils n'étaient pas traduits). |
 | Deux sélecteurs de thème (`SettingsDialog` + page Appearance) | à dédupliquer | Le dialogue est vivant (en-tête → `open_settings`) ; retirer un contrôle qu'un utilisateur utilise peut-être est une décision produit, pas un correctif de revue. Sa version emoji est corrigée, la duplication reste. |
 | Flèches de spinbox/combo (`assets/icons/arrow_*_orange.png`) | vague icônes | Assets PNG oranges, donc hors thème sur Abyss/Emerald/Void. Corriger demande des icônes par thème ou teintées à l'exécution. |

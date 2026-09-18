@@ -217,35 +217,48 @@ def test_qcolor_rejects_unknown_and_non_color_tokens():
 _APP_PY = theme.TEMPLATE_PATH.parent.parent / "ItemDatabase" / "app.py"
 
 
-def _dict_literal_from_app_py(name: str) -> dict[str, str]:
-    """Read a ``{"Key": "#hex", ...}`` literal straight out of the owner file.
-
-    Parsed from source rather than imported: ``ItemDatabase/app.py`` is a
-    46k-line module that builds Qt objects on import.
-    """
-    source = _APP_PY.read_text(encoding="utf-8")
-    match = re.search(rf"^{name}\s*=\s*\{{(.*?)^\}}", source, flags=re.S | re.M)
-    assert match, f"{name} not found in {_APP_PY}"
-    return dict(re.findall(r'"([^"]+)"\s*:\s*"(#[0-9a-fA-F]{6})"', match.group(1)))
-
-
 def test_the_item_database_drift_gate_can_actually_run():
     """The gate below used to carry a skipif, so it vanished silently rather
-    than failing when ItemDatabase/ was absent (review F-14).  A missing
-    owner file is itself the drift."""
+    than failing when ItemDatabase/ was absent (review F-14)."""
     assert _APP_PY.is_file(), (
-        f"{_APP_PY} is gone — it owns GRADE_COLORS/GEAR_TYPE_COLORS, which "
-        f"core/theme.py mirrors; move the tables here before deleting it"
+        f"{_APP_PY} is gone — it is the consumer this module's data tables "
+        f"exist for; re-point the gate below before deleting it"
     )
 
 
-@pytest.mark.parametrize("kind,owner_table", [("item_grade", "GRADE_COLORS"), ("gear_type", "GEAR_TYPE_COLORS")])
-def test_data_color_mirrors_item_database(kind, owner_table):
-    """Detects drift: ItemDatabase/app.py still owns these tables."""
-    owner = _dict_literal_from_app_py(owner_table)
-    assert owner, f"{owner_table} parsed empty"
-    mirrored = {key: theme.data_color(kind, key) for key in theme.data_color_keys(kind)}
-    assert mirrored == owner
+#: Tables that used to live in ``ItemDatabase/app.py`` as literals, with
+#: ``core/theme.py`` mirroring them.  The Armory tokenization wave
+#: (2026-09-18) inverted that: this module OWNS them, and app.py binds the
+#: same names to these objects at import.  So the drift gate inverted too —
+#: there is nothing to compare, and the thing to check is that no second
+#: copy has reappeared.
+_OWNED_TABLES = ("GRADE_COLORS", "GEAR_TYPE_COLORS", "SKILL_TYPE_COLORS",
+                 "ARCANA_THEME_COLORS", "GENIUS_BOARD_COLORS", "ROLE_COLORS")
+
+
+@pytest.mark.parametrize("name", _OWNED_TABLES)
+def test_no_second_copy_of_a_data_table_in_the_armory(name):
+    """A re-appearing literal table is the drift this used to detect.
+
+    Parsed from source rather than imported: ``ItemDatabase/app.py`` is a
+    23k-line module that builds Qt objects on import.
+    """
+    source = _APP_PY.read_text(encoding="utf-8")
+    literal = re.search(rf"^_?{name}\s*=\s*\{{\s*\n?\s*\"", source, flags=re.M)
+    assert not literal, (
+        f"ItemDatabase/app.py declares its own {name} again — core/theme.py "
+        f"is the owner; bind the name to it instead of copying the values"
+    )
+
+
+def test_the_armory_reads_the_data_tables_from_here():
+    """The other half: the Armory must actually be wired to this module."""
+    source = _APP_PY.read_text(encoding="utf-8")
+    assert "from core import theme as _theme" in source
+    for name in ("GRADE_COLORS", "GEAR_TYPE_COLORS"):
+        assert f"{name} = _theme.{name}" in source, f"{name} is not bound from core.theme"
+    for kind in ("item_grade", "skill_type", "arcana_theme", "genius_board"):
+        assert f'"{kind}"' in source, f"nothing in the Armory asks for {kind} colours"
 
 
 _OVERLAY_PY = theme.TEMPLATE_PATH.parent / "overlay" / "overlay_window.py"

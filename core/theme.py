@@ -566,9 +566,14 @@ def contrast_ratio(fg: str, bg: str) -> float:
 # §4-4 data-driven colors
 # --------------------------------------------------------------------------
 
-#: Item rarity colors — mirror of ``ItemDatabase/app.py``'s ``GRADE_COLORS``
-#: (read-only; that module stays the owner until it is migrated).
-_ITEM_GRADE_COLORS: dict[str, str] = {
+#: Item rarity colors.  THIS is the owner since the Armory tokenization
+#: wave (2026-09-18): ``ItemDatabase/app.py`` binds its own ``GRADE_COLORS``
+#: to this table at import and only falls back to its own literal copy when
+#: ``core.theme`` is unimportable at all (the standalone
+#: ``AION2_ItemDatabase.spec`` build, or ``python ItemDatabase/app.py`` from
+#: a checkout without the repo root on ``sys.path``).  That copy is gated
+#: against this one by ``tests/test_theme.py::test_data_color_mirrors_item_database``.
+GRADE_COLORS: dict[str, str] = {
     "Common": "#94a3b8",
     "Rare": "#4ade80",
     "Unique": "#facc15",
@@ -576,11 +581,100 @@ _ITEM_GRADE_COLORS: dict[str, str] = {
     "Legend": "#38bdf8",
 }
 
-#: Gear-flavor colors — mirror of ``ItemDatabase/app.py``'s ``GEAR_TYPE_COLORS``.
-_GEAR_TYPE_COLORS: dict[str, str] = {
+#: Gear-flavor colors — same ownership story as :data:`GRADE_COLORS`.
+GEAR_TYPE_COLORS: dict[str, str] = {
     "PvP": "#fb7185",
     "PvE": "#4ade80",
     "Neutral": "#94a3b8",
+}
+
+# ---- Armory data tables (moved here whole on 2026-09-18) ----------------
+#
+# Every table below used to be a module-level literal in
+# ``ItemDatabase/app.py``.  They are colors the *data* picks -- a skill's
+# type, a recipe's method, an Arcana Set's theme, a Genius board, a stat
+# role -- which MASTER §4-4 names as the one tolerated exception to "no
+# color outside the tokens".  The exception is about *where the value comes
+# from*, not about *who stores it*: stored in the widget file they were 190
+# unreachable literals, stored here they are one inventory the QSS template
+# can also read (``{{data.<kind>.<key>}}``).
+
+#: Skill kind — active / passive / stigma (Skill Planner, badges, cards).
+SKILL_TYPE_COLORS: dict[str, str] = {
+    "active": "#22d3ee",
+    "passive": "#a855f7",
+    "stigma": "#facc15",
+}
+
+#: How a recipe is obtained.  ``Herstellung``/``Transfer`` are the stable
+#: internal method identifiers of the recipe data, not display strings.
+CRAFT_METHOD_COLORS: dict[str, str] = {
+    "Transfer": "#f59e0b",
+    "Herstellung": "#4ade80",
+}
+
+#: Arcana Set theme identity (Choose Card Sets, Set banners, card pills).
+ARCANA_THEME_COLORS: dict[str, str] = {
+    "Vigor": "#facc15",
+    "Magic": "#22d3ee",
+    "Frenzy": "#f97316",
+    "Purity": "#a78bfa",
+    "Punishment": "#ef4444",
+    "Protection": "#4ade80",
+    "Indomitability": "#f472b6",
+}
+
+#: Arcana Set display category (derived from each theme's icon set-label).
+ARCANA_CATEGORY_COLORS: dict[str, str] = {
+    "pve": "#4ade80",
+    "pvp": "#fb7185",
+    "offense": "#f59e0b",
+    "defence": "#38bdf8",
+    "cure": "#a855f7",
+}
+
+#: Dark end of each category's fallback banner gradient (the 0.0 stop; the
+#: 1.0 stop is :data:`ARCANA_CATEGORY_COLORS`).  Only used for a Set with
+#: no real background photo yet.
+ARCANA_CATEGORY_DEEP_COLORS: dict[str, str] = {
+    "pve": "#14532d",
+    "pvp": "#4c0519",
+    "offense": "#78350f",
+    "defence": "#0c4a6e",
+    "cure": "#4c1d95",
+}
+
+#: Genius Insight board identity.
+GENIUS_BOARD_COLORS: dict[str, str] = {
+    "Cogni": "#3ba7f2",
+    "Fera": "#ef4444",
+    "Natura": "#22c55e",
+    "Varian": "#f2b90c",
+    "Special": "#2dd4bf",
+}
+
+#: Stat-priority role (User-Wunsch: "Angreifer Orange, Verteidiger Blau
+#: und Support Grün").  Keys are the role identifiers the profile stores.
+ROLE_COLORS: dict[str, str] = {
+    "Angreifer": "#fb923c",
+    "Verteidiger": "#60a5fa",
+    "Support": "#4ade80",
+}
+
+#: A skill's damage type (physical vs magical), Skill Planner badges.
+DAMAGE_TYPE_COLORS: dict[str, str] = {
+    "physic": "#f87171",
+    "magic": "#60a5fa",
+}
+
+#: Active-skill specialization slot state, as the user specified it
+#: ("30% Türkis, 70% schwarz, 50% Transparenz" for an unlocked-but-unpicked
+#: option; solid dark turquoise once picked).  Not accent-derived on
+#: purpose: it reads as "this belongs to the skill tree", not as "this is
+#: the app's current accent".
+SPEC_STATE_COLORS: dict[str, str] = {
+    "available": "rgba(94, 234, 212, 0.35)",
+    "chosen": "#0d9488",
 }
 
 #: Built-in reset timers.  THIS is the owner (ownership was inverted on
@@ -609,10 +703,19 @@ _TIMER_SWATCHES: dict[str, str] = {
 }
 
 _DATA_COLORS: dict[str, dict[str, str]] = {
-    "item_grade": _ITEM_GRADE_COLORS,
-    "gear_type": _GEAR_TYPE_COLORS,
+    "item_grade": GRADE_COLORS,
+    "gear_type": GEAR_TYPE_COLORS,
     "timer": _TIMER_COLORS,
     "timer_swatch": _TIMER_SWATCHES,
+    "skill_type": SKILL_TYPE_COLORS,
+    "craft_method": CRAFT_METHOD_COLORS,
+    "arcana_theme": ARCANA_THEME_COLORS,
+    "arcana_category": ARCANA_CATEGORY_COLORS,
+    "arcana_category_deep": ARCANA_CATEGORY_DEEP_COLORS,
+    "genius_board": GENIUS_BOARD_COLORS,
+    "role": ROLE_COLORS,
+    "damage_type": DAMAGE_TYPE_COLORS,
+    "spec_state": SPEC_STATE_COLORS,
 }
 
 #: Returned when a data key is unknown (MASTER §2 ``fg.muted``).
@@ -644,7 +747,19 @@ def data_color_keys(kind: str) -> tuple[str, ...]:
 # QSS generation
 # --------------------------------------------------------------------------
 
-_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
+#: ``{{token}}``, ``{{bg.window}}``, ``{{data.item_grade.Legend}}`` and any
+#: of those with an alpha modifier: ``{{accent|0.14}}``.
+#:
+#: The alpha form exists for the Armory template (2026-09-18).  Its
+#: hand-written ancestor was built out of translucent layers -- 60 rules
+#: spelling ``rgba(34, 211, 238, 0.06 … 0.25)`` over a dark ground -- and
+#: the semantic set has exactly one alpha per role (``accent.soft`` at
+#: 0.14).  Without a modifier, porting it meant either flattening every
+#: layer to one soft token (visibly different) or inventing a dozen
+#: ``*.soft-er`` tokens nothing else would use.  ``{{accent|0.06}}``
+#: renders the *active theme's* accent at the layer the widget asked for,
+#: which is what the literal meant in the first place.
+_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)(?:\|([0-9.]+))?\s*\}\}")
 
 
 #: Families Qt actually registered, as reported by ``core.fonts.load_fonts``.
@@ -685,8 +800,27 @@ def font_stack(tokens_or_theme: Tokens | str, role: str) -> str:
     return ", ".join([quoted] + [e for e in entries if e != quoted])
 
 
+def with_alpha(color: str, alpha: float) -> str:
+    """``("#22d3ee", 0.14)`` → ``"rgba(34, 211, 238, 0.14)"``.
+
+    Multiplies into an already-translucent color rather than replacing its
+    alpha, so ``with_alpha(accent_soft, 0.5)`` is half of the soft layer
+    instead of a surprise opacity bump.
+    """
+    red, green, blue, own_alpha = parse_color(color)
+    effective = max(0.0, min(1.0, own_alpha * alpha))
+    return f"rgba({red}, {green}, {blue}, {effective:g})"
+
+
 def render_qss(template: str, theme: str = DEFAULT_THEME, asset_path: str = "") -> str:
     """Substitute ``{{token}}`` and ``ASSET_PATH`` in an in-memory template.
+
+    Three placeholder forms (see :data:`_PLACEHOLDER_RE`):
+
+    * ``{{accent}}`` / ``{{bg.window}}`` — a semantic token of ``theme``;
+    * ``{{data.item_grade.Legend}}`` — a :func:`data_color` entry, for the
+      rules a *data* color decides (MASTER §4-4);
+    * either of those with ``|alpha``, e.g. ``{{accent|0.06}}``.
 
     Raises :class:`KeyError` on an unknown placeholder — a typo in the
     template must fail the build, not silently ship a broken rule.
@@ -694,21 +828,73 @@ def render_qss(template: str, theme: str = DEFAULT_THEME, asset_path: str = "") 
     theme_tokens = tokens(theme)
     unknown: list[str] = []
 
-    def substitute(match: re.Match[str]) -> str:
-        attr = _token_attr(match.group(1))
+    def resolve(name: str) -> str | None:
+        if name.startswith("data."):
+            parts = name.split(".", 2)
+            if len(parts) != 3:
+                return None
+            _, kind, key = parts
+            if kind not in _DATA_COLORS or key not in _DATA_COLORS[kind]:
+                return None
+            return data_color(kind, key)
+        attr = _token_attr(name)
         if attr in ("font_display", "font_body", "font_mono"):
             # Resolved through core.fonts so the sheet names the family Qt
             # actually registered (see set_font_families).
             return font_stack(theme_tokens, attr.removeprefix("font_"))
         if not hasattr(theme_tokens, attr):
+            return None
+        return str(getattr(theme_tokens, attr))
+
+    def substitute(match: re.Match[str]) -> str:
+        value = resolve(match.group(1))
+        if value is None:
             unknown.append(match.group(1))
             return match.group(0)
-        return str(getattr(theme_tokens, attr))
+        alpha = match.group(2)
+        if alpha is None:
+            return value
+        try:
+            return with_alpha(value, float(alpha))
+        except ValueError:
+            # A number the template spelled wrong, or a non-color token:
+            # same class of mistake as an unknown name, same loud failure.
+            unknown.append(f"{match.group(1)}|{alpha}")
+            return match.group(0)
 
     rendered = _PLACEHOLDER_RE.sub(substitute, template)
     if unknown:
         raise KeyError(f"Unknown token placeholder(s) in QSS template: {sorted(set(unknown))}")
     return rendered.replace("ASSET_PATH", asset_path)
+
+
+def build_qss_from(
+    path: Path | str, theme: str = DEFAULT_THEME, asset_path: str = "", *, bundle_hint: str = ""
+) -> str:
+    """Render *any* ``{{token}}`` template file for ``theme``.
+
+    The app's own sheet goes through :func:`build_qss`; this is the generic
+    form, added for ``ItemDatabase/styles.template.qss`` (the Armory owns
+    its own sheet because its windows are parentless and therefore outside
+    the application sheet's ``QWidget[aion2="true"]`` scope -- see
+    tests/test_app_sheet_isolation.py).
+
+    ``bundle_hint`` is appended to the not-found error: a template missing
+    from a frozen build is a spec-datas mistake, and the message should say
+    which line is missing rather than leave the reader to guess.
+    """
+    path = Path(path)
+    try:
+        template = path.read_text(encoding="utf-8")
+    except OSError as error:
+        # A missing template means an unstyled app, and the message must
+        # name the path that was actually tried -- this used to surface as a
+        # bare FileNotFoundError from inside MainWindow.__init__.
+        raise RuntimeError(
+            f"QSS template not found at {path} — is it bundled?"
+            + (f" ({bundle_hint})" if bundle_hint else "")
+        ) from error
+    return render_qss(template, theme=theme, asset_path=asset_path)
 
 
 def build_qss(theme: str = DEFAULT_THEME, asset_path: str = "") -> str:
@@ -718,18 +904,12 @@ def build_qss(theme: str = DEFAULT_THEME, asset_path: str = "") -> str:
     exactly like the loader it supersedes (``MainWindow.load_styles``): the
     repo root in a dev checkout, ``sys._MEIPASS`` in a frozen build.
     """
-    path = template_path()
-    try:
-        template = path.read_text(encoding="utf-8")
-    except OSError as error:
-        # A missing template means an unstyled app, and the message must
-        # name the path that was actually tried -- this used to surface as a
-        # bare FileNotFoundError from inside MainWindow.__init__.
-        raise RuntimeError(
-            f"QSS template not found at {path} — is it bundled? "
-            f"(spec datas must carry ('ui/styles.template.qss', 'ui'))"
-        ) from error
-    return render_qss(template, theme=theme, asset_path=asset_path)
+    return build_qss_from(
+        template_path(),
+        theme=theme,
+        asset_path=asset_path,
+        bundle_hint="spec datas must carry ('ui/styles.template.qss', 'ui')",
+    )
 
 
 def build_palette(tokens_or_theme: Tokens | str = DEFAULT_THEME) -> QPalette:

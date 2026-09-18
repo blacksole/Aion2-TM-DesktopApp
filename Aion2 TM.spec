@@ -19,7 +19,14 @@ a = Analysis(
         # what has to reach _MEIPASS/ui/.
         ('ui/styles.template.qss', 'ui'),
         ('ItemDatabase/app.py', 'ItemDatabase'),
-        ('ItemDatabase/styles.qss', 'ItemDatabase'),
+        # ItemDatabase/styles.qss is gone (2026-09-18, the Armory
+        # tokenization wave): the Armory renders its own sheet from this
+        # TEMPLATE via core.theme.build_qss_from(), per theme, exactly as
+        # the app does from ui/styles.template.qss above.  Both halves have
+        # to reach _MEIPASS/ItemDatabase/ -- the template AND the
+        # dropdown-arrow PNG its one url() points at, which travels inside
+        # ('ItemDatabase/assets', …) below.
+        ('ItemDatabase/styles.template.qss', 'ItemDatabase'),
         ('ItemDatabase/assets', 'ItemDatabase/assets'),
         # Real bug found + fixed (User-reported, 2026-09-05, screenshot:
         # the Pantheon Lord filter always showed zero results after
