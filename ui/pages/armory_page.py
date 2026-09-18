@@ -66,7 +66,9 @@ class ArmoryPage(QWidget):
 
             row_layout.addLayout(text_col, 1)
 
-            def on_press(event, signal=getattr(self, signal_name), r=row):
+            bound_signal = getattr(self, signal_name)
+
+            def on_press(event, signal=bound_signal, r=row):
                 if event.button() == Qt.LeftButton:
                     signal.emit()
                 type(r).mousePressEvent(r, event)

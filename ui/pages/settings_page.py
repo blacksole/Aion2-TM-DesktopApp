@@ -1,14 +1,13 @@
 import os
-import webbrowser
 from pathlib import Path
 from PySide6.QtGui import (
-    QIcon, QPixmap, QPainter, QPainterPath, QPen, QBrush, QLinearGradient, QColor, QFontDatabase,
+    QIcon, QPainter, QPainterPath, QPen, QBrush, QLinearGradient, QColor, QFontDatabase,
 )
-from PySide6.QtCore import Signal, QTime, QDate, QDateTime, QSize, Qt, QRectF, QPointF
+from PySide6.QtCore import Signal, QTime, QDate, QSize, Qt, QRectF, QPointF
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QDateEdit, QButtonGroup, QGridLayout,
-    QFileDialog, QLineEdit, QScrollArea, QTabWidget, QMessageBox, QDialog, QPlainTextEdit, QCompleter,
+    QFileDialog, QLineEdit, QScrollArea, QTabWidget, QDialog, QPlainTextEdit, QCompleter,
 )
 
 from core.app_logger import get_log_path

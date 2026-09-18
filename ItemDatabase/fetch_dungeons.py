@@ -99,7 +99,6 @@ def _parse_properties(html: str) -> dict:
 
 
 def _parse_name(html: str) -> str | None:
-    m = re.search(r'"mt-0\.5 text-xs text-faint","children":\["id ","(\d+)"\]', html)
     m2 = re.search(r'"font-display text-2xl font-bold leading-tight sm:text-3xl","children":"([^"]+)"', html)
     return m2.group(1) if m2 else None
 

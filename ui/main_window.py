@@ -1828,7 +1828,7 @@ class MainWindow(QMainWindow):
             tray_btn = box.addButton(
                 tr(self.language, "tray_minimize_yes"), QMessageBox.AcceptRole
             )
-            close_btn = box.addButton(
+            box.addButton(
                 tr(self.language, "tray_minimize_no"), QMessageBox.RejectRole
             )
             box.exec()
@@ -3787,10 +3787,6 @@ class MainWindow(QMainWindow):
                 open(default_path, "w", encoding="utf-8"),
                 indent=4, ensure_ascii=False,
             )
-
-    def change_theme_from_page(self, theme: str):
-        self.apply_theme(theme)
-        self.save_profile()
 
     def _setup_theme_logo(self):
         self.theme_logo_label = QLabel()

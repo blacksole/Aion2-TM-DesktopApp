@@ -3,7 +3,6 @@ from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QRadialGradient
 
 from core.flow_model import FlowNode
-from ui.flow.widgets.delete_confirm_dialog import UnsavedChangesDialog
 
 
 NODE_RADIUS = 14
