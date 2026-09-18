@@ -44,12 +44,77 @@
      #22c55e                          {ok}                     green.400
      #38bdf8 (#SkillTileName)         {accent}                 was Abyss-sky, which is also Legend's
                                                                  grade colour — the tile name is not a grade
-     #c084fc (#SlotEnchantLabel)      {accent}                 app.py already overrode this per theme with
-                                                                 ENCHANT_ACCENT_BY_THEME; the accent IS that
-                                                                 table's intent, so the table is gone
+     #c084fc (#SlotEnchantLabel)      {accent}                 dead on arrival: app.py overrode this label
+                                                                 per theme with ENCHANT_ACCENT_BY_THEME, so
+                                                                 the value a user SAW was that table's
+                                                                 (#06b6d4 on Abyss).  The table was this
+                                                                 app's private copy of "the current theme's
+                                                                 accent", so it is gone and the token says it
      rgba(192,132,252,0.18)           {secondary|0.18}         violet.400 wash
      #fb923c #60a5fa #4ade80          {data.role.*}            the three Rolle accents are DATA (MASTER
      rgba(251,146,60,a) &c            {data.role.*|a}          §4-4), owned by core/theme.ROLE_COLORS
+
+   NEAREST-TOKEN MAP, PART 2 — THE MIGRATED INLINE SHEETS.  The map above
+   covers this file's hand-written ancestor.  The other 94 sources were
+   `setStyleSheet` calls, HTML `<span style=…>` fragments and QPainter
+   colours inside ItemDatabase/app.py; review G (M10) pointed out, rightly,
+   that they got the same nearest-token treatment with no record.  Here it
+   is.  Mappings already listed in PART 1 (the four dim greys, the ambers,
+   #e2e8f0/#e6ecf5/#e7ebf3 → {fg}, slate-500 lines → {border}) applied
+   identically and are not repeated.
+
+     legacy value                     token                      why
+     ------------------------------   ------------------------   ---------------------------------
+     #f1f5f9  (3 tooltip titles,      {fg}                       a fourth spelling of "main text"
+              1 Arcana card row)
+     #a9b7d1  (_DETAIL_CAPTION_       {fg.secondary}             the detail popups' caption grey
+              COLOR, 4 HTML spans)
+     #aab4c8  (browse-only substat    {fg.secondary}             a boosted-contrast variant of the
+              header)                                            same caption (User-reported,
+                                                                  2026-09-11: "kaum lesbar")
+     #fdfdfd  (Arcana set banner)     {fg}                       near-white painter text
+     #f8fafc  (Daevanion hover ring)  {accent.hover}             the lightest accent step, which is
+                                                                  what "brighter than active" meant
+     #334155  (radio :disabled)       {fg.muted|0.35}            the FIFTH dim grey — PART 1's "four
+                                                                  dim greys" line counted the sheet's
+                                                                  only, this one was inline
+     #0f1b2e  (season button ground)  {bg.elevated}              between navy.900 and navy.850
+     #fca5a5  ("not enough points")   {danger}                   red.300 → red.400
+     #c084fc  (_ARCANA_WISH_COLOR)    {secondary}                "testweise mal lila" (2026-08-28),
+                                                                  i.e. a second accent — which is
+                                                                  exactly what `secondary` is
+     #06b6d4  (enchant badge, per     {accent}                   see the #SlotEnchantLabel row above
+              theme)
+     #2dd4bf  (skill-level source     {accent}                   a teal that was Emerald's accent in
+              tooltip heading)                                    an Abyss window
+     #38bdf8  (2 HTML headings)       {accent}                   same as #SkillTileName above
+     rgb(30,41,59)  (HTML table       {bg.elevated}              navy.850; the wash it replaced sat
+              ground, 1 tooltip)                                  between .850 and .800
+     rgb(56,189,248)  (substat        {accent}                   the "offensive" band was sky, the
+              bucket "offensive")                                 accent is cyan (Δ 22,22,10)
+     rgb(244,114,182)  (substat       {data.gear_type.PvP}       the "pvp" band was rose, and "PvP"
+              bucket "pvp")                                       already means #fb7185 everywhere
+                                                                  else in this window (Δ 7,1,49).
+                                                                  It was mapped to {secondary} first —
+                                                                  a pink→violet shift of Δ(77,25,68),
+                                                                  which is what review G caught
+     rgb(74,222,128) / rgb(250,204,   {ok} / {warn}              the other two bands, both already
+              21)  (the other bands)                              on their token
+     QColor(6,10,18,a)  (banner       {bg.window} at a           navy.950 is (11,17,32)
+              overlay, 3 stops)
+     QColor(71,85,105)  (icon         {border.strong}            slate-600 plate under a missing icon
+              placeholder ground)
+     QColor(15,22,38,235)  (node      {bg.surface} at 235        navy.900 is (15,23,42)
+              tooltip ground)
+     QColor(0,0,0,150)  (tooltip      {bg.window} at 150         a black shadow is the window ground
+              shadow)                                             on every one of the six themes
+     QColor(255,255,255,a)  (banner   {fg} at a                  MASTER §2: never pure white
+              border), `color: white`
+     #0d9488 / rgba(94,234,212,       data spec_state            kept VERBATIM as a data colour: the
+              0.35)  (spec states)                                two values are a user decision about
+                                                                  a game mechanic, not a theme choice
+     #475569  (icon glow, plate       {border.strong}            the "no grade" fallback ring
+              fallback)
 
    NOT tokenised, on purpose:
      * font-family — nothing.  MASTER's deferred decision "app.setFont() as
@@ -1328,6 +1393,7 @@ QListWidget::item:selected {
 }
 
 #SimGradeLabel {
+    color: {{fg_muted}};
     font-weight: {{font_weight_bold}};
 }
 
@@ -1420,8 +1486,12 @@ QListWidget::item:selected {
 
 /* ── substat accordion headers ─────────────────────────────────────── */
 /* Four buckets, four accents.  They used to be four rgb() triplets passed
-   as strings through a nested function; offensive/defensive/pvp/skills are
-   OUR categories, not game data, so they are tokens, not a data table. */
+   as strings through a nested function.  offensive / defensive / skills are
+   OUR categories, so they take tokens; `pvp` takes the PvP *data* colour
+   (core.theme.GEAR_TYPE_COLORS), because the legacy rose rgb(244,114,182)
+   is that colour to within Δ(4,3,5) and "PvP" already means #fb7185
+   everywhere else in this window -- mapping it to {secondary} was a
+   pink→violet shift of Δ(77,25,68) (review G, M10). */
 
 #SubstatSectionHeader {
     padding: 4px 10px;
@@ -1443,8 +1513,8 @@ QListWidget::item:selected {
 }
 
 #SubstatSectionHeader[bucket="pvp"] {
-    background-color: {{secondary|0.18}};
-    color: {{secondary}};
+    background-color: {{data.gear_type.PvP|0.18}};
+    color: {{data.gear_type.PvP}};
 }
 
 #SubstatSectionHeader[bucket="skills"] {

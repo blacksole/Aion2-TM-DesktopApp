@@ -31,7 +31,9 @@ two went quietly to "skipped": they are re-asserted here against the
 RENDERED template instead, which is the thing the windows actually get.
 """
 
+import ast
 import importlib.util
+import json
 import re
 import sys
 from array import array
@@ -48,7 +50,10 @@ from tests.conftest import destroy_window
 ROOT = Path(__file__).resolve().parent.parent
 APP_PY = ROOT / "ItemDatabase" / "app.py"
 TEMPLATE = ROOT / "ItemDatabase" / "styles.template.qss"
-LEGACY_SELECTORS = Path(__file__).resolve().parent / "fixtures" / "armory_legacy_selectors.txt"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+LEGACY_SELECTORS = FIXTURES / "armory_legacy_selectors.txt"
+DEAD_SELECTORS = FIXTURES / "armory_dead_selectors.txt"
+ABYSS_DECLARATIONS = FIXTURES / "armory_abyss_declarations.json"
 
 #: Same set and same budget as the app's own render gate
 #: (tests/test_render_gate.py): a patch of one of Fusion's default surfaces
@@ -275,17 +280,79 @@ def test_the_template_keeps_every_legacy_selector():
     assert not missing, f"selectors lost in the port: {missing}"
 
 
-def test_the_template_styles_the_object_names_this_wave_added():
-    """The other direction: the 93 inline sheets became rules, and a rule
-    with no objectName behind it is an unstyled widget."""
-    ported = {selector for selector, _ in _rules(_rendered("abyss"))}
-    for selector in (
-        "#TransparentPane", "#GradeTileName", "#SubstatSectionHeader",
-        "#TooltipTitle", "#TooltipStatusPill", "#ArcanaSeasonButton",
-        "#ArcanaThemeOption", "#EquipItemIconLabel", "#CompareValueBetter",
-        "#SkillTypeBadge", "#TierComboPopup", "#CraftMenuRow",
-    ):
-        assert selector in ported, f"{selector} is set in app.py but never styled"
+def test_every_objectname_rule_has_a_widget_that_sets_it():
+    """A rule with no ``setObjectName`` behind it is an UNSTYLED WIDGET.
+
+    Review G (B1/B2/M7): this test used to assert the opposite direction —
+    it read the rendered sheet, checked a hand-written list of ids against
+    *that same sheet*, and reported "set in app.py but never styled".  So
+    it compared the author's rule to the author's rule, and passed while
+    naming two of the three widgets that had shipped unstyled
+    (``#TooltipStatusPill``, ``#EquipItemIconLabel``, and
+    ``#SimGradeLabel``: each got a rule, none got its id).  Two of the
+    three lost geometry, on a style-only brief.
+
+    Derived from the template rather than hand-maintained, so a new rule
+    cannot be added without its call site.  Matching on the bare quoted
+    name, not on ``setObjectName("…")``: several ids are set through a
+    lookup table or a variable (``_ROLE_BUTTON_OBJECT_NAMES``, the Pantheon
+    slot styles, ``#SubstatRow``/``#SubstatRowCompact``,
+    ``#CompareValueBetter``/``Worse``) and are not dead.
+    """
+    source = APP_PY.read_text(encoding="utf-8")
+    ids = set()
+    for selector, _ in _rules(_rendered("abyss")):
+        for part in selector.split():
+            if part.startswith("#"):
+                ids.add(part.lstrip("#").split(":")[0].split("[")[0])
+    assert len(ids) > 100, f"only {len(ids)} objectName rules found — wrong parse?"
+
+    known_dead = {
+        line.strip()
+        for line in DEAD_SELECTORS.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    dead = sorted(name for name in ids if f'"{name}"' not in source)
+    assert not set(dead) - known_dead, (
+        "template rules whose objectName is never set anywhere in app.py: "
+        f"{sorted(set(dead) - known_dead)} — each one is a widget rendering "
+        f"unstyled.  Wire it up, or add it to {DEAD_SELECTORS.name} with a reason."
+    )
+    assert not known_dead - set(dead), (
+        f"{DEAD_SELECTORS.name} lists ids that are wired up now — delete the "
+        f"stale entries: {sorted(known_dead - set(dead))}"
+    )
+
+
+def test_no_call_site_passes_a_colour_where_a_data_key_belongs():
+    """Review G (M4): ``_set_data_color(head, "skill_type", skill_type)``
+    read a parameter that two call sites still filled with
+    ``_SKILL_TYPE_COLORS["active"]``, so the property landed as
+    ``dataColor="skill_type:#22d3ee"`` and matched no rule in any theme.
+
+    The test above enumerates *legitimate* keys out of
+    ``theme.data_color_keys``, so it validates the rules and can never see
+    a bogus key.  This one reads the call sites: any literal third argument
+    must be a real key of that kind, and a non-literal (a variable) must
+    not be a colour-shaped expression.
+    """
+    source = APP_PY.read_text(encoding="utf-8")
+    calls = re.findall(r'_set_data_color\(\s*[^,]+,\s*"([a-z_]+)"\s*,\s*([^)]+)\)', source)
+    assert len(calls) >= 15, f"only {len(calls)} _set_data_color call sites parsed"
+    for kind, argument in calls:
+        argument = argument.strip()
+        assert kind in theme._DATA_COLORS, f"unknown data kind at a call site: {kind}"
+        literal = re.fullmatch(r'"([^"]*)"', argument)
+        if literal:
+            assert literal.group(1) in theme.data_color_keys(kind), (
+                f'_set_data_color(..., "{kind}", "{literal.group(1)}") — not a key of '
+                f"that table; the rule it needs does not exist"
+            )
+            continue
+        assert "COLORS[" not in argument and "#" not in argument, (
+            f'_set_data_color(..., "{kind}", {argument}) looks like a COLOUR, and this '
+            f"helper takes a data KEY (review G, M4)"
+        )
 
 
 def test_every_data_colour_the_armory_sets_has_a_rule():
@@ -305,6 +372,93 @@ def test_every_data_colour_the_armory_sets_has_a_rule():
 # ---------------------------------------------------------------------------
 # 3. the two rules this sheet must never have
 # ---------------------------------------------------------------------------
+
+#: The item views where a QSS ``color`` really does beat each item's own
+# ---------------------------------------------------------------------------
+# 2b. the VALUES, not just the selector names
+# ---------------------------------------------------------------------------
+
+
+def _declaration_map(qss: str) -> dict[str, dict[str, str]]:
+    """``{selector: {property: value}}``, whitespace-normalised."""
+    out: dict[str, dict[str, str]] = {}
+    for selector, declarations in _rules(qss):
+        props = {}
+        for declaration in declarations.split(";"):
+            if ":" not in declaration:
+                continue
+            name, _, value = declaration.partition(":")
+            props[" ".join(name.split())] = " ".join(value.split())
+        out.setdefault(selector, {}).update(props)
+    return out
+
+
+def test_the_abyss_render_matches_the_replayed_legacy_sheet():
+    """Review G (M9): the port's central claim, made falsifiable.
+
+    The template header claims that for Abyss, everything outside its
+    nearest-token map renders byte-for-byte as the hand-written sheet did.
+    That was true and *unfalsifiable in CI*, because the sheet it refers to
+    was deleted in the same commit: the selector NAMES survived as a
+    snapshot, the VALUES did not.
+
+    ``armory_abyss_declarations.json``'s ``legacy`` half closes that: it is
+    not a snapshot of this render, it is generated by replaying the
+    documented substitution map onto ``git show
+    eb53cd6:ItemDatabase/styles.qss``.  A failure here therefore means the
+    render drifted from the deleted sheet, not merely from yesterday.
+    """
+    fixture = json.loads(ABYSS_DECLARATIONS.read_text(encoding="utf-8"))
+    assert fixture["theme"] == "abyss" and fixture["source_revision"]
+    rendered = _declaration_map(theme.build_qss_from(
+        TEMPLATE, fixture["theme"], asset_path=fixture["asset_path"]
+    ))
+    expected = fixture["legacy"]
+    assert len(expected) == 190, "the legacy half of the fixture looks truncated"
+
+    for selector, properties in sorted(expected.items()):
+        assert selector in rendered, f"legacy selector lost: {selector}"
+        assert rendered[selector] == properties, (
+            f"{selector} drifted from the sheet it replaced:\n"
+            + "\n".join(
+                f"  {prop}: was {properties.get(prop)!r}, now {rendered[selector].get(prop)!r}"
+                for prop in sorted(set(properties) | set(rendered[selector]))
+                if properties.get(prop) != rendered[selector].get(prop)
+            )
+        )
+
+
+def test_the_rules_that_replaced_the_inline_sheets_are_pinned_too():
+    """The other half of the fixture: the 228 rules with no pre-image.
+
+    They cannot be checked against anything, so they are pinned as a change
+    detector — an intentional edit updates the fixture and shows up in the
+    diff, which is exactly what the pink→violet substat drift (review G,
+    M10) needed and did not have.
+    """
+    fixture = json.loads(ABYSS_DECLARATIONS.read_text(encoding="utf-8"))
+    rendered = _declaration_map(theme.build_qss_from(
+        TEMPLATE, fixture["theme"], asset_path=fixture["asset_path"]
+    ))
+    added = {s: d for s, d in rendered.items() if s not in fixture["legacy"]}
+    assert added == fixture["added"], (
+        "the rules added by the tokenization wave changed:\n"
+        + "\n".join(
+            f"  {selector}: was {fixture['added'].get(selector)}, now {added.get(selector)}"
+            for selector in sorted(set(added) | set(fixture["added"]))
+            if added.get(selector) != fixture["added"].get(selector)
+        )
+    )
+
+
+def test_the_fixture_covers_the_whole_sheet():
+    """Neither half may quietly stop covering a rule."""
+    fixture = json.loads(ABYSS_DECLARATIONS.read_text(encoding="utf-8"))
+    rendered = _declaration_map(theme.build_qss_from(
+        TEMPLATE, fixture["theme"], asset_path=fixture["asset_path"]
+    ))
+    assert set(rendered) == set(fixture["legacy"]) | set(fixture["added"])
+
 
 #: The item views where a QSS ``color`` really does beat each item's own
 #: ``setForeground()`` -- a combo popup.  That is the case the 2026-08-29
@@ -491,6 +645,95 @@ def test_a_rarity_foreground_survives_the_sheet(qapp, armory_module, windows):
         database.model.removeRow(0)
 
 
+def test_the_equipped_item_plate_really_wears_the_rarity_ring(qapp, armory_module, windows):
+    """Review G (B2), measured where it broke.
+
+    The plate is a 36x36 pixmap-only QLabel whose rarity signal is a 2 px
+    ``border-color`` from the item's grade.  It shipped with the rule
+    written and ``setObjectName("EquipItemIconLabel")`` missing, so the
+    only rule still matching was the generic ``*[dataColor=…] { color: … }``
+    — which does nothing at all to a label that holds no text.  A name
+    check could not see that; the ring is a pixel fact, so this counts
+    pixels on the plate's own edge.
+
+    Driven through the same helper the equip panel uses rather than through
+    the equip flow itself: ``ItemDatabase/data`` is absent in this clone, so
+    no item can actually be equipped, and the property pair is exactly what
+    ``_refresh_equip_item_panel`` sets.
+    """
+    loadout = windows["build planner"]
+    plate = loadout.equip_item_icon_label
+    assert plate.objectName() == "EquipItemIconLabel", (
+        "the plate lost its objectName — every rule below it is dead again"
+    )
+    armory_module.apply_theme("abyss")
+    _settle(qapp, 120)
+
+    def edge_hits(colour: str) -> int:
+        image = plate.grab().toImage()
+        width, height = image.width(), image.height()
+        edge = []
+        for x in range(width):
+            edge += [image.pixel(x, 0), image.pixel(x, 1),
+                     image.pixel(x, height - 1), image.pixel(x, height - 2)]
+        for y in range(height):
+            edge += [image.pixel(0, y), image.pixel(1, y),
+                     image.pixel(width - 1, y), image.pixel(width - 2, y)]
+        target = QColor(colour).rgb() & 0xFFFFFF
+        return sum(1 for pixel in edge if (pixel & 0xFFFFFF) == target)
+
+    plate.setProperty("variant", "")
+    armory_module._set_data_color(plate, "item_grade", "Legend")
+    _settle(qapp, 150)
+    legend_hits = edge_hits(theme.data_color("item_grade", "Legend"))
+    assert legend_hits > 60, (
+        f"only {legend_hits} edge pixels carry the Legend colour — the 2 px "
+        f"rarity ring is not being drawn on the plate"
+    )
+
+    # ...and it is the GRADE that decides it, not a constant.
+    armory_module._set_data_color(plate, "item_grade", "Rare")
+    _settle(qapp, 150)
+    assert edge_hits(theme.data_color("item_grade", "Rare")) > 60
+    assert edge_hits(theme.data_color("item_grade", "Legend")) < 10
+
+    # An empty slot drops the ring and the ground entirely (variant="empty").
+    plate.setProperty("variant", "empty")
+    armory_module._set_data_color(plate, "item_grade", None)
+    _settle(qapp, 150)
+    assert edge_hits(theme.data_color("item_grade", "Rare")) < 10
+
+
+def test_the_daevanion_status_pill_is_styled(qapp, armory_module, windows):
+    """Review G (B1): the five-state pill had its rule and no objectName,
+    so it rendered as bare inherited text — no ground, no state colour, and
+    no padding or radius, which is geometry lost on a style-only brief."""
+    tooltip = armory_module.DaevanionNodeTooltip()
+    try:
+        assert tooltip._status_label.objectName() == "TooltipStatusPill"
+        tooltip.setStyleSheet(_rendered("abyss"))
+        for state, token in (
+            ("start", "accent"), ("active", "accent"), ("available", "ok"),
+            ("locked", "fg_muted"), ("no_points", "danger"),
+        ):
+            label = tooltip._status_label
+            label.setText("QA")
+            label.setProperty("status", state)
+            label.style().unpolish(label)
+            label.style().polish(label)
+            _settle(qapp, 80)
+            image = label.grab().toImage()
+            expected = getattr(theme.THEMES["abyss"], token)
+            # The pill's ground is that state's colour at a low alpha over
+            # the tooltip, so look for the TEXT colour, which is solid.
+            assert _exact_pixels(image, expected) > 5, (
+                f"status={state}: no {token} pixels on the pill"
+            )
+    finally:
+        tooltip.deleteLater()
+        _settle(qapp, 80)
+
+
 def test_apply_theme_restyles_a_window_that_is_already_open(qapp, armory_module, windows):
     """The seam the host uses.
 
@@ -544,6 +787,148 @@ def test_property_driven_rules_are_repolished_on_a_theme_switch(qapp, armory_mod
     ]
     assert tagged, "no widget in the Build Planner carries a dataColor property"
     assert all(":" in str(widget.property("dataColor")) for widget in tagged)
+
+
+def test_every_data_colour_a_real_widget_carries_is_a_real_key(qapp, armory_module, windows):
+    """Review G (M4), caught where a static read cannot reach.
+
+    ``_build_category_column``'s second parameter became a data KEY when
+    its body became ``_set_data_color(head, "skill_type", skill_type)``, but
+    its two call sites still passed ``_SKILL_TYPE_COLORS["active"]``.  The
+    property landed as ``dataColor="skill_type:#22d3ee"`` — a value no rule
+    in any theme matches — and neither the rule-side gate (which enumerates
+    *legitimate* keys) nor a call-site regex on ``_set_data_color`` itself
+    (the colour arrives through a parameter) could see it.
+
+    Asking the widgets closes it: every ``dataColor`` a built widget
+    actually carries must name a kind and a key this theme engine knows.
+    The four card tooltips are built explicitly because they are created on
+    demand and would otherwise be outside every window's child tree — and
+    the Arcana one is exactly where M4 lived.
+    """
+    tooltips = [
+        armory_module.DaevanionNodeTooltip(),
+        armory_module.SkillInfoTooltip(),
+        armory_module.ArcanaCardTooltip(),
+        armory_module.ArcanaSetBonusTooltip(),
+    ]
+    try:
+        roots = list(windows.values()) + tooltips
+        seen = []
+        for root in roots:
+            for widget in [root] + root.findChildren(QWidget):
+                value = widget.property("dataColor")
+                if not value:
+                    continue
+                value = str(value)
+                seen.append((widget.objectName(), value))
+                assert ":" in value, f"malformed dataColor {value!r}"
+                kind, _, key = value.partition(":")
+                assert kind in theme._DATA_COLORS, (
+                    f"#{widget.objectName()} carries dataColor={value!r} — "
+                    f"{kind!r} is not a data-colour table"
+                )
+                assert key in theme.data_color_keys(kind), (
+                    f"#{widget.objectName()} carries dataColor={value!r} — "
+                    f"{key!r} is not a key of {kind!r}, so no rule matches it "
+                    f"(a colour passed where a KEY belongs?)"
+                )
+        # Nine today: the rarity filter pills and the Arcana tooltip's two
+        # column heads.  Most data-coloured widgets live in panels built on
+        # demand (a selected item, a hovered node), so this floor is a
+        # "did we walk a real tree at all" check, not a census.
+        assert len(seen) >= 8, f"only {len(seen)} data-coloured widgets found — wrong tree?"
+        assert any(kind.startswith("skill_type") for _name, kind in seen), (
+            "no skill_type data colour was set by any widget — the Arcana card "
+            "tooltip's ACTIVE/PASSIVE headings are where M4 lived"
+        )
+    finally:
+        for tooltip in tooltips:
+            tooltip.deleteLater()
+        _settle(qapp, 80)
+
+
+def test_the_standalone_spec_bundles_what_the_app_reads():
+    """Review G (M6): a datas DESTINATION is part of the read path.
+
+    ``_bundled_resource()`` is ``Path(sys._MEIPASS) / "ItemDatabase" /
+    name``, so a file bundled to ``'.'`` lands one level too shallow and
+    ``_load_qss_text()`` returns ``""`` — an unstyled window, logged as a
+    warning, no error.  That is the 2026-08-27 regression this module's own
+    docstring memorializes, and the standalone spec had re-laid it.
+
+    Read as text rather than executed: a .spec is Python evaluated by
+    PyInstaller with its own globals (``SPECPATH``), so ast is the honest
+    way to inspect one from a test.
+    """
+    spec_text = (ROOT / "ItemDatabase" / "AION2_ItemDatabase.spec").read_text(encoding="utf-8")
+    tree = ast.parse(spec_text)
+    datas = None
+    hidden = None
+    pathex = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Analysis":
+            for keyword in node.keywords:
+                if keyword.arg == "datas":
+                    datas = [tuple(ast.literal_eval(e)) for e in keyword.value.elts]
+                elif keyword.arg == "hiddenimports":
+                    hidden = ast.literal_eval(keyword.value)
+                elif keyword.arg == "pathex":
+                    pathex = keyword.value
+    assert datas, "the standalone spec bundles nothing"
+
+    for source, destination in datas:
+        assert destination == "ItemDatabase" or destination.startswith("ItemDatabase/"), (
+            f"({source!r}, {destination!r}): frozen, app.py reads its files from "
+            f"_MEIPASS/ItemDatabase — this destination is unreachable"
+        )
+        assert (ROOT / "ItemDatabase" / source).exists(), f"{source} does not exist"
+
+    destinations = {d for _s, d in datas}
+    assert "ItemDatabase" in destinations, "the stylesheet template is not bundled"
+    assert ("styles.template.qss", "ItemDatabase") in datas
+    assert "ItemDatabase/assets" in destinations, (
+        "assets/ is not bundled — the sheet's one url() (the combo dropdown "
+        "arrow) cannot resolve"
+    )
+
+    assert hidden and "core.theme" in hidden, (
+        "core.theme is the owner of every token this app renders; without it "
+        "the exe runs on _FALLBACK_TOKENS and shows no rarity colours"
+    )
+    # pathex must not be a CWD-relative string: PyInstaller resolves it
+    # against the build directory, not against the spec.
+    assert pathex is not None
+    literals = [n for n in ast.walk(pathex) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+    assert not any(value.value in ("..", ".") for value in literals), (
+        "pathex is CWD-relative — build it from SPECPATH instead"
+    )
+    assert "SPECPATH" in spec_text
+
+
+def test_the_shipping_spec_puts_the_armory_files_where_it_reads_them():
+    """The spec that actually ships (``scripts/build_exe.bat`` and the
+    release workflow build only this one).  Same invariant, and the reason
+    M6 was capped at MAJOR: this one was already right."""
+    spec_text = (ROOT / "Aion2 TM.spec").read_text(encoding="utf-8")
+    tree = ast.parse(spec_text)
+    datas = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Analysis":
+            for keyword in node.keywords:
+                if keyword.arg == "datas":
+                    datas = [tuple(ast.literal_eval(e)) for e in keyword.value.elts]
+    armory = [(s, d) for s, d in datas if s.startswith("ItemDatabase")]
+    assert armory, "the shipping spec bundles no Armory files at all"
+    for source, destination in armory:
+        assert destination == "ItemDatabase" or destination.startswith("ItemDatabase/"), (
+            f"({source!r}, {destination!r}) is outside _MEIPASS/ItemDatabase"
+        )
+    assert ("ItemDatabase/styles.template.qss", "ItemDatabase") in armory
+    assert ("ItemDatabase/assets", "ItemDatabase/assets") in armory
+    assert not any(source.endswith("styles.qss") for source, _d in armory), (
+        "the deleted hand-written sheet is still named in the shipping spec"
+    )
 
 
 def test_the_fallback_renderer_understands_the_same_template(armory_module, monkeypatch):

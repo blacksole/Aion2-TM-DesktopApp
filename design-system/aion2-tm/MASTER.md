@@ -435,6 +435,48 @@ de `core.theme`. Elle restait navy pendant que l'app changeait de thème.
   **pixels** que le `setForeground()` par rareté survit à la feuille (le
   défaut du 2026-08-29, re-garanti du bon côté de la suppression du fichier).
 
+#### Ce que la revue G a corrigé (même jour)
+
+La revue d'Apex a trouvé la faille structurelle de la vague, et elle vaut
+d'être écrite parce qu'elle est générale : **partout où la vague affirmait
+quelque chose qu'un test pouvait confronter à une seconde source,
+l'affirmation était vraie ; partout où le test ne pouvait inspecter qu'un
+seul côté, elle était fausse.** La moitié QSS→QSS est épinglée par un
+snapshot de sélecteurs, donc exacte. La moitié Python→QSS — 94 feuilles
+inline devenues 228 règles — n'était épinglée par rien, et c'est là que
+vivaient tous les défauts :
+
+- **trois règles écrites pour un `objectName` que personne ne posait**
+  (`#TooltipStatusPill`, `#EquipItemIconLabel`, `#SimGradeLabel`) : la pilule
+  d'état du Daevanion et la plaque de l'objet équipé rendaient sans fond,
+  sans padding, sans rayon et **sans anneau de rareté** — de la géométrie
+  perdue dans une vague « style only ». Le test censé garder exactement ça
+  comparait la feuille à elle-même et **nommait deux des trois victimes**
+  dans sa propre liste de paramètres tout en passant. Il est inversé : les
+  `#Id` sont désormais *dérivés de la feuille* et confrontés au source de
+  `app.py` ;
+- **une couleur passée là où une clé de donnée est attendue**
+  (`dataColor="skill_type:#22d3ee"`), donc les en-têtes ACTIF/PASSIF du
+  tooltip de carte Arcana perdaient leur couleur dans les six thèmes. Gardé
+  maintenant en interrogeant les **widgets construits**, pas en énumérant
+  les clés légitimes ;
+- **une dérive de teinte non documentée** : la bande « pvp » de l'accordéon
+  de substats passait de rose `rgb(244,114,182)` à violet `{secondary}`
+  (Δ 77,25,68). Elle prend la couleur de donnée PvP (`#fb7185`), qui est ce
+  que « PvP » veut déjà dire partout ailleurs dans cette fenêtre ;
+- **la parité des valeurs n'était plus falsifiable** : le fichier de
+  référence avait été supprimé dans le même commit, donc la phrase « pour
+  Abyss, tout ce qui n'est pas dans la table de correspondance rend octet
+  pour octet comme avant » était vraie et invérifiable. Elle l'est
+  maintenant : `tests/fixtures/armory_abyss_declarations.json` est
+  **régénéré en rejouant la table de correspondance sur
+  `git show eb53cd6:ItemDatabase/styles.qss`**, pas en photographiant le
+  rendu courant — un échec signifie donc « le rendu s'est éloigné de la
+  feuille supprimée », pas « il a changé depuis hier » ;
+- `_FALLBACK_TOKENS` (la table de repli d'`app.py`) était affirmée égale aux
+  valeurs Abyss dans trois documents et comparée à elles dans aucun : un
+  miroir sans comparaison est un commentaire, pas un contrat. Gate ajouté.
+
 ### Décisions différées (posées explicitement, pas oubliées)
 
 | Sujet | Décision | Pourquoi pas maintenant |
@@ -443,6 +485,8 @@ de `core.theme`. Elle restait navy pendant que l'app changeait de thème.
 | Emoji utilisés comme icônes (`"📋 Vorlagen"`, `"🛒 Einkauf"`, `"👤 Charaktere"`) dans `core/translations.py` | vague icônes | §3 dit « aucun emoji comme icône » et ces glyphes sont dans les chaînes traduites des trois langues. Les remplacer demande de vrais `QIcon` Lucide posés sur les boutons — un travail d'icônes, pas une retouche de chaîne. Le double sélecteur de thème du `SettingsDialog` a en revanche perdu ses emoji tout de suite (ils n'étaient pas traduits). |
 | Deux sélecteurs de thème (`SettingsDialog` + page Appearance) | à dédupliquer | Le dialogue est vivant (en-tête → `open_settings`) ; retirer un contrôle qu'un utilisateur utilise peut-être est une décision produit, pas un correctif de revue. Sa version emoji est corrigée, la duplication reste. |
 | Flèches de spinbox/combo (`assets/icons/arrow_*_orange.png`) | vague icônes | Assets PNG oranges, donc hors thème sur Abyss/Emerald/Void. Corriger demande des icônes par thème ou teintées à l'exécution. |
+| Deux libellés tronqués dans le Build Planner : « Constitutior » (colonne Stat Values, `Constitution` coupé) et « 1aterials & Enhancemer » (en-tête de section du Crafting, `Materials & Enhancement` coupé aux deux bouts) | dette de **layout**, pas de style | Repérés dans les captures de la vague Armory (`docs/audit-2026-09-18/shots/aether-armory/`) et **antérieurs** à elle : la vague n'a changé aucune métrique (ni police, ni padding, ni largeur — voir « NOT tokenised, on purpose » dans l'en-tête de `ItemDatabase/styles.template.qss`). Ce sont des largeurs fixes trop courtes pour la chaîne rendue ; corriger demande de toucher au layout (élargir la colonne, ou élider proprement), ce qui est hors d'une vague de couleurs. |
+| 4 `objectName` morts dans la feuille de l'Armory (`#ChainNode`, `#ChainSideLabel`, `#ExpandableMaterialHeader`, `#SkillRow`) | à câbler ou à supprimer | Règles sans widget : les quatre sont déjà morts dans `eb53cd6` (avant la vague) et leurs règles existaient dans l'ancienne feuille écrite à la main. Supprimer une règle est une décision sur une **fonctionnalité** (widget renommé ? panneau retiré ?), pas une retouche de style — d'où l'attente. Ils sont listés avec cette raison dans `tests/fixtures/armory_dead_selectors.txt`, et le gate `test_every_objectname_rule_has_a_widget_that_sets_it` échoue sur tout **nouveau** mort. |
 
 ## Pages (overrides)
 

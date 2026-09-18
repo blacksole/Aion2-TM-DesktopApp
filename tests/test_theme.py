@@ -1,5 +1,6 @@
 """core/theme.py + ui/styles.template.qss — token system invariants."""
 
+import ast
 import dataclasses
 import re
 from pathlib import Path
@@ -251,14 +252,75 @@ def test_no_second_copy_of_a_data_table_in_the_armory(name):
     )
 
 
+#: Module-level name in ``ItemDatabase/app.py`` → the table here it must be
+#: bound to.  The absence gate above proves no second literal exists; this
+#: proves the name actually points at ours (review G, M5: only two of the
+#: six had the binding half asserted).
+_ARMORY_BINDINGS = {
+    "GRADE_COLORS": "GRADE_COLORS",
+    "GEAR_TYPE_COLORS": "GEAR_TYPE_COLORS",
+    "_SKILL_TYPE_COLORS": "SKILL_TYPE_COLORS",
+    "_METHOD_COLORS": "CRAFT_METHOD_COLORS",
+    "_ARCANA_THEME_COLORS": "ARCANA_THEME_COLORS",
+    "ARCANA_CATEGORY_COLORS": "ARCANA_CATEGORY_COLORS",
+    "_GENIUS_BOARD_COLORS": "GENIUS_BOARD_COLORS",
+}
+
+
 def test_the_armory_reads_the_data_tables_from_here():
     """The other half: the Armory must actually be wired to this module."""
     source = _APP_PY.read_text(encoding="utf-8")
     assert "from core import theme as _theme" in source
-    for name in ("GRADE_COLORS", "GEAR_TYPE_COLORS"):
-        assert f"{name} = _theme.{name}" in source, f"{name} is not bound from core.theme"
+    for armory_name, owner_name in _ARMORY_BINDINGS.items():
+        assert f"{armory_name} = _theme.{owner_name}" in source, (
+            f"{armory_name} is not bound from core.theme.{owner_name}"
+        )
+        assert hasattr(theme, owner_name), f"core.theme lost {owner_name}"
     for kind in ("item_grade", "skill_type", "arcana_theme", "genius_board"):
         assert f'"{kind}"' in source, f"nothing in the Armory asks for {kind} colours"
+
+
+def _armory_fallback_tokens() -> dict[str, str]:
+    """``ItemDatabase/app.py``'s ``_FALLBACK_TOKENS``, read from source.
+
+    Parsed, not imported: that module builds Qt objects at import time and
+    this test has no QApplication (and should not need one to compare two
+    tables of strings).
+    """
+    tree = ast.parse(_APP_PY.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if any(getattr(t, "id", None) == "_FALLBACK_TOKENS" for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise AssertionError("_FALLBACK_TOKENS not found at module level in ItemDatabase/app.py")
+
+
+def test_the_armory_fallback_table_parses_and_is_small():
+    table = _armory_fallback_tokens()
+    assert 20 <= len(table) <= 40, (
+        f"_FALLBACK_TOKENS has {len(table)} entries — it is meant to stay the "
+        f"tiny last-resort mirror the literal baseline justifies, not a palette"
+    )
+
+
+@pytest.mark.parametrize("key", sorted(_armory_fallback_tokens()))
+def test_the_armory_fallback_table_still_matches_abyss(key):
+    """Review G (M5): a mirror without a comparison is a comment.
+
+    ``_FALLBACK_TOKENS`` is a second copy of MASTER §2 Abyss, kept for the
+    build that cannot import this module at all.  MASTER's "Statut"
+    paragraph and ``tests/fixtures/itemdatabase_literal_baseline.txt`` both
+    justify the Armory's 18 remaining hex literals by asserting that they
+    ARE the Abyss values — an equality nothing checked.  It holds today;
+    without this it would hold only until someone tuned a token.
+    """
+    assert hasattr(theme.ABYSS, key), (
+        f"_FALLBACK_TOKENS defines {key!r}, which is not a token of this module"
+    )
+    assert _armory_fallback_tokens()[key] == str(getattr(theme.ABYSS, key)), (
+        f"the Armory's fallback {key} has drifted from Abyss"
+    )
 
 
 _OVERLAY_PY = theme.TEMPLATE_PATH.parent / "overlay" / "overlay_window.py"

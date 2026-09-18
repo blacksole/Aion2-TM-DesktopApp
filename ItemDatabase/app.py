@@ -9865,6 +9865,7 @@ class CraftingCalculatorWindow(QMainWindow):
         self.sim_name_label.setObjectName("DetailHeader")
         name_col.addWidget(self.sim_name_label)
         self.sim_grade_label = QLabel()
+        self.sim_grade_label.setObjectName("SimGradeLabel")
         name_col.addWidget(self.sim_grade_label)
         header_row.addLayout(name_col, 1)
 
@@ -13014,6 +13015,7 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         outer.addWidget(self._effects_container)
 
         self._status_label = QLabel()
+        self._status_label.setObjectName("TooltipStatusPill")
         self._status_label.setAlignment(Qt.AlignCenter)
         self._status_label.setWordWrap(True)
         outer.addWidget(self._status_label)
@@ -13185,13 +13187,16 @@ class ArcanaCardTooltip(_TranslucentCardTooltip):
         columns = QHBoxLayout()
         columns.setSpacing(14)
         # Header colored per type (User-Wunsch, 2026-08-29: "jetzt noch
-        # farbig fuer aktiv und passiv jeweils") -- same Active/Passive
-        # colors used everywhere else in the app (_SKILL_TYPE_COLORS).
+        # farbig fuer aktiv und passiv jeweils") -- the same Active/Passive
+        # colours used everywhere else in the app, reached by data KEY
+        # ("active"/"passive") rather than by value: the colour itself lives
+        # in core.theme.SKILL_TYPE_COLORS and is applied by the
+        # [dataColor="skill_type:…"] rules.
         self._active_container, self._active_layout = self._build_category_column(
-            "arm_active", _SKILL_TYPE_COLORS["active"]
+            "arm_active", "active"
         )
         self._passive_container, self._passive_layout = self._build_category_column(
-            "arm_passive", _SKILL_TYPE_COLORS["passive"]
+            "arm_passive", "passive"
         )
         columns.addWidget(self._active_container, 1)
         columns.addWidget(self._passive_container, 1)
@@ -18720,6 +18725,7 @@ class LoadoutWindow(QMainWindow):
         header_row.addWidget(equip_back_btn)
 
         self.equip_item_icon_label = QLabel()
+        self.equip_item_icon_label.setObjectName("EquipItemIconLabel")
         self.equip_item_icon_label.setFixedSize(36, 36)
         self.equip_item_icon_label.setAlignment(Qt.AlignCenter)
         header_row.addWidget(self.equip_item_icon_label)
