@@ -220,8 +220,54 @@ SHOP_ITEMS_PATH = _BUNDLE_DIR / "data" / "shop_items.json"
 # between TemplateItemPickerDialog's sidebar and ItemDatabaseWindow's own
 # Shop filter dropdown so the two can never drift apart.
 REAL_SHOP_TYPES = ("Merchant NPC", "Trade Shop", "Black Cloud Merchants", "Shugo Festival")
-ICON_CACHE_DIR = BASE_DIR / "data" / "icons"
-DETAIL_CACHE_DIR = BASE_DIR / "data" / "details"
+
+
+def _cache_root() -> Path:
+    """Where the HTTP caches (icons, item details) are written.
+
+    Frozen: the per-user cache directory (%LOCALAPPDATA%\\Aion2 TM\\Cache on
+    Windows, $XDG_CACHE_HOME/aion2-tm on Linux, ~/Library/Caches on macOS).
+    The old location -- next to the executable -- is unwritable for any
+    system-wide install (/opt, /usr/lib, Program Files) and is exactly what
+    an AUR package or an AppImage must never touch. From source, keep
+    ItemDatabase/data/ so a dev run reuses the cache it already has.
+
+    Standalone `python ItemDatabase/app.py` (no host app on sys.path) keeps
+    the old behaviour too, since utils.paths is then unimportable.
+    """
+    if not getattr(sys, "frozen", False):
+        return BASE_DIR / "data"
+    try:
+        from utils.paths import ensure_dir, user_cache_dir
+    except ImportError:
+        return BASE_DIR / "data"
+    return ensure_dir(user_cache_dir() / "armory")
+
+
+def _migrate_legacy_cache(new_root: Path) -> None:
+    """One-off move of a pre-XDG cache sitting next to the executable.
+
+    Only runs when the new location has no icons yet, so it can never
+    overwrite a live cache; a failure is silent because everything in here is
+    re-downloadable.
+    """
+    legacy = BASE_DIR / "data"
+    if legacy == new_root or not legacy.is_dir():
+        return
+    try:
+        for name in ("icons", "details"):
+            source, target = legacy / name, new_root / name
+            if source.is_dir() and not target.exists():
+                source.replace(target)
+                logger.info("Moved cached %s to %s", name, target)
+    except OSError as exc:
+        logger.debug("Could not migrate the legacy cache: %s", exc)
+
+
+CACHE_ROOT = _cache_root()
+_migrate_legacy_cache(CACHE_ROOT)
+ICON_CACHE_DIR = CACHE_ROOT / "icons"
+DETAIL_CACHE_DIR = CACHE_ROOT / "details"
 DETAILS_API_URL = "https://shugo.gg/api/items/batch-details"
 ICON_SIZE = 32
 VISIBLE_ROW_PADDING = 20

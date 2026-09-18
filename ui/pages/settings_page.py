@@ -1,10 +1,9 @@
-import glob
 import os
-import subprocess
 import webbrowser
-import winsound
 from pathlib import Path
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QPainterPath, QPen, QBrush, QLinearGradient, QColor
+from PySide6.QtGui import (
+    QIcon, QPixmap, QPainter, QPainterPath, QPen, QBrush, QLinearGradient, QColor, QFontDatabase,
+)
 from PySide6.QtCore import Signal, QTime, QDate, QDateTime, QSize, Qt, QRectF, QPointF
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -13,6 +12,71 @@ from PySide6.QtWidgets import (
 )
 
 from core.app_logger import get_log_path
+from core.platform import open_path, platform_placeholder_exe_path, reveal_in_file_manager
+from core.sound import list_system_wavs, play_wav
+
+#: Item data marking the "Browse..." row of a notification-sound picker.
+SOUND_BROWSE_DATA = "__browse_wav__"
+
+
+def populate_sound_combo(combo, selected: str = "", tr_func=None, language: str = "en") -> None:
+    """Fill a notification-sound picker, shared by Settings and the custom-timer dialog.
+
+    Rows: the "no sound" sentinel, every system .wav, any already-chosen
+    custom file, and a "Browse..." entry.
+
+    On Windows this is exactly the previous content and order (the sorted
+    contents of C:\\Windows\\Media after the sentinel), with Browse appended
+    last. Elsewhere the desktop sound themes ship .oga/.ogg -- which
+    QSoundEffect cannot play -- so ``list_system_wavs()`` comes back empty and
+    Browse is the only way in: it then LEADS the list instead of trailing it.
+    """
+    def _t(key: str, fallback: str) -> str:
+        try:
+            return tr_func(language, key) if tr_func else fallback
+        except Exception:
+            return fallback
+
+    combo.blockSignals(True)
+    try:
+        combo.clear()
+        combo.addItem(f"-- {_t('no_sound', 'No Sound')} --", "")
+        wavs = list_system_wavs()
+        browse_label = f"{_t('dps_meter_browse', 'Browse')}..."
+        if not wavs:
+            combo.addItem(browse_label, SOUND_BROWSE_DATA)
+        for wav in wavs:
+            combo.addItem(wav.stem, str(wav))
+        # A sound picked through Browse (or carried over from another machine)
+        # is not in the system list -- keep it visible instead of silently
+        # resetting the user's choice to "no sound".
+        if selected and combo.findData(selected) < 0:
+            combo.addItem(Path(selected).stem, selected)
+        if wavs:
+            combo.addItem(browse_label, SOUND_BROWSE_DATA)
+        combo.setCurrentIndex(max(0, combo.findData(selected)) if selected else 0)
+    finally:
+        combo.blockSignals(False)
+
+
+def browse_for_wav(parent, combo, fallback_index: int = 0) -> str:
+    """Handle the "Browse..." row: pick a .wav, insert it and select it.
+    Cancelling restores ``fallback_index``. Returns the chosen path, or ""."""
+    path, _ = QFileDialog.getOpenFileName(parent, "WAV", "", "WAV (*.wav)")
+    combo.blockSignals(True)
+    try:
+        if not path:
+            combo.setCurrentIndex(max(0, fallback_index))
+            return ""
+        index = combo.findData(path)
+        if index < 0:
+            combo.insertItem(1, Path(path).stem, path)
+            index = 1
+        combo.setCurrentIndex(index)
+        return path
+    finally:
+        combo.blockSignals(False)
+
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
 
@@ -190,7 +254,11 @@ class _LogViewerDialog(QDialog):
         self._text = QPlainTextEdit()
         self._text.setReadOnly(True)
         self._text.setLineWrapMode(QPlainTextEdit.NoWrap)
-        self._text.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
+        # The platform's own fixed-width font: Consolas exists on Windows only,
+        # and naming it on Linux/macOS fell through to the proportional default,
+        # which mangles the log's column alignment.
+        self._text.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self._text.setStyleSheet("font-size: 11px;")
         layout.addWidget(self._text, 1)
 
         button_row = QHBoxLayout()
@@ -222,11 +290,7 @@ class _LogViewerDialog(QDialog):
         scrollbar.setValue(scrollbar.maximum())
 
     def _open_folder(self):
-        path = get_log_path()
-        try:
-            subprocess.Popen(["explorer", "/select,", str(path)])
-        except OSError:
-            pass
+        reveal_in_file_manager(get_log_path())
 
 
 class SettingsPage(QWidget):
@@ -707,9 +771,11 @@ class SettingsPage(QWidget):
             for btn, tr_key in zip(self.weekly_day_buttons, self._day_tr_keys):
                 btn.setText(tr_func(language, tr_key))
 
-        # ===== NO-SOUND LABEL =====
+        # ===== NO-SOUND / BROWSE LABELS =====
+        # Rebuilt rather than setItemText(0, ...): the picker now also carries
+        # a translated "Browse..." row, and the current selection survives.
         if hasattr(self, "notif_sound_combo") and self.notif_sound_combo.count() > 0:
-            self.notif_sound_combo.setItemText(0, f"-- {tr_func(language, 'no_sound')} --")
+            self._populate_sound_combo()
 
         # ===== LANGUAGE =====
 
@@ -1394,7 +1460,8 @@ class SettingsPage(QWidget):
             sound_completer.setCaseSensitivity(Qt.CaseInsensitive)
             sound_completer.setFilterMode(Qt.MatchContains)
             sound_completer.setCompletionMode(QCompleter.PopupCompletion)
-        self._populate_sound_combo()
+        self._populate_sound_combo("")
+        self.notif_sound_combo.currentIndexChanged.connect(self._on_sound_combo_changed)
 
         self.notif_test_btn = QPushButton("▶ Test")
         self.notif_test_btn.setObjectName("secondaryButton")
@@ -1446,17 +1513,19 @@ class SettingsPage(QWidget):
         # active-style override still needed for its #toggleButton background.
         _apply_active_button_style(self.notif_sync_btn, checked, "toggle")
 
-    def _populate_sound_combo(self):
-        self.notif_sound_combo.clear()
-        self.notif_sound_combo.addItem("-- No Sound --", "")
-        for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
-            name = os.path.splitext(os.path.basename(path))[0]
-            self.notif_sound_combo.addItem(name, path)
+    def _populate_sound_combo(self, selected: str | None = None):
+        if selected is None:
+            selected = self.notif_sound_combo.currentData() or ""
+        populate_sound_combo(self.notif_sound_combo, selected, self._cur_tr, self._cur_lang)
+        self._last_sound_index = self.notif_sound_combo.currentIndex()
+
+    def _on_sound_combo_changed(self, index: int):
+        if self.notif_sound_combo.itemData(index) == SOUND_BROWSE_DATA:
+            browse_for_wav(self, self.notif_sound_combo, getattr(self, "_last_sound_index", 0))
+        self._last_sound_index = self.notif_sound_combo.currentIndex()
 
     def _preview_sound(self):
-        path = self.notif_sound_combo.currentData() or ""
-        if path and os.path.isfile(path):
-            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        play_wav(self.notif_sound_combo.currentData() or "")
     
     def _create_general_page(self):
         page = QWidget()
@@ -1621,7 +1690,7 @@ class SettingsPage(QWidget):
         dps_path_row.setSpacing(8)
         self.dps_path_input = QLineEdit()
         self.dps_path_input.setObjectName("settingsLineEditReadOnly")
-        self.dps_path_input.setPlaceholderText("C:\\...\\dps_meter.exe")
+        self.dps_path_input.setPlaceholderText(platform_placeholder_exe_path())
         self.dps_path_input.setReadOnly(True)
         self.dps_browse_btn = QPushButton()
         self.dps_browse_btn.setObjectName("secondaryButton")
@@ -1843,10 +1912,10 @@ class SettingsPage(QWidget):
                 self.notif_riss_warn_combo.setCurrentIndex(idx)
 
         if hasattr(self, "notif_sound_combo"):
-            sound_path = data.get("notification_sound", "")
-            index = self.notif_sound_combo.findData(sound_path)
-            if index >= 0:
-                self.notif_sound_combo.setCurrentIndex(index)
+            # Repopulate around the saved path: a custom .wav picked through
+            # Browse is not in the system list, and findData() alone would
+            # silently fall back to "no sound".
+            self._populate_sound_combo(data.get("notification_sound", ""))
 
         if hasattr(self, "profiles_path_label"):
             self.profiles_path_label.setText(data.get("profile_dir", ""))
@@ -2063,9 +2132,10 @@ class SettingsPage(QWidget):
             self.profile_dir_changed.emit(new_path)
 
     def _open_profile_dir(self):
+        # Opens the folder itself -- this never was a "reveal and select".
         path = self.profiles_path_label.text()
         if path and os.path.isdir(path):
-            subprocess.Popen(f'explorer "{path}"')
+            open_path(path)
 
     def update_profile_dir_label(self, path: str):
         if hasattr(self, "profiles_path_label"):

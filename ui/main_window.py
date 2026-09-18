@@ -1,9 +1,6 @@
-import glob
 import json
-import os
 import shutil
 import sys
-import winsound
 from pathlib import Path
 from uuid import uuid4
 from .settings_dialog import SettingsDialog
@@ -29,9 +26,12 @@ from .pages.about_page import AboutPage
 from .flow.flow_app_window import FlowMapWindow
 from .overlay.overlay_window import OverlayWindow
 from core.app_logger import get_logger
+from core.platform import launch_external, tray_available
+from core.sound import play_wav
 from core.translations import tr
 from core.update_checker import UpdateChecker
 from core.version import ARMORY_ENABLED
+from utils import paths
 
 logger = get_logger("main_window")
 from PySide6.QtWidgets import QTimeEdit
@@ -337,8 +337,12 @@ class MainWindow(QMainWindow):
             self.project_root = Path(sys.executable).parent
         else:
             self.project_root = Path(__file__).resolve().parent.parent
+        # Frozen: the per-user config location (%APPDATA%\Aion2 TM on Windows,
+        # ~/.config/aion2-tm on Linux, ~/Library/Application Support on macOS
+        # -- see utils/paths.py). From source: the repo root, so a dev run keeps
+        # its config next to the code instead of polluting the user profile.
         if getattr(sys, "frozen", False):
-            self.app_config_dir = Path(os.environ["APPDATA"]) / "Aion2 TM"
+            self.app_config_dir = paths.user_config_dir()
         else:
             self.app_config_dir = self.project_root
         self.app_config_path = self.app_config_dir / "config.json"
@@ -976,7 +980,10 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         self.setWindowTitle(self.tr("app.title"))
         self.resize(1200, 800)
-        self.setMinimumSize(1100, 820)
+        # 820 exceeded the usable height of a 1366x768 laptop screen (and of
+        # a 1920x1080 one with a top+bottom panel), which made the window
+        # impossible to fit or resize down on those setups.
+        self.setMinimumSize(1100, 700)
         icon_path = self.project_root / "assets" / "icons" / "aion2_tm_icon.ico"
         self.setWindowIcon(QIcon(str(icon_path)))
 
@@ -1728,7 +1735,32 @@ class MainWindow(QMainWindow):
         return 1
 
 
+    def _tray_ready(self) -> bool:
+        """True when a tray icon was actually created (see _setup_tray_icon)."""
+        return hasattr(self, "tray_icon")
+
+    def _notify(self, title: str, message: str, msecs: int = 5000):
+        """Desktop balloon through the tray when there is one, in-app toast
+        otherwise. On a bare Wayland session without a StatusNotifier host
+        (Hyprland with no Waybar tray module, a minimal WM, a headless test)
+        showMessage() is silently swallowed, which used to lose every
+        notification the app produced."""
+        if self._tray_ready():
+            self.tray_icon.showMessage(
+                title, message,
+                QSystemTrayIcon.MessageIcon.Information,
+                msecs,
+            )
+            return
+        self.show_toast(message)
+
     def _setup_tray_icon(self):
+        # Must run after QApplication exists -- QSystemTrayIcon.isSystemTrayAvailable()
+        # segfaults when called before it (PySide6 6.11). Called from __init__,
+        # which is only reached once main.py has constructed the app.
+        if not tray_available():
+            logger.info("No system tray available -- notifications fall back to in-app toasts")
+            return
         icon = self.windowIcon()
         self.tray_icon = QSystemTrayIcon(icon, self)
 
@@ -1779,18 +1811,17 @@ class MainWindow(QMainWindow):
             QApplication.instance().quit()
             return
 
-        if self.minimize_to_tray is True:
+        # Hiding into a tray that does not exist would strand the window with
+        # no way back, so the preference is honoured only when there IS a tray.
+        # The stored setting is deliberately left untouched: the same profile
+        # may well be used on a machine that has one.
+        if self.minimize_to_tray is True and self._tray_ready():
             event.ignore()
             self.hide()
-            self.tray_icon.showMessage(
-                "Aion2 TM",
-                tr(self.language, "tray_running"),
-                QSystemTrayIcon.MessageIcon.Information,
-                3000,
-            )
+            self._notify("Aion2 TM", tr(self.language, "tray_running"), 3000)
             return
 
-        if self.minimize_to_tray is None:
+        if self.minimize_to_tray is None and self._tray_ready():
             box = QMessageBox(self)
             box.setWindowTitle(tr(self.language, "tray_minimize_title"))
             box.setText(tr(self.language, "tray_minimize_text"))
@@ -1806,12 +1837,7 @@ class MainWindow(QMainWindow):
                 self._save_app_config()
                 event.ignore()
                 self.hide()
-                self.tray_icon.showMessage(
-                    "Aion2 TM",
-                    tr(self.language, "tray_running"),
-                    QSystemTrayIcon.MessageIcon.Information,
-                    3000,
-                )
+                self._notify("Aion2 TM", tr(self.language, "tray_running"), 3000)
             else:
                 self.minimize_to_tray = False
                 self._save_app_config()
@@ -1829,97 +1855,30 @@ class MainWindow(QMainWindow):
             self._start_dps_meter(self.dps_meter_path)
 
     def _start_dps_meter(self, path: str):
-        """Launches the user's configured external DPS Meter tool. Uses
-        ShellExecuteEx directly (not the simpler os.startfile) with
-        SEE_MASK_FLAG_NO_UI (User-reported, 2026-08-30: declining the UAC
-        elevation prompt for a DPS Meter that requires admin rights also
-        popped up a SECOND "elevation failed" error dialog, carrying OUR
-        app's own taskbar icon since we're the process that requested the
-        launch). SEE_MASK_FLAG_NO_UI only suppresses the SHELL's own
-        follow-up error UI (missing file, access denied, elevation
-        cancelled, ...) -- it does NOT and cannot suppress the actual UAC
-        consent prompt itself (that's a Windows security boundary no
-        application can bypass, by design, and shouldn't want to). The
-        user still sees the normal "Do you want to allow..." prompt every
-        time; declining it just no longer also throws up a confusing
-        second popup -- a failure is instead reported back to us as a
-        plain error code, which we log instead of displaying."""
-        import ctypes
-        from ctypes import wintypes
+        """Launches the user's configured external DPS Meter tool.
 
+        On Windows this still goes through ShellExecuteEx with
+        SEE_MASK_FLAG_NO_UI rather than the simpler os.startfile
+        (core.platform.launch_windows_shellexecute holds the verbatim code and
+        the full rationale): User-reported, 2026-08-30, declining the UAC
+        elevation prompt for a DPS Meter that requires admin rights also popped
+        up a SECOND "elevation failed" dialog carrying OUR app's taskbar icon,
+        since we are the process that requested the launch. The UAC consent
+        prompt itself is a Windows security boundary and is NOT suppressed --
+        only the shell's follow-up error UI is, so a declined elevation comes
+        back as an error code we log instead of a confusing second popup.
+
+        Off Windows there is no UAC and no shell verb: a plain Popen from the
+        program's own directory is the correct equivalent (a Windows .exe is
+        routed through wine when it is installed).
+        """
         if not path:
             return
-        if not os.path.isfile(path):
-            logger.warning("DPS Meter file not found: %s", path)
-            return
-
-        class _SHELLEXECUTEINFO(ctypes.Structure):
-            _fields_ = [
-                ("cbSize", wintypes.DWORD),
-                ("fMask", ctypes.c_ulong),
-                ("hwnd", wintypes.HWND),
-                ("lpVerb", wintypes.LPCWSTR),
-                ("lpFile", wintypes.LPCWSTR),
-                ("lpParameters", wintypes.LPCWSTR),
-                ("lpDirectory", wintypes.LPCWSTR),
-                ("nShow", ctypes.c_int),
-                ("hInstApp", wintypes.HINSTANCE),
-                ("lpIDList", ctypes.c_void_p),
-                ("lpClass", wintypes.LPCWSTR),
-                ("hKeyClass", wintypes.HKEY),
-                ("dwHotKey", wintypes.DWORD),
-                ("hIcon", wintypes.HANDLE),
-                ("hProcess", wintypes.HANDLE),
-            ]
-
-        SEE_MASK_NOCLOSEPROCESS = 0x00000040
-        SEE_MASK_FLAG_NO_UI = 0x00000400
-        SW_SHOWNORMAL = 1
-
-        sei = _SHELLEXECUTEINFO()
-        sei.cbSize = ctypes.sizeof(sei)
-        sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI
-        sei.hwnd = None
-        sei.lpVerb = "open"
-        sei.lpFile = path
-        sei.lpParameters = None
-        sei.lpDirectory = os.path.dirname(path) or None
-        sei.nShow = SW_SHOWNORMAL
-        sei.hInstApp = None
-
-        try:
-            ok = ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei))
-            if not ok:
-                error = ctypes.get_last_error()
-                logger.warning(
-                    "DPS Meter did not start (error=%s, e.g. UAC elevation was declined) -- "
-                    "no popup shown, see SEE_MASK_FLAG_NO_UI note above", error,
-                )
-            else:
-                logger.info("DPS Meter started: %s", path)
-        except Exception as e:
-            logger.error("DPS Meter failed to start: %s", e)
+        launch_external(Path(path), elevate_hint=True)
 
     def _fire_notification(self, title: str, message: str):
-        if hasattr(self, "tray_icon"):
-            self.tray_icon.showMessage(
-                title, message,
-                QSystemTrayIcon.MessageIcon.Information,
-                5000,
-            )
-        if self.notification_sound and os.path.isfile(self.notification_sound):
-            winsound.PlaySound(
-                self.notification_sound,
-                winsound.SND_FILENAME | winsound.SND_ASYNC,
-            )
-
-    @staticmethod
-    def get_windows_sounds() -> dict:
-        sounds = {"-- Kein Sound --": ""}
-        for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
-            name = os.path.splitext(os.path.basename(path))[0]
-            sounds[name] = path
-        return sounds
+        self._notify(title, message)
+        play_wav(self.notification_sound)
 
     def format_countdown(self, seconds):
         seconds = max(0, int(seconds))
@@ -2071,14 +2030,8 @@ class MainWindow(QMainWindow):
 
     def _fire_custom_notification(self, name: str, sound_path: str, warn_minutes: int = 0):
         msg = f"{name} läuft jetzt ab!" if warn_minutes <= 0 else f"{name} läuft in {warn_minutes} Min ab!"
-        if hasattr(self, "tray_icon"):
-            self.tray_icon.showMessage(
-                name, msg,
-                QSystemTrayIcon.MessageIcon.Information,
-                5000,
-            )
-        if sound_path and os.path.isfile(sound_path):
-            winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        self._notify(name, msg)
+        play_wav(sound_path)
 
     def open_profile_menu(self, checked=False, anchor=None):
         menu = QMenu(self)
@@ -2568,13 +2521,22 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        # 2. Bestehender profiles-Ordner neben der App / EXE
+        # 2. Portable mode: profiles/ next to the app.
+        #    From source that folder IS the dev profile dir -- always honour it.
+        #    Frozen, the bare existence of the folder is not enough: a system-wide
+        #    install (/opt, /usr/lib, Program Files) must never write next to its
+        #    own read-only files, and an installer that happens to create the
+        #    folder would silently flip every fresh install to portable mode.
+        #    An explicit portable.txt marker next to the executable opts in.
         local_dir = self.project_root / "profiles"
-        if local_dir.exists():
+        frozen = getattr(sys, "frozen", False)
+        if not frozen and local_dir.exists():
+            return local_dir
+        if frozen and paths.is_portable(paths.app_root()):
             return local_dir
 
-        # 3. Neue Installation → AppData
-        return Path(os.environ["APPDATA"]) / "Aion2 TM" / "Profiles"
+        # 3. Neue Installation → per-user data dir
+        return paths.default_profiles_dir()
 
     def _save_app_config(self):
         cfg = {
@@ -4154,6 +4116,26 @@ class MainWindow(QMainWindow):
         if not self._pending_update:
             return
         version, body, asset_url = self._pending_update
+
+        if sys.platform != "win32":
+            # UpdateDialog installs in place through a Windows .bat +
+            # robocopy swap-on-restart (ui/update_dialog.py). There is no
+            # equivalent off Windows, and there should not be: an AUR
+            # package, an AppImage or a Flatpak is updated by its own
+            # channel, and a self-updating app inside /opt or /usr would
+            # either fail on permissions or fight the package manager.
+            # Show the release page instead and let the user take it from
+            # there.
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            from core.version import GITHUB_REPO, GITHUB_USER
+
+            url = f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
+            logger.info("Update %s available; opening the release page (%s)", version, url)
+            QDesktopServices.openUrl(QUrl(url))
+            self.show_toast(f"Update {version} → {url}")
+            return
+
         app_root = self.project_root
         dlg = UpdateDialog(version, body, asset_url, app_root, parent=self)
         dlg.exec()

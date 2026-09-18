@@ -110,6 +110,25 @@ The app checks for updates automatically on startup. When a new version is avail
 
 ---
 
+## 🐧 Run on Linux
+
+Runs from source on Linux (no packaged build yet). Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/):
+
+```sh
+uv sync                 # creates .venv from uv.lock
+./scripts/aion2-tm      # launcher (or: .venv/bin/python main.py)
+```
+
+**Wayland.** The launcher runs the app through XWayland (`QT_QPA_PLATFORM=xcb`) when it finds no deliberate choice of its own. Native Wayland gives a client no way to place its own windows: measured on Hyprland, the HUD overlay opens on whatever monitor and workspace the compositor picks, while under XWayland it appears where the app puts it. Run `QT_QPA_PLATFORM=wayland ./scripts/aion2-tm` to override. Tiling window managers still size the main window themselves; on Hyprland, `windowrule = float, class:^([Aa]ion2[- ][Tt][Mm])$` floats both windows and `windowrule = pin, title:^(Aion2 TM)$` keeps the overlay above the rest.
+
+**Where your data lives.** Config in `$XDG_CONFIG_HOME/aion2-tm` (`~/.config/aion2-tm`), profiles in `$XDG_DATA_HOME/aion2-tm/Profiles`, the Armory cache in `$XDG_CACHE_HOME/aion2-tm`, the log in `$XDG_STATE_HOME/aion2-tm`. Windows and macOS keep their own conventions (`%APPDATA%\Aion2 TM`, `~/Library/Application Support`) — nothing moved there. Running from a git clone keeps everything in the repo folder, as before.
+
+**Portable mode.** Put an empty `portable.txt` next to the executable and the app reads and writes its profiles from `profiles/` beside itself instead of your home directory — for a USB stick or a self-contained folder. Without the marker an installed build never writes next to its own files.
+
+Notification sounds are played through Qt (WAV only). Desktop sound themes ship `.oga` files, which Qt cannot play, so the sound picker is usually empty on Linux — use its **Browse...** entry to point at any `.wav`. Without a system tray (a Wayland session with no StatusNotifier host), notifications appear as in-app toasts and minimize-to-tray is skipped. The in-app updater is Windows-only; on Linux the update button opens the release page.
+
+---
+
 ## 📸 Screenshots
 
 <img width="1186" height="839" alt="image" src="https://github.com/user-attachments/assets/59d05594-a1ad-41ed-949f-3246b8db7320" />

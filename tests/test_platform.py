@@ -344,3 +344,80 @@ def test_no_module_imports_winsound_on_this_host():
 
     assert "winsound" not in _sys.modules or _sys.platform == "win32"
     assert subprocess  # module kept imported for the fixtures above
+
+
+# ── the shared notification-sound picker (ui.pages.settings_page) ─────────
+
+@pytest.fixture
+def picker(qapp):
+    from PySide6.QtWidgets import QComboBox
+
+    return QComboBox()
+
+
+def _rows(combo):
+    return [(combo.itemText(i), combo.itemData(i)) for i in range(combo.count())]
+
+
+def test_picker_leads_with_browse_when_no_system_wavs(picker, monkeypatch):
+    from ui.pages import settings_page as sp
+
+    monkeypatch.setattr(sp, "list_system_wavs", lambda *a, **k: [])
+    sp.populate_sound_combo(picker)
+    assert _rows(picker) == [("-- No Sound --", ""), ("Browse...", sp.SOUND_BROWSE_DATA)]
+
+
+def test_picker_keeps_the_windows_order_and_trails_browse(picker, monkeypatch, tmp_path):
+    # With system sounds present (Windows), the list must read exactly as it
+    # always did -- sentinel, then the sorted sounds -- with Browse appended.
+    from ui.pages import settings_page as sp
+
+    wavs = [tmp_path / "Alarm.wav", tmp_path / "Chime.wav"]
+    monkeypatch.setattr(sp, "list_system_wavs", lambda *a, **k: wavs)
+    sp.populate_sound_combo(picker)
+    assert [text for text, _ in _rows(picker)] == ["-- No Sound --", "Alarm", "Chime", "Browse..."]
+
+
+def test_picker_keeps_an_unknown_saved_path_selected(picker, monkeypatch):
+    from ui.pages import settings_page as sp
+
+    monkeypatch.setattr(sp, "list_system_wavs", lambda *a, **k: [])
+    sp.populate_sound_combo(picker, "/home/u/sounds/custom.wav")
+    assert picker.currentData() == "/home/u/sounds/custom.wav"
+    assert picker.currentText() == "custom"
+
+
+def test_picker_translates_both_labels(picker, monkeypatch):
+    from core.translations import tr
+    from ui.pages import settings_page as sp
+
+    monkeypatch.setattr(sp, "list_system_wavs", lambda *a, **k: [])
+    sp.populate_sound_combo(picker, "", tr, "de")
+    assert _rows(picker) == [("-- Kein Sound --", ""), ("Durchsuchen...", sp.SOUND_BROWSE_DATA)]
+
+
+def test_browse_for_wav_inserts_and_selects(picker, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+
+    from ui.pages import settings_page as sp
+
+    monkeypatch.setattr(sp, "list_system_wavs", lambda *a, **k: [])
+    sp.populate_sound_combo(picker)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: ("/tmp/picked.wav", "")))
+
+    assert sp.browse_for_wav(None, picker, 0) == "/tmp/picked.wav"
+    assert picker.currentData() == "/tmp/picked.wav"
+
+
+def test_browse_for_wav_cancel_restores_the_previous_row(picker, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+
+    from ui.pages import settings_page as sp
+
+    monkeypatch.setattr(sp, "list_system_wavs", lambda *a, **k: [])
+    sp.populate_sound_combo(picker)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: ("", "")))
+
+    assert sp.browse_for_wav(None, picker, 0) == ""
+    assert picker.currentIndex() == 0
+    assert picker.currentData() == ""

@@ -1,6 +1,3 @@
-import glob
-import os
-import winsound
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFrame, QButtonGroup, QGridLayout, QTimeEdit, QWidget, QSpinBox, QComboBox,
@@ -8,7 +5,10 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QTime, Qt
 
-from ui.pages.settings_page import _ScreenAwareComboBox
+from core.sound import play_wav
+from ui.pages.settings_page import (
+    SOUND_BROWSE_DATA, _ScreenAwareComboBox, browse_for_wav, populate_sound_combo,
+)
 
 CUSTOM_TIMER_COLORS = [
     ("#22d3ee", "ct_color_cyan"),
@@ -414,12 +414,12 @@ class CustomTimerDialog(QDialog):
             sound_completer.setCaseSensitivity(Qt.CaseInsensitive)
             sound_completer.setFilterMode(Qt.MatchContains)
             sound_completer.setCompletionMode(QCompleter.PopupCompletion)
-        self.sound_combo.addItem(self._tr(self._language, "ct_dialog_no_sound"), "")
-        for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
-            sound_name = os.path.splitext(os.path.basename(path))[0]
-            self.sound_combo.addItem(sound_name, path)
-        idx = self.sound_combo.findData(notification_sound)
-        self.sound_combo.setCurrentIndex(max(0, idx))
+        populate_sound_combo(self.sound_combo, notification_sound, self._tr, self._language)
+        # The sentinel keeps this dialog's own wording ("-- Kein Sound --"),
+        # which differs from Settings' "-- No Sound --" key.
+        self.sound_combo.setItemText(0, self._tr(self._language, "ct_dialog_no_sound"))
+        self._last_sound_index = self.sound_combo.currentIndex()
+        self.sound_combo.currentIndexChanged.connect(self._on_sound_combo_changed)
 
         self.sound_test_btn = QPushButton(self._tr(self._language, "ct_dialog_test_button"))
         self.sound_test_btn.setObjectName("secondaryButton")
@@ -474,10 +474,13 @@ class CustomTimerDialog(QDialog):
     def _on_hourly_pencil_clicked(self):
         self._hourly_manual_widget.setVisible(self._hourly_pencil_btn.isChecked())
 
+    def _on_sound_combo_changed(self, index: int):
+        if self.sound_combo.itemData(index) == SOUND_BROWSE_DATA:
+            browse_for_wav(self, self.sound_combo, getattr(self, "_last_sound_index", 0))
+        self._last_sound_index = self.sound_combo.currentIndex()
+
     def _preview_sound(self):
-        path = self.sound_combo.currentData() or ""
-        if path and os.path.isfile(path):
-            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        play_wav(self.sound_combo.currentData() or "")
 
     # ── Helpers ───────────────────────────────────────────────────────────
 

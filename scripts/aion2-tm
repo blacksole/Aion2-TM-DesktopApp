@@ -1,0 +1,37 @@
+#!/bin/sh
+# Aion2 TM launcher for Linux/macOS.
+#
+# Native Wayland (xdg-shell) gives a client no way to place its own windows or
+# to stay above others: on Hyprland the HUD overlay is tiled, its geometry is
+# ignored and WindowStaysOnTopHint does nothing. Under XWayland the same window
+# floats, keeps its size and stays on top. The game itself runs through
+# Proton/XWayland anyway, so default to xcb and let anyone override it by
+# exporting QT_QPA_PLATFORM themselves (QT_QPA_PLATFORM=wayland ./scripts/aion2-tm).
+set -eu
+
+# Two cases count as "no deliberate choice was made for THIS app", and both
+# get xcb: the variable being unset, and it holding a fallback LIST such as
+# the "wayland;xcb" many Wayland sessions export globally (Omarchy does) --
+# a list already says xcb is acceptable, it just ranks wayland first. A single
+# explicit value is always left exactly as the user set it, so
+# QT_QPA_PLATFORM=wayland ./scripts/aion2-tm still runs native Wayland.
+if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
+    case "${QT_QPA_PLATFORM:-}" in
+        "" | *\;*)
+            QT_QPA_PLATFORM=xcb
+            export QT_QPA_PLATFORM
+            ;;
+    esac
+fi
+
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+# Prefer the project venv, fall back to whatever python3 is on PATH.
+if [ -x "$APP_DIR/.venv/bin/python" ]; then
+    PYTHON="$APP_DIR/.venv/bin/python"
+else
+    PYTHON=${PYTHON:-python3}
+fi
+
+cd -- "$APP_DIR"
+exec "$PYTHON" main.py "$@"
