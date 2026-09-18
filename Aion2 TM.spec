@@ -78,7 +78,12 @@ a = Analysis(
         'PySide6.QtWebSockets', 'PySide6.Qt3DCore', 'PySide6.Qt3DRender',
         'PySide6.Qt3DInput', 'PySide6.Qt3DLogic', 'PySide6.Qt3DAnimation',
         'PySide6.Qt3DExtras', 'PySide6.QtCharts', 'PySide6.QtDataVisualization',
-        'PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
+        # 'PySide6.QtMultimedia' removed (Linux port, 2026-09-18): core/sound.py
+        # plays notification sounds through QSoundEffect on every non-Windows
+        # host (winsound stays the Windows backend). Excluding it shipped a
+        # build that could never make a sound outside Windows. QtMultimedia
+        # WIDGETS stays excluded -- no video surface is used anywhere.
+        'PySide6.QtMultimediaWidgets',
         'PySide6.QtLocation', 'PySide6.QtPositioning',
         'PySide6.QtRemoteObjects', 'PySide6.QtScxml',
         'PySide6.QtSerialPort', 'PySide6.QtSerialBus',
