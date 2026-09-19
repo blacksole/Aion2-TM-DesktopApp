@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
 from PySide6.QtCore import Signal
 
 from core import theme
+from ui.widgets import icons
 
 #: The built-in timers' identity colours (MASTER §4-4 data colours, owned by
 #: core/theme.py).  These used to be five hex literals passed in at the call
@@ -73,9 +74,10 @@ class TimersPage(QWidget):
         self.manage_timers_btn.setToolTip("Custom Timer verwalten")
         self.manage_timers_btn.clicked.connect(self.manage_timers_requested.emit)
 
-        self.timer_settings_btn = QPushButton("⚙")
+        self.timer_settings_btn = QPushButton()
         self.timer_settings_btn.setObjectName("pageIconButton")
         self.timer_settings_btn.setToolTip("")
+        icons.set_icon(self.timer_settings_btn, "settings", 16)
         self.timer_settings_btn.clicked.connect(self.timer_settings_requested.emit)
 
         header_row.addWidget(self.manage_timers_btn)

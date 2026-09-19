@@ -8,6 +8,7 @@ from PySide6.QtGui import QIntValidator, QPainter, QBrush, QActionGroup
 
 from core import theme
 from ui.widgets.empty_state import EmptyStateWidget
+from ui.widgets import icons
 
 class TaskProgressBar(QFrame):
     def __init__(self):
@@ -38,13 +39,18 @@ class TaskProgressBar(QFrame):
         # tile already tracks (MainWindow._record_missed_daily_activities)
         # (User-Wunsch, 2026-09-07: "Genauso die Regel dahinter bauen") --
         # just surfaced live in the app itself now too, not only on export.
-        for val, icon, label, val_obj, icon_obj, sub_obj in [
-            (self._done_val,   "✓", "done",      "ProgressDoneVal",   "ProgressDoneIcon",   "ProgressDoneSub"),
-            (self._open_val,   "○", "remaining", "ProgressOpenVal",   "ProgressOpenIcon",   "ProgressOpenSub"),
-            (self._missed_val, "!", "missed",    "ProgressMissedVal", "ProgressMissedIcon", "ProgressMissedSub"),
-            (self._total_val,  "Σ", "total",     "ProgressTotalVal",  "ProgressTotalIcon",  "ProgressTotalSub"),
+        # Was four text glyphs ("✓", "○", "!", "Σ") coloured by the
+        # #Progress*Icon rules.  MASTER §3 forbids a glyph standing in for
+        # an icon, and a QSS `color:` cannot reach a rendered SVG, so each
+        # one names its own token here -- the SAME token its rule used, so
+        # the row keeps the meaning it had (ok / warn / danger / accent).
+        for val, icon_name, icon_token, label, val_obj, icon_obj, sub_obj in [
+            (self._done_val,   "check",          "ok",      "done",      "ProgressDoneVal",   "ProgressDoneIcon",   "ProgressDoneSub"),
+            (self._open_val,   "circle",         "warn",    "remaining", "ProgressOpenVal",   "ProgressOpenIcon",   "ProgressOpenSub"),
+            (self._missed_val, "triangle-alert", "danger",  "missed",    "ProgressMissedVal", "ProgressMissedIcon", "ProgressMissedSub"),
+            (self._total_val,  "sigma",          "accent",  "total",     "ProgressTotalVal",  "ProgressTotalIcon",  "ProgressTotalSub"),
         ]:
-            icon_lbl = QLabel(icon)
+            icon_lbl = icons.IconLabel(icon_name, 16, icon_token)
             icon_lbl.setObjectName(icon_obj)
             val.setObjectName(val_obj)
             sub = QLabel("")
@@ -629,9 +635,10 @@ class TasksPage(QWidget):
         self._reset_hint_label.setVisible(False)
         self.sort_row.addWidget(self._reset_hint_label)
 
-        self._manual_reset_btn = QPushButton("↺")
+        self._manual_reset_btn = QPushButton()
         self._manual_reset_btn.setObjectName("ManualResetBtn")
         self._manual_reset_btn.setFixedSize(26, 26)
+        icons.set_icon(self._manual_reset_btn, "rotate-ccw", 16)
         self._manual_reset_btn.setToolTip(self.tr(self.language, "manual_reset_tooltip"))
         self._manual_reset_btn.setVisible(False)
         self._manual_reset_btn.clicked.connect(self.manual_reset_requested.emit)
@@ -1272,6 +1279,12 @@ class TasksPage(QWidget):
         if hint == hint_key:
             hint = ""
 
+        # MASTER §3 « État vide : icône Lucide 24 px fg.muted » (review
+        # G/m13).  The glyph names the tab, so it is set here rather than
+        # once at construction: the same widget serves both tabs.
+        self.empty_state.set_icon(
+            "shopping-cart" if self.active_tab == "shopping" else "list-todo"
+        )
         self.empty_state.set_content(title, hint, action_label, on_action)
 
     def _add_row_target(self):

@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
 )
 from ui.custom_timer_dialog import DEFAULT_TIMER_COLOR, CustomTimerDialog
 from ui.widgets.empty_state import EmptyStateWidget
+from ui.widgets import icons
 
 
 class CustomTimerManagerDialog(QDialog):
@@ -133,9 +134,11 @@ class CustomTimerManagerDialog(QDialog):
             for cfg in self._custom_timer_configs
         )
         if len(self._timer_categories) > 1 and not has_timers:
-            del_btn = QPushButton("✕")
+            del_btn = QPushButton()
             del_btn.setObjectName("secondaryButton")
             del_btn.setFixedWidth(36)
+            del_btn.setToolTip(self._tr(self._language, "ct_manager_delete_category_tooltip"))
+            icons.set_icon(del_btn, "x", 16)
             del_btn.clicked.connect(lambda checked=False, cn=cat_name: self._remove_category(cn))
             rl.addWidget(del_btn)
         return row
@@ -268,6 +271,7 @@ class CustomTimerManagerDialog(QDialog):
             title = self._tr(self._language, "ct_manager_timer_section_title")
         if hint == "empty_timers_hint":
             hint = ""
+        self._ct_empty_state.set_icon("timer")
         self._ct_empty_state.set_content(title, hint)
         self._ct_empty_state.setVisible(True)
 
@@ -300,9 +304,11 @@ class CustomTimerManagerDialog(QDialog):
         edit_btn.setFixedWidth(110)
         edit_btn.clicked.connect(lambda checked=False, i=idx: self._edit_custom_timer(i))
 
-        remove_btn = QPushButton("✕")
+        remove_btn = QPushButton()
         remove_btn.setObjectName("secondaryButton")
         remove_btn.setFixedWidth(36)
+        remove_btn.setToolTip(self._tr(self._language, "ct_manager_remove_button"))
+        icons.set_icon(remove_btn, "trash", 16)
         remove_btn.clicked.connect(lambda checked=False, i=idx: self._remove_custom_timer(i))
 
         toggle_btn = QPushButton()

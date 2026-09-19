@@ -9,6 +9,7 @@ from PySide6.QtGui import QPainter, QColor, QActionGroup
 
 from core import theme
 from core.translations import tr
+from ui.widgets import icons
 
 # --------------------------------------------------------------------------
 # Colors (MASTER §4-3: a painter reads tokens, never a literal)
@@ -421,9 +422,11 @@ class _AccordionSection(QWidget):
         header_row.setContentsMargins(10, 6, 10, 6)
         header_row.setSpacing(8)
 
-        self._chevron = QLabel()
+        # Was a "▾"/"▸" QLabel.  An IconLabel rather than a QIcon on a
+        # button: the whole header is the click target (self._header), the
+        # chevron is only the disclosure marker.
+        self._chevron = icons.IconLabel("chevron-right", 16, "fg.muted")
         self._chevron.setObjectName("OverlayChevron")
-        self._chevron.setFixedWidth(10)
 
         title_lbl = QLabel(title)
         title_lbl.setObjectName("OverlaySectionTitle")
@@ -458,7 +461,7 @@ class _AccordionSection(QWidget):
             self._on_toggle(self._open)
 
     def _apply_open_state(self):
-        self._chevron.setText("▾" if self._open else "▸")
+        self._chevron.set_icon("chevron-down" if self._open else "chevron-right")
         self._body.setVisible(self._open)
 
 
@@ -541,17 +544,23 @@ class OverlayWindow(QWidget):
         # Gear icon (User-Wunsch, 2026-09-05: bring it back, this time as a
         # section-visibility picker rather than its original Tasks/Guide
         # mode-switch role -- see OverlayWindow._show_section_popover).
-        self._gear_btn = QPushButton("⚙")
+        self._gear_btn = QPushButton()
         self._gear_btn.setObjectName("OverlayIconBtn")
         self._gear_btn.setFixedSize(26, 26)
         self._gear_btn.setCursor(Qt.PointingHandCursor)
         self._gear_btn.setToolTip("Overlay sections")
+        # MASTER §3: « aucun emoji comme icône » -- this was a "⚙" glyph,
+        # rendered by whatever font the host happened to have.  The tooltip
+        # above is what a screen reader reads now that there is no text.
+        icons.set_icon(self._gear_btn, "settings", 16)
         self._gear_btn.clicked.connect(self._show_section_popover)
 
-        close_btn = QPushButton("✕")
+        close_btn = QPushButton()
         close_btn.setObjectName("OverlayIconBtn")
         close_btn.setFixedSize(26, 26)
         close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setToolTip("Close overlay")
+        icons.set_icon(close_btn, "x", 16)
         close_btn.clicked.connect(self.hide)
 
         title_row.addWidget(dot)

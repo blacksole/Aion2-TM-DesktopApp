@@ -32,6 +32,7 @@ from ui.flow.widgets.flow_guide_view import FlowGuideView
 from ui.flow.flow_layout import NODE_WIDTH, NODE_HEIGHT, ICON_SIZE
 from ui.flow.flow_renderer import FlowRenderer
 from ui.flow.flow_controller import FlowController
+from ui.widgets import icons
 
 class FlowMapWindow(QMainWindow):
     map_switch_requested = Signal(str)
@@ -100,10 +101,11 @@ class FlowMapWindow(QMainWindow):
         self.new_map_btn.setToolTip("Neue Map erstellen")
         self.new_map_btn.clicked.connect(self.map_add_requested.emit)
 
-        self.delete_map_btn = QPushButton("🗑")
+        self.delete_map_btn = QPushButton()
         self.delete_map_btn.setObjectName("FlowDeleteMapBtn")
         self.delete_map_btn.setFixedSize(34, 34)
         self.delete_map_btn.setToolTip("Aktuelle Map löschen")
+        icons.set_icon(self.delete_map_btn, "trash", 20)
         self.delete_map_btn.clicked.connect(lambda: self.map_delete_requested.emit())
 
         self.edit_mode_btn = QPushButton()
@@ -120,7 +122,7 @@ class FlowMapWindow(QMainWindow):
 
         
 
-        self.save_status_label = QLabel("✓ Saved")
+        self.save_status_label = QLabel("Saved")
         self.save_status_label.setObjectName("FlowSaveStatusLabel")
 
         self.mode_tabs = QFrame()
@@ -260,10 +262,11 @@ class FlowMapWindow(QMainWindow):
         sep_bottom.setFixedHeight(1)
         tool_layout.addWidget(sep_bottom)
 
-        self.reset_map_btn = QPushButton("↺")
+        self.reset_map_btn = QPushButton()
         self.reset_map_btn.setObjectName("FlowResetMapBtn")
         self.reset_map_btn.setFixedSize(44, 44)
         self.reset_map_btn.setToolTip("Map zurücksetzen")
+        icons.set_icon(self.reset_map_btn, "rotate-ccw", 24)
         self.reset_map_btn.clicked.connect(self.map_reset_requested.emit)
         tool_layout.addWidget(self.reset_map_btn)
 

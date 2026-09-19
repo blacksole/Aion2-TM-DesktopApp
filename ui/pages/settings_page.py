@@ -15,6 +15,7 @@ from core import theme
 from core.app_logger import get_log_path
 from core.platform import open_path, platform_placeholder_exe_path, reveal_in_file_manager
 from core.sound import list_system_wavs, play_wav
+from ui.widgets import icons
 
 #: Item data marking the "Browse..." row of a notification-sound picker.
 SOUND_BROWSE_DATA = "__browse_wav__"
@@ -1453,7 +1454,7 @@ class SettingsPage(QWidget):
         self._populate_sound_combo("")
         self.notif_sound_combo.currentIndexChanged.connect(self._on_sound_combo_changed)
 
-        self.notif_test_btn = QPushButton("▶ Test")
+        self.notif_test_btn = QPushButton("Test")
         self.notif_test_btn.setObjectName("secondaryButton")
         self.notif_test_btn.setFixedWidth(70)
         self.notif_test_btn.clicked.connect(self._preview_sound)
@@ -1686,7 +1687,7 @@ class SettingsPage(QWidget):
         self.dps_browse_btn.setObjectName("secondaryButton")
         self.dps_browse_btn.setFixedWidth(100)
         self.dps_browse_btn.clicked.connect(self._browse_dps_exe)
-        self.dps_start_btn = QPushButton("▶ Start")
+        self.dps_start_btn = QPushButton("Start")
         self.dps_start_btn.setObjectName("secondaryButton")
         self.dps_start_btn.setFixedWidth(80)
         self.dps_start_btn.clicked.connect(
@@ -1954,9 +1955,13 @@ class SettingsPage(QWidget):
         self.profiles_name_input.setText(self.profile_name)
         self.profiles_name_input.setVisible(False)
 
-        self.profiles_name_edit_btn = QPushButton("✎")
+        self.profiles_name_edit_btn = QPushButton()
         self.profiles_name_edit_btn.setObjectName("smallIconButton")
         self.profiles_name_edit_btn.setFixedSize(34, 34)
+        # "✎" / "💾" before the icons wave.  The 💾 in particular was a full
+        # colour emoji on most Linux font stacks -- the one glyph in the app
+        # that ignored the theme entirely.
+        icons.set_icon(self.profiles_name_edit_btn, "pencil", 16)
         self.profiles_name_edit_btn.clicked.connect(self._toggle_profile_edit)
 
         name_layout.addWidget(self.profiles_name_label)
@@ -1976,7 +1981,7 @@ class SettingsPage(QWidget):
         self.save_profile_btn = QPushButton("Save Profile")
         self.save_profile_btn.setObjectName("secondaryButton")
 
-        self.load_profile_btn = QPushButton("Load Profile ▾")
+        self.load_profile_btn = QPushButton("Load Profile")
         self.load_profile_btn.setObjectName("secondaryButton")
 
         self.reset_profile_btn = QPushButton("Reset Profile")
@@ -2104,7 +2109,7 @@ class SettingsPage(QWidget):
             self.profiles_name_input.setText(self.profile_name)
             self.profiles_name_label.setVisible(False)
             self.profiles_name_input.setVisible(True)
-            self.profiles_name_edit_btn.setText("💾")
+            icons.set_icon(self.profiles_name_edit_btn, "save", 16)
             self.profiles_name_input.setFocus()
             self.profiles_name_input.selectAll()
             return
@@ -2119,7 +2124,7 @@ class SettingsPage(QWidget):
         self.profile_edit_mode = False
         self.profiles_name_input.setVisible(False)
         self.profiles_name_label.setVisible(True)
-        self.profiles_name_edit_btn.setText("✎")
+        icons.set_icon(self.profiles_name_edit_btn, "pencil", 16)
 
     def _pick_profile_dir(self):
         current = self.profiles_path_label.text()

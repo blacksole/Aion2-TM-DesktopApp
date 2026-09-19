@@ -14,6 +14,16 @@ a = Analysis(
         # Barlow/Barlow Condensed/JetBrains Mono part of the design system,
         # not decoration. PyInstaller de-duplicates identical TOC entries.
         ('assets/fonts', 'assets/fonts'),
+        # The vendored Lucide subset (MASTER §3, "Icônes : Lucide (ISC)") and
+        # the per-theme chevrons under its tinted/ folder.  Same reasoning as
+        # the fonts line above: already inside ('assets', 'assets'), named
+        # again so that trimming the broad entry cannot silently ship a build
+        # with no icons -- and unlike a missing font, a missing icon set
+        # fails *loudly* (ui/widgets/icons.py raises KeyError on an unknown
+        # name) rather than falling back to something that still renders.
+        # The tinted chevrons are what QSS `image: url()` points at, so
+        # losing them un-draws every combo/spin-box arrow.
+        ('assets/icons/lucide', 'assets/icons/lucide'),
         # ui/styles.qss is gone (2026-09-18): the app renders its stylesheet
         # from this template via core/theme.build_qss(), so the TEMPLATE is
         # what has to reach _MEIPASS/ui/.

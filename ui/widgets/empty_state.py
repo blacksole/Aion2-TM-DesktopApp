@@ -7,10 +7,19 @@ exposes stable objectNames (``emptyState`` / ``emptyStateTitle`` /
 ``emptyStateHint`` / ``emptyStateAction``) so the later design pass can
 style it from ``ui/styles.template.qss`` without touching this file — it
 now does, see #emptyState / #emptyStateTitle / #emptyStateHint there.
+
+The icon (MASTER §3: « État vide : icône Lucide 24 px ``fg.muted`` »,
+review G/m13) arrived with the icons wave. It is **optional** and hidden
+by default: ``ui/pages/armory_page.py`` builds an EmptyStateWidget too and
+is owned by another change at the time of writing, so a widget that grew a
+mandatory icon would have altered a page this file must not touch.
+``set_icon(name)`` is the whole opt-in.
 """
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+
+from ui.widgets.icons import IconLabel
 
 
 class EmptyStateWidget(QWidget):
@@ -25,6 +34,12 @@ class EmptyStateWidget(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(8)
         layout.addStretch()
+
+        #: MASTER §3 — 24 px, ``fg.muted``, above the title.  Built lazily
+        #: by :meth:`set_icon` so an empty state that names no icon keeps
+        #: exactly the geometry it had before this widget grew one.
+        self.icon_label: IconLabel | None = None
+        self._icon_slot = layout.count()
 
         self.title_label = QLabel("")
         self.title_label.setObjectName("emptyStateTitle")
@@ -49,6 +64,28 @@ class EmptyStateWidget(QWidget):
 
         self._action_slot = None
         self.setVisible(False)
+
+    # ── icon ──────────────────────────────────────────────────────────────
+
+    def set_icon(self, name: str, size: int = 24, color: str = "fg.muted"):
+        """Show a Lucide icon above the title (MASTER §3: 24 px, ``fg.muted``).
+
+        Calling it again swaps the glyph; the widget is created once. Passing
+        an empty ``name`` hides it again.
+        """
+        if not name:
+            if self.icon_label is not None:
+                self.icon_label.setVisible(False)
+            return
+
+        if self.icon_label is None:
+            self.icon_label = IconLabel(name, size, color)
+            self.icon_label.setObjectName("emptyStateIcon")
+            layout = self.layout()
+            layout.insertWidget(self._icon_slot, self.icon_label, 0, Qt.AlignHCenter)
+        else:
+            self.icon_label.set_icon(name, color)
+        self.icon_label.setVisible(True)
 
     # ── content ───────────────────────────────────────────────────────────
 

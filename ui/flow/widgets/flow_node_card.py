@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QFrame, QLabel, QPushButton, QGridLayout
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPixmap, QIcon
 
+from ui.widgets import icons
 from ui.flow.flow_layout import (
     NODE_WIDTH,
     NODE_HEIGHT,
@@ -110,9 +111,10 @@ class FlowNodeCard(QFrame):
         else:
             self.add_node_hint_btn.setText("+")
 
-        self.done_btn = QPushButton("✓")
+        self.done_btn = QPushButton()
         self.done_btn.setObjectName("FlowDoneButton")
         self.done_btn.setFixedSize(34, 34)
+        icons.set_icon(self.done_btn, "check", 16)
         self.done_btn.setCursor(Qt.PointingHandCursor)
 
         grid = QGridLayout(self)

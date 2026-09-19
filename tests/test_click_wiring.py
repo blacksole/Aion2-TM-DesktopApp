@@ -332,7 +332,10 @@ def test_clicking_a_section_header_collapses_it(qapp):
 
         _click(section._header)
         assert section._open is False, "the header click no longer toggles the section"
-        assert section._chevron.text() == "▸"
+        # The chevron was a "▸"/"▾" QLabel until the icons wave; it is a
+        # Lucide IconLabel now, so the collapsed state is read off the icon
+        # it paints rather than off its text (MASTER §3).
+        assert section._chevron.icon_name == "chevron-right"
 
         _click(section._header)
         assert section._open is True

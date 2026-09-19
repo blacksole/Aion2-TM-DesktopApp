@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from ui.widgets.shopping_card import format_currency_price
+from ui.widgets import icons
 from PySide6.QtCore import Qt, QEvent, QObject
 from PySide6.QtGui import QRegularExpressionValidator, QIntValidator
 from PySide6.QtCore import QRegularExpression
@@ -1493,8 +1494,10 @@ class _TemplateEditDialog(QDialog):
         # rather than adding write-only dead data to shop templates.
         self._description = None
         if task_mode:
-            self._desc_toggle_btn = QPushButton("▸ " + self._t("task_description_toggle"))
+            self._desc_toggle_btn = QPushButton(self._t("task_description_toggle"))
             self._desc_toggle_btn.setObjectName("linkButton")
+            icons.set_icon(self._desc_toggle_btn, "chevron-right", 16,
+                           "accent", clear_text=False)
             self._desc_toggle_btn.setFlat(True)
             self._desc_toggle_btn.setCursor(Qt.PointingHandCursor)
             self._desc_toggle_btn.setCheckable(True)
@@ -1570,8 +1573,10 @@ class _TemplateEditDialog(QDialog):
     def _toggle_description(self):
         expanded = self._desc_toggle_btn.isChecked()
         self._description.setVisible(expanded)
-        arrow = "▾ " if expanded else "▸ "
-        self._desc_toggle_btn.setText(arrow + self._t("task_description_toggle"))
+        icons.set_icon(self._desc_toggle_btn,
+                       "chevron-down" if expanded else "chevron-right",
+                       16, "accent", clear_text=False)
+        self._desc_toggle_btn.setText(self._t("task_description_toggle"))
 
     def _open_import_from_db(self):
         if not self._item_picker_callback:

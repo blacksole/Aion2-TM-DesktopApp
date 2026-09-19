@@ -4,6 +4,7 @@ from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QRadialGradient
 
 from core import theme
 from core.flow_model import FlowNode
+from ui.widgets import icons
 
 
 NODE_RADIUS = 14
@@ -128,18 +129,14 @@ class FlowGuideCanvas(QWidget):
         painter.drawEllipse(pos, r, r)
 
         if node.status == "completed":
-            font = QFont()
-            font.setPixelSize(13)
-            font.setBold(True)
-            painter.setFont(font)
-            check = token_color("fg")
-            check.setAlpha(220)
-            painter.setPen(QPen(check, 2))
-            painter.drawText(
-                QRect(pos.x() - r, pos.y() - r, r * 2, r * 2),
-                Qt.AlignCenter,
-                "✓",
-            )
+            # A drawn Lucide check, not a "✓" run through whatever font Qt
+            # picked (MASTER §3).  Painted at the dot's own scale so it
+            # follows the zoom the rest of this painter already honours.
+            edge = max(8, int(r * 1.4))
+            mark = icons.pixmap("check", edge, token_color("fg"),
+                                painter.device().devicePixelRatio())
+            painter.drawPixmap(pos.x() - edge // 2, pos.y() - edge // 2,
+                               edge, edge, mark)
 
     def _draw_label(self, painter, node: FlowNode, pos: QPoint):
         text = (
@@ -291,18 +288,20 @@ class FlowGuideView(QWidget):
         self._language = "de"
         self._tr_func = None
 
-        self.done_btn = QPushButton("✓  Als erledigt markieren")
+        self.done_btn = QPushButton()
         self.done_btn.setObjectName("GuideDoneButton")
         self.done_btn.setFixedSize(220, 44)
         self.done_btn.setVisible(False)
         self.done_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self.done_btn, "check", 16, "ok", clear_text=False)
         self.done_btn.clicked.connect(self._on_done_clicked)
 
-        self.edit_btn = QPushButton("✏  Edit")
+        self.edit_btn = QPushButton("Edit")
         self.edit_btn.setObjectName("GuideEditButton")
         self.edit_btn.setFixedSize(88, 44)
         self.edit_btn.setVisible(False)
         self.edit_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self.edit_btn, "pencil", 16, clear_text=False)
         self.edit_btn.clicked.connect(self._on_edit_clicked)
 
         info_layout.addWidget(self.info_icon_label)

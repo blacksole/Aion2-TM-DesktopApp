@@ -26,7 +26,11 @@ def test_every_theme_builds_qss(name):
     assert len(qss) > 5000, "template rendered suspiciously small"
     assert "{{" not in qss and "}}" not in qss, "unsubstituted placeholder left in output"
     assert "ASSET_PATH" not in qss
-    assert "/tmp/assets/assets/icons/arrow_down_orange.png" in qss
+    # The one url() family the sheet still carries: the dropdown/spin-box
+    # chevrons, per theme (the baked orange PNGs are gone -- MASTER §3, the
+    # icons wave).  Asserted with `name` interpolated so a theme that forgot
+    # to ship its tinted set fails here rather than at first paint.
+    assert f"/tmp/assets/assets/icons/lucide/tinted/{name}/chevron-down.svg" in qss
 
 
 def _without_comments(text: str) -> str:

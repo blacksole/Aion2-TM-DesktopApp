@@ -835,15 +835,46 @@ QWidget[aion2="true"] #priorityInput QAbstractItemView {
     padding: {{space_1}}px;
 }
 
+/* Dropdown chevron — a Lucide chevron, pre-tinted per theme (MASTER §3).
+   Was `assets/icons/arrow_down_orange.png`: one baked ORANGE bitmap for all
+   six themes, so a combo box on Abyss, Emerald or Void carried a warm accent
+   that belongs to none of them (MASTER « Décisions différées », review D/m3).
+   QSS `image: url()` cannot tint, so the file itself has to be the right
+   colour -- `{{name}}` is the active theme's own name, and the 6 × 4 files it
+   selects between are generated from `fg.muted` by
+   scripts/gen_tinted_icons.py (see its docstring for why build time and not
+   a runtime cache). */
 QWidget[aion2="true"] #priorityInput::down-arrow,
 QWidget[aion2="true"] #settingsCombo::down-arrow,
 QWidget[aion2="true"] #FlowZoomCombo::down-arrow,
 QWidget[aion2="true"] #FlowSymbolCombo::down-arrow {
-    image: url(ASSET_PATH/assets/icons/arrow_down_orange.png);
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down.svg);
     width: 14px;
     height: 14px;
     border: none;
     background: transparent;
+}
+
+/* Hover: the theme's OWN accent.  This is the variant that makes the
+   per-theme folders earn their keep -- `fg.muted` is not a token a theme may
+   redefine (MASTER §2), so the resting chevron is the same grey everywhere,
+   while this one is cyan / teal / orange / lavender / white / violet.  The
+   control gets back the splash of colour the orange PNG used to give it,
+   only now it is the colour of the theme the user actually picked.
+
+   The pseudo-state goes on the SUBCONTROL (`::down-arrow:hover`), never on
+   the widget (`:hover::down-arrow`).  Both forms parse, and the second one
+   is what this rule was written as first -- it makes Qt draw the image a
+   SECOND time, unsized and unpositioned, on top of the combo's own text: a
+   half-clipped chevron that reads as a stray "✓" next to the value.  It is
+   visible in every theme and in every combo, with no hover involved.  Same
+   family as the `outline` lesson in MASTER's focus-ring note: the QSS
+   *parses*, and Qt's idea of what it means is not CSS's. */
+QWidget[aion2="true"] #priorityInput::down-arrow:hover,
+QWidget[aion2="true"] #settingsCombo::down-arrow:hover,
+QWidget[aion2="true"] #FlowZoomCombo::down-arrow:hover,
+QWidget[aion2="true"] #FlowSymbolCombo::down-arrow:hover {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down-accent.svg);
 }
 
 QWidget[aion2="true"] #settingsTimeEdit,
@@ -898,16 +929,28 @@ QWidget[aion2="true"] #settingsTimeInput::down-button:hover {
     border-radius: {{radius_sm}}px;
 }
 
+/* Same story as the combo chevron above: the spin box's two arrows were the
+   orange PNG pair, now the theme's own Lucide chevrons. */
 QWidget[aion2="true"] #settingsTimeInput::up-arrow {
-    image: url(ASSET_PATH/assets/icons/arrow_up_orange.png);
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-up.svg);
     width: 10px;
     height: 10px;
 }
 
 QWidget[aion2="true"] #settingsTimeInput::down-arrow {
-    image: url(ASSET_PATH/assets/icons/arrow_down_orange.png);
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down.svg);
     width: 10px;
     height: 10px;
+}
+
+/* The two spin buttons already light up `accent.soft` on hover (above); the
+   arrow inside follows, same accent variant as the combo chevron. */
+QWidget[aion2="true"] #settingsTimeInput::up-arrow:hover {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-up-accent.svg);
+}
+
+QWidget[aion2="true"] #settingsTimeInput::down-arrow:hover {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down-accent.svg);
 }
 
 /* Checkbox indicator — checked reads as the accent, MASTER §3. */
@@ -2806,4 +2849,72 @@ QWidget[aion2="true"] #armoryCardCta:focus {
     border: {{focus_ring_width}}px solid {{accent}};
     border-radius: {{radius_sm}}px;
     padding: {{space_1_inset}}px {{space_2_inset}}px;
+}
+
+/* Stage 2 (2026-09-19): the Recommendations card.  Audit
+   docs/audit-2026-09-18/B-armory.md §3.4 features #1/#2 — the Armory
+   engine's first two solvers, rendered on the landing page.
+
+   Appended inside §15 rather than opening a §16: it is the same page, the
+   same surface and the same type scale as the cards above, and the only
+   reason it needs rules of its own is that its content is a LIST (rows,
+   each with a disclosure) instead of one figure.  Nothing above is
+   touched. */
+
+/* Same ground, border and radius as `#armoryCard` — the page must read as
+   one set of cards — but no `:hover`/`:focus` accent: this card is not a
+   button.  Its rows are individually interactive, so a card-wide hover
+   would promise a click the frame does not handle. */
+QWidget[aion2="true"] #armoryRecoCard {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+/* The row is a plain container: it carries the separation between
+   recommendations (its layout spacing) and no surface of its own, so a
+   rendered card shows a list, not a stack of nested boxes. */
+QWidget[aion2="true"] #armoryRecoItem {
+    background: transparent;
+}
+
+/* "Why?" — a text link, not a second button per row competing with the
+   card's own CTA (MASTER §3: one primary per surface).  Same accent/size
+   treatment as `#armoryCardCta`, one step smaller because it repeats. */
+QWidget[aion2="true"] #armoryRecoWhyButton {
+    background: transparent;
+    color: {{accent}};
+    border: {{border_width}}px solid transparent;
+    border-radius: {{radius_sm}}px;
+    padding: 0px {{space_1}}px;
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #armoryRecoWhyButton:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #armoryRecoWhyButton:checked {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+}
+
+/* The ring sits on the control's own edge — the button already carries a
+   1 px transparent border, so nothing moves when focus lands (§0b's rule,
+   and the reason `#armoryCardCta:focus` re-states its padding inset). */
+QWidget[aion2="true"] #armoryRecoWhyButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    padding: 0px {{space_1_inset}}px;
+}
+
+/* The expanded reasons: muted and indented, so the explanation reads as
+   subordinate to the line it explains rather than as four more
+   recommendations. */
+QWidget[aion2="true"] #armoryRecoWhy {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    padding-left: {{space_2}}px;
 }
