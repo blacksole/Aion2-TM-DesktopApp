@@ -1,28 +1,41 @@
-"""Characterization tests for the enchant / GearScore estimators in
-ItemDatabase/app.py (``estimate_enchant_bonus``, ``estimate_exceed_bonus``,
+"""Characterization tests for the enchant / GearScore estimators
+(``estimate_enchant_bonus``, ``estimate_exceed_bonus``,
 ``estimate_armor_bonus``, ``estimate_armor_exceed_bonus``, ``_gearscore_push``).
 
-The calibration data lives in TWO places: the hardcoded constants in app.py
+The calibration data lives in TWO places: the hardcoded constants in the code
 and the documentation pair ``ENCHANT_RATES.md`` / ``ENCHANT_RATES.json`` --
 which, per the audit (B-armory.md 1, LOW), no Python file reads. These tests
 close that loop: every documented (grade, level -> bonus) row in the JSON is
 asserted against the live estimators, so the two sources of truth can no
-longer drift apart silently, and the planned move of this block into
-``armory_engine/enchant.py`` cannot change a number unnoticed.
+longer drift apart silently.
+
+RUN TWICE, AGAINST BOTH PATHS (Stage 1 of the split, B-armory.md 4.2). The
+estimators now live in ``ItemDatabase/armory_engine/enchant.py`` and app.py
+imports them back under the same names, so there are two ways to reach them
+and both have to keep working:
+
+  * ``engine`` -- ``armory_engine.enchant`` imported directly, no Qt, no
+    23 000-line module executed. What the extraction was FOR.
+  * ``app.py`` -- the module loaded the way the host loads it, and the names
+    read off its namespace. The SHIPPING path: if app.py ever stopped
+    re-exporting one of these, every internal call site would break and this
+    half would be the test that says so.
 
 Tolerances come from the docs themselves: linear rates are exact; the Unique
 weapon curve is a power fit (k=5.733, p=1.355) that ENCHANT_RATES.md states
 may miss intermediate points by "~5 Einheiten".
 
 Seams these tests depend on (KEEP THEM STABLE):
+  * ``armory_engine.enchant`` importable with ``ItemDatabase/`` on sys.path.
   * ``importlib.util.spec_from_file_location("item_database_app",
     ItemDatabase/app.py)`` with a QApplication already alive (module import
     installs a global QComboBox.showPopup monkey-patch).
   * Public-ish names: ``estimate_enchant_bonus``, ``estimate_exceed_bonus``,
     ``estimate_armor_bonus``, ``estimate_armor_exceed_bonus``,
     ``_gearscore_push``, ``_GEARSCORE_NORMAL_RATE``, ``_GEARSCORE_EXCEED_RATE``,
-    ``_ACCESSORY_CATEGORIES``, ``_ARMOR_CATEGORIES``, ``_BELT_CATEGORY``.
-    If the refactor renames these, update this file in the SAME commit.
+    ``_ACCESSORY_CATEGORIES``, ``_ARMOR_CATEGORIES``, ``_BELT_CATEGORY`` --
+    reachable under BOTH names above. ``tests/test_armory_engine_packaging.py``
+    pins the app.py half of that as its own assertion.
   * ``ItemDatabase/ENCHANT_RATES.json`` -- the table these tests read.
 """
 
@@ -55,8 +68,26 @@ AN_ARMOR_PIECE = "Top"
 A_BELT = "Belt"
 
 
-@pytest.fixture(scope="module")
-def armory(qapp, monkeypatch_module_network):
+@pytest.fixture(scope="module", params=["engine", "app.py"])
+def armory(request, qapp, monkeypatch_module_network):
+    """The estimators, reached both ways (see the module docstring).
+
+    Every test below takes this fixture and reads the names off it, so
+    parametrizing here runs the whole file against the engine module AND
+    against app.py's namespace without a single test knowing about it.
+
+    ``qapp`` is requested for both paths even though the engine needs no Qt:
+    the fixture is module-scoped and its two params share the module, and
+    asking for it conditionally would make the engine half's behaviour depend
+    on which param ran first.
+    """
+    if request.param == "engine":
+        if str(ROOT / "ItemDatabase") not in sys.path:
+            sys.path.insert(0, str(ROOT / "ItemDatabase"))
+        from armory_engine import enchant
+
+        return enchant
+
     module = sys.modules.get("item_database_app")
     if module is None:
         spec = importlib.util.spec_from_file_location("item_database_app", APP_PY)

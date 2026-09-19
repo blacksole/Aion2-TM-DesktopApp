@@ -19,6 +19,127 @@ from collections import deque
 from pathlib import Path
 from urllib.parse import urlparse
 
+# ── The engine package: armory_engine/, next to this file ───────────────────
+#
+# Stage 1 of the split in docs/audit-2026-09-18/B-armory.md §4.2.  Every pure
+# calculation this module used to carry inline -- enchant/GearScore, substat
+# auto-pick, the Arcana solver, the Daevanion router, the transfer graph, the
+# stat merge -- now lives in armory_engine/ and is imported back HERE, under
+# exactly the names it had, so none of the internal call sites changed.  The
+# package imports no Qt at all (tests/test_armory_engine_qt_free.py enforces
+# that in a subprocess), which is the whole point: the arithmetic is testable
+# and reusable without a display.
+#
+# The sys.path insert is not optional.  This module is loaded BY FILE PATH --
+# importlib.util.spec_from_file_location("item_database_app", .../app.py), see
+# MainWindow._ensure_item_database_window -- and that does NOT put the file's
+# own directory on sys.path the way running a script does.  Without this line
+# `import armory_engine` raises ModuleNotFoundError at startup in the host app
+# (it happens to work for a bare `python ItemDatabase/app.py`, which is
+# exactly the trap: the standalone entry point would not have caught it).
+#
+# Frozen, the same reasoning gives the same directory: PyInstaller ships this
+# file as DATA under _MEIPASS/ItemDatabase/ (see both .spec files), so
+# __file__.parent is already _MEIPASS/ItemDatabase and the recursive datas
+# entry puts armory_engine/ right beside it.  _BUNDLE_DIR below is computed
+# the same way, but it is computed ~200 lines further down and these imports
+# have to resolve now.
+_ENGINE_DIR = str(Path(__file__).resolve().parent)
+if _ENGINE_DIR not in sys.path:
+    sys.path.insert(0, _ENGINE_DIR)
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _FROZEN_ENGINE_DIR = str(Path(sys._MEIPASS) / "ItemDatabase")
+    if _FROZEN_ENGINE_DIR not in sys.path:
+        sys.path.insert(0, _FROZEN_ENGINE_DIR)
+
+from armory_engine.arcana import (
+    _ARCANA_ACTIVE_THEMES,
+    _ARCANA_CARD_EXTRA_BUDGET,
+    _ARCANA_DEFAULT_GRADE,
+    _ARCANA_GRADE_MAX_LEVEL,
+    _ARCANA_LORD_CATEGORY,
+    _ARCANA_LORD_TYPES,
+    _ARCANA_MAX_CARD_LEVEL,
+    _ARCANA_PER_SKILL_CAP,
+    _ARCANA_SKILL_BASELINE,
+    _ARCANA_SKILL_SLOTS_PER_CARD,
+    _arcana_best_card_contribution,
+    _arcana_best_combination,
+    _arcana_card_grade,
+    _arcana_card_level,
+    _arcana_card_slot_list,
+    _arcana_compute_combinations,
+    _arcana_eligible_skills_for_type,
+    _arcana_eligible_types,
+    _arcana_full_pool_for_type,
+    _arcana_max_ceiling,
+    _arcana_result_coverage_percent,
+    _arcana_uncovered_reason,
+    _arcana_usable_lord_types,
+)
+from armory_engine.daevanion import (
+    _DAEVANION_MP_NAMES,
+    _daevanion_compute_auto_route,
+    _daevanion_is_reachable,
+    _daevanion_neighbors,
+    _daevanion_node_mp_count,
+    _daevanion_path_nodes_to_add,
+    _daevanion_shortest_from_tree,
+    _daevanion_spent_cost,
+    _daevanion_total_cost,
+)
+from armory_engine.enchant import (
+    _ACCESSORY_CATEGORIES,
+    _ARMOR_CATEGORIES,
+    _BELT_CATEGORY,
+    _DEFENSE_STAT_ID,
+    _GEAR_STAT_ID_ALIASES,
+    _GEARSCORE_EXCEED_RATE,
+    _GEARSCORE_NORMAL_RATE,
+    _HP_STAT_ID,
+    _RUNE_PVE_ITEM_ID,
+    _RUNE_PVP_ITEM_ID,
+    _SCALING_STAT_ID,
+    _gearscore_push,
+    _rune_enchant_bonus,
+    estimate_armor_bonus,
+    estimate_armor_exceed_bonus,
+    estimate_enchant_bonus,
+    estimate_exceed_bonus,
+)
+from armory_engine.sets import _build_dungeon_sets
+from armory_engine.stats import (
+    _parse_stat_value,
+    compute_gearscore,
+    compute_stat_totals_detailed,
+)
+from armory_engine.substats import (
+    _DEFAULT_STAT_PRIORITY_BY_CATEGORY,
+    _STAT_NAME_ALIASES,
+    _STAT_PRIORITY_GEAR_TYPES,
+    _STAT_PRIORITY_MAX_ENTRIES,
+    _STAT_PRIORITY_ROLES,
+    _default_stat_priority_profiles,
+    _merge_stat_priority_profiles,
+    _normalize_stat_name,
+    _pick_priority_substats,
+)
+from armory_engine.transfer import (
+    _build_material_node,
+    _build_material_tree,
+    _build_recipe_output_index,
+    _build_transfer_source_index,
+    _compute_tree_kinah,
+    _find_transfer_path,
+    _flatten_material_tree,
+    _item_grade,
+    _item_type_word,
+    _ordered_tier_chain,
+    _parse_gold_cost,
+    _resolve_material_name,
+    _transfer_source_name,
+)
+
 try:
     # Shares one log file with the host app when run through it; standalone
     # `python app.py` (see module docstring) falls back to a plain logger
@@ -1170,272 +1291,6 @@ def _format_number(value: float, decimals: int = 0) -> str:
     if decimals:
         return f"{value:.{decimals}f}"
     return str(int(round(value)))
-
-
-# Real per-item substat ids that don't match the id this file otherwise
-# uses for the SAME real stat (confirmed 2026-08-30 via an audit of every
-# distinct stat id across ~2200 cached item detail responses against
-# _STAT_ID_DISPLAY_NAME/_MAIN_STAT_ROWS etc. -- User-Wunsch: "prüfen, ob
-# alle Werte des gesamten Gears in die Stats mit einfließen"). Without
-# this, gear rolling any of these ids was silently summed under the raw
-# id and never shown anywhere or counted toward the row it clearly means
-# (e.g. real gear uses "BackAttackDamage", but the "Back Attack" row
-# expects "BackAttack" -- same stat, so any gear piece rolling it was
-# invisible). Normalized here, at gear-collection time, rather than
-# renaming the established row ids themselves, since those same ids are
-# also targeted by Genius/Daevanion/Arcana/Attribute mappings elsewhere.
-_GEAR_STAT_ID_ALIASES = {
-    "Accuracy": "AccuracyBonus",
-    "Evasion": "EvasionBonus",
-    "Perfect": "PerfectChance",
-    "Defense": "DefenseBonus",
-    "FixingDamage": "AttackBonus",
-    "WeaponDamage": "MaxAttack",
-    "CriticalAddDamage": "CriticalAttack",
-    "BackAttackDamage": "BackAttack",
-    "FrontAttackDamage": "FrontAttack",
-    "BackAttackCritical": "BackAttackCriticalHit",
-    "FrontAttackCritical": "FrontAttackCriticalHit",
-    "BackAttackDefense": "BackDefense",
-    "FrontAttackDefense": "FrontDefense",
-    "BackAttackCriticalResist": "BackAttackCriticalHitResist",
-    "FrontAttackCriticalResist": "FrontAttackCriticalHitResist",
-    "DecreaseBackAttack": "BackAttackDamageTolerance",
-    "DecreaseFrontAttack": "FrontAttackDamageTolerance",
-    "DecreaseWeaponDamage": "WeaponDamageTolerance",
-    "DecreaseDamage": "DamageTolerance",
-    "DecreaseCriticalDamage": "CriticalDamageTolerance",
-    "IgnoreIronWall": "EndurancePenetration",
-    "IgnoreRestoration": "RegenerationPenetration",
-    "PvEAddDamage": "PvEAttack",
-    "PvEDamageDefense": "PvEDefense",
-    "BossNpcAddDamage": "BossAttack",
-    # Real Bracelets ("Ludra's Bracelet", "Abyssal Bracelet", etc.) can
-    # roll a raw Empyrean Lord stat directly as a substat -- completely
-    # independent of Arcana cards (User-reported, 2026-08-30). Aliased
-    # straight to the same "XxxLordPoints" id Arcana card contributions
-    # use, so both sources land in the same total/tooltip automatically;
-    # see _arcana_lord_stat_totals_detailed for how the derived %-stats
-    # (Combat Speed etc.) then combine both sources' points.
-    "Time": "TimeLordPoints", "Space": "SpaceLordPoints", "Justice": "JusticeLordPoints",
-    "Freedom": "FreedomLordPoints", "Illusion": "IllusionLordPoints", "Life": "LifeLordPoints",
-    "Destiny": "DestinyLordPoints", "Wisdom": "WisdomLordPoints", "Death": "DeathLordPoints",
-    "Destruction": "DestructionLordPoints",
-}
-
-# The one main stat that scales with enchant — identified by id, not by
-# whether the item happens to display it as a range or a flat number
-# (e.g. Guard shows a flat "Attack: 136", Greatsword/Staff show a range).
-_SCALING_STAT_ID = "WeaponFixingDamage"
-
-# Accessories use a completely different (and much simpler) rate than
-# weapons/guards for the same scaling stat — confirmed universal across
-# every grade sampled.
-_ACCESSORY_CATEGORIES = {"Necklace", "Earrings", "Ring", "Bracelet", "Brooch", "Amulet"}
-_ACCESSORY_RATE_PER_LEVEL = 5.0
-
-# (k, p) for bonus = k * level**p, fit to real data pulled from 12 actual
-# characters' actually-equipped gear via the API (101 samples total, see
-# project notes) — one real anchor point plus the confirmed frozen value at
-# the grade's own maxEnchantLevel:
-#   Legend: lvl1->+10, lvl5->+50                      (exactly linear)
-#   Unique: lvl6->+65, lvl10->+125, lvl12->+165, cap lvl15->+225
-#   Heroic (Epic): CONFIRMED exactly linear, +17.5/level (350/20 = 17.5,
-#     verified against a real +20 screenshot — always whole-number bonuses
-#     in-game, never fractional; one outlier sub-cap sample we scraped
-#     ("Ludra's Grimoire", a Spellbook, showing +125 at level 10 instead of
-#     the expected +175) contradicted this and is treated as bad/anomalous
-#     data — likely a scrape glitch — rather than overriding the confirmed
-#     linear rate.
-# Common/Rare: no samples found (no low-level max-enchanted gear exists in
-# practice) — falls back to the Legend shape as a rough placeholder.
-_WEAPON_CURVE_PARAMS = {
-    "Legend": (10.0, 1.0),
-    "Unique": (5.733, 1.355),
-}
-_HEROIC_RATE_PER_LEVEL = 17.5
-_DEFAULT_WEAPON_CURVE = (10.0, 1.0)
-
-# Clash Rune (id 310900001, PvE) / Devotion Rune (id 310900002, PvP) --
-# real per-enchant-level growth from "Kanon's Aion 2 Bible" CH2 (2026-08-
-# 29 research), NOT the generic estimate_enchant_bonus/estimate_armor_
-# bonus curve below (neither knows "Rune" as a category, and shugo.gg's
-# own enchant simulator keeps every one of this item's stat values frozen
-# across all 10 levels -- confirmed live, so its numbers can't be trusted
-# for Runes either). Level-0 base values (Combat Speed 1%, Penetration
-# 100, Multi-hit Chance 1%, +the PvE/PvP Damage Boost/Tolerance 0.5%) come
-# from the item's own real mainStats via the normal per-slot loop in
-# _compute_stat_totals_detailed -- this only adds the DELTA above that
-# base for a given enchant level, User-Wunsch 2026-09-04: "die Runen
-# reinbringen, so genau wie moeglich - die Successchance koennen wir
-# rauslassen" (enchant success % intentionally not modeled, real numbers
-# don't exist anywhere).
-#
-# Combat Speed/Multi-hit Chance don't scale linearly from level 0 -- they
-# stay at their base value until a threshold level, then gain +1%/level
-# from there on. The guide gives the threshold levels (+6 / +9) but never
-# a single concrete "value AT level N" example to pin down whether the
-# threshold level itself already shows the first bump or the level after
-# it does -- this file assumes the FIRST bump lands ON the threshold
-# level (e.g. Combat Speed: level 5 = 1%, level 6 = 2%, level 7 = 3%...).
-# Multi-hit Chance's own +9 threshold is additionally flagged UNCONFIRMED
-# by the guide itself ("Never seen one, need confirmation") -- treat its
-# numbers as the best available estimate, not a verified fact.
-_RUNE_PVE_ITEM_ID = 310900001  # Clash Rune
-_RUNE_PVP_ITEM_ID = 310900002  # Devotion Rune
-_RUNE_COMBAT_SPEED_THRESHOLD = 6
-_RUNE_MULTI_HIT_THRESHOLD = 9
-
-
-def _rune_enchant_bonus(item_id: int, level: int) -> dict[str, float]:
-    if level <= 0:
-        return {}
-    bonus = {
-        "CombatSpeed": max(0, level - _RUNE_COMBAT_SPEED_THRESHOLD + 1) * 1.0,
-        "DefensePierce": level * 50.0,
-        "AdditionalHitRate": max(0, level - _RUNE_MULTI_HIT_THRESHOLD + 1) * 1.0,
-    }
-    if item_id == _RUNE_PVE_ITEM_ID:
-        bonus["PvEAmplifyDamage"] = level * 0.5
-        bonus["PvEDecreaseDamage"] = level * 0.5
-    elif item_id == _RUNE_PVP_ITEM_ID:
-        bonus["PvPAmplifyDamage"] = level * 0.5
-        bonus["PvPDecreaseDamage"] = level * 0.5
-    return bonus
-
-
-def estimate_enchant_bonus(
-    level: int, grade_name: str = "", normal_max_level: int = 0, category_name: str = "",
-) -> float:
-    """Estimated bonus ADDED ALONGSIDE (never into) a weapon/armor's ranged
-    main stat (e.g. Attack) at a given enchant level — the base min~max
-    range itself is always shown completely unchanged, exactly like the
-    in-game '396 ~ 545 (+350)' display: only the '(+N)' part is new.
-
-    Only the one main stat that has this id scales with enchant at all —
-    verified via the API against real, actually-equipped items: Accuracy/
-    Critical Hit/Block/etc. never changed at any enchant level.
-
-    Accessories (Ring, Necklace, ...) scale at a flat, grade-independent
-    rate; weapons/guards follow a grade-dependent curve — both fit to real
-    data (see the constants above).
-
-    The bonus FREEZES at the item's own maxEnchantLevel (confirmed: this
-    varies by grade — Legend/Unique cap at 15, Epic/Heroic at 20) — past
-    that point (Exceed range) it stops growing entirely; instead two new
-    separate bonus lines appear (see estimate_exceed_bonus)."""
-    effective_level = min(level, normal_max_level) if normal_max_level else level
-    if effective_level <= 0:
-        return 0.0
-    if category_name in _ACCESSORY_CATEGORIES:
-        return _ACCESSORY_RATE_PER_LEVEL * effective_level
-    if grade_name == "Heroic":
-        # Confirmed exactly linear at +17.5/level — a real, precise rate,
-        # so odd levels land on a decimal internally (e.g. level 1 -> 17.5);
-        # _format_number() rounds this to a whole number for display, since
-        # in-game bonus displays are always whole numbers.
-        return _HEROIC_RATE_PER_LEVEL * effective_level
-    k, p = _WEAPON_CURVE_PARAMS.get(grade_name, _DEFAULT_WEAPON_CURVE)
-    return k * (effective_level ** p)
-
-
-def estimate_exceed_bonus(level: int, normal_max_level: int, category_name: str = "") -> dict:
-    """Past the item's normal max enchant level (the Exceed range), new
-    separate stat lines appear on top of the (now frozen) ranged main stat
-    bonus. Confirmed via ~40 real Exceed-range samples (3/4/5 Exceed steps,
-    both Unique and Epic grade — rate is identical across grades, only
-    category changes it):
-      - Weapons/Guards: flat 'Attack' +30/step, 'Attack increase' +1%/step.
-      - Accessories: flat 'Attack' +20/step, a separate 'Defense' +40/step,
-        'Attack increase' +1%/step (all three lines shown together)."""
-    if not normal_max_level or level <= normal_max_level:
-        return {"attack": 0.0, "attack_pct": 0.0, "defense": 0.0}
-    steps = level - normal_max_level
-    if category_name in _ACCESSORY_CATEGORIES:
-        return {"attack": 20.0 * steps, "attack_pct": 1.0 * steps, "defense": 40.0 * steps}
-    return {"attack": 30.0 * steps, "attack_pct": 1.0 * steps, "defense": 0.0}
-
-
-# Armor (body pieces) scales TWO main stats simultaneously — Defense AND HP
-# — unlike weapons/accessories, which only scale one. Confirmed via 16 real
-# samples across all 7 armor slots (Helm/Top/Pauldrons/Gloves/Legs/Shoes/
-# Cloak) at both Unique and Epic/Heroic grade, all internally consistent:
-#   Unique: Defense cap 450 @15 (=30/level), HP cap 300 @15 (=20/level)
-#   Heroic (Epic): Defense cap 700 @20 (=35/level), HP cap 400 @20 (=20/level)
-# HP rate is grade-independent (20/level both grades); Defense rate is not.
-# Belt is its OWN special case — own maxEnchantLevel of 10 (not 15/20), and
-# BOTH grades gave the identical capped values (Defense 300 / HP 500 @10),
-# i.e. Belt's rate is grade-independent entirely: 30/level Defense,
-# 50/level HP.
-_ARMOR_CATEGORIES = {"Helm", "Top", "Pauldrons", "Gloves", "Legs", "Shoes", "Cloak"}
-_BELT_CATEGORY = "Belt"
-_DEFENSE_STAT_ID = "ArmorDefense"
-_HP_STAT_ID = "HPMax"
-
-_ARMOR_DEFENSE_RATE = {"Unique": 30.0, "Heroic": 35.0}
-_DEFAULT_ARMOR_DEFENSE_RATE = 30.0
-_ARMOR_HP_RATE_PER_LEVEL = 20.0
-
-_BELT_DEFENSE_RATE_PER_LEVEL = 30.0
-_BELT_HP_RATE_PER_LEVEL = 50.0
-
-
-def estimate_armor_bonus(
-    level: int, grade_name: str = "", normal_max_level: int = 0, category_name: str = "",
-) -> tuple[float, float]:
-    """Returns (defense_bonus, hp_bonus) for an armor piece — see the
-    constants above for the data this is calibrated against."""
-    effective_level = min(level, normal_max_level) if normal_max_level else level
-    if effective_level <= 0:
-        return 0.0, 0.0
-    if category_name == _BELT_CATEGORY:
-        return (
-            round(_BELT_DEFENSE_RATE_PER_LEVEL * effective_level),
-            round(_BELT_HP_RATE_PER_LEVEL * effective_level),
-        )
-    def_rate = _ARMOR_DEFENSE_RATE.get(grade_name, _DEFAULT_ARMOR_DEFENSE_RATE)
-    return round(def_rate * effective_level), round(_ARMOR_HP_RATE_PER_LEVEL * effective_level)
-
-
-def estimate_armor_exceed_bonus(level: int, normal_max_level: int) -> dict:
-    """Exceed range for armor: both Defense and HP get +80/step (confirmed
-    identical across Unique and Epic grade), plus a +1%/step 'increase' on
-    each — four new lines total, vs. weapons/accessories' two or three."""
-    if not normal_max_level or level <= normal_max_level:
-        return {"defense": 0.0, "defense_pct": 0.0, "hp": 0.0, "hp_pct": 0.0}
-    steps = level - normal_max_level
-    return {"defense": 80.0 * steps, "defense_pct": 1.0 * steps, "hp": 80.0 * steps, "hp_pct": 1.0 * steps}
-
-
-# The GearScore push from enchanting is its OWN real rate — confirmed via
-# shugo.gg's live character/equipment/item endpoint (a real enchant-level
-# simulator: TW NCSoft's own API, proxied by shugo.gg, returns a per-item
-# 'levelValue' for a given characterId/slotPos/enchantLevel combo) against
-# 4 independent real equipped items pulled from real TW characters
-# ("Levis"/"Skyvie", [HIT] legion, server 1009) swept across enchant 0/5/
-# 10/15/20/25: a Heroic/Epic Staff (weapon), a Unique Guard (weapon-like),
-# an Epic/Heroic armor Shoulder piece, and an Epic Necklace (accessory).
-# All four gave IDENTICALLY +1.0 levelValue per normal enchant level and
-# +5.0 per Exceed step (the DELTA between consecutive sweep points) —
-# completely independent of grade or category, and clearly NOT the same
-# rate as the Attack/Defense/HP stat bonuses (e.g. a Heroic weapon's
-# Attack bonus is +17.5/level, its GearScore push only +1/level).
-# NOTE: every real sample's levelValue also carried a constant per-
-# instance offset even at enchant 0 (13-24, varying by item) — almost
-# certainly from that specific character's socketed magic/god stones,
-# which our planner doesn't model at all (no UI/data for them) — so only
-# the confirmed RATE is used here; push is 0 at enchant 0, matching
-# shugo.gg's own static item-catalog API (always levelValue=0 unenchanted).
-_GEARSCORE_NORMAL_RATE = 1.0
-_GEARSCORE_EXCEED_RATE = 5.0
-
-
-def _gearscore_push(enchant_level: int, normal_max_level: int) -> float:
-    if enchant_level <= 0:
-        return 0.0
-    normal_steps = min(enchant_level, normal_max_level) if normal_max_level else enchant_level
-    exceed_steps = max(0, enchant_level - normal_max_level) if normal_max_level else 0
-    return _GEARSCORE_NORMAL_RATE * normal_steps + _GEARSCORE_EXCEED_RATE * exceed_steps
 
 
 def _clear_layout(layout):
@@ -3127,420 +2982,6 @@ _ARCANA_SEASON_GROUPS: list[tuple[str, str, list[str]]] = [
 # the other two stay visible with a 🔒 lock but can't be clicked while
 # this is False. Flip to True only once a later season is confirmed live.
 _ARCANA_FUTURE_SEASONS_ENABLED = False
-
-# ---- Arcana Planner (2026-08-29) -------------------------------------------
-# One equip slot per Lord card TYPE (not a generic duplicates-allowed pool --
-# corrected by the user after an initial wrong assumption: "da bei Magic und
-# Vigor keine Waage existiert, sind es nur 5 Karten, somit betraegt die
-# gesamt Anzahl der Setkarten nur 5, nicht 6"). Each slot's real in-game
-# card can be leveled up independently of its base grade -- each level-up
-# always grants +1 to exactly ONE random skill from the card's pool (never
-# player-chosen -- User, 2026-08-29: "Der Spieler kann nicht waehlen,
-# welcher Wert gelevelt wird ... nur immer wieder neue Karten farmen und
-# leveln") -- and grade caps the max level reachable (Rare=3, Legend=4,
-# Unique=5, User-confirmed). The Calculator deliberately does NOT simulate
-# that randomness -- "Wir machen das aber nicht im Kalkulator, wir gehen
-# von den perfekten Werten aus": it shows the PERFECT/best-case reference
-# (every level-up landing on the one skill you care about, on a maxed
-# Unique card) so a player can judge how close their own randomly-rolled
-# real cards are to that ceiling -- not a literal "buy this and get
-# exactly this" recommendation. Same perfect-case logic applies to the
-# card's own Empyrean Lord stat effect, which also gains +1 per level
-# (User: "Bei Magic und Vigor geht der Hauptwert ... auch nur +1"), so a
-# maxed Unique card's Lord effect is shown at its max level's value too.
-# Applies to ONE skill chosen from that type's class-specific pool
-# (grade-independent -- see _load_arcana_class_skills), constrained by the
-# type's fixed skill category: Chalice can target either an Active or a
-# Passive skill ("Mastery"), Parchment/Compass/Scales only Active, Bell/
-# Mirror only Passive. Common grade doesn't exist for any Lord card.
-_ARCANA_LORD_TYPES = ["Chalice", "Parchment", "Compass", "Bell", "Mirror", "Scales"]
-_ARCANA_LORD_CATEGORY = {
-    "Chalice": "both", "Parchment": "active", "Compass": "active",
-    "Bell": "passive", "Mirror": "passive", "Scales": "active",
-}
-_ARCANA_GRADE_MAX_LEVEL = {"Rare": 3, "Legend": 4, "Unique": 5}
-# The Calculator always reasons about the perfect/best case -- a maxed
-# Unique card -- so this is simply the Unique entry above. This is the
-# CARD's overall level (how many shared extra-points its leveling
-# provides in total -- see _ARCANA_CARD_EXTRA_BUDGET below, same number),
-# distinct from _ARCANA_PER_SKILL_CAP (the max any ONE skill on that card
-# can individually reach).
-_ARCANA_MAX_CARD_LEVEL = _ARCANA_GRADE_MAX_LEVEL["Unique"]
-
-# "Season 1" assumption (User-Wunsch, 2026-08-29, explicitly UNVERIFIED --
-# "die Wahrscheinlichkeit ist sehr hoch, dass nur Vigor und Magic
-# existieren"): only these two themes are treated as currently obtainable.
-# The other 5 (Frenzy/Purity/Punishment/Protection/Indomitability) stay out
-# of the planner's candidate pool for now -- same forward-compat intent as
-# the Daevanion Board's _s/_a split, but here it's one flat set rather than
-# two named variants since the user wants more seasons/slots addable later
-# without a redesign (see _arcana_usable_lord_types below).
-_ARCANA_ACTIVE_THEMES = {"Vigor", "Magic"}
-
-
-def _arcana_usable_lord_types(theme_map: dict, active_themes: set[str]) -> list[str]:
-    """Which Lord card types actually exist in at least one of the given
-    themes -- e.g. Scales has no Vigor/Magic entry at all, so it's excluded
-    from the Season-1 candidate pool entirely, dropping the real usable
-    total from 6 to 5. Data-driven (reads theme_map, already scanned from
-    arcana_info.json) rather than a hardcoded count, so a later season
-    adding Scales -- or a wholly new theme -- just changes the result here,
-    no separate constant to update."""
-    return [
-        ct for ct in _ARCANA_LORD_TYPES
-        if any(ct in theme_map.get(theme, {}) for theme in active_themes)
-    ]
-
-
-_ARCANA_SKILL_SLOTS_PER_CARD = 4
-# A real card rolls _ARCANA_SKILL_SLOTS_PER_CARD (4) of its type's ~5-6
-# possible skills; the instant one is rolled it already sits at
-# _ARCANA_SKILL_BASELINE (1), not 0 (User, 2026-08-29: "bei diesen Skills
-# ist das Startlevel nicht '0' sondern 1" / "kann eine Karte, wenn sie +0
-# ist, folgende Werte haben: Rushing Smash +1, Spinning Strike +1,
-# Impactful Crush +1, Dark Crush +1"). Leveling the card then spends a
-# SHARED pool of _ARCANA_CARD_EXTRA_BUDGET (5, for Unique) extra points,
-# one at a time, each landing on ONE random already-rolled skill (never
-# player-chosen) -- but no single skill can exceed _ARCANA_PER_SKILL_CAP
-# (4) regardless of how many hits land on it (User: "das Limit ist +4 auf
-# den Skills und das maximale Level, das eine Arcana erhalten kann, ist
-# +5, also 5 Level auf die vorhandenen Skills verteilen"). Verified
-# against the user's own worked examples: Parchment showing Onslaught +4
-# (needs 3 hits beyond baseline) and Spinning Strike +3 (needs 2 hits) =
-# exactly 5 hits, the full shared budget, with the card's other 2
-# (unlisted, uninteresting) slots staying at baseline; Chalice showing
-# Dark Crush +4 (3 hits, AT the per-skill cap) + Rushing Smash +2 (1 hit)
-# = 4 of 5 hits used, the 5th would be wasted since Dark Crush is already
-# capped. Both examples are inconsistent with either "no shared budget,
-# every skill independently to +5" (Parchment's 2 slots alone would need
-# 5 hits for just +4/+3, leaving nothing baseline-related unaccounted)
-# or "one skill per card" (both cards clearly show 2+ skills at once).
-_ARCANA_SKILL_BASELINE = 1
-_ARCANA_CARD_EXTRA_BUDGET = _ARCANA_MAX_CARD_LEVEL
-_ARCANA_PER_SKILL_CAP = 4
-_ARCANA_SKILL_SLOTS_PER_CARD = 4
-_ARCANA_DEFAULT_GRADE = "Unique"
-
-
-def _arcana_card_slot_list(card_data: dict | None) -> list[dict | None]:
-    """Exactly _ARCANA_SKILL_SLOTS_PER_CARD (4) positional entries, each
-    either None (empty) or {"skill_id": ..., "level": ...} -- the shape
-    manual per-slot editing needs (User-Wunsch, 2026-08-29: "Jede der 4
-    Skill-Zeilen einzeln anklickbar", needs a stable index per slot).
-    Migrates the older {"skill_ids": {sid: level}} shape on the fly (still
-    what's stored in any profile saved before this existed, and still what
-    the Calculator's Apply writes) -- a dict has no way to represent "slot
-    2 is specifically empty while slot 3 has X", only "whatever order
-    happened to get assigned"."""
-    if not card_data:
-        return [None] * _ARCANA_SKILL_SLOTS_PER_CARD
-    slots = card_data.get("slots")
-    if slots is None:
-        old = card_data.get("skill_ids") or {}
-        slots = [{"skill_id": sid, "level": lvl} for sid, lvl in old.items()]
-    slots = list(slots[:_ARCANA_SKILL_SLOTS_PER_CARD])
-    while len(slots) < _ARCANA_SKILL_SLOTS_PER_CARD:
-        slots.append(None)
-    return slots
-
-
-def _arcana_card_grade(card_data: dict | None) -> str:
-    if not card_data:
-        return _ARCANA_DEFAULT_GRADE
-    return card_data.get("grade", _ARCANA_DEFAULT_GRADE)
-
-
-def _arcana_card_level(card_data: dict | None) -> int:
-    """The card's overall Level (0 to its grade's max, see
-    _ARCANA_GRADE_MAX_LEVEL) -- User-Wunsch, 2026-08-30: derive it from the
-    already-assigned skill slots instead of a separate input ("wir
-    berechnen das Level der Karten anhand der vergebenen Punkte. ... fuegt
-    man eine Karte mit +3 und einem +4 hinzu ist sie +5"). Every point a
-    slot sits above baseline (_ARCANA_SKILL_BASELINE) came out of the same
-    shared per-card budget, so summing those points back up gives the
-    exact Level that was spent to reach this slot assignment -- same math
-    already used for the live wish-ceiling (see ArcanaSkillSlotDialog)."""
-    slots = _arcana_card_slot_list(card_data)
-    spent = sum(
-        max(0, slot.get("level", _ARCANA_SKILL_BASELINE) - _ARCANA_SKILL_BASELINE)
-        for slot in slots if slot
-    )
-    grade = _arcana_card_grade(card_data)
-    return min(spent, _ARCANA_GRADE_MAX_LEVEL.get(grade, _ARCANA_MAX_CARD_LEVEL))
-
-
-def _arcana_eligible_skills_for_type(
-    ct: str, wishes: dict[str, int], class_skill_pools: dict[str, list[dict]], skill_type_by_id: dict[str, str],
-) -> list[str]:
-    """Wished skills this Lord type could ever roll (in its pool, matching
-    its fixed Active/Passive/both category)."""
-    category = _ARCANA_LORD_CATEGORY.get(ct)
-    pool_ids = {s["id"] for s in class_skill_pools.get(ct, [])}
-    return [
-        sid for sid in wishes
-        if sid in pool_ids and (category == "both" or skill_type_by_id.get(sid) == category)
-    ]
-
-
-def _arcana_full_pool_for_type(ct: str, class_skill_pools: dict[str, list[dict]]) -> list[str]:
-    """Every real skill id this Lord type's pool can roll, wished or not --
-    used to fill a card's 4 skill slots with something sensible once real
-    wishes run out (User-Wunsch, 2026-08-29: "Immer alle 5 verteilen" /
-    "kannst bei der Verteilung der restlichen Punkte auch gerne die
-    Prioliste der Skills nehmen"), instead of leaving slots/budget
-    stranded just because nothing was explicitly wished for them."""
-    return [s["id"] for s in class_skill_pools.get(ct, [])]
-
-
-def _arcana_best_card_contribution(
-    eligible: list[str], full_pool: list[str], priority_rank: dict[str, int],
-    wishes: dict[str, int], covered: dict[str, int],
-) -> dict[str, int]:
-    """What ONE card of this type contributes in the perfect/best case,
-    given what's ALREADY covered by other assigned cards so far. Two
-    phases:
-
-    1. Choose up to _ARCANA_SKILL_SLOTS_PER_CARD (4) of the card's real
-       skill slots: eligible (wished) skills with remaining unmet need
-       first (an exchange argument shows no reason to pick a skill with
-       less need over one with more, so no need to try every possible
-       4-of-N subset), ranked by need then Priority List position as a
-       tiebreak; if fewer than 4 wished skills have real need, the
-       remaining slots are filled from the type's FULL pool ranked by
-       Priority List position, then pool order as a last resort (User,
-       2026-08-29: "kannst bei der Verteilung der restlichen Punkte auch
-       gerne die Prioliste der Skills nehmen" / "wenn dort nur 4 Skills
-       angegeben sind, nimm den erst besten") -- so a card's slots are
-       never left conceptually "empty" just because nothing was wished.
-    2. Spend the shared _ARCANA_CARD_EXTRA_BUDGET one point at a time,
-       never past _ARCANA_PER_SKILL_CAP: real wish-need first, then once
-       every chosen skill's own wish is met, keep spending the REST of
-       the budget too (User: "Immer alle 5 verteilen") on whichever
-       chosen skill ranks highest on the Priority List, falling back to
-       pool order -- a real card's leveling doesn't stop just because
-       your specific wish was already satisfied.
-
-    Returns ({skill_id: added_value}, need_based_ids) for the chosen
-    skills (empty only if the type's pool has nothing at all matching its
-    category) -- need_based_ids is the subset of the RESULT that was
-    actually chosen because of real remaining wish need (phase 1 above),
-    as opposed to pure filler (phase 1's "fewer than 4 wished skills"
-    fallback). _arcana_compute_combinations' diversification only
-    excludes need_based_ids when searching for a second combination (see
-    its own docstring) -- a filler pick landing on a skill that ANOTHER
-    type already fully covered via real need is incidental (that type
-    just had unused slots left over), not a genuine second path to that
-    skill, and excluding it too was blocking real alternatives that
-    should have been findable (User-reported, 2026-09-13: "hier gibt es
-    doch sicher noch andere Kombinationen" -- confirmed via direct
-    inspection that a single wished skill fully covered by one type still
-    incidentally showed up as a 1-point filler pick on a second type,
-    which then got excluded right along with the real assignment)."""
-    def remaining_need(sid: str, value: int) -> int:
-        return max(0, wishes.get(sid, 0) - covered.get(sid, 0) - value)
-
-    def choice_key(sid: str) -> tuple:
-        need = max(0, wishes.get(sid, 0) - covered.get(sid, 0))
-        return (-need, priority_rank.get(sid, float("inf")), sid)
-
-    need_chosen = sorted(
-        (sid for sid in eligible if wishes.get(sid, 0) - covered.get(sid, 0) > 0),
-        key=choice_key,
-    )[:_ARCANA_SKILL_SLOTS_PER_CARD]
-    chosen = list(need_chosen)
-    if len(chosen) < _ARCANA_SKILL_SLOTS_PER_CARD:
-        filler = sorted(
-            (sid for sid in full_pool if sid not in chosen),
-            key=lambda sid: (priority_rank.get(sid, float("inf")), sid),
-        )
-        chosen += filler[: _ARCANA_SKILL_SLOTS_PER_CARD - len(chosen)]
-    if not chosen:
-        return {}, set()
-
-    values = {sid: _ARCANA_SKILL_BASELINE for sid in chosen}
-    budget = _ARCANA_CARD_EXTRA_BUDGET
-    while budget > 0:
-        candidates = [sid for sid in chosen if values[sid] < _ARCANA_PER_SKILL_CAP]
-        if not candidates:
-            break
-        best_sid = min(
-            candidates,
-            key=lambda sid: (-remaining_need(sid, values[sid]), priority_rank.get(sid, float("inf")), sid),
-        )
-        values[best_sid] += 1
-        budget -= 1
-    return values, set(need_chosen)
-
-
-def _arcana_best_combination(
-    usable_types: list[str], type_to_theme: dict[str, str],
-    eligible_by_type: dict[str, list[str]], full_pool_by_type: dict[str, list[str]],
-    priority_rank: dict[str, int], wishes: dict[str, int],
-) -> tuple[dict[str, int], list[dict]]:
-    """Each of the 5 usable Lord types is now a real, fixed card (its
-    theme chosen up front via ArcanaThemeChoiceDialog, not searched) --
-    so unlike the earlier count-budget model, there's no more "which
-    theme"/"skip this type" decision left to explore. Each type's card
-    independently contributes _arcana_best_card_contribution's perfect-
-    case values (sequentially, in usable_types order, so a later type's
-    "remaining need" already reflects what earlier types covered)."""
-    covered: dict[str, int] = {}
-    path: list[dict] = []
-    for ct in usable_types:
-        theme = type_to_theme.get(ct)
-        if not theme:
-            continue
-        contribution, need_based_ids = _arcana_best_card_contribution(
-            eligible_by_type.get(ct, []), full_pool_by_type.get(ct, []), priority_rank, wishes, covered,
-        )
-        if not contribution:
-            continue
-        for sid, value in contribution.items():
-            covered[sid] = covered.get(sid, 0) + value
-        path.append({"type": ct, "theme": theme, "skill_ids": contribution, "need_based_ids": need_based_ids})
-    return covered, path
-
-
-def _arcana_compute_combinations(
-    usable_types: list[str], type_to_theme: dict[str, str],
-    class_skill_pools: dict[str, list[dict]], wishes: dict[str, int],
-    skill_type_by_id: dict[str, str], priority_rank: dict[str, int] | None = None,
-    max_results: int = 3,
-) -> list[dict]:
-    """Up to max_results distinct combinations, best first: the single
-    result from _arcana_best_combination, then that same sequential fill
-    repeated with the previous result's (type, skill) pairs excluded from
-    that type's eligible AND full pool each time, forcing a structurally
-    different combination whenever a type's real pool has more viable
-    wished skills than its 4 slots (or a skill is shared across more than
-    one type's pool) -- the only remaining source of alternatives now
-    that each type's theme is fixed rather than searched. Pruning
-    full_pool_by_type too (not just eligible_by_type) matters: otherwise
-    a skill excluded as a WISH target could still silently reappear as
-    plain FILLER on the very same card (filler selection draws from the
-    whole pool), quietly re-covering the same wish and making the
-    "different" combination not actually different.
-
-    Only excludes need_based_ids (see _arcana_best_card_contribution),
-    not every skill_id a type touched -- a skill that ended up on a
-    SECOND type purely as incidental filler (that type had unused slots
-    left over after its own real wishes, and this skill happened to rank
-    high in the fallback priority-list order) never actually contributed
-    to satisfying the wish there, so excluding it too was blocking a real
-    second combination that should have been findable by simply routing
-    that wish through the other type instead (User-reported, 2026-09-13:
-    "hier gibt es doch sicher noch andere Kombinationen" -- confirmed via
-    direct inspection: a single wished skill, fully covered by one type
-    alone, still incidentally showed up as a 1-point filler pick on a
-    second type in the same result, and that filler pick alone was enough
-    to make every subsequent solve attempt collapse to 0% coverage)."""
-    if not wishes:
-        return []
-
-    eligible_by_type = {
-        ct: _arcana_eligible_skills_for_type(ct, wishes, class_skill_pools, skill_type_by_id)
-        for ct in usable_types
-    }
-    full_pool_by_type = {ct: _arcana_full_pool_for_type(ct, class_skill_pools) for ct in usable_types}
-    priority_rank = priority_rank or {}
-
-    results = []
-    excluded: set[tuple] = set()
-    for _ in range(max_results):
-        pruned_eligible = {
-            ct: [sid for sid in eligible if (ct, sid) not in excluded]
-            for ct, eligible in eligible_by_type.items()
-        }
-        pruned_full_pool = {
-            ct: [sid for sid in pool if (ct, sid) not in excluded]
-            for ct, pool in full_pool_by_type.items()
-        }
-        covered, path = _arcana_best_combination(
-            usable_types, type_to_theme, pruned_eligible, pruned_full_pool, priority_rank, wishes,
-        )
-        if not path:
-            break
-        results.append({"assignments": path, "covered": covered})
-        for a in path:
-            for sid in a["need_based_ids"]:
-                excluded.add((a["type"], sid))
-    return results
-
-
-def _arcana_result_coverage_percent(result: dict, wishes: dict[str, int]) -> float:
-    """What percentage of the total wishlist this combination covers,
-    clamped per skill at its own wish (overshoot on one skill doesn't
-    offset a shortfall on another) -- used to filter out combinations
-    that aren't a useful alternative (User-Wunsch, 2026-08-29: "nur
-    Kombinationen anzeigen, die besser als 50% sind")."""
-    total_wish = sum(wishes.values())
-    if total_wish <= 0:
-        return 0.0
-    covered = result.get("covered", {})
-    total_useful = sum(min(covered.get(sid, 0), need) for sid, need in wishes.items())
-    return total_useful / total_wish * 100.0
-
-
-def _arcana_eligible_types(
-    skill_id: str, category: str | None, usable_types: list[str], class_skill_pools: dict[str, list[dict]],
-) -> list[str]:
-    """Which usable Lord types could ever target this skill -- in its
-    pool AND matching its Active/Passive category (Chalice's "both"
-    always matches)."""
-    return [
-        ct for ct in usable_types
-        if any(s["id"] == skill_id for s in class_skill_pools.get(ct, []))
-        and (_ARCANA_LORD_CATEGORY.get(ct) == "both" or _ARCANA_LORD_CATEGORY.get(ct) == category)
-    ]
-
-
-def _arcana_max_ceiling(
-    skill_id: str, category: str | None, usable_types: list[str], class_skill_pools: dict[str, list[dict]],
-) -> int:
-    """The absolute most this skill could ever gain from Arcana THIS
-    season assuming perfect leveling, ignoring every other wish -- one
-    maxed Unique card can push any ONE skill up to _ARCANA_PER_SKILL_CAP
-    (4), per eligible Lord type, since a type can go to whichever theme
-    still has budget when the real split is chosen later (User-Wunsch,
-    2026-08-29: "wenn ein Skill bereits +4 ist, kann der Rest maximal
-    noch +3 werden" -- this is the standalone half of that; the OTHER
-    half, how much competing wishes actually leave once slots are shared,
-    is what _arcana_compute_combinations/_arcana_uncovered_reason resolve
-    for a specific split+wishlist instead of a live, always-on number)."""
-    eligible = _arcana_eligible_types(skill_id, category, usable_types, class_skill_pools)
-    return len(eligible) * _ARCANA_PER_SKILL_CAP
-
-
-def _arcana_uncovered_reason(
-    skill_id: str, wish: int, covered: int, usable_types: list[str],
-    class_skill_pools: dict[str, list[dict]], skill_type_by_id: dict[str, str],
-) -> tuple[str, dict]:
-    """Why a wished skill didn't fully reach its target in a given result
-    (User-Wunsch, 2026-08-29: "einen Grund zeigen, warum gewisse Skills
-    nicht gepusht werden koennen") -- returns a translation key + kwargs
-    for _t(), one of three tiers:
-
-    1. No eligible Lord type at all -- structural, can never be covered
-       regardless of slots (skill isn't in any usable card's pool, or
-       none match its Active/Passive category).
-    2. Eligible types exist, but even dedicating every one of them to
-       ONLY this skill can't reach the wish -- a hard ceiling from this
-       season's real card pool, not specific to this one combination
-       (theme choice no longer matters here: every usable type is always
-       a real card regardless of which theme it's set to).
-    3. Eligible types exist and COULD in principle reach the wish, just
-       not in this particular combination -- those slots went to other
-       wishes instead in this solve."""
-    category = skill_type_by_id.get(skill_id)
-    eligible_types = _arcana_eligible_types(skill_id, category, usable_types, class_skill_pools)
-    if not eligible_types:
-        return "arm_arcana_reason_no_card", {}
-
-    max_possible = len(eligible_types) * _ARCANA_PER_SKILL_CAP
-    if max_possible < wish:
-        return "arm_arcana_reason_not_enough_slots", {"max": max_possible}
-
-    return "arm_arcana_reason_competing_wishes", {}
 
 
 # Real Empyrean Lord stat effects — each Lord's value scales two stats at
@@ -7213,139 +6654,6 @@ def _recipe_method(inputs: list[dict]) -> str:
     return "Transfer" if any("Transfer Stone" in (i.get("name") or "") for i in inputs) else "Herstellung"
 
 
-def _item_type_word(name: str) -> str:
-    """Last real word of an item name, ignoring a trailing "(Bound)"/"(...)"
-    tag -- used to check that an upgrade recipe's single-qty source item is
-    actually the same equipment slot as its output (see
-    _transfer_source_name)."""
-    name = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
-    parts = name.split()
-    return parts[-1] if parts else ""
-
-
-def _item_grade(name: str | None, item_id: int | None, items_by_id: dict, output_index: dict) -> str | None:
-    item = items_by_id.get(item_id) if item_id else None
-    if item and item.get("grade"):
-        return item["grade"]
-    recipe = output_index.get(name) if name else None
-    return recipe.get("grade") if recipe else None
-
-
-def _transfer_source_name(recipe: dict, items_by_id: dict, output_index: dict) -> str | None:
-    """A recipe is an "upgrade hop" (Transfer-Stone or Kinah-only alike) if
-    exactly one input is consumed at qty 1, isn't the stone or a pure Kinah
-    row, shares its item-type word with the output (e.g. both end in
-    "Boots"), AND -- confirmed by the user -- is the SAME grade tier as the
-    output (a real Transfer/Splendent upgrade never jumps e.g. "Legend"
-    (blue) straight to "Unique" (gold) in one hop; that's a normal
-    Herstellung recipe instead, not a chain link). The word check alone is
-    needed because a good chunk of ordinary multi-material recipes also
-    happen to consume exactly one other craftable item at qty 1 as a plain
-    catalyst (e.g. "Wrathful Mind" x1 into a completely unrelated "Celestial
-    Dragon Lord Ring"); the grade check on top catches the rarer case where
-    the shared word is coincidental AND the two items happen to be
-    different tiers. Verified against the full dataset: with just the word
-    check, 288 of the real 304 Transfer-Stone recipes match (the rest have
-    >1 qty-1 input) plus 482 further Kinah-only upgrade hops are found this
-    way; every single one of those is already same-grade (706x Unique-
-    Unique, 36x Legend-Legend, 26x Rare-Rare), so the grade check costs
-    zero real matches and only guards against a hop the game doesn't
-    actually have. Shared module-level (not just CraftingCalculatorWindow)
-    so the Build Planner's Schnellauswahl can derive the same tier chains."""
-    candidates = [
-        i for i in recipe["inputs"]
-        if (i.get("qty") or 1) == 1 and i.get("name")
-        and "Transfer Stone" not in i["name"] and "Kina" not in i["name"]
-    ]
-    if len(candidates) != 1:
-        return None
-    candidate = candidates[0]
-    candidate_name = candidate["name"]
-    output_name = recipe["outputs"][0].get("name") or ""
-    if _item_type_word(candidate_name) != _item_type_word(output_name):
-        return None
-    candidate_grade = _item_grade(candidate_name, candidate.get("id"), items_by_id, output_index)
-    output_grade = recipe.get("grade")
-    if candidate_grade and output_grade and candidate_grade != output_grade:
-        return None
-    return candidate_name
-
-
-def _build_transfer_source_index(recipes: list[dict], items_by_id: dict, output_index: dict) -> dict[str, list[dict]]:
-    """Upgrade-chain recipes indexed by their "source" item -- built from
-    ALL recipes, not just method=="Transfer" ones, because a real chain hop
-    is often a pure-Kinah upgrade with no Transfer Stone at all (e.g.
-    "Celestial Dragon Lord Boots" -> "Splendent Celestial Dragon Lord
-    Boots" for 15,000,000 Kina, no stone) -- restricting to Transfer Stone
-    recipes alone silently broke real chains one hop before their end."""
-    index: dict[str, list[dict]] = {}
-    for r in recipes:
-        source = _transfer_source_name(r, items_by_id, output_index)
-        if source:
-            index.setdefault(source, []).append(r)
-    return index
-
-
-def _find_transfer_path(start_name: str, target_name: str, transfer_source_index: dict) -> list[dict] | None:
-    """BFS over upgrade-hop recipes from start_name to target_name -- real
-    chains can span multiple tiers (verified 3-hop example: Splendent
-    White -> Wise -> Splendent Wise -> Celestial Dragon Lord Boots)."""
-    if start_name == target_name:
-        return []
-    queue = deque([(start_name, [])])
-    visited = {start_name}
-    while queue:
-        current, path = queue.popleft()
-        if len(path) >= 12:
-            continue
-        for recipe in transfer_source_index.get(current, []):
-            output_name = recipe["outputs"][0].get("name")
-            if output_name in visited:
-                continue
-            new_path = path + [recipe]
-            if output_name == target_name:
-                return new_path
-            visited.add(output_name)
-            queue.append((output_name, new_path))
-    return None
-
-
-def _ordered_tier_chain(root_name: str, type_word: str, transfer_source_index: dict) -> list[str]:
-    """BFS from root_name, returning tier-prefix names (root_name itself,
-    then every reachable output, each with its trailing type_word stripped)
-    in visitation order -- a real, natural tier progression order since
-    each hop is exactly one upgrade step. Used to populate the Build
-    Planner's Schnellauswahl tier dropdown (see project_todo.md: verified
-    against real data that the tier-prefix sequence is identical across
-    equipment slot types for the same race, e.g. Ring/Boots/Necklace/
-    Dagger/Greatsword all reach the same 9 prefixes for "True Dragon Lord")."""
-    def strip_word(name: str) -> str:
-        return name[: -(len(type_word) + 1)] if name.endswith(" " + type_word) else name
-
-    order = [strip_word(root_name)]
-    queue = deque([root_name])
-    visited = {root_name}
-    while queue:
-        current = queue.popleft()
-        for recipe in transfer_source_index.get(current, []):
-            output_name = recipe["outputs"][0].get("name")
-            if output_name in visited:
-                continue
-            visited.add(output_name)
-            order.append(strip_word(output_name))
-            queue.append(output_name)
-    return order
-
-
-def _parse_gold_cost(raw) -> int:
-    """Raw values are comma-formatted strings like "4,000" (or already 0)."""
-    if raw is None:
-        return 0
-    try:
-        return int(str(raw).replace(",", "").strip())
-    except ValueError:
-        return 0
-
 # Recipes that only consume a base item + pure PvP currency (Abyss Points,
 # Platinum Medal of Merit) with no real crafting material — these are PvP
 # gear upgrades, not "crafting" in the sense this guide is for (excluded
@@ -7390,100 +6698,6 @@ def _load_recipes() -> list[dict]:
             "outputs": r.get("outputs", []),
         })
     return recipes
-
-
-def _build_recipe_output_index(recipes: list[dict]) -> dict[str, dict]:
-    """Maps a craftable item's name to the recipe that makes it — lets a
-    recipe's own ingredient list be checked for "is this itself craftable"
-    without a separate hand-built table. Real multi-tier upgrade chains
-    (e.g. Base -> Fine -> Pure -> Artisan's Orichalcum Longsword) fall out
-    of this automatically rather than needing to be curated by hand.
-
-    Indexes EVERY output name, not just outputs[0] -- some recipes have a
-    second output for a bonus-chance "Splendent" variant (e.g. recipe
-    111014001 outputs both "Artisan's Orichalcum Longsword" [guaranteed]
-    and "Artisan's Splendent Orichalcum Longsword" [bonus chance]). Only
-    indexing the first output meant looking up that second name -- which is
-    exactly what a parent recipe's own ingredient list references -- found
-    nothing, silently truncating the chain one tier early."""
-    index: dict[str, dict] = {}
-    for r in recipes:
-        for output in r["outputs"]:
-            index.setdefault(output["name"], r)
-    return index
-
-
-def _resolve_material_name(name: str | None, item_id: int | None, items_by_id: dict) -> str | None:
-    """A handful of recipe inputs carry no name in the scraped data (the
-    scraper's own gap, not a missing item) even though the id resolves fine
-    in the item catalog -- fall back to that instead of showing "None"."""
-    if name:
-        return name
-    item = items_by_id.get(item_id) if item_id else None
-    return item.get("name") if item else None
-
-
-def _build_material_node(
-    name: str | None, item_id: int | None, qty: int, output_index: dict, items_by_id: dict, depth: int = 0,
-) -> dict:
-    """One node of the quantity-aware material tree used by the Crafting
-    Simulator's Baum/Liste views. qty is "how many of this material are
-    needed per ONE unit of its parent" -- NOT yet scaled by how many of the
-    parent are actually needed; that scaling happens at render/flatten time
-    (multiplying down the tree), so the same tree is reusable across
-    different Anzahl values without rebuilding it. depth caps at 20 as a
-    cheap guard against a data cycle."""
-    name = _resolve_material_name(name, item_id, items_by_id)
-    node = {"name": name, "id": item_id, "qty": qty, "mastery": None, "goldCost": 0, "children": None}
-    if depth >= 20 or not name:
-        return node
-    recipe = output_index.get(name)
-    if recipe is None:
-        return node
-    node["mastery"] = recipe.get("masteryLevel")
-    node["goldCost"] = recipe.get("goldCost", 0)
-    node["children"] = [
-        _build_material_node(m.get("name"), m.get("id"), m.get("qty") or 1, output_index, items_by_id, depth + 1)
-        for m in recipe.get("inputs", [])
-    ]
-    return node
-
-
-def _build_material_tree(recipe: dict, output_index: dict, items_by_id: dict) -> dict:
-    """Root node for a selected recipe -- mirrors _build_material_node's
-    shape, just seeded directly from the chosen recipe instead of a
-    name lookup."""
-    output = recipe["outputs"][0]
-    return {
-        "name": output["name"], "id": output.get("id"), "qty": 1,
-        "mastery": recipe.get("masteryLevel"), "goldCost": recipe.get("goldCost", 0),
-        "children": [
-            _build_material_node(m.get("name"), m.get("id"), m.get("qty") or 1, output_index, items_by_id, 1)
-            for m in recipe.get("inputs", [])
-        ],
-    }
-
-
-def _flatten_material_tree(node: dict, needed_qty: int, totals: dict[str, dict]):
-    """Recursively sums every leaf material across the whole tree, regardless
-    of how deep it sits -- the "Liste" (shopping-list) view's data source."""
-    if not node.get("children"):
-        entry = totals.setdefault(node["name"], {"qty": 0, "id": node.get("id")})
-        entry["qty"] += needed_qty
-        return
-    for child in node["children"]:
-        _flatten_material_tree(child, needed_qty * (child.get("qty") or 1), totals)
-
-
-def _compute_tree_kinah(node: dict, needed_qty: int) -> int:
-    """Kinah fee paid per craft attempt at every tier that's actually
-    crafted (raw/gathered leaf materials have no fee here)."""
-    if not node.get("children"):
-        return 0
-    total = (node.get("goldCost") or 0) * needed_qty
-    for child in node["children"]:
-        total += _compute_tree_kinah(child, needed_qty * (child.get("qty") or 1))
-    return total
 
 
 _UNRESOLVED_TOKEN_RE = re.compile(r"\{[a-zA-Z_]+(?::[A-Za-z0-9_]+)+\}")
@@ -8752,14 +7966,6 @@ def _make_stat_badge_icon(abbrev: str, color: str, size: int = 44) -> QPixmap:
     painter.drawText(pixmap.rect(), Qt.AlignCenter, abbrev)
     painter.end()
     return pixmap
-
-
-def _parse_stat_value(raw) -> float:
-    try:
-        return float(str(raw).replace("%", "").strip())
-    except (ValueError, TypeError):
-        return 0.0
-
 
 
 
@@ -10778,56 +9984,6 @@ _GEAR_TYPE_TO_QUICK_SELECT_TAGS = {
     "Neutral": {"Expedition", "Sanctuary"},
 }
 
-# Dungeon gear (Neutral gear type, User-Wunsch 2026-08-26: "zusätzlich zu dem
-# gecrafteten Gear kommt in die Auswahl das Equipment aus den Dungeons") is
-# NOT one clean tier ladder like RACE_TIER_ROOT's crafted line -- it's ~174
-# independent named sets (e.g. "Abyssal Helm"/"Abyssal Ring"/... share the
-# root "Abyssal"). Their real drop location isn't in the raw catalog at all;
-# the closest signal is each item's detail "sources" list. Which tags
-# actually produce real, level-45, >=3-slot sets is entirely a property of
-# the current data (compute_dungeon_sets.py checks all ~21 tags found in the
-# catalog and keeps whichever aren't empty -- e.g. Attendance/Subscribe/
-# Ascension never do, they're login/cash-shop rewards, not gear), so this is
-# read straight from data/dungeon_sets.json's own keys at runtime rather
-# than a hardcoded list that would drift out of sync with it.
-_dungeon_sets_cache: dict[str, dict[str, str]] | None = None
-_DUNGEON_SETS_PATH = Path(__file__).parent / "data" / "dungeon_sets.json"
-
-
-def _build_dungeon_sets(items_by_id: dict, detail_cache: "ItemDetailCache") -> dict[str, dict[str, str]]:
-    """Returns {source_tag: {root_name: grade}}, one entry per source tag
-    compute_dungeon_sets.py found at least one real set for -- the grade
-    lets the Rarität filter narrow the Dungeon-Set dropdown too (User-
-    Wunsch, 2026-08-26: "Ich weiß ja, dass in der Liste auch blaue Sets
-    dabei sind, nicht nur goldene" -- Legend/blue and Unique/gold both
-    appear, confirmed real: e.g. Expedition alone is 13 Unique/6 Legend/3
-    Epic at level 45).
-
-    Loads the precomputed data/dungeon_sets.json (see compute_dungeon_sets.py
-    -- same offline-maintenance-script convention as fetch_item_details.py,
-    run whenever the catalog is refreshed) instead of scanning live: an
-    earlier live version of this (grouping ~3000 items and reading each
-    one's detail file via ItemDetailCache.request()) measured ~17s on a
-    cold cache -- far too slow for a dialog that should open instantly.
-    Falls back to an empty result if the precomputed file is missing
-    (e.g. a dev checkout that hasn't run the script yet), rather than ever
-    falling back to the slow live scan again."""
-    global _dungeon_sets_cache
-    if _dungeon_sets_cache is not None:
-        return _dungeon_sets_cache
-
-    result: dict[str, dict[str, str]] = {}
-    if _DUNGEON_SETS_PATH.exists():
-        try:
-            result = json.loads(_DUNGEON_SETS_PATH.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            logger.warning("Failed to load %s -- Dungeon-Quelle dropdown will be empty", _DUNGEON_SETS_PATH)
-    else:
-        logger.warning("%s not found -- run compute_dungeon_sets.py. Dungeon-Quelle dropdown will be empty.", _DUNGEON_SETS_PATH)
-
-    _dungeon_sets_cache = result
-    return result
-
 # Per-slot labels for the "Manuelle Auswahl" accordion panel under each group
 # -- SLOT_LAYOUT's own labels give both ring/earring slots the identical
 # "Ringe"/"Ohrringe" text (fine for the paperdoll, ambiguous as two separate
@@ -10952,12 +10108,6 @@ _STAT_PRIORITY_CATEGORY_ORDER_OVERRIDE: dict[str, list[str]] = {
     ],
 }
 
-# Eigenschaften-Priorität profiles are keyed [gear_type][role][category] ->
-# an ordered list of up to _STAT_PRIORITY_MAX_ENTRIES stat names (User-
-# Wunsch: "Filter PvP und PvE drin... Rollen Angreifer, Verteidiger und
-# Support... Prioliste bis zu 7 Werte... als Profile, die man setzen kann").
-_STAT_PRIORITY_GEAR_TYPES = ("PvE", "PvP")
-_STAT_PRIORITY_ROLES = ("Angreifer", "Verteidiger", "Support")
 # User-Wunsch: "Angreifer 'Orange', Verteidiger 'Blau' und Support 'Grün' ...
 # bei Auswahl des Reiters eine entsprechende Farbkombi" -- objectName per
 # role so the sheet can give each Rolle button its own :checked accent
@@ -10978,87 +10128,6 @@ _ROLE_LABEL_KEYS = {
     "Verteidiger": "arm_role_defender",
     "Support": "arm_role_support",
 }
-_STAT_PRIORITY_MAX_ENTRIES = 7
-
-# Starting point for every one of the 6 (Gear-Typ x Rolle) profiles, all
-# identical until the player edits them via the gear-icon editor -- only
-# PvE/Angreifer has real guide backing today (project_gear_stat_guide.md,
-# 2026-08-24, offered as a "recommendation, please double-check"); the
-# other 5 profiles reuse it as a reasonable starting point rather than
-# shipping empty (an empty list would leave every substat slot unfilled).
-# Names/casing must match the real catalog exactly (not the guide's own
-# prose wording, e.g. "Attack increase"/"Move Speed", not "Attack Increase"/
-# "Movement Speed") -- the editor's dropdown restore (QComboBox.findData) is
-# an exact-string lookup, unlike the case-insensitive matching
-# _pick_priority_substats uses for the real auto-pick, so a wording
-# mismatch here silently resets to "— empty —" in the editor even though
-# auto-pick itself would have matched fine.
-_DEFAULT_STAT_PRIORITY_BY_CATEGORY: dict[str, list[str]] = {
-    "weapon": ["Weapon Damage Boost", "Combat Speed", "Damage Boost", "Might", "Precision", "Attack", "Multi-hit Chance"],
-    # Per-piece armor priorities straight from the guide's detailed
-    # per-slot breakdown (User-Wunsch, 2026-08-27: "Jedes Rüstungsteil hat
-    # eine eigene Prio Liste"). "Passive Skills" (every guide line's last
-    # entry) isn't a literal matchable name -- whatever ranks remain after
-    # these already get filled from the player's own Passive Skill Priority
-    # List automatically (see _apply_quick_substats), no explicit entry
-    # needed, same reasoning as Jewelry/Ring below.
-    "helmet": ["Attack increase", "Smite", "Attack", "Endurance", "Incoming Heal"],
-    "shoulder": ["Critical Damage Boost", "Attack", "Endurance", "Defense increase", "Accuracy", "Critical Hit"],
-    "torso": ["Damage Boost", "Attack", "Endurance", "Defense increase", "Accuracy", "Critical Hit"],
-    "gloves": ["Combat Speed", "Attack", "Perfect Chance", "Defense increase", "Accuracy", "Critical Hit"],
-    "pants": ["Damage Tolerance", "Attack increase", "Attack", "Perfect Chance", "Endurance"],
-    "boots": ["Move Speed", "Attack", "Perfect Chance", "Defense increase", "Accuracy", "Critical Hit"],
-    # Guide: "Earrings & Necklace: Attack > Accuracy > Critical Hit >
-    # Passive Skills" -- the trailing "Passive Skills" isn't a literal
-    # matchable name (no fixed one is universal/class-agnostic), so it's
-    # left off here; whatever substat slots remain after these 3 already
-    # get filled from the player's own Passive Skill Priority List
-    # automatically (see _apply_quick_substats), no explicit entry needed.
-    "jewelry": ["Attack", "Accuracy", "Critical Hit"],
-    # Guide: "Rings: Active Skill 1-6 (in slot order) > Attack" -- only the
-    # "Attack" fallback is a universal name safe to bake in; the 6 Active
-    # skill ranks ahead of it are class-/player-specific (same reasoning as
-    # Bracelet below) and must be set by hand via the editor, which already
-    # lists the player's own Active Skill Priority List first in this tab's
-    # dropdown for convenience (see StatPriorityEditorDialog).
-    "ring": ["Attack"],
-    # Left empty on purpose (User-Wunsch, 2026-08-27): only the fixed,
-    # non-random story-reward Bracelet ever rolled Attack/Critical Hit/HP,
-    # and its stats can't be changed anyway. Every actually customizable
-    # Bracelet (Abyssal and above) only rolls the 10 Deity stats instead
-    # (see compute_stat_priority_options.py) -- no real guide backing
-    # exists yet for ranking those against each other, so this stays empty
-    # rather than pointing at values no Bracelet can ever roll.
-    "bracelet": [],
-}
-
-
-def _default_stat_priority_profiles() -> dict[str, dict[str, dict[str, list[str]]]]:
-    return {
-        gear_type: {
-            role: {cat: list(names) for cat, names in _DEFAULT_STAT_PRIORITY_BY_CATEGORY.items()}
-            for role in _STAT_PRIORITY_ROLES
-        }
-        for gear_type in _STAT_PRIORITY_GEAR_TYPES
-    }
-
-
-def _merge_stat_priority_profiles(saved: dict | None) -> dict[str, dict[str, dict[str, list[str]]]]:
-    """Merges a persisted profiles dict onto the defaults -- keeps a saved
-    profile missing a not-yet-existing gear_type/role/category (e.g. an
-    older profile from before this feature) filled in rather than blank."""
-    result = _default_stat_priority_profiles()
-    for gear_type, roles in (saved or {}).items():
-        if gear_type not in result:
-            continue
-        for role, categories in (roles or {}).items():
-            if role not in result[gear_type]:
-                continue
-            for category, names in (categories or {}).items():
-                if category in result[gear_type][role] and isinstance(names, list):
-                    result[gear_type][role][category] = [str(n) for n in names][:_STAT_PRIORITY_MAX_ENTRIES]
-    return result
-
 
 # Precomputed real subStat names per category (compute_stat_priority_
 # options.py) -- shown as the editor's "Verfügbare Werte" reference list so
@@ -11082,44 +10151,6 @@ def _load_stat_priority_options() -> dict[str, list[str]]:
         logger.warning("%s not found -- run compute_stat_priority_options.py", _STAT_PRIORITY_OPTIONS_PATH)
     _stat_priority_options_cache = result
     return result
-
-
-# Known real-data wording that differs from the guide's own term -- matching
-# is otherwise case-insensitive exact-name, which already covers e.g. the
-# guide's "Defense Increase" vs. the catalog's "Defense increase".
-_STAT_NAME_ALIASES = {"movement speed": "move speed"}
-
-
-def _normalize_stat_name(name: str) -> str:
-    key = (name or "").strip().lower()
-    return _STAT_NAME_ALIASES.get(key, key)
-
-
-def _pick_priority_substats(sub_stats: list[dict], count: int, priority_names: list[str]) -> set[int]:
-    """Picks up to `count` indices into sub_stats, walking priority_names
-    (the current Gear-Typ/Rolle/Kategorie profile's ordered stat-name list)
-    top to bottom and taking the first still-unused match for each name --
-    falls through the WHOLE list (not just the first few entries) so a
-    slot whose top preferences aren't among its real options still gets its
-    substat slots filled from lower-priority ones rather than being left
-    empty (explicit user instruction: even the last-ranked entry should
-    still be used if a slot has that many substat slots to fill)."""
-    if count <= 0 or not sub_stats or not priority_names:
-        return set()
-    normalized = [_normalize_stat_name(s.get("name") or "") for s in sub_stats]
-    chosen: list[int] = []
-    used: set[int] = set()
-    for wanted_name in priority_names:
-        if len(chosen) >= count:
-            break
-        wanted = _normalize_stat_name(wanted_name)
-        for i, name in enumerate(normalized):
-            if i in used or name != wanted:
-                continue
-            chosen.append(i)
-            used.add(i)
-            break
-    return set(chosen[:count])
 
 
 def _build_quick_slot_group_rows(
@@ -12421,111 +11452,6 @@ def _daevanion_variant(variant: str) -> dict:
             "node_by_id": node_by_id,
         }
     return _daevanion_variant_cache[variant]
-
-
-def _daevanion_neighbors(r: int, c: int) -> list[tuple[int, int]]:
-    return [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
-
-
-def _daevanion_is_reachable(node: dict, grid: dict, active: set) -> bool:
-    """A node with no real stat/skill value can never bridge two others --
-    only nodes with a real value connect to each other (User-Wunsch,
-    2026-08-28: "Es können zum verbinden nur Felder genutzt werden, die
-    Werte beinhalten")."""
-    if node["id"] in active:
-        return True
-    for rc in _daevanion_neighbors(node["r"], node["c"]):
-        nb = grid.get(rc)
-        if nb and nb["g"] != "empty" and nb["id"] in active:
-            return True
-    return False
-
-
-def _daevanion_total_cost(grid: dict) -> int:
-    return sum(n["cost"] for n in grid.values())
-
-
-def _daevanion_spent_cost(active: set, node_by_id: dict) -> int:
-    return sum(node_by_id[nid]["cost"] for nid in active if nid in node_by_id)
-
-
-_DAEVANION_MP_NAMES = {"mpmax", "Max MP"}  # "a" data uses the lowercase questlog code, "s" data the plain name
-
-
-def _daevanion_node_mp_count(node: dict) -> int:
-    return 1 if any(e.get("t") == "s" and e.get("n") in _DAEVANION_MP_NAMES for e in node.get("e") or []) else 0
-
-
-def _daevanion_shortest_from_tree(grid: dict, tree: set, node_by_id: dict):
-    """Multi-source Dijkstra from every node already in `tree` (distance
-    (0, 0)) -- distance is (points, mpNodeCount), Python tuples already
-    compare lexicographically: cheapest point cost wins outright, ties
-    broken toward fewer Max MP nodes crossed (User-Wunsch, 2026-08-28).
-    "empty" cells are skipped entirely, never traversable."""
-    inf = (float("inf"), float("inf"))
-    dist = {n["id"]: ((0, 0) if n["id"] in tree else inf) for n in grid.values()}
-    prev: dict[str, str] = {}
-    visited: set[str] = set()
-    while len(visited) < len(dist):
-        best_id, best_d = None, inf
-        for nid, d in dist.items():
-            if nid not in visited and d < best_d:
-                best_d, best_id = d, nid
-        if best_id is None:
-            break
-        visited.add(best_id)
-        n = node_by_id[best_id]
-        for rc in _daevanion_neighbors(n["r"], n["c"]):
-            nb = grid.get(rc)
-            if not nb or nb["g"] == "empty" or nb["id"] in visited:
-                continue
-            in_tree = nb["id"] in tree
-            nd = (best_d[0] + (0 if in_tree else nb["cost"]), best_d[1] + (0 if in_tree else _daevanion_node_mp_count(nb)))
-            if nd < dist[nb["id"]]:
-                dist[nb["id"]] = nd
-                prev[nb["id"]] = best_id
-    return dist, prev
-
-
-def _daevanion_path_nodes_to_add(prev: dict, target_id: str, tree: set) -> list[str]:
-    chain = []
-    cur = target_id
-    while cur is not None:
-        chain.append(cur)
-        if cur in tree:
-            break
-        cur = prev.get(cur)
-    return chain
-
-
-def _daevanion_compute_auto_route(grid: dict, node_by_id: dict, wanted_ids: set, start_id: str) -> dict:
-    """Greedy Steiner-tree heuristic (identical to the approved browser
-    mockup): repeatedly connects whichever wanted node is currently
-    cheapest to reach from the tree built so far, until every wanted node
-    is connected or the board's point cap runs out."""
-    tree = {start_id}
-    cap = _daevanion_total_cost(grid)
-    spent = 0
-    remaining = set(wanted_ids) - {start_id}
-    included: set[str] = set()
-    skipped: set[str] = set()
-    while remaining:
-        dist, prev = _daevanion_shortest_from_tree(grid, tree, node_by_id)
-        best_id, best_d = None, (float("inf"), float("inf"))
-        for nid in remaining:
-            d = dist.get(nid, (float("inf"), float("inf")))
-            if d < best_d:
-                best_d, best_id = d, nid
-        if best_id is None or best_d[0] == float("inf") or spent + best_d[0] > cap:
-            skipped |= remaining
-            break
-        for nid in _daevanion_path_nodes_to_add(prev, best_id, tree):
-            if nid not in tree:
-                tree.add(nid)
-                spent += node_by_id[nid]["cost"]
-        included.add(best_id)
-        remaining.discard(best_id)
-    return {"tree": tree, "included": included, "skipped": skipped, "spent": spent, "cap": cap}
 
 
 def _daevanion_stat_key(raw: str) -> str:
@@ -19108,82 +18034,26 @@ class LoadoutWindow(QMainWindow):
         (by_slot[stat_id][slot_id] = contribution) so the Stat Info
         tooltip can show exactly which equipped piece a value came from
         (User-Wunsch, 2026-08-30: "auf die 3000+ attack hovern und sehen,
-        woher diese attack stammen ... 50 atk Waffe / 100 atk Guard")."""
-        totals: dict[str, float] = {}
-        by_slot: dict[str, dict[str, float]] = {}
+        woher diese attack stammen ... 50 atk Waffe / 100 atk Guard").
 
-        def add(slot_id: str, stat_id: str | None, value: float):
-            if not stat_id or not value:
-                return
-            # Real gear can use a different id than this file's own
-            # convention for the same stat (see _GEAR_STAT_ID_ALIASES) --
-            # normalize before it ever reaches totals/by_slot.
-            stat_id = _GEAR_STAT_ID_ALIASES.get(stat_id, stat_id)
-            totals[stat_id] = totals.get(stat_id, 0.0) + value
-            slot_totals = by_slot.setdefault(stat_id, {})
-            slot_totals[slot_id] = slot_totals.get(slot_id, 0.0) + value
-
-        for slot_id, item in equipped.items():
-            detail = self.detail_cache.get(item.get("id"))
-            if not detail:
-                continue
-            for stat in detail.get("mainStats") or []:
-                add(slot_id, stat.get("id"), _parse_stat_value(stat.get("value")))
-            sub_stats = detail.get("subStats") or []
-            for i in substats.get(slot_id, set()):
-                if i < len(sub_stats):
-                    add(slot_id, sub_stats[i].get("id"), _parse_stat_value(sub_stats[i].get("value")))
-
-            # Enchant bonus — same estimate formulas the item's own detail
-            # panel uses for its "(+N)" line, so Stat Info stays consistent
-            # with what that panel shows instead of ignoring the slider.
-            level = enchant.get(slot_id, 0)
-            if level:
-                grade_name = detail.get("gradeName") or detail.get("grade") or ""
-                category_name = detail.get("categoryName") or ""
-                normal_max = int(detail.get("maxEnchantLevel") or 0)
-                if category_name == "Rune":
-                    # Own real per-level curve -- see _rune_enchant_bonus's
-                    # docstring for why the generic estimators below don't
-                    # apply to this category at all.
-                    for stat_id, value in _rune_enchant_bonus(item.get("id"), level).items():
-                        add(slot_id, stat_id, value)
-                    continue
-                is_armor = category_name in _ARMOR_CATEGORIES or category_name == _BELT_CATEGORY
-                if is_armor:
-                    def_bonus, hp_bonus = estimate_armor_bonus(level, grade_name, normal_max, category_name)
-                    add(slot_id, _DEFENSE_STAT_ID, def_bonus)
-                    add(slot_id, _HP_STAT_ID, hp_bonus)
-                    exceed = estimate_armor_exceed_bonus(level, normal_max)
-                    add(slot_id, _DEFENSE_STAT_ID, exceed["defense"])
-                    add(slot_id, _HP_STAT_ID, exceed["hp"])
-                    if exceed["defense_pct"]:
-                        add(slot_id, "DefenseRatio", exceed["defense_pct"])
-                else:
-                    bonus = estimate_enchant_bonus(level, grade_name, normal_max, category_name)
-                    add(slot_id, _SCALING_STAT_ID, bonus)
-                    exceed = estimate_exceed_bonus(level, normal_max, category_name)
-                    add(slot_id, _SCALING_STAT_ID, exceed["attack"])
-                    if exceed["attack_pct"]:
-                        add(slot_id, "DamageRatio", exceed["attack_pct"])
-                    if exceed["defense"]:
-                        add(slot_id, _DEFENSE_STAT_ID, exceed["defense"])
-        return totals, by_slot
+        The body moved to armory_engine.stats.compute_stat_totals_detailed
+        (audit B-armory.md §3.1/§4.2 Stage 1).  It was already pure but for
+        a single ``self.detail_cache.get`` call, which the engine now takes
+        as a DetailProvider -- a protocol ItemDetailCache already satisfies
+        structurally -- so passing that cache is the whole adaptation.
+        Kept as a method because it is the seam the live Stat Info panel
+        AND Build Compare both call.
+        """
+        return compute_stat_totals_detailed(equipped, substats, enchant, self.detail_cache)
 
     def _compute_gearscore(self, equipped: dict, enchant: dict) -> float:
-        """Shared with the Build Vergleich tab -- see _compute_stat_totals."""
-        total = 0.0
-        for slot_id, item in equipped.items():
-            detail = self.detail_cache.get(item.get("id"))
-            if not detail or not detail.get("level"):
-                continue
-            total += detail["level"]
-            level = enchant.get(slot_id, 0)
-            if not level:
-                continue
-            normal_max = int(detail.get("maxEnchantLevel") or 0)
-            total += _gearscore_push(level, normal_max)
-        return total
+        """Shared with the Build Vergleich tab -- see _compute_stat_totals.
+
+        Same wrapper shape as _compute_stat_totals_detailed above: the sum
+        lives in armory_engine.stats.compute_gearscore, this passes the
+        detail cache as its DetailProvider.
+        """
+        return compute_gearscore(equipped, enchant, self.detail_cache)
 
     def _refresh_stat_info(self):
         # MUST run before passive_totals below -- _skill_bonus (gear/
@@ -20819,7 +19689,35 @@ class LoadoutWindow(QMainWindow):
         Build's own state instead of self._equipped/live session state --
         shared by Build Compare's stat-category tabs AND Skill Compare's
         damage estimate (which additionally needs the resolved skill_bonus
-        dict back, for its own per-skill effective-level calc)."""
+        dict back, for its own per-skill effective-level calc).
+
+        STAYED A METHOD, deliberately (Stage 1, audit B-armory.md §4.2).
+        Its sibling _compute_stat_totals_detailed became a thin wrapper over
+        armory_engine.stats because it read exactly ONE thing off self.  This
+        one reaches into eight further pieces of LoadoutWindow sub-state, and
+        none of them is a plain value -- each is a method over a different
+        persisted sub-tree:
+
+          self._compute_stat_totals            -> engine (already extracted)
+          self._linked_genius_build_name_for   -> state["linked_genius_build"] + genius_builds_data
+          self._genius_stat_totals_for         -> genius_builds_data[class][name] board
+          self._attribute_derived_stat_totals  -> attribute tables + the totals so far
+          self._arcana_lord_stat_totals        -> Lord-point totals + arcana_info.json
+          self._wings_stat_totals_for          -> wings_items.json caches
+          self._compute_equipped_skill_bonus_for -> skills_all.json + gear sub-skill slots
+          self._linked_skill_build_name_for    -> state["linked_skill_build"] + skill_builds_data
+          self._compute_arcana_card_skill_bonus_for -> skill_builds_data[...]["arcana_cards"]
+          self._passive_skill_stat_totals_for  -> passive skill effect tables
+
+        Extracting it means extracting the whole SIX-source merge (audit §1's
+        "de-facto stat model"), which is a wave of its own: each of those
+        sources has its own loader and its own label tables, and the honest
+        interface for it is the persisted build-state dict (audit §3.2 item
+        3), not ten more parameters.  Splitting it half-way would leave two
+        merges that have to agree -- the exact failure this method was
+        written to fix in the first place (the 2026-09-03 gear-only-totals
+        bug, see _open_build_compare's comment).  So it stays whole, here,
+        until the Genius/Arcana/Daevanion/wings totals move together."""
         equipped, substats, enchant = state["equipped"], state["substats"], state["enchant"]
         totals = self._compute_stat_totals(equipped, substats, enchant)
         genius_build_name = self._linked_genius_build_name_for(state)
@@ -23072,14 +21970,39 @@ def apply_theme(theme_name: str = "") -> int:
     (``[dataColor=…]``, ``[variant=…]``, ``[status=…]``) against widgets
     that have already computed their style.
 
-    Returns how many windows were restyled, so a caller can log it.
+    BOTH STEPS ARE SKIPPED FOR A WINDOW THAT ALREADY WEARS THIS SHEET
+    (review G, m7).  The repolish walks ``findChildren(QWidget)`` -- the
+    Build Planner alone is thousands of widgets -- and the host calls this
+    on every profile load, which almost always means "the same theme
+    again".  ``MainWindow.apply_theme`` grew an ``unchanged`` early return
+    and ``load_styles`` an ``_APPLIED_STYLE_KEY`` guard for exactly this
+    cost; the Armory path was re-introducing it.
+
+    The guard is per window and compares the RENDERED SHEET, not the theme
+    name, on purpose.  A name comparison against ``_theme.current()`` cannot
+    work here: the host records the new theme through
+    ``MainWindow.load_styles`` *before* it forwards the switch, so by the
+    time this runs ``_theme.current()`` is already the target and a
+    name-based early return would skip the real switch too.  A module-level
+    "last applied name" would work but can drift out of step with a window
+    ``_style_window`` handed a sheet in between.  The sheet itself is the
+    thing that has to be right, is already in hand, and a string compare of
+    it is nothing next to what it saves.
+
+    Returns how many windows now wear this theme's sheet -- the ones it
+    restyled plus the ones that already matched -- so a caller can log it
+    and so "every open window is on this theme" stays the postcondition.
     """
     if theme_name and _theme is not None:
         _theme.set_current(theme_name)
     styles = _load_qss_text()
     restyled = 0
+    unchanged = 0
     for window in list(_STYLED_WINDOWS):
         try:
+            if styles and window.styleSheet() == styles:
+                unchanged += 1
+                continue
             window.setStyleSheet(styles)
             for widget in [window] + window.findChildren(QWidget):
                 widget.style().unpolish(widget)
@@ -23090,9 +22013,9 @@ def apply_theme(theme_name: str = "") -> int:
             # restyle, and nothing wrong: the WeakSet drops it next cycle.
             continue
         restyled += 1
-    logger.debug("Armory restyled %d window(s) for theme %s", restyled,
-                 _theme.current() if _theme else "fallback")
-    return restyled
+    logger.debug("Armory restyled %d window(s) (%d already current) for theme %s",
+                 restyled, unchanged, _theme.current() if _theme else "fallback")
+    return restyled + unchanged
 
 
 def create_window(parent=None, language: str = "en") -> ItemDatabaseWindow:

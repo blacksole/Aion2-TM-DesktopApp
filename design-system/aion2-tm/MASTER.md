@@ -221,6 +221,75 @@ Règles de dérivation (une seule, pour que le prochain thème s'ajoute sans arb
    couleur QSS y écrase le `setForeground()` de chaque item. La couleur du
    texte d'item vient de la palette.
 
+## 5. Architecture Armory (moteur de calcul)
+
+> Ajouté le 2026-09-19 (Stage 1 de `docs/audit-2026-09-18/B-armory.md` §4.2).
+> Ce §5 parle d'**architecture**, pas de style : il est ici parce que le
+> design system est le seul document que tout le monde lit avant de toucher
+> à l'Armory, et parce que sa règle centrale (« aucun Qt ») est de la même
+> nature que « aucun littéral de couleur » du §4 — une frontière qu'un test
+> garde, pas une convention qu'on se rappelle.
+
+`ItemDatabase/app.py` faisait 22 900 lignes d'UI, de logique et d'accès
+données entrelacés. Le calcul **pur** — qui était déjà pur, juste prisonnier
+d'un module qui importe PySide6 et se monkey-patche à l'import — vit
+maintenant dans `ItemDatabase/armory_engine/` :
+
+| Module | Ce qu'il contient |
+|---|---|
+| `model.py` | les formes partagées (`Item`, `Detail`, `BuildState`) et le protocole **`DetailProvider`** |
+| `enchant.py` | les 4 estimateurs calibrés, la courbe Rune, la poussée de GearScore |
+| `substats.py` | les 6 profils (Gear-Typ × Rôle) et l'auto-pick glouton des sous-stats |
+| `arcana.py` | le solveur de cartes Lord (meilleur cas) et son « pourquoi pas » |
+| `daevanion.py` | le routeur Steiner glouton sur le plateau |
+| `transfer.py` | le graphe de hops d'amélioration, l'arbre de matériaux, le cumul de Kinah |
+| `sets.py` | la table de sets de donjon précalculée |
+| `stats.py` | la fusion de stats par slot et le GearScore, au-dessus d'un `DetailProvider` |
+| `explain.py` | le **contrat** que toute recommandation future renverra (données seules) |
+
+**Trois règles, chacune tenue par un test.**
+
+1. **Aucun Qt dans le moteur.** Pas d'import PySide6, ni direct ni transitif.
+   Vérifié par `tests/test_armory_engine_qt_free.py`, qui importe chaque
+   module **dans un sous-processus** avec un `meta_path` finder qui fait
+   échouer tout import PySide6 — un import en cours de processus ne
+   prouverait rien, PySide6 étant déjà chargé quand un test tourne. Ce que
+   le moteur a réellement besoin de Qt (les détails d'items) passe par
+   `DetailProvider`, un `Protocol` à une seule méthode `get(item_id)` que
+   `ItemDetailCache` satisfait structurellement, sans rien changer.
+2. **Un seul exemplaire.** Le code a été **déplacé**, pas copié : app.py le
+   réimporte sous exactement les mêmes noms, donc aucun de ses ~700 sites
+   d'appel n'a changé. `tests/test_armory_engine_packaging.py` refuse qu'un
+   nom déplacé soit redéfini au niveau module dans app.py — une redéfinition
+   masquerait l'import en silence, et les tests du moteur continueraient de
+   passer contre du code que plus rien n'exécute. Même motif que les gates
+   de tokens du §4.
+3. **Toute recommandation s'explique.** Un solveur ne renvoie jamais un
+   choix nu : `explain.py` fixe `Reason(stat_id, delta, weight, text_key)` et
+   `Recommendation(pick, score_delta, reasons)`. `text_key` est une **clé de
+   traduction**, jamais du texte affiché — comme partout ailleurs. Les
+   `dataclass` sont livrées en Stage 1 *sans* logique, exprès : figer le type
+   de retour avant le premier solveur est ce qui empêche le deuxième
+   d'inventer le sien. La surface d'affichage existe déjà (les lignes de
+   delta par stat de Build Compare), et `stats.compute_stat_totals_detailed`
+   renvoie déjà l'attribution par slot dont ces deltas se justifient.
+
+**Empaquetage.** `app.py` est embarqué comme fichier de **données** (l'hôte
+le charge par `spec_from_file_location`), donc PyInstaller ne suit pas ses
+imports : le paquet a besoin de sa propre entrée `datas`, vers
+`ItemDatabase/armory_engine`, dans les **deux** `.spec`. Une destination plus
+haute d'un niveau et l'Armory ne s'ouvre plus du tout. Gardé par
+`tests/test_armory_engine_packaging.py`, même raisonnement que le gate de
+destination de la feuille (`tests/test_armory_theme.py`).
+
+**Ce qui n'est pas parti.** Tout ce qui dessine ou charge : les tables de
+libellés et de couleurs, les `_load_*` qui lisent `data/*.json`, et la fusion
+**6 sources** (`_refresh_stat_info` / `_compute_full_build_totals`), qui
+touche huit autres morceaux d'état de `LoadoutWindow`. La couper en deux
+laisserait deux fusions qui doivent s'accorder — exactement le bug de
+2026-09-03 que cette méthode a été écrite pour corriger. Elle part entière,
+avec Genius/Arcana/Daevanion/wings, ou pas du tout.
+
 ## Journal d'implémentation
 
 ### 2026-09-18 — câblage du moteur (wave 2)

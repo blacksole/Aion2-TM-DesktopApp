@@ -39,6 +39,14 @@ a = Analysis(
     datas=[
         ('styles.template.qss', 'ItemDatabase'),
         ('assets', 'ItemDatabase/assets'),
+        # armory_engine/ -- the Qt-free calculation core app.py imports
+        # (Stage 1, docs/audit-2026-09-18/B-armory.md §4.2).  Here app.py IS
+        # the analyzed script, so PyInstaller follows the import and the
+        # package also lands in the PYZ; this data copy is what keeps the
+        # two builds' read paths identical, since app.py resolves the
+        # package through `sys.path.insert(_MEIPASS/"ItemDatabase")` in both.
+        # Same destination rule as everything else in this list.
+        ('armory_engine', 'ItemDatabase/armory_engine'),
     ],
     hiddenimports=['core.theme'],
     hookspath=[],

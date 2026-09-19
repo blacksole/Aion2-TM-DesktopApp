@@ -176,3 +176,134 @@ A true substat *optimizer* (marginal stat values, caps, DR curves) is **L** and 
 | Recommendation features are name-rank greedy only (§2) | MED | S–M each | ship features 1–4 from §3.4 on the engine |
 | Global QComboBox monkey-patch on module import (app.py:139) | MED | S | explicit installer function |
 | ENCHANT_RATES.json dead vs hardcoded constants (app.py:1063) | LOW | S | make constants the generated artifact, or delete the JSON |
+
+---
+
+## Stage 1 done — 2026-09-19
+
+§4.2's "safe first slice" is landed. The pure blocks of §3.1 now live in
+`ItemDatabase/armory_engine/` (Qt-free, 9 modules, 1 921 lines), app.py
+re-imports them under exactly the names it had, and app.py went from **23 123
+to 22 046 lines** (−1 195 moved out, +118 of import block and wrapper/`self`-read
+documentation back in). Behaviour-preserving by construction: the code was moved
+verbatim, and every number is pinned by goldens recorded from the
+*pre-extraction* app.py.
+
+### Function map (old app.py line → new module)
+
+| Old app.py | Moved to | What |
+|---|---|---|
+| 1175–1440 | `enchant.py` | `_GEAR_STAT_ID_ALIASES`, `_SCALING_STAT_ID`, accessory/weapon-curve/Heroic constants, `_rune_enchant_bonus` + its 4 constants, `estimate_enchant_bonus`, `estimate_exceed_bonus`, armor/belt constants, `estimate_armor_bonus`, `estimate_armor_exceed_bonus`, `_GEARSCORE_NORMAL_RATE`/`_EXCEED_RATE`, `_gearscore_push` |
+| 3131–3544 | `arcana.py` | the Arcana Planner block: `_ARCANA_LORD_TYPES`/`_LORD_CATEGORY`/`_GRADE_MAX_LEVEL`/`_ACTIVE_THEMES`, `_arcana_usable_lord_types`, the card model (`_arcana_card_slot_list`/`_card_grade`/`_card_level`), `_arcana_eligible_skills_for_type`, `_arcana_full_pool_for_type`, `_arcana_best_card_contribution`, `_arcana_best_combination`, `_arcana_compute_combinations`, `_arcana_result_coverage_percent`, `_arcana_eligible_types`, `_arcana_max_ceiling`, `_arcana_uncovered_reason` |
+| 7216–7348, 7395–7488 | `transfer.py` | `_item_type_word`, `_item_grade`, `_transfer_source_name`, `_build_transfer_source_index`, `_find_transfer_path`, `_ordered_tier_chain`, `_parse_gold_cost`, `_build_recipe_output_index`, `_resolve_material_name`, `_build_material_node`, `_build_material_tree`, `_flatten_material_tree`, `_compute_tree_kinah` |
+| 8757 | `stats.py` | `_parse_stat_value` |
+| 10781–10830 | `sets.py` | `_build_dungeon_sets` (+ its cache and path), **signature changed**: `detail_cache: "ItemDetailCache"` → `detail_provider: DetailProvider \| None`, plus an optional `path` for tests |
+| 10955–10960, 10981–11061, 11087–11124 | `substats.py` | `_STAT_PRIORITY_GEAR_TYPES`/`_ROLES`/`_MAX_ENTRIES`, `_DEFAULT_STAT_PRIORITY_BY_CATEGORY`, `_default_stat_priority_profiles`, `_merge_stat_priority_profiles`, `_STAT_NAME_ALIASES`, `_normalize_stat_name`, `_pick_priority_substats` |
+| 12426–12530 | `daevanion.py` | `_daevanion_neighbors`, `_daevanion_is_reachable`, `_daevanion_total_cost`, `_daevanion_spent_cost`, `_DAEVANION_MP_NAMES`, `_daevanion_node_mp_count`, `_daevanion_shortest_from_tree`, `_daevanion_path_nodes_to_add`, `_daevanion_compute_auto_route` |
+| 19104 (`LoadoutWindow._compute_stat_totals_detailed`) | `stats.compute_stat_totals_detailed` | body moved; the one impurity, `self.detail_cache.get`, became the `provider` parameter. The method stays as a **thin wrapper** — it is the seam the live panel and Build Compare both call |
+| 19173 (`LoadoutWindow._compute_gearscore`) | `stats.compute_gearscore` | same shape, same wrapper treatment |
+| — (new) | `model.py` | `Item`/`Detail`/`StatEntry`/`EquipBuild`/`BuildState` TypedDicts (descriptions of the existing dicts, `total=False`), `StatTotals`/`StatsBySlot` aliases, and the **`DetailProvider` Protocol** §3.2 item 2 asked for |
+| — (new) | `explain.py` | §3.3's contract as frozen dataclasses: `Reason(stat_id, delta, weight, text_key, text_kwargs)` with a `score_contribution` property, and `Recommendation(pick, score_delta, reasons)`. Data only, no logic |
+
+### What stayed in app.py, and why
+
+- **Everything that draws or loads.** Label/colour tables
+  (`ARCANA_LORD_EFFECTS`, `_DAEVANION_STAT_LABELS`, `_ROLE_LABEL_KEYS`,
+  `_ROLE_BUTTON_OBJECT_NAMES`), the `_load_*` readers that resolve
+  `data/*.json` against app-relative paths (`_load_recipes`,
+  `_load_arcana_class_skills`, `_load_stat_priority_options`,
+  `_daevanion_variant`), and `_recipe_method` (only `_load_recipes` uses it).
+- **`_compute_full_build_totals` (now app.py:19681) — the notable one.** Its
+  sibling became a wrapper because it read exactly one thing off `self`. This
+  one calls **nine** further `LoadoutWindow` methods, each over a different
+  persisted sub-tree: `_linked_genius_build_name_for`,
+  `_genius_stat_totals_for`, `_attribute_derived_stat_totals`,
+  `_arcana_lord_stat_totals`, `_wings_stat_totals_for`,
+  `_compute_equipped_skill_bonus_for`, `_linked_skill_build_name_for`,
+  `_compute_arcana_card_skill_bonus_for`, `_passive_skill_stat_totals_for`.
+  Extracting it means extracting the whole six-source merge of §1 — each
+  source with its own loader and label tables — and the honest interface for
+  that is the persisted build-state dict (§3.2 item 3), not nine more
+  parameters. Half-extracting it would leave two merges that must agree,
+  which is verbatim the 2026-09-03 gear-only-totals bug this method was
+  written to fix. It moves whole, in the wave that moves
+  Genius/Arcana/Daevanion/wings, or not at all. The full `self`-read list is
+  now in its docstring.
+- **The `QComboBox.showPopup` monkey-patch** (§4.3 MED) — untouched; it is a
+  Qt concern and a separate decision.
+
+### Two findings from doing the work
+
+- **`heapq` in the Daevanion Dijkstra (§2.4) is NOT a free win.** Measured
+  before moving: 400 randomized 6×6 boards, a `heapq` port compared against
+  the O(V²) linear scan. `dist` matched on every board; **`prev` differed on
+  169 of 400**. The linear scan's `d < best_d` keeps the first minimum it
+  meets — `grid.values()` insertion order — while a heap breaks ties on
+  `(distance, node_id)`. Costs are small integers on a dense grid, so ties
+  are the common case, and `prev` is what decides which equal-cost path is
+  materialized and therefore which nodes enter the tree. (A first pass showed
+  *zero* mismatches, with synthetic `r{r}c{c}` node ids whose lexicographic
+  order happens to equal the grid's row-major order; real questlog ids are
+  arbitrary strings.) The linear scan stays, with the evidence in
+  `armory_engine/daevanion.py`'s docstring. A heap would need an explicit
+  tie-break on the grid's insertion index.
+- **§2.4's "when the cap is hit it skips all remaining wanted nodes" can
+  never fire on the point cap.** `cap` is `sum(cost)` over *every* node on the
+  board and the tree is a subset of the board, so `spent <= cap` always
+  holds. The branch is reached only by an **unreachable** target — a node
+  walled off by `"empty"` cells. The limitation is real, its trigger is not
+  the budget; the golden fixture now walls off a node to exercise it.
+
+### Tests + gates
+
+- `tests/test_armory_engine_golden.py` — 704 tests. Goldens in
+  `tests/fixtures/armory_engine/golden.json`, **recorded from the
+  pre-extraction app.py** against `tests/fixtures/armory_engine/inputs.py`
+  (6 items with details, a 6-recipe chain with one Kinah-only hop and one
+  decoy, a 5×5 board with 4 punched cells, 3 Arcana wishlists, 12 seeded
+  random boards). A red test here means the move changed behaviour, not that
+  the golden is stale.
+- `tests/test_armory_engine_qt_free.py` — 12 tests. Each engine module
+  imported in a **subprocess** with a `meta_path` finder that makes any
+  PySide6/shiboken import raise, plus an `ast` pass for a Qt import hidden in
+  a function body. Modules are discovered by glob, so a new one is covered
+  automatically.
+- `tests/test_armory_engine_packaging.py` — 193 tests, 162 run and 31
+  skipped (a moved name app.py no longer references needs no re-import; the
+  skip is the assertion that the two halves agree). No moved name is
+  redefined at app.py's top level; every moved name app.py still references
+  is imported back; the two wrapper methods are still one-`return`
+  delegations; `sys.path.insert` runs before the first engine import; and
+  both `.spec` files carry the recursive `datas` entry.
+- `tests/test_enchant_model.py` — its `armory` fixture is now parametrized
+  over **both paths** (`armory_engine.enchant` directly, and app.py's
+  namespace), so 123 tests became 246 and the shipping re-export surface is
+  tested too.
+
+### Spec changes (§4.1's constraint 1)
+
+One line each, both destinations under `ItemDatabase/`:
+
+- `Aion2 TM.spec`: `('ItemDatabase/armory_engine', 'ItemDatabase/armory_engine')`
+- `ItemDatabase/AION2_ItemDatabase.spec`: `('armory_engine', 'ItemDatabase/armory_engine')`
+
+A directory source (copied recursively) rather than a line per module —
+unlike `ItemDatabase/data/`, which needs per-file discipline because it also
+holds ~278 MB of runtime caches. §4.1's constraint 2 is satisfied by
+`sys.path.insert(0, str(Path(__file__).resolve().parent))` near the top of
+app.py, before the first engine import, with a `_MEIPASS/ItemDatabase` insert
+alongside it for the frozen case.
+
+### Also in this pass
+
+Review G **m7** (Armory `apply_theme` had no `unchanged` early return) is
+fixed — per window, comparing the **rendered sheet** rather than the theme
+name. A name comparison against `_theme.current()`, as m7 suggests, cannot
+work: the host records the new theme in `MainWindow.load_styles` *before*
+forwarding the switch, so `_theme.current()` is already the target by the
+time `apply_theme` runs and a name guard would skip the real switch too. The
+expensive part — `findChildren(QWidget)` + unpolish/polish over thousands of
+widgets, paid on every profile load — is now skipped for any window whose
+sheet already matches. The return value is "windows now wearing this theme"
+(restyled + already current), which keeps `apply_theme(name) >= 3` meaning
+what `tests/test_armory_theme.py` asserts it means.
