@@ -31,7 +31,22 @@ REPO = Path(__file__).resolve().parent.parent
 ALLOWLIST = Path(__file__).resolve().parent / "fixtures" / "unscoped_selectors_allowlist.txt"
 SCOPE = 'QWidget[aion2="true"]'
 
-ARMORY_SHEET = REPO / "ItemDatabase" / "styles.qss"
+#: The Armory's sheet is a TEMPLATE now (MASTER §4, the 2026-09-18
+#: tokenization wave): ``ItemDatabase/styles.qss`` was deleted and
+#: ``core.theme`` renders this file per theme instead.  The two tests at
+#: the bottom of this module used to read that deleted file behind a
+#: ``skipif(not ARMORY_SHEET.is_file())``, so they skipped unconditionally
+#: with the false reason "ItemDatabase not present" — 2 of the suite's 3
+#: reported skips, and the exact F-14 anti-pattern ``test_theme.py:220``
+#: forbids (review G/m1).  They read the RENDERED template now, which is
+#: the string the Armory windows are actually handed, and no longer skip.
+ARMORY_TEMPLATE = REPO / "ItemDatabase" / "styles.template.qss"
+
+
+def _armory_sheet(name: str = "abyss") -> str:
+    """The Armory sheet as a window gets it — same helper as
+    ``tests/test_armory_theme.py::_rendered``."""
+    return theme.build_qss_from(ARMORY_TEMPLATE, name, asset_path="/QA_ASSETS")
 
 
 def _without_comments(text: str) -> str:
@@ -175,27 +190,27 @@ def test_the_palette_supplies_the_item_text_colour(qapp, name):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not ARMORY_SHEET.is_file(), reason="ItemDatabase not present")
-def test_the_armory_sheet_still_omits_colour_on_its_item_view():
+@pytest.mark.parametrize("name", sorted(theme.THEMES))
+def test_the_armory_sheet_still_omits_colour_on_its_item_view(name):
     """If the Armory ever declares it itself, this whole gate can relax —
-    so the assumption is pinned rather than remembered."""
-    armory = {
-        selector: declarations
-        for selector, declarations in _rules(ARMORY_SHEET.read_text(encoding="utf-8"))
-    }
+    so the assumption is pinned rather than remembered.
+
+    Asserted per theme now that the sheet is rendered: the declaration
+    could be added under one theme's branch and not another's.
+    """
+    armory = {selector: declarations for selector, declarations in _rules(_armory_sheet(name))}
     view = armory.get("QComboBox QAbstractItemView")
     assert view is not None, "the Armory stopped styling its combo popups"
     assert not _declares(view, "color"), (
-        "ItemDatabase now declares `color` on its item view — re-read "
-        "ItemDatabase/styles.qss:104-112 before changing anything here"
+        f"{name}: ItemDatabase now declares `color` on its item view — re-read "
+        "ItemDatabase/styles.template.qss before changing anything here"
     )
 
 
-@pytest.mark.skipif(not ARMORY_SHEET.is_file(), reason="ItemDatabase not present")
 def test_no_font_family_leaks_anywhere_near_the_armory():
-    """Review F-0b: ``ItemDatabase/styles.qss`` declares no ``font-family``
-    at all, so any unscoped one in our sheet would retype the whole Armory."""
-    armory_text = _without_comments(ARMORY_SHEET.read_text(encoding="utf-8"))
+    """Review F-0b: the Armory sheet declares no ``font-family`` at all, so
+    any unscoped one in our sheet would retype the whole Armory."""
+    armory_text = _without_comments(_armory_sheet())
     assert "font-family" not in armory_text, (
         "the Armory now sets its own font-family — this gate can be revisited"
     )

@@ -28,6 +28,7 @@ contains no colour and no font.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt, Signal
@@ -63,6 +64,15 @@ from ui.widgets.empty_state import EmptyStateWidget
 #: there fails loudly here.  The denominator also grows on its own if a
 #: state carries a filled slot this tuple does not know
 #: (``summarize_build_planner``), so the ratio can never exceed 1.
+#: MASTER §3 "Carte" — padding `3`.  The space scale lives in
+#: ``core.theme`` (``space_3 = 12``) and is identical across all six
+#: themes, so a layout margin can be a plain int here; the equality is a
+#: gate, not a comment
+#: (``tests/test_armory_dashboard.py::test_the_card_padding_is_space_3``).
+#: A layout margin cannot come from QSS — Qt's box model applies a
+#: stylesheet ``padding`` to the frame, not to the QVBoxLayout inside it.
+CARD_PADDING = 12
+
 ARMORY_EQUIP_SLOTS: tuple[str, ...] = (
     # left column: weapon, armor, wings
     "MainHand", "SubHand",
@@ -125,6 +135,24 @@ class ArmorySummary:
             or self.pantheon_filled
         )
 
+    @property
+    def has_equip_build(self) -> bool:
+        """True when the per-class equip build behind the numbers was found.
+
+        ``equip_builds_data`` is keyed by ``character_class.lower()``, so an
+        unknown, misspelled or not-yet-chosen class resolves to no build at
+        all — and then ``equipped_slots`` is 0 for a reason that has nothing
+        to do with how geared the character is.  ``daevanion_active`` and
+        ``pantheon_slots`` are class-INDEPENDENT, so such a state is not
+        ``is_empty`` and the card still renders: without this flag it read
+        "0/20 slots equipped" over a fully equipped build (review G/m3).
+
+        ``build_name`` is emptied by :func:`summarize_build_planner` in
+        exactly that case, so it is the flag — named here so the render
+        does not have to re-derive the meaning of an empty string.
+        """
+        return bool(self.build_name)
+
 
 def _as_dict(value) -> dict:
     return value if isinstance(value, dict) else {}
@@ -170,10 +198,22 @@ def summarize_build_planner(state: dict | None) -> ArmorySummary:
     # "Enchant levels present" = the positive ones.  A freshly equipped
     # piece persists `enchant: {"MainHand": 0}`, and "+0–+0" is noise, not
     # information — no positive level at all hides the line entirely.
+    #
+    # ``math.isfinite`` is the one guard the rest of the derivation does not
+    # need (review G/m2): every other access goes through _as_dict/_as_list/
+    # _as_text, but this one calls ``int(value)``, and ``int(inf)`` raises
+    # OverflowError.  ``json.loads`` accepts ``Infinity`` by default, so a
+    # hand-edited or corrupted profile could carry one — and the exception
+    # would propagate through set_build_planner_state -> load_profile (a
+    # try/finally with no except) into MainWindow.__init__, i.e. the app
+    # would not start.  ``NaN`` was already safe (``NaN > 0`` is False).
     levels = [
         int(value)
         for value in _as_dict(build.get("enchant")).values()
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+        if isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
     ]
 
     skill_build_name, skill_build = _current_build(
@@ -224,6 +264,53 @@ def summarize_build_planner(state: dict | None) -> ArmorySummary:
 # ---------------------------------------------------------------------------
 
 
+class _ElidedLabel(QLabel):
+    """A single-line label that ends in "…" instead of being cut mid-glyph.
+
+    ``QLabel`` has no ``setElideMode`` — that is ``QComboBox``/``QTabBar``
+    territory — so a value wider than its cell is simply clipped, with no
+    ellipsis and no way to read the rest (review G/m11).  The display face
+    carries prose (``"Gladiator · Elyos · PvE t1"``, and full RU/DE
+    sentences) in a half-width grid cell, so that is a real information
+    loss, not a cosmetic one.
+
+    The *logical* text stays whole: :meth:`text` returns what was set and
+    the tooltip carries it too, so the full string is always one hover
+    away and readable by a test.  Only the rendered string is shortened,
+    recomputed from ``QFontMetrics`` on every resize.
+    """
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._full_text = ""
+
+    def setText(self, text: str):
+        self._full_text = text or ""
+        # The tooltip is the whole point: eliding without one would trade a
+        # cut string for a shorter cut string.
+        self.setToolTip(self._full_text)
+        self._apply_elide()
+
+    def text(self) -> str:
+        """The full string, not the elided face Qt paints."""
+        return self._full_text
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_elide()
+
+    def _apply_elide(self):
+        width = self.contentsRect().width()
+        elided = (
+            self.fontMetrics().elidedText(self._full_text, Qt.ElideRight, width)
+            if width > 0
+            else self._full_text
+        )
+        # Guarded: QLabel.setText can trigger a resize, which re-enters here.
+        if super().text() != elided:
+            super().setText(elided)
+
+
 class ArmoryCard(QFrame):
     """A whole-card button: title, big value, hint lines, CTA.
 
@@ -247,7 +334,12 @@ class ArmoryCard(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
+        # MASTER §3 "Carte": padding `3`, i.e. space_3 = 12 px on all four
+        # sides.  It used to be (16, 12, 16, 12) — space_4 horizontally —
+        # which made this the only card in the app with its own padding
+        # (review G/m12).  Pinned to the token by
+        # tests/test_armory_dashboard.py::test_the_card_padding_is_space_3.
+        layout.setContentsMargins(CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING)
         layout.setSpacing(4)
 
         # Title and value are single-line on purpose.  A word-wrapped QLabel
@@ -261,7 +353,7 @@ class ArmoryCard(QFrame):
         self.title_label.setObjectName("armoryCardTitle")
         layout.addWidget(self.title_label)
 
-        self.value_label = QLabel("")
+        self.value_label = _ElidedLabel()
         self.value_label.setObjectName("armoryCardValue")
         self.value_label.setVisible(False)
         layout.addWidget(self.value_label)
@@ -469,7 +561,15 @@ class ArmoryPage(QWidget):
             part for part in (summary.character_class, summary.character_race, summary.build_name) if part
         )
         self.build_card.set_value(identity or t("armory_card_build_empty"))
-        hints = [t("armory_card_slots", equipped=summary.equipped_slots, total=summary.total_slots)]
+        # The slots line is only true when the equip build it counts was
+        # actually found (review G/m3) — otherwise it states "0/20" about a
+        # build it never read.  No line at all is the honest degradation:
+        # the card still shows what IS known (identity, Daevanion, skills).
+        hints = []
+        if summary.has_equip_build:
+            hints.append(
+                t("armory_card_slots", equipped=summary.equipped_slots, total=summary.total_slots)
+            )
         if summary.enchant_max is not None:
             hints.append(t("armory_card_enchant", min=summary.enchant_min, max=summary.enchant_max))
         if summary.gear_types:

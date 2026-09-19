@@ -115,6 +115,46 @@ def test_neither_the_window_nor_a_card_outlives_its_teardown(build_window):
         assert kind not in names, f"a {kind} outlived its window"
 
 
+def test_destroy_window_knows_every_parentless_window_the_host_holds(build_window):
+    """``destroy_window``'s named-child list must not go stale silently.
+
+    The timer sweep and the close loop both iterate a hardcoded tuple
+    (``overlay``, ``flow_map_window``, ``item_database_window``) because
+    those three are top-levels MainWindow owns in *Python* only — no Qt
+    parent, so ``findChildren`` cannot reach them and nothing would ever
+    collect them (review G/m5).  The list was verified complete by hand;
+    this makes the day a fourth appears a failing test instead of a leak.
+    """
+    from PySide6.QtWidgets import QWidget
+
+    from tests.conftest import HOST_WINDOW_ATTRIBUTES
+
+    window = build_window()
+    try:
+        known = set(HOST_WINDOW_ATTRIBUTES)
+        assert known == {"overlay", "flow_map_window", "item_database_window"}, (
+            f"destroy_window's named-child list changed: {sorted(known)} — "
+            f"confirm the new one really is every parentless window, then "
+            f"update this expectation"
+        )
+        missed = sorted(
+            name
+            for name, value in vars(window).items()
+            if isinstance(value, QWidget)
+            and value is not window
+            and value.parentWidget() is None
+            and name not in known
+        )
+        assert not missed, (
+            f"MainWindow holds parentless window(s) destroy_window does not "
+            f"know about: {missed} — add them to its named-child list, or "
+            f"their timers fire into freed C++ objects and their trees stay "
+            f"alive for the rest of the session"
+        )
+    finally:
+        destroy_window(window)
+
+
 def test_one_event_filter_serves_every_card(build_window):
     """The shape of the fix, so it cannot regress into a per-card object.
 

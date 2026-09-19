@@ -957,106 +957,141 @@ class FlowMapWindow(QMainWindow):
             parent=self.map_area,
         )
 
-        card.done_btn.clicked.connect(
-            lambda checked=False, node_id=node.id: self.toggle_node_completed(node_id)
-        )
-
-        drag_state = {
-            "dragging": False,
-            "start_global": None,
-            "start_node": (0.0, 0.0),
-            "multi_starts": {},
-            "child_starts": {},
-        }
-
-        def on_press(event, n=node, c=card):
-            if event.button() != Qt.LeftButton:
-                return
-            drag_state["dragging"] = False
-            drag_state["start_global"] = event.globalPosition().toPoint()
-            drag_state["start_node"] = (n.x, n.y)
-
-            if self.current_tool == "select":
-                ctrl = bool(event.modifiers() & Qt.ControlModifier)
-                if ctrl:
-                    if n.id in self.selected_node_ids:
-                        self.selected_node_ids.discard(n.id)
-                    else:
-                        self.selected_node_ids.add(n.id)
-                    self._refresh_card_highlights()
-
-                drag_state["multi_starts"] = {
-                    nid: (self.nodes[nid].x, self.nodes[nid].y)
-                    for nid in self.selected_node_ids
-                    if nid in self.nodes
-                }
-                if self.move_children_with_parent:
-                    child_starts = {}
-                    primary = self.selected_node_ids if self.selected_node_ids else {n.id}
-                    for nid in primary:
-                        for desc_id in self._get_all_descendants(nid):
-                            if desc_id not in primary and desc_id not in child_starts:
-                                if desc_id in self.nodes:
-                                    child_starts[desc_id] = (self.nodes[desc_id].x, self.nodes[desc_id].y)
-                    drag_state["child_starts"] = child_starts
-                else:
-                    drag_state["child_starts"] = {}
-            else:
-                self.handle_node_click(n.id)
-
-        def on_move(event, n=node, c=card):
-            if not (event.buttons() & Qt.LeftButton):
-                return
-            if self.current_tool != "select" or drag_state["start_global"] is None:
-                return
-            delta = event.globalPosition().toPoint() - drag_state["start_global"]
-            if not drag_state["dragging"]:
-                if abs(delta.x()) > 5 or abs(delta.y()) > 5:
-                    drag_state["dragging"] = True
-            if drag_state["dragging"]:
-                sx, sy = drag_state["start_node"]
-                dx = delta.x() / self.zoom_factor
-                dy = delta.y() / self.zoom_factor
-                n.x = sx + dx
-                n.y = sy + dy
-                c.move(int(n.x * self.zoom_factor), int(n.y * self.zoom_factor))
-
-                for nid, (nx, ny) in drag_state["multi_starts"].items():
-                    if nid != n.id and nid in self.nodes and nid in self.node_cards:
-                        other = self.nodes[nid]
-                        other.x = nx + dx
-                        other.y = ny + dy
-                        self.node_cards[nid].move(int(other.x * self.zoom_factor), int(other.y * self.zoom_factor))
-
-                for nid, (nx, ny) in drag_state["child_starts"].items():
-                    if nid in self.nodes and nid in self.node_cards:
-                        other = self.nodes[nid]
-                        other.x = nx + dx
-                        other.y = ny + dy
-                        self.node_cards[nid].move(int(other.x * self.zoom_factor), int(other.y * self.zoom_factor))
-
-                self.map_area.update()
-
-        def on_release(event, n=node):
-            if event.button() != Qt.LeftButton:
-                return
-            ctrl = bool(event.modifiers() & Qt.ControlModifier)
-            if self.current_tool == "select" and not drag_state["dragging"]:
-                if not ctrl:
-                    self.selected_node_ids.clear()
-                    self._refresh_card_highlights()
-                    self.handle_node_click(n.id)
-            if drag_state["dragging"]:
-                self.mark_unsaved()
-            drag_state["dragging"] = False
-            drag_state["start_global"] = None
-
-        card.mousePressEvent = on_press
-        card.mouseMoveEvent = on_move
-        card.mouseReleaseEvent = on_release
+        # A bound method, not ``lambda node_id=node.id: ...``: PySide holds
+        # a bound-method slot weakly, so the connection adds no reference to
+        # the card or to this window.  The lambda added both and outlived
+        # the card (review G/L3, same shape as MainWindow._wire_card).
+        card.done_btn.clicked.connect(self._on_node_done_clicked)
 
         return card
-    
+
+    # ── node card interaction ────────────────────────────────────────────
+    #
+    # These four used to be three closures plus a ``drag_state`` dict
+    # assigned onto every card (``card.mousePressEvent = on_press`` &c.,
+    # review G/L3).  Each closure captured the node, the card AND this
+    # window, and lived in the card's own ``__dict__``: a reference cycle
+    # rooted on a live Qt object, so a 40-node map orphaned 120 closures
+    # plus the window on every rebuild, and ``deleteLater()`` could not
+    # break any of it.  ``FlowNodeCard`` calls these as plain methods now
+    # (ui/flow/widgets/flow_node_card.py) — nothing is stored on the card.
+
+    #: The drag in flight, if any.  One dict for the window rather than one
+    #: per card: the mouse is grabbed by the card that was pressed, so only
+    #: one card can ever be mid-drag.
+    _node_drag_state = None
+
+    def _node_drag(self) -> dict:
+        if self._node_drag_state is None:
+            self._node_drag_state = {
+                "dragging": False,
+                "start_global": None,
+                "start_node": (0.0, 0.0),
+                "multi_starts": {},
+                "child_starts": {},
+            }
+        return self._node_drag_state
+
+    def _on_node_done_clicked(self):
+        """The ✓ on a node card. Resolves the card from the button, not a
+        closure (same pattern as ``MainWindow._on_card_delete_clicked``)."""
+        button = self.sender()
+        if button is None:
+            return
+        card = button.parentWidget()
+        while card is not None and getattr(card, "done_btn", None) is not button:
+            card = card.parentWidget()
+        if card is not None:
+            self.toggle_node_completed(card.node_id)
+
+    def on_node_card_press(self, card, event):
+        n = self.nodes.get(card.node_id)
+        if n is None or event.button() != Qt.LeftButton:
+            return
+        drag_state = self._node_drag()
+        drag_state["dragging"] = False
+        drag_state["start_global"] = event.globalPosition().toPoint()
+        drag_state["start_node"] = (n.x, n.y)
+
+        if self.current_tool == "select":
+            ctrl = bool(event.modifiers() & Qt.ControlModifier)
+            if ctrl:
+                if n.id in self.selected_node_ids:
+                    self.selected_node_ids.discard(n.id)
+                else:
+                    self.selected_node_ids.add(n.id)
+                self._refresh_card_highlights()
+
+            drag_state["multi_starts"] = {
+                nid: (self.nodes[nid].x, self.nodes[nid].y)
+                for nid in self.selected_node_ids
+                if nid in self.nodes
+            }
+            if self.move_children_with_parent:
+                child_starts = {}
+                primary = self.selected_node_ids if self.selected_node_ids else {n.id}
+                for nid in primary:
+                    for desc_id in self._get_all_descendants(nid):
+                        if desc_id not in primary and desc_id not in child_starts:
+                            if desc_id in self.nodes:
+                                child_starts[desc_id] = (self.nodes[desc_id].x, self.nodes[desc_id].y)
+                drag_state["child_starts"] = child_starts
+            else:
+                drag_state["child_starts"] = {}
+        else:
+            self.handle_node_click(n.id)
+
+    def on_node_card_move(self, card, event):
+        n = self.nodes.get(card.node_id)
+        if n is None or not (event.buttons() & Qt.LeftButton):
+            return
+        drag_state = self._node_drag()
+        if self.current_tool != "select" or drag_state["start_global"] is None:
+            return
+        delta = event.globalPosition().toPoint() - drag_state["start_global"]
+        if not drag_state["dragging"]:
+            if abs(delta.x()) > 5 or abs(delta.y()) > 5:
+                drag_state["dragging"] = True
+        if drag_state["dragging"]:
+            sx, sy = drag_state["start_node"]
+            dx = delta.x() / self.zoom_factor
+            dy = delta.y() / self.zoom_factor
+            n.x = sx + dx
+            n.y = sy + dy
+            card.move(int(n.x * self.zoom_factor), int(n.y * self.zoom_factor))
+
+            for nid, (nx, ny) in drag_state["multi_starts"].items():
+                if nid != n.id and nid in self.nodes and nid in self.node_cards:
+                    other = self.nodes[nid]
+                    other.x = nx + dx
+                    other.y = ny + dy
+                    self.node_cards[nid].move(int(other.x * self.zoom_factor), int(other.y * self.zoom_factor))
+
+            for nid, (nx, ny) in drag_state["child_starts"].items():
+                if nid in self.nodes and nid in self.node_cards:
+                    other = self.nodes[nid]
+                    other.x = nx + dx
+                    other.y = ny + dy
+                    self.node_cards[nid].move(int(other.x * self.zoom_factor), int(other.y * self.zoom_factor))
+
+            self.map_area.update()
+
+    def on_node_card_release(self, card, event):
+        n = self.nodes.get(card.node_id)
+        if n is None or event.button() != Qt.LeftButton:
+            return
+        drag_state = self._node_drag()
+        ctrl = bool(event.modifiers() & Qt.ControlModifier)
+        if self.current_tool == "select" and not drag_state["dragging"]:
+            if not ctrl:
+                self.selected_node_ids.clear()
+                self._refresh_card_highlights()
+                self.handle_node_click(n.id)
+        if drag_state["dragging"]:
+            self.mark_unsaved()
+        drag_state["dragging"] = False
+        drag_state["start_global"] = None
+
     def qt_align_top_center(self):
         return Qt.AlignTop | Qt.AlignHCenter
 

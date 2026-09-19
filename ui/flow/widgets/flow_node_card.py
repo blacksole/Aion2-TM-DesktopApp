@@ -144,6 +144,40 @@ class FlowNodeCard(QFrame):
             label.style().unpolish(label)
             label.style().polish(label)
 
+    # ── mouse: click-to-select and drag, owned by the window ──────────────
+    #
+    # These three used to be closures assigned onto each card from
+    # ``FlowAppWindow.create_node_card`` (``card.mousePressEvent =
+    # on_press`` &c.).  Each captured the node, the card and the window and
+    # lived in this widget's own ``__dict__`` — a reference cycle rooted on
+    # a live Qt object, three per card plus a shared ``drag_state`` dict, so
+    # a 40-node map orphaned 120 closures and the window on every rebuild
+    # (review G/L3).  Class-level handlers capture nothing; the window is
+    # reached through the ``parent_window`` link the card already had, and
+    # the node through ``node_id``.
+    #
+    # Deliberately no ``super()`` call: the old closures did not chain
+    # either, so the press stays accepted here and does not fall through to
+    # the map area behind the card (which does its own rubber-band/pan).
+
+    def _window_handler(self, name: str):
+        return getattr(self.parent_window, name, None) if self.parent_window else None
+
+    def mousePressEvent(self, event):
+        handler = self._window_handler("on_node_card_press")
+        if handler is not None:
+            handler(self, event)
+
+    def mouseMoveEvent(self, event):
+        handler = self._window_handler("on_node_card_move")
+        if handler is not None:
+            handler(self, event)
+
+    def mouseReleaseEvent(self, event):
+        handler = self._window_handler("on_node_card_release")
+        if handler is not None:
+            handler(self, event)
+
     def enterEvent(self, event):
         if self.parent_window:
             if self.parent_window.current_tool == "add_node":

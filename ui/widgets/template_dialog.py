@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 from ui.widgets.shopping_card import format_currency_price
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QEvent, QObject
 from PySide6.QtGui import QRegularExpressionValidator, QIntValidator
 from PySide6.QtCore import QRegularExpression
 from PySide6.QtWidgets import (
@@ -26,6 +26,70 @@ _SCHEDULE_TEXTS = {"daily": "DAILY", "weekly": "WEEKLY", "season": "SEASON"}
 _PRIO_NAMES = {"low": "priorityLow", "middle": "priorityMiddle", "high": "priorityHigh"}
 _PRIO_TEXTS = {"low": "LOW", "middle": "MID", "high": "HIGH"}
 _SORT_LABELS = {"name": "Name", "priority": "Prio", "schedule": "Schedule", "location": "Location"}
+
+
+class _CheckRow(QFrame):
+    """A row whose whole surface toggles the one checkbox it contains.
+
+    Replaces ``row.mousePressEvent = on_row_press`` (review G/L4), a closure
+    that captured the row *and* its checkbox as default arguments and was
+    stored in the row's own ``__dict__`` — a reference cycle rooted on a
+    live Qt object, which ``deleteLater()`` cannot break: the C++ widget is
+    freed while the Python wrapper keeps the whole dialog subtree reachable
+    until a full ``gc.collect()`` happens to run.
+
+    The checkbox is found through the Qt parent/child tree rather than
+    captured, so this class holds no Python reference to anything: exactly
+    the ``ui/main_window.py::_CardPressFilter`` / ``ArmoryCard`` pattern,
+    in the one shape that fits here (the rows are built inline, one
+    checkbox each, and the behaviour belongs to the row itself).
+
+    The children are ``WA_TransparentForMouseEvents`` (User-reported,
+    2026-09-05: QCheckBox's own hitButton region is narrower than the
+    widget once QSS is applied, and a QLabel swallows the press), so this
+    one handler really does own every pixel of the row.
+    """
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            check = self.findChild(QCheckBox)
+            if check is not None:
+                check.setChecked(not check.isChecked())
+        # The old closure ended in ``QFrame.mousePressEvent(r, event)``.
+        super().mousePressEvent(event)
+
+
+class _RowSelectFilter(QObject):
+    """Turns a left-click on a template row into "select that row".
+
+    Replaces ``row.mousePressEvent = lambda _e, i=index: self._select_*(i)``
+    (review G/L1) — the same cycle as above and the highest-frequency one in
+    the app: the rows are rebuilt on **every keystroke** in the search box
+    (``_on_shop_search_changed`` / ``_on_task_search_changed``), so each
+    keystroke orphaned a pinned copy of the row subtree.
+
+    An event filter needs no capture at all: Qt hands it the event target,
+    so the row arrives as ``obj``, its index comes off the row as a Qt
+    *property* (C++ side), and the dialog is reachable through the filter's
+    Qt parent.  One filter serves every row of both lists.
+    """
+
+    #: Row property -> the ``TemplateDialog`` method that selects it.
+    _SELECTORS = {"shop": "_select_shop_row", "task": "_select_task_row"}
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.MouseButtonPress or event.button() != Qt.LeftButton:
+            return False
+        dialog = self.parent()
+        index = obj.property("rowIndex")
+        selector = self._SELECTORS.get(obj.property("rowKind"))
+        if dialog is None or index is None or selector is None:
+            return False
+        getattr(dialog, selector)(int(index))
+        # True, not False: the old closure REPLACED the row's
+        # mousePressEvent, so the row's own handler never ran and the press
+        # never propagated to the list container behind it.
+        return True
 
 
 def _h_separator() -> QFrame:
@@ -385,7 +449,7 @@ class TemplateDialog(QDialog):
         row.setProperty("selected", (not is_std) and index == self._selected_shop_index)
         if not is_std:
             row.setCursor(Qt.PointingHandCursor)
-            row.mousePressEvent = lambda _e, i=index: self._select_shop_row(i)
+            self._wire_row(row, "shop", index)
 
         hl = QHBoxLayout(row)
         hl.setContentsMargins(12, 10, 12, 10)
@@ -509,7 +573,7 @@ class TemplateDialog(QDialog):
         row.setProperty("selected", (not is_std) and index == self._selected_task_index)
         if not is_std:
             row.setCursor(Qt.PointingHandCursor)
-            row.mousePressEvent = lambda _e, i=index: self._select_task_row(i)
+            self._wire_row(row, "task", index)
 
         hl = QHBoxLayout(row)
         hl.setContentsMargins(12, 10, 12, 10)
@@ -571,6 +635,27 @@ class TemplateDialog(QDialog):
         hl.addWidget(edit_btn)
         hl.addWidget(del_btn)
         return row
+
+    # ── Row wiring ────────────────────────────────────────────────────────────
+
+    #: The one :class:`_RowSelectFilter` this dialog installs on its rows,
+    #: built on first use.  A class-level default rather than an ``__init__``
+    #: assignment because the first ``_rebuild_shop_list()`` already runs
+    #: while ``__init__`` is still building the dialog.
+    _row_select_filter = None
+
+    def _wire_row(self, row, kind: str, index: int):
+        """Make ``row`` selectable without storing anything on it.
+
+        The index goes on the row as a Qt property (C++ side, freed with
+        the widget) and the behaviour comes from a single filter owned by
+        the dialog — see :class:`_RowSelectFilter` for why not a closure.
+        """
+        row.setProperty("rowKind", kind)
+        row.setProperty("rowIndex", index)
+        if self._row_select_filter is None:
+            self._row_select_filter = _RowSelectFilter(self)
+        row.installEventFilter(self._row_select_filter)
 
     # ── Shopping actions ──────────────────────────────────────────────────────
 
@@ -1095,7 +1180,10 @@ class _StandardTemplatePickerDialog(QDialog):
             list_layout.setContentsMargins(0, 0, 0, 0)
             list_layout.setSpacing(4)
             for tmpl in templates:
-                row = QFrame()
+                # _CheckRow, not QFrame: the whole row toggles its checkbox
+                # from a class-level handler instead of a per-row closure
+                # stored on the widget (review G/L4).
+                row = _CheckRow()
                 row.setObjectName("taskCard")
                 row.setCursor(Qt.PointingHandCursor)
                 hl = QHBoxLayout(row)
@@ -1124,11 +1212,6 @@ class _StandardTemplatePickerDialog(QDialog):
                 sched_badge.setObjectName(_SCHEDULE_NAMES.get(sched, "scheduleDaily"))
                 sched_badge.setAttribute(Qt.WA_TransparentForMouseEvents)
                 hl.addWidget(sched_badge)
-
-                def on_row_press(event, c=check, r=row):
-                    c.setChecked(not c.isChecked())
-                    QFrame.mousePressEvent(r, event)
-                row.mousePressEvent = on_row_press
 
                 self._rows.append((row, sched, tmpl.get("location", "").strip()))
                 list_layout.addWidget(row)
@@ -1232,7 +1315,8 @@ class _StandardSyncDialog(QDialog):
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(6)
         for entry in self._entries:
-            row = QFrame()
+            # _CheckRow: see _StandardTemplatePickerDialog above (G/L4).
+            row = _CheckRow()
             row.setObjectName("taskCard")
             row.setCursor(Qt.PointingHandCursor)
             hl = QHBoxLayout(row)
@@ -1261,11 +1345,6 @@ class _StandardSyncDialog(QDialog):
             new_badge.setObjectName("newBadge")
             new_badge.setAttribute(Qt.WA_TransparentForMouseEvents)
             hl.addWidget(new_badge)
-
-            def on_row_press(event, c=check, r=row):
-                c.setChecked(not c.isChecked())
-                QFrame.mousePressEvent(r, event)
-            row.mousePressEvent = on_row_press
 
             list_layout.addWidget(row)
         list_layout.addStretch()

@@ -47,6 +47,15 @@ def _no_animation_crosses_a_test():
 # tests/test_soft_delete.py's `settled` helper).
 
 
+#: The windows a MainWindow owns in Python but NOT as a Qt parent: the
+#: overlay is a parentless ``Qt.Tool``, the Flow Map and the Armory's
+#: ItemDatabase window are parentless top-levels.  ``findChildren`` cannot
+#: reach any of them, so ``destroy_window`` has to name them -- and
+#: ``tests/test_widget_lifecycle.py`` fails the day a fourth appears
+#: (review G/m5).
+HOST_WINDOW_ATTRIBUTES = ("overlay", "flow_map_window", "item_database_window")
+
+
 def destroy_window(window) -> None:
     """Tear a test MainWindow down for real, not just visually.
 
@@ -70,27 +79,40 @@ def destroy_window(window) -> None:
 
     app = QApplication.instance()
 
-    for attribute in ("overlay", "flow_map_window", "item_database_window"):
-        child = getattr(window, attribute, None)
-        if child is not None:
-            child.close()
-            child.deleteLater()
+    named_children = [
+        child
+        for child in (
+            getattr(window, attribute, None) for attribute in HOST_WINDOW_ATTRIBUTES
+        )
+        if child is not None
+    ]
 
-    for timer_attribute in ("countdown_timer", "_tick_timer"):
-        timer = getattr(window, timer_attribute, None)
-        if timer is not None:
+    # Timers FIRST, on the window AND on each parentless child, before
+    # anything is closed (review G/m5).  The sweep used to run only on
+    # ``window`` and only after the close loop above had already
+    # ``deleteLater``'d those three -- so the two window trees whose timers
+    # actually matter (the overlay's 1 s ``_tick_timer``, the Armory's icon
+    # request timer) were never reached by it: ``findChildren`` sees Qt
+    # children, and a parentless top-level is not one.
+    #
+    # A slot that runs after its C++ side is gone raises inside the Qt event
+    # loop ("Internal C++ object already deleted"), which pytest-qt reports
+    # against whichever test happened to pump next.  So: stop every timer
+    # while the objects its slot touches are still alive, then drain what
+    # was already queued.
+    for root in [window, *named_children]:
+        for timer_attribute in ("countdown_timer", "_tick_timer"):
+            timer = getattr(root, timer_attribute, None)
+            if timer is not None:
+                timer.stop()
+        for timer in root.findChildren(QTimer):
             timer.stop()
-
-    # Every OTHER timer in the tree, by discovery rather than by name, and
-    # its already-queued timeout drained while the objects its slot touches
-    # are still alive.  A slot that runs after the C++ side is gone raises
-    # inside the Qt event loop ("Internal C++ object already deleted"), which
-    # pytest-qt reports against whichever test happened to pump next -- the
-    # Armory's icon-request timer did exactly that.
-    for timer in window.findChildren(QTimer):
-        timer.stop()
     if app is not None:
         app.processEvents()
+
+    for child in named_children:
+        child.close()
+        child.deleteLater()
 
     window.close()
     window.deleteLater()

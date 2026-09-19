@@ -32,6 +32,7 @@ import pytest
 from PySide6.QtCore import QDeadlineTimer, QEvent, QEventLoop, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QLabel
 
 from core import theme
 from core.translations import TRANSLATIONS, tr
@@ -217,6 +218,132 @@ def test_build_name_is_blank_when_the_selected_build_does_not_exist():
     )
     assert summary.build_name == ""
     assert summary.is_empty is False
+    assert summary.has_equip_build is False
+
+
+# --- m2: a non-finite enchant level must not take the app down -------------
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (float("inf"), (None, None)),      # int(inf) raises OverflowError
+        (float("-inf"), (None, None)),     # -inf > 0 is False, but guard it anyway
+        (float("nan"), (None, None)),      # NaN > 0 is already False
+        (12.0, (12, 12)),                  # a finite float still counts
+    ],
+)
+def test_a_non_finite_enchant_level_cannot_raise(value, expected):
+    """``json.loads`` accepts ``Infinity``, and ``int(inf)`` raises
+    OverflowError — which would propagate through set_build_planner_state
+    -> load_profile (try/finally, no except) into MainWindow.__init__, i.e.
+    the app would not start (review G/m2)."""
+    state = _synthetic_state()
+    state["equip_builds_data"]["gladiator"]["PvE t1"]["enchant"] = {"MainHand": value}
+    summary = summarize_build_planner(state)
+    assert (summary.enchant_min, summary.enchant_max) == expected
+
+
+def test_a_non_finite_level_does_not_hide_the_finite_ones():
+    state = _synthetic_state()
+    state["equip_builds_data"]["gladiator"]["PvE t1"]["enchant"] = {
+        "MainHand": float("inf"),
+        "Torso": 9,
+    }
+    summary = summarize_build_planner(state)
+    assert (summary.enchant_min, summary.enchant_max) == (9, 9)
+
+
+# --- m3: "0/20 slots" over a build that was never read ---------------------
+
+
+def _state_with_an_unresolvable_class() -> dict:
+    """A class the equip store has no key for, but real content elsewhere.
+
+    ``daevanion_active`` and ``pantheon_slots`` are class-INDEPENDENT, so
+    this state is not ``is_empty`` and the build card renders.
+    """
+    state = _synthetic_state()
+    state["character_class"] = "Gladiatorr"  # misspelled: no equip_builds_data key
+    return state
+
+
+def test_an_unresolvable_class_reports_no_equip_build():
+    summary = summarize_build_planner(_state_with_an_unresolvable_class())
+    assert summary.is_empty is False
+    assert summary.equipped_slots == 0
+    assert summary.has_equip_build is False
+
+
+def test_the_slots_line_is_hidden_when_the_build_was_never_found(page):
+    """Review G/m3: the hint used to be unconditional, so a misspelled or
+    not-yet-chosen class rendered "0/20 slots equipped" over a build the
+    page had never read."""
+    page.set_build_planner_state(_state_with_an_unresolvable_class())
+
+    hints = [label.text() for label in page.build_card._hint_labels if not label.isHidden()]
+    slots_line = tr("en", "armory_card_slots", equipped=0, total=len(ARMORY_EQUIP_SLOTS))
+    assert slots_line not in hints, "the card still claims 0 of 20 slots"
+    assert not any("0" in hint and "/" in hint for hint in hints), hints
+    # What IS known still shows.
+    assert not page.build_card.isHidden()
+    assert page.daevanion_card.value_label.text() == tr(
+        "en", "armory_card_daevanion_value", count=4
+    )
+
+
+def test_the_slots_line_is_shown_when_the_build_resolves(page):
+    page.set_build_planner_state(_synthetic_state())
+    hints = [label.text() for label in page.build_card._hint_labels if not label.isHidden()]
+    assert hints[0] == tr(
+        "en", "armory_card_slots", equipped=2, total=len(ARMORY_EQUIP_SLOTS)
+    )
+
+
+# --- m11 / m12: the display face and the card's own padding ----------------
+
+
+def test_the_display_face_elides_and_keeps_the_whole_string(page):
+    """MASTER-neutral fix for review G/m11: a value wider than its cell was
+    clipped mid-glyph with no ellipsis and no tooltip."""
+    long_value = "Gladiator · Elyos · " + "Eine sehr lange Buildbezeichnung " * 3
+    page.build_card.set_value(long_value)
+    label = page.build_card.value_label
+
+    assert label.text() == long_value, "the logical text must stay whole"
+    assert label.toolTip() == long_value, "no tooltip = the rest is unreadable"
+
+    label.setFixedWidth(120)
+    QApplication.instance().processEvents()
+    painted = QLabel.text(label)
+    assert painted != long_value and painted.endswith("…"), (
+        f"the face is clipped rather than elided: {painted!r}"
+    )
+    assert label.text() == long_value
+
+
+def test_a_short_value_is_not_elided(page):
+    page.build_card.value_label.setFixedWidth(600)
+    page.build_card.set_value("Gladiator")
+    QApplication.instance().processEvents()
+    assert QLabel.text(page.build_card.value_label) == "Gladiator"
+
+
+def test_the_card_padding_is_space_3(page):
+    """MASTER §3 "Carte": padding `3`.  It was (16, 12, 16, 12) — space_4
+    horizontally — the only card in the app with its own padding (G/m12)."""
+    from ui.pages.armory_page import CARD_PADDING
+
+    assert CARD_PADDING == theme.THEMES["abyss"].space_3
+    assert len({tokens.space_3 for tokens in theme.THEMES.values()}) == 1, (
+        "space_3 now differs per theme — the card margin can no longer be a "
+        "plain int here"
+    )
+    for card in (page.build_card, page.daevanion_card, page.items_card):
+        margins = card.layout().contentsMargins()
+        assert (
+            margins.left(), margins.top(), margins.right(), margins.bottom()
+        ) == (CARD_PADDING,) * 4
 
 
 # ---------------------------------------------------------------------------

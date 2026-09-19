@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QSlider, QMenu, QWidgetAction, QCheckBox,
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QPoint, QTimer, Signal
 from PySide6.QtGui import QPainter, QColor, QActionGroup
 
 from core import theme
@@ -334,6 +334,65 @@ class OverlayCountdownRow(_ColoredRow):
         )
 
 
+class _ClickableWidget(QWidget):
+    """A bare widget that reports a left-click as a signal.
+
+    The accordion header used to be wired with
+    ``self._header.mousePressEvent = lambda _event: self._toggle()``
+    (review G/L2): a closure capturing the section, stored in the header's
+    own ``__dict__``.  That is a reference cycle rooted on a live Qt object
+    — header -> its instance dict -> the lambda -> the section -> the
+    header — and it mattered here more than anywhere: the overlay is the
+    always-on HUD and ``refresh()`` rebuilds every section from scratch on
+    every task toggle and every countdown tick, so each rebuild orphaned a
+    pinned section subtree.
+
+    A signal costs neither capture: PySide holds a bound-method slot
+    weakly, so ``clicked.connect(section._toggle)`` adds no reference in
+    either direction (same reasoning as ``MainWindow._wire_card``).
+    """
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class _ResizeHandle(QWidget):
+    """The overlay's bottom grip: drag state as signals, not stored methods.
+
+    ``self._resize_handle.mousePressEvent = self._on_handle_press`` and its
+    two siblings (review G/L4) stored **bound methods** on the handle, so
+    the handle's instance dict pointed at the OverlayWindow.  The overlay is
+    parentless *and* holds ``self.main_window``, so that single cycle
+    transitively pinned the entire MainWindow — structurally the reason
+    ``tests/conftest.py::destroy_window`` needs a ``gc.collect()`` at all.
+
+    The handle reports positions instead; the window keeps the arithmetic.
+    """
+
+    pressed = Signal(QPoint)
+    moved = Signal(QPoint)
+    released = Signal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.pressed.emit(event.globalPosition().toPoint())
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton:
+            self.moved.emit(event.globalPosition().toPoint())
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.released.emit()
+        super().mouseReleaseEvent(event)
+
+
 class _AccordionSection(QWidget):
     """A collapsible section: clickable header (chevron/title/count) + body.
 
@@ -351,7 +410,7 @@ class _AccordionSection(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        self._header = QWidget()
+        self._header = _ClickableWidget()
         self._header.setObjectName("OverlaySectionHead")
         self._header.setCursor(Qt.PointingHandCursor)
         # A plain QWidget doesn't paint its stylesheet background/border by
@@ -384,7 +443,9 @@ class _AccordionSection(QWidget):
         outer.addWidget(self._header)
         outer.addWidget(self._body)
 
-        self._header.mousePressEvent = lambda _event: self._toggle()
+        # A bound method, not a lambda stored on the header: PySide holds it
+        # weakly, so the connection adds no reference (review G/L2).
+        self._header.clicked.connect(self._toggle)
         self._apply_open_state()
 
     def add_row(self, widget: QWidget):
@@ -524,13 +585,15 @@ class OverlayWindow(QWidget):
         outer.addWidget(self._scroll)
 
         # resize handle
-        self._resize_handle = QWidget()
+        self._resize_handle = _ResizeHandle()
         self._resize_handle.setFixedHeight(6)
         self._resize_handle.setCursor(Qt.SizeVerCursor)
         self._resize_handle.setObjectName("OverlayResizeHandle")
-        self._resize_handle.mousePressEvent = self._on_handle_press
-        self._resize_handle.mouseMoveEvent = self._on_handle_move
-        self._resize_handle.mouseReleaseEvent = self._on_handle_release
+        # Three bound-method slots instead of three bound methods stored in
+        # the handle's __dict__ (review G/L4).
+        self._resize_handle.pressed.connect(self._on_handle_press)
+        self._resize_handle.moved.connect(self._on_handle_move)
+        self._resize_handle.released.connect(self._on_handle_release)
         outer.addWidget(self._resize_handle)
 
         self.resize(360, 300)
@@ -983,18 +1046,21 @@ class OverlayWindow(QWidget):
 
     # drag & resize
 
-    def _on_handle_press(self, event):
-        if event.button() == Qt.LeftButton:
-            self._resize_pos = event.globalPosition().toPoint()
-            self._resize_start_h = self.height()
+    def _on_handle_press(self, global_pos):
+        """``_ResizeHandle.pressed`` — remember where the drag started."""
+        self._resize_pos = global_pos
+        self._resize_start_h = self.height()
 
-    def _on_handle_move(self, event):
-        if self._resize_pos and event.buttons() & Qt.LeftButton:
-            delta = event.globalPosition().toPoint().y() - self._resize_pos.y()
-            new_h = max(80, self._resize_start_h + delta)
-            self.resize(self.width(), new_h)
+    def _on_handle_move(self, global_pos):
+        """``_ResizeHandle.moved`` — resize by the delta since the press."""
+        if self._resize_pos is None:
+            return
+        delta = global_pos.y() - self._resize_pos.y()
+        new_h = max(80, self._resize_start_h + delta)
+        self.resize(self.width(), new_h)
 
-    def _on_handle_release(self, event):
+    def _on_handle_release(self):
+        """``_ResizeHandle.released`` — the drag is over."""
         self._resize_pos = None
         self._resize_start_h = None
 
