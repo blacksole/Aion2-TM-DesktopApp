@@ -98,12 +98,21 @@ def test_every_engine_module_imports_with_pyside6_blocked(module_name, tmp_path)
     assert result.stdout.strip().startswith("OK")
 
 
-def test_the_package_really_has_the_modules_stage_1_promised():
+def test_the_package_really_has_the_modules_the_two_stages_promised():
     """A guard on the guard: if the glob above found nothing, every
-    parametrized test would vacuously pass."""
+    parametrized test would vacuously pass.
+
+    Stage 2 (2026-09-19) added ``providers``/``score``/``recommend``.
+    ``providers`` is the interesting one for THIS module: it is the first
+    engine module that touches the filesystem, and the rule it has to keep
+    is that it does so with ``json`` and ``pathlib`` — a Qt-free
+    ``DetailProvider`` is the entire reason a recommendation can be computed
+    on the landing page, before any Armory window exists.
+    """
     assert set(ENGINE_MODULES) >= {
         "__init__", "arcana", "daevanion", "enchant", "explain",
-        "model", "sets", "stats", "substats", "transfer",
+        "model", "providers", "recommend", "score", "sets", "stats",
+        "substats", "transfer",
     }
 
 

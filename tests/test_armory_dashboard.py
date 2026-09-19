@@ -25,6 +25,7 @@ Seams these tests depend on (KEEP THEM STABLE):
 
 import json
 import shutil
+import sys
 from array import array
 from pathlib import Path
 
@@ -45,6 +46,15 @@ from ui.pages.armory_page import (
 )
 
 REPO = Path(__file__).resolve().parent.parent
+
+# The recommendation card renders ENGINE objects (duck-typed: text_key,
+# text_kwargs, reasons).  Building the fakes out of the real dataclasses --
+# rather than out of a local stub -- is what makes these tests fail if the
+# explain contract changes shape, which is the whole point of having one.
+if str(REPO / "ItemDatabase") not in sys.path:
+    sys.path.insert(0, str(REPO / "ItemDatabase"))
+from armory_engine.explain import Reason, Recommendation  # noqa: E402
+
 FIXTURE_PROFILE = REPO / "tests" / "fixtures" / "reset_profile.json"
 REAL_PROFILE = REPO / "profiles" / "Claude.json"
 SHOTS = REPO / "docs" / "audit-2026-09-18" / "shots" / "aether"
@@ -67,6 +77,27 @@ NEW_KEYS = (
     "armory_card_open_crafting",
     "armory_empty_title",
     "armory_empty_hint",
+)
+
+#: The Stage-2 recommendation keys (B-armory.md §3.4 #1/#2).  Listed apart
+#: from NEW_KEYS because half of them are never written in this repo's Python
+#: at all: they arrive as ``text_key`` strings from
+#: ``ItemDatabase/armory_engine``, so ``tests/test_i18n_leaks.py``'s literal
+#: scan cannot see them and this is the only gate they have.
+RECO_KEYS = (
+    "armory_reco_title",
+    "armory_reco_why",
+    "armory_reco_needs_data",
+    "armory_reco_empty",
+    "armory_reco_set_incomplete",
+    "armory_reason_set_missing_piece",
+    "armory_reco_substat_alignment",
+    "armory_reason_substat_missing",
+    "armory_reason_slot_off_profile",
+    "armory_reco_stat_gap",
+    "armory_reason_stat_absent",
+    "armory_reason_stat_thin",
+    "armory_reason_stat_behind",
 )
 
 #: Fusion's own default surfaces — the signature of a widget the stylesheet
@@ -767,3 +798,303 @@ def test_the_armory_dashboard_renders_with_no_fusion_grey(win, qapp, name):
         f"{name}: the Armory card ground is {hex(centre)}, expected {hex(expected)}"
     )
     win.apply_theme("abyss")
+
+
+# ---------------------------------------------------------------------------
+# 6. the Recommendations card (Stage 2, B-armory.md §3.4 #1/#2)
+#
+# The engine itself is tested without Qt in
+# tests/test_armory_engine_recommend.py.  What is tested HERE is the seam:
+# that a Recommendation survives the trip to a widget as a translation KEY
+# (so a language switch after the solve still renders), that "Why?" gates
+# the reasons, and that the degradation line is the one the audit asked for.
+# ---------------------------------------------------------------------------
+
+
+def _reco(text_key, reasons=(), **kwargs):
+    return Recommendation(
+        pick={"kind": "test"}, score_delta=0.0, reasons=tuple(reasons),
+        text_key=text_key, text_kwargs=kwargs,
+    )
+
+
+def _set_reco():
+    """What ``missing_set_pieces`` produces for a set that is one piece
+    short — the exact shape, built by hand."""
+    return _reco(
+        "armory_reco_set_incomplete",
+        reasons=(
+            Reason(
+                stat_id="", delta=1.0, weight=0.25,
+                text_key="armory_reason_set_missing_piece",
+                text_kwargs={"slot": "Ring", "set": "Abyssal",
+                             "source": "Expedition", "item": "Abyssal Ring"},
+            ),
+        ),
+        set="Abyssal", owned=3, total=4, source="Expedition",
+    )
+
+
+@pytest.mark.parametrize("language", sorted(TRANSLATIONS))
+@pytest.mark.parametrize("key", RECO_KEYS)
+def test_every_recommendation_key_exists_in_every_language(language, key):
+    assert key in TRANSLATIONS[language], f"{language} is missing {key}"
+    assert TRANSLATIONS[language][key].strip(), f"{language}[{key}] is empty"
+
+
+def test_every_engine_text_key_has_a_translation():
+    """The keys the ENGINE emits, read off the engine's own constants rather
+    than retyped here: a solver that invents a key nobody translated would
+    ship the key itself rendered on screen (``tr`` falls back to it)."""
+    from armory_engine import providers as engine_providers
+    from armory_engine import recommend as engine_recommend
+    from armory_engine import score as engine_score
+
+    emitted = {
+        engine_providers.DATA_MISSING_KEY,
+        engine_recommend.RECO_SET_INCOMPLETE,
+        engine_recommend.REASON_SET_MISSING_PIECE,
+        engine_recommend.RECO_STAT_GAP,
+        engine_score.REASON_STAT_ABSENT,
+        engine_score.REASON_STAT_THIN,
+        engine_score.REASON_STAT_BEHIND,
+        engine_score.REASON_STAT_SUBSTAT_MISSING,
+        engine_score.REASON_SLOT_OFF_PROFILE,
+        engine_score.RECO_SUBSTAT_ALIGNMENT,
+    }
+    assert emitted <= set(RECO_KEYS)
+    for language, table in TRANSLATIONS.items():
+        assert emitted <= set(table), f"{language} is missing {sorted(emitted - set(table))}"
+
+
+def test_the_recommendation_keys_format_with_the_kwargs_the_engine_sends():
+    assert tr("en", "armory_reco_set_incomplete", set="Abyssal", owned=3, total=4,
+              source="Expedition") == "Abyssal: 3/4 pieces — the rest from Expedition"
+    assert tr("en", "armory_reason_stat_thin", stat="Critical Hit", slots=1,
+              total=4) == "Critical Hit: only 1 of 4 slots provide any"
+    assert tr("en", "armory_reason_stat_behind", stat="Attack", slots=1, total=4,
+              value=650.0, reference=1000.0) == (
+        "Attack: 650 against 1000 in the comparison build"
+    )
+
+
+def test_the_card_shows_the_degradation_line_when_there_is_no_data(page):
+    """Audit §3.4's graceful degradation, as the user sees it: one line that
+    says why, not an empty card that reads as "nothing to improve"."""
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations([_reco("armory_reco_needs_data")])
+
+    rows = page.reco_card.visible_rows()
+    assert [row.text_label.text() for row in rows] == [tr("en", "armory_reco_needs_data")]
+    # Nothing to expand: a recommendation with no reasons explains itself.
+    assert rows[0].why_button.isHidden()
+
+
+def test_no_recommendation_at_all_reads_as_nothing_to_improve(page):
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations([])
+    rows = page.reco_card.visible_rows()
+    assert [row.text_label.text() for row in rows] == [tr("en", "armory_reco_empty")]
+
+
+def test_a_recommendation_renders_its_line_and_hides_its_reasons(page):
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations([_set_reco()])
+
+    (row,) = page.reco_card.visible_rows()
+    assert row.text_label.text() == tr(
+        "en", "armory_reco_set_incomplete", set="Abyssal", owned=3, total=4, source="Expedition"
+    )
+    assert not row.why_button.isHidden()
+    assert row.why_button.text() == tr("en", "armory_reco_why")
+    assert row.why_label.isHidden()
+
+
+def test_why_reveals_the_reasons_and_hides_them_again(page):
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations([_set_reco()])
+    (row,) = page.reco_card.visible_rows()
+
+    row.why_button.setChecked(True)
+    assert not row.why_label.isHidden()
+    assert row.why_label.text() == tr(
+        "en", "armory_reason_set_missing_piece", slot="Ring", set="Abyssal",
+        source="Expedition", item="Abyssal Ring",
+    )
+
+    row.why_button.setChecked(False)
+    assert row.why_label.isHidden()
+
+
+def test_the_rows_are_reused_rather_than_rebuilt(page):
+    """The page lives for the whole session and re-renders on every state
+    push; churning widgets under it is what the hint labels already avoid."""
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations([_set_reco(), _reco("armory_reco_needs_data")])
+    before = page.reco_card.rows
+    assert len(before) == 2
+
+    page.set_recommendations([_set_reco()])
+    after = page.reco_card.rows
+    assert after[0] is before[0] and after[1] is before[1]
+    assert len(page.reco_card.visible_rows()) == 1
+
+
+def test_a_language_switch_re_renders_a_recommendation_solved_earlier(page):
+    """The reason ``text_key`` is a KEY and not a sentence: the solve happens
+    on a state push, the render happens later, and the language can change in
+    between."""
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations([_set_reco()])
+    (row,) = page.reco_card.visible_rows()
+    row.why_button.setChecked(True)
+    english = row.text_label.text()
+
+    page.update_language("de", tr)
+    (row,) = page.reco_card.visible_rows()
+    assert row.text_label.text() != english
+    assert row.text_label.text() == tr(
+        "de", "armory_reco_set_incomplete", set="Abyssal", owned=3, total=4, source="Expedition"
+    )
+    assert page.reco_card.title_label.text() == tr("de", "armory_reco_title")
+    assert row.why_button.text() == tr("de", "armory_reco_why")
+
+
+def test_a_key_whose_placeholders_disagree_falls_back_to_the_key(page):
+    """Guarded because this runs inside a paint: a mismatch between an
+    engine's kwargs and a translation's placeholders must show a visible
+    typo, not stop the page from drawing."""
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations([_reco("armory_reco_set_incomplete")])  # no kwargs at all
+    (row,) = page.reco_card.visible_rows()
+    assert row.text_label.text() == "armory_reco_set_incomplete"
+
+
+def test_the_card_carries_its_objectnames(page):
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations([_set_reco()])
+    (row,) = page.reco_card.visible_rows()
+    assert page.reco_card.objectName() == "armoryRecoCard"
+    assert page.reco_card.title_label.objectName() == "armoryCardTitle"
+    assert row.objectName() == "armoryRecoItem"
+    assert row.why_button.objectName() == "armoryRecoWhyButton"
+    assert row.why_label.objectName() == "armoryRecoWhy"
+
+
+def test_the_card_is_hidden_with_the_rest_when_there_is_no_build(page):
+    page.set_recommendations([_set_reco()])
+    page.set_build_planner_state(None)
+    assert page.reco_card.isHidden()
+    page.set_build_planner_state(_synthetic_state())
+    assert not page.reco_card.isHidden()
+
+
+@pytest.mark.parametrize("value", [None, 7, "not a sequence"])
+def test_a_non_sequence_push_is_the_same_as_none_yet(page, value):
+    """The host computes these behind a try/except and must be able to say
+    "nothing" without inventing a shape."""
+    page.set_build_planner_state(_synthetic_state())
+    page.set_recommendations(value)
+    assert page.recommendations == ()
+
+
+# ── the host seam ─────────────────────────────────────────────────────────
+
+
+def test_the_single_writer_pushes_recommendations_too(host):
+    """Same M1 reasoning as the summary: one writer, and it tells the page
+    everything the page shows."""
+    host._set_build_planner_state(_real_state())
+    assert isinstance(host.armory_page.recommendations, tuple)
+
+
+def test_this_clone_has_no_data_pack_so_the_card_says_so(host):
+    """Not a hypothetical: ``ItemDatabase/data`` in this repo holds an empty
+    ``details/`` and no ``items_all.json``, which is what every fresh clone
+    looks like."""
+    host._set_build_planner_state(_real_state())
+    rows = host.armory_page.reco_card.visible_rows()
+    assert len(rows) == 1
+    assert rows[0].text_label.text() in (
+        tr(host.language, "armory_reco_needs_data"),
+        tr(host.language, "armory_reco_empty"),
+    )
+
+
+def test_the_data_dir_mirrors_the_armorys_own_bundle_dir(host):
+    """``MainWindow._armory_data_dir`` mirrors ``ItemDatabase/app.py``'s
+    ``_BUNDLE_DIR`` (read-only, never imported).  Drift here means the
+    dashboard reads a catalog the Armory window does not."""
+    assert host._armory_data_dir() == host.project_root / "ItemDatabase" / "data"
+    app_source = (REPO / "ItemDatabase" / "app.py").read_text(encoding="utf-8")
+    assert '_BUNDLE_DIR = Path(sys._MEIPASS) / "ItemDatabase"' in app_source
+    assert "_BUNDLE_DIR = Path(__file__).parent" in app_source
+
+
+def test_the_engine_is_loaded_once_per_session(host):
+    """The recommender runs on every window activation; re-parsing the
+    catalog per Alt-Tab is a file parse for a known answer."""
+    host._armory_engine_cache = None
+    first = host._armory_engine()
+    assert host._armory_engine() is first
+    host._armory_engine_cache = None
+
+
+def test_a_failing_engine_degrades_instead_of_breaking_the_window(host, monkeypatch):
+    """A dashboard card is not worth an unhandled exception on an
+    activation change."""
+    class Boom:
+        def next_best_actions(self, *args, **kwargs):
+            raise RuntimeError("solver exploded")
+
+    monkeypatch.setattr(host, "_armory_engine_cache", (Boom(), None, None))
+    assert host._armory_recommendations(_real_state()) == []
+    host.armory_page.set_recommendations(host._armory_recommendations(_real_state()))
+    assert host.armory_page.recommendations == ()
+
+
+def test_the_recommendation_card_renders_with_no_fusion_grey(win, qapp):
+    """The documented grab (MASTER §4-5 render gate), with a full card: two
+    set recommendations, one expanded, one collapsed."""
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    state = json.loads(REAL_PROFILE.read_text(encoding="utf-8"))["build_planner"]
+
+    win.apply_theme("abyss")
+    win.sidebar.set_active_page("armory")
+    win._set_build_planner_state(state)
+    win.armory_page.set_recommendations([
+        _set_reco(),
+        _reco(
+            "armory_reco_substat_alignment",
+            reasons=(
+                Reason(stat_id="attack", delta=0.0, weight=1.0,
+                       text_key="armory_reason_substat_missing",
+                       text_kwargs={"stat": "Attack"}),
+                Reason(stat_id="combat speed", delta=0.0, weight=0.0,
+                       text_key="armory_reason_slot_off_profile",
+                       text_kwargs={"slot": "Gloves", "stat": "Combat Speed"}),
+            ),
+            aligned=2, total=5, top_n=3,
+        ),
+        _reco("armory_reco_stat_gap", reasons=(
+            Reason(stat_id="CriticalHit", delta=10.0, weight=0.75,
+                   text_key="armory_reason_stat_thin",
+                   text_kwargs={"stat": "Critical Hit", "slots": 1, "total": 4}),
+        ), count=3, gear_type="PvE", role="Angreifer"),
+    ])
+    win.armory_page.reco_card.visible_rows()[0].why_button.setChecked(True)
+    _settle(qapp, 400)
+
+    image = win.grab().toImage()
+    destination = SHOTS / "armory_dashboard_reco.png"
+    assert image.save(str(destination)), f"could not write {destination}"
+
+    assert not _grey_offenders(image), "Fusion default surfaces on the Armory page"
+
+    card_image = win.armory_page.reco_card.grab().toImage()
+    expected = theme.qcolor("abyss", "bg.elevated").rgb() & 0xFFFFFF
+    centre = card_image.pixel(card_image.width() // 2, 4) & 0xFFFFFF
+    assert centre == expected, (
+        f"the Recommendations card ground is {hex(centre)}, expected {hex(expected)}"
+    )
+    win.armory_page.set_recommendations([])

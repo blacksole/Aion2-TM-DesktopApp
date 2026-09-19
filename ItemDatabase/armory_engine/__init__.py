@@ -30,7 +30,14 @@ Modules
 ``transfer``    the upgrade-hop graph, material trees and the Kinah rollup.
 ``sets``        the precomputed dungeon-set table.
 ``stats``       the per-slot stat merge and GearScore, over a DetailProvider.
-``explain``     the data contract every future recommendation returns.
+``explain``     the data contract every recommendation returns.
+``providers``   the disk-backed DetailProvider and the catalog DataBundle.
+``score``       rank-derived role weights, stat coverage, substat alignment.
+``recommend``   set completion, and the orchestrator the dashboard calls.
+
+Stage 2 added the last three (audit §3.4 features #1 and #2).  They keep the
+rule: ``providers`` is the only module that touches the filesystem, and it
+does it with ``json`` and ``pathlib``, not with Qt.
 
 Nothing is re-exported here on purpose: app.py imports from the leaf modules
 by name, which keeps the "where did this come from" answer one grep away.
@@ -42,6 +49,9 @@ __all__ = [
     "enchant",
     "explain",
     "model",
+    "providers",
+    "recommend",
+    "score",
     "sets",
     "stats",
     "substats",

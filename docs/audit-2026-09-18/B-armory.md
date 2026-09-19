@@ -307,3 +307,125 @@ widgets, paid on every profile load — is now skipped for any window whose
 sheet already matches. The return value is "windows now wearing this theme"
 (restyled + already current), which keeps `apply_theme(name) >= 3` meaning
 what `tests/test_armory_theme.py` asserts it means.
+
+---
+
+## Stage 2 done — 2026-09-19 : recos #1/#2
+
+Les deux features **S** du §3.4, livrées derrière le contrat du §3.3. Rien
+d'autre du §3.4 n'est touché : #3/#4/#5 restent ouvertes, pour la raison
+donnée plus bas.
+
+### Ce qui a été ajouté
+
+| Module | Contenu |
+|---|---|
+| `armory_engine/providers.py` | `DiskDetailProvider` (le `DetailProvider` du §3.2 item 2, version disque : lit `data/details/{id}.json`, mémoïse hits **et** miss), `load_json_or_none`, `DataBundle` + `load_data_bundle` (les 3 fichiers catalogue, avec `available`/`reason_key`) |
+| `armory_engine/score.py` | `role_weights` (rang → poids, décroissance géométrique), `merge_role_weights`, `display_names`, `normalize_stat_id`, `stat_name_index`, `stat_gap` / `stat_gap_ranked`, `substat_alignment` |
+| `armory_engine/recommend.py` | `set_root`, `build_set_index`, `missing_set_pieces`, `next_best_actions` |
+| `armory_engine/explain.py` | `Recommendation` gagne `text_key` / `text_kwargs` (additif, avec défauts) |
+| `ui/pages/armory_page.py` | carte « Recommendations » (`#armoryRecoCard`, lignes `#armoryRecoItem`, « Why? » dépliable par ligne) |
+| `ui/main_window.py` | `_armory_data_dir` / `_armory_engine` / `_armory_recommendations`, poussés par l'unique writer `_set_build_planner_state` |
+
+### Feature #1, telle qu'elle est réellement livrable
+
+Le tableau du §3.4 titre #1 « stat gap vs role target » et donne en exemple
+*« tu es 240 Accuracy sous le profil PvE-Angreifer »*. **Cette phrase n'est pas
+livrable** : la cible absolue demande un modèle de combat (valeur marginale
+d'un point, soft caps, rendements décroissants) que le catalogue ne contient
+pas — ce que la dernière ligne du §3.4 dit déjà de l'optimiseur de sous-stats.
+La fabriquer reviendrait à fabriquer le modèle.
+
+Ce qui est livré à la place, et qui tient sans modèle :
+
+1. **Couverture par slot.** Pour chaque stat que le profil classe haut :
+   combien des slots équipés en fournissent, via l'attribution `by_slot` de
+   `compute_stat_totals_detailed` (le §3.1 la nommait « l'actif central » —
+   elle l'est). Tri par `poids × (1 − couverture)`. Sur le build de test :
+   Critical Hit (0.75 × 3/4 = 0.5625) passe devant Attack (1.0 × 1/4 = 0.25),
+   parce qu'Attack est déjà sur 3 pièces sur 4 et que recommander le stat que
+   tout le build porte déjà est du bruit.
+2. **Alignement des sous-stats.** Part des choix qui tombent dans le top-N du
+   profil, plus les slots dont **aucun** choix n'est au profil. Ça compare le
+   joueur à son propre classement — donc aucune cible inventée — et c'est
+   directement actionnable (le picker de sous-stats est à un clic).
+
+Un `reference` (totals d'un build de comparaison) est accepté et bascule le
+calcul sur le seul écart de magnitude légitime : même stat, mêmes unités.
+Personne ne le passe encore ; Build Compare est le consommateur naturel.
+
+### Feature #2
+
+`dungeon_sets.json` donne `{tag: {root: {grade, gearscore}}}` mais **pas** les
+pièces : elles se retrouvent en re-appliquant à `items_all.json` la règle de
+suffixe de `compute_dungeon_sets.py` (`"Abyssal Helm"` → root `"Abyssal"`).
+`SET_SLOT_WORDS` est donc un **miroir** de `DUNGEON_SET_SLOT_WORDS`, et la
+dérive n'est pas laissée à un commentaire : le test parse le script et compare
+les deux listes. La passe 2 du script (préfixe de deux mots pour les armes
+« flavor-named » du Crafting) n'est pas reproduite — ces roots sont exclus du
+fichier écrit de toute façon, et un root que plus aucun item ne résout ne
+produit simplement aucune pièce, ce qui est la bonne dégradation.
+
+Deux détails qui viennent des vraies données : les copies liées/non liées
+partagent un nom (l'id le plus bas gagne, sinon la pièce recommandée change
+d'un rafraîchissement à l'autre), et un root peut être listé sous plusieurs
+tags (le premier alphabétiquement gagne, même raison).
+
+### Un bug attrapé en écrivant les tests
+
+`stat_name_index` construisait `{id brut: nom}` alors que
+`compute_stat_totals_detailed` réécrit les ids via `_GEAR_STAT_ID_ALIASES`
+(`"Defense"` sur la pièce → `"DefenseBonus"` dans les totals). La jointure
+échouait donc **exactement sur les stats pour lesquelles la table d'alias
+existe**, et silencieusement : le stat ressortait comme « aucune pièce n'en
+fournit ». Corrigé (l'index applique l'alias) et gaté par
+`test_the_name_index_uses_the_totals_spelling_not_the_pieces`.
+
+### Dégradation (le chemin nominal ici)
+
+`ItemDatabase/data/` de ce clone ne contient ni `items_all.json` ni un seul
+fichier de détail — c'est l'état de tout clone frais. Les quatre chemins :
+
+| Situation | Résultat |
+|---|---|
+| pas de `items_all.json` | **une** recommandation `armory_reco_needs_data` → la carte affiche « Recommendations need the Armory data pack… » |
+| pas de `dungeon_sets.json` | pas de recos de set, le reste tourne |
+| pas de provider / aucun détail lisible | **aucune** feature de stat (des totals vides et un build qui ne porte réellement rien donnent les mêmes chiffres et veulent dire l'inverse) ; les recos de set tournent, elles n'ont besoin que des noms |
+| données présentes, rien à dire | liste vide → la carte affiche « rien à améliorer » |
+
+### Ce qui n'a pas été fait, et pourquoi
+
+- **Rôle choisi par le joueur.** L'état persisté porte `active_gear_types`
+  (donc PvE/PvP est lu) mais **pas** de rôle : c'est une sélection par dialogue
+  (`StatPriorityEditorDialog.selected_role`), jamais sauvegardée. Le moteur
+  prend `Angreifer` — le seul profil avec un vrai appui guide, les cinq autres
+  étant des copies (§2.2) — et le dit dans la phrase. Un sélecteur de rôle sur
+  le tableau de bord demanderait d'abord une clé de persistance dans
+  `BuildState`, donc une décision de spec, pas une ligne de code.
+- **Rôle traduit.** `{role}` voyage dans les `text_kwargs` mais les trois
+  phrases l'écrivent en dur (« attacker » / « Angreifer » / « атакующий »),
+  puisque la valeur est aujourd'hui constante. Une table de libellés de rôle
+  dans `core/translations.py` viendra avec le sélecteur ci-dessus.
+- **Animation de la révélation « Why? »** : §4-6 de MASTER interdit un sixième
+  site d'animation sans passer par MASTER. Non fait, exprès.
+- **Features #3/#4/#5** : inchangées. #3 et #4 demandent un `score_delta` en
+  espace de stats, donc le modèle de combat ; #5 demande le croisement
+  recettes × `dungeons_all.json`, qui est un travail de données à part entière.
+
+### Tests + gates
+
+- `tests/test_armory_engine_recommend.py` (nouveau, 75 tests) : poids, rangs,
+  couverture, alignement, complétude de set, orchestration, les 4 chemins de
+  dégradation, et le provider/bundle contre un pack de données temporaire.
+  **Aucune valeur enregistrée** — contrairement aux goldens du Stage 1 : ici
+  tout est calculé à la main depuis `tests/fixtures/armory_engine/reco_inputs.py`,
+  parce qu'une valeur enregistrée ne prouverait que « le code refait ce qu'il
+  a fait la première fois ».
+- `tests/test_armory_dashboard.py` : + 30 tests (clés dans les 3 langues, clés
+  émises par le moteur ⊆ clés traduites, rendu avec/sans données, « Why? »,
+  re-rendu après changement de langue, garde de formatage, objectNames, seam
+  hôte, grab).
+- `tests/test_armory_engine_qt_free.py` : les 3 nouveaux modules sont couverts
+  d'office (découverte par glob) ; la liste-garde les nomme.
+- Grab : `docs/audit-2026-09-18/shots/aether/armory_dashboard_reco.png` (Abyss,
+  carte pleine, une ligne dépliée).

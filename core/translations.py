@@ -278,6 +278,23 @@ TRANSLATIONS = {
         "armory_empty_title": "Noch kein Build",
         "armory_empty_hint": "Öffne den Buildplaner, um einen anzulegen — danach steht hier deine Zusammenfassung.",
 
+        # Empfehlungen (Stage 2, docs/audit-2026-09-18/B-armory.md §3.4 #1/#2).
+        # Jeder Text-Key hier wird von einer Recommendation/Reason aus
+        # ItemDatabase/armory_engine geliefert, nie von einem Widget gesetzt.
+        "armory_reco_title": "Empfehlungen",
+        "armory_reco_why": "Warum?",
+        "armory_reco_needs_data": "Für Empfehlungen fehlt das Armory-Datenpaket (öffne einmal die Item-Datenbank, damit es geladen wird).",
+        "armory_reco_empty": "Nichts zu verbessern gefunden — Set vollständig und Substats folgen deinem Profil.",
+        "armory_reco_set_incomplete": "{set}: {owned}/{total} Teile — Rest über {source}",
+        "armory_reason_set_missing_piece": "{slot} fehlt: {item} (Quelle: {source})",
+        "armory_reco_substat_alignment": "{aligned}/{total} Substat-Auswahlen liegen in den Top {top_n} deines Profils",
+        "armory_reason_substat_missing": "{stat} steht weit oben im Profil, wird aber in keinem Slot gewählt",
+        "armory_reason_slot_off_profile": "{slot}: keine Auswahl steht im Profil (z. B. {stat})",
+        "armory_reco_stat_gap": "{count} Werte des {gear_type}-Profils Angreifer sind im Build dünn besetzt",
+        "armory_reason_stat_absent": "{stat}: kein ausgerüstetes Teil liefert davon etwas ({slots}/{total} Slots)",
+        "armory_reason_stat_thin": "{stat}: nur {slots} von {total} Slots liefern davon etwas",
+        "armory_reason_stat_behind": "{stat}: {value:.0f} gegenüber {reference:.0f} im Vergleichs-Build",
+
         "flow_title": "Ablaufplan",
         "flow_window_title": "Ablaufplan Map",
 
@@ -1228,6 +1245,21 @@ TRANSLATIONS = {
         "armory_empty_title": "Билда пока нет",
         "armory_empty_hint": "Откройте планировщик билдов и создайте билд — затем здесь появится сводка.",
 
+        # Рекомендации (этап 2, docs/audit-2026-09-18/B-armory.md §3.4 #1/#2)
+        "armory_reco_title": "Рекомендации",
+        "armory_reco_why": "Почему?",
+        "armory_reco_needs_data": "Для рекомендаций нужен пакет данных Armory (откройте базу предметов один раз, чтобы он загрузился).",
+        "armory_reco_empty": "Улучшать нечего — сет собран, а сабстаты соответствуют профилю.",
+        "armory_reco_set_incomplete": "{set}: {owned}/{total} частей — остальное из «{source}»",
+        "armory_reason_set_missing_piece": "Не хватает «{slot}»: {item} (источник: {source})",
+        "armory_reco_substat_alignment": "{aligned} из {total} выбранных сабстатов входят в топ-{top_n} профиля",
+        "armory_reason_substat_missing": "{stat} высоко в профиле, но не выбран ни в одном слоте",
+        "armory_reason_slot_off_profile": "{slot}: ни один выбор не входит в профиль (например, {stat})",
+        "armory_reco_stat_gap": "{count} характеристик профиля «{gear_type}, атакующий» слабо представлены в билде",
+        "armory_reason_stat_absent": "{stat}: ни один надетый предмет его не даёт ({slots}/{total} слотов)",
+        "armory_reason_stat_thin": "{stat}: его дают только {slots} из {total} слотов",
+        "armory_reason_stat_behind": "{stat}: {value:.0f} против {reference:.0f} в билде сравнения",
+
         "flow_title": "Блок-схема",
         "flow_window_title": "Карта блок-схемы",
 
@@ -2172,6 +2204,21 @@ TRANSLATIONS = {
         "armory_card_open_crafting": "Open Crafting Calculator",
         "armory_empty_title": "No build yet",
         "armory_empty_hint": "Open the Build Planner to create one — your summary then shows up here.",
+
+        # Recommendations (Stage 2, docs/audit-2026-09-18/B-armory.md §3.4 #1/#2)
+        "armory_reco_title": "Recommendations",
+        "armory_reco_why": "Why?",
+        "armory_reco_needs_data": "Recommendations need the Armory data pack (open the Item Database once to download it).",
+        "armory_reco_empty": "Nothing to improve — your set is complete and your substats follow your profile.",
+        "armory_reco_set_incomplete": "{set}: {owned}/{total} pieces — the rest from {source}",
+        "armory_reason_set_missing_piece": "{slot} is missing: {item} (source: {source})",
+        "armory_reco_substat_alignment": "{aligned} of {total} substat picks are in your profile's top {top_n}",
+        "armory_reason_substat_missing": "{stat} is ranked high in the profile but no slot picks it",
+        "armory_reason_slot_off_profile": "{slot}: no pick is in the profile (e.g. {stat})",
+        "armory_reco_stat_gap": "{count} stats the {gear_type} attacker profile ranks high are thin in this build",
+        "armory_reason_stat_absent": "{stat}: no equipped piece provides any ({slots}/{total} slots)",
+        "armory_reason_stat_thin": "{stat}: only {slots} of {total} slots provide any",
+        "armory_reason_stat_behind": "{stat}: {value:.0f} against {reference:.0f} in the comparison build",
 
         "flow_title": "Flow",
         "flow_window_title": "Flow Map",

@@ -197,6 +197,11 @@ Règles de dérivation (une seule, pour que le prochain thème s'ajoute sans arb
 | État vide | icône Lucide 24 px `fg.muted`, titre `font.body 500 fg.secondary`, hint `fg.muted`, action en bouton secondaire |
 | Icônes | Lucide (ISC), 16/20/24 px, couleur héritée via `fg.*` ; aucun emoji comme icône |
 
+Implémentation des deux dernières lignes : `ui/widgets/icons.py`
+(`icon(name, size, token)`, `IconLabel`, `set_icon(bouton, …)`), jeu vendoré
+sous `assets/icons/lucide/`, chevrons pré-teintés par thème sous
+`assets/icons/lucide/tinted/<thème>/`. Voir le journal, 2026-09-19.
+
 ## 4. Règles d'implémentation
 
 1. `core/theme.py` : `THEMES: dict[str, Tokens]`, `tokens(theme) -> Tokens`, `qcolor(token)`, `build_qss(theme) -> str` depuis `ui/styles.template.qss` (`{{token}}`), `apply(app, theme)`.
@@ -289,6 +294,84 @@ touche huit autres morceaux d'état de `LoadoutWindow`. La couper en deux
 laisserait deux fusions qui doivent s'accorder — exactement le bug de
 2026-09-03 que cette méthode a été écrite pour corriger. Elle part entière,
 avec Genius/Arcana/Daevanion/wings, ou pas du tout.
+
+### Recommandations — contrat d'explicabilité (ajout 2026-09-19, Stage 2)
+
+> Stage 2 de `docs/audit-2026-09-18/B-armory.md` : les deux premières
+> features **S** du §3.4 (#1 écart de stats vs profil de rôle, #2 pièce de set
+> manquante). Trois modules de plus dans `armory_engine/` — `providers.py`
+> (le seul qui touche au disque), `score.py`, `recommend.py` — et une carte
+> de plus sur la page Armory.
+
+**1. Toute recommandation s'explique, et l'explication est une donnée.**
+La règle 3 du §5 devient exécutable : `next_best_actions()` ne renvoie que des
+`Recommendation(pick, score_delta, reasons, text_key, text_kwargs)`, chaque
+`Reason` portant `(stat_id, delta, weight, text_key, text_kwargs)`.
+`text_key` est une **clé**, jamais une phrase : le solveur tourne quand l'état
+change, le rendu arrive plus tard, et la langue peut changer entre les deux
+(`tests/test_armory_dashboard.py::test_a_language_switch_re_renders_a_recommendation_solved_earlier`).
+Le `Recommendation` a gagné son propre `text_key` en Stage 2, avec défaut :
+sans lui, le titre de la ligne devait être re-dérivé du `pick` dans le widget
+— exactement le « rendre à partir de ce que le moteur a déjà calculé » que ce
+contrat existe pour empêcher.
+
+**2. Les poids viennent du rang, pas d'un modèle de combat.**
+`score.role_weights()` = décroissance géométrique `decay ** rang`
+(défaut 0.75 : le rang 7, plafond `_STAT_PRIORITY_MAX_ENTRIES`, vaut 0.178 du
+rang 1). C'est tout ce qu'une liste ordonnée contient. Le §3.4 #1 promettait
+« tu es 240 Accuracy sous le profil » ; ce nombre demande une cible absolue,
+donc un modèle de combat que les données ne livrent pas (§3.4, dernière
+ligne). L'inventer, c'est inventer le modèle — et le joueur n'aurait aucun
+moyen de distinguer un chiffre venu du jeu d'un chiffre venu de nous.
+
+Donc ce qui est calculé est **sans unité** :
+
+| Constat | Pourquoi il est défendable |
+|---|---|
+| *couverture par slot* — combien de slots équipés portent un stat que le profil classe haut | « aucune pièce ne fournit ça » est un fait, dans aucune unité |
+| *alignement des sous-stats* — part des choix qui tombent dans le top-N du profil | compare le joueur à **son propre** classement, pas à une cible |
+| *complétude de set* — pièces possédées / pièces du set | pur comptage sur `dungeon_sets.json` |
+| *écart vs build de référence* (optionnel) | même stat, mêmes unités → le ratio a un sens |
+
+Comparer la **magnitude** de deux stats différents (3 000 Attack contre 44
+Critical Hit) est la seule chose que l'absence de modèle interdit. Rien ne le
+fait.
+
+**3. `score_delta` ne somme pas toujours ses `reasons`.**
+`explain.py` promet `score_delta == Σ reason.score_contribution` — vrai pour
+un solveur en espace de stats (§3.4 #3/#4). Les deux features de Stage 2 n'en
+sont pas : leur `score_delta` est une **complétude dans [0, 1]**, et leurs
+`reasons` *énumèrent* le constat au lieu de le décomposer. L'exception est
+`missing_set_pieces`, où la décomposition tombe juste (une raison par pièce
+manquante, chacune valant `1/total`) et où le test le vérifie. Chaque solveur
+dit lequel des deux il est, dans sa propre docstring ; un solveur qui ne le
+dit pas est un bug de revue.
+
+**Ce qu'il faudrait pour un vrai optimiseur** (et qui n'existe pas encore) :
+une valeur marginale par point de stat, les soft caps, les courbes de
+rendement décroissant, et l'interaction avec ce qui est déjà empilé. Avec ça,
+`score_delta` redevient un delta de score réel, les features #3 (meilleur
+upgrade par slot) et #4 (GearScore +N le moins cher) deviennent exactes, et
+`Reason.weight` cesse d'être une approximation par le rang. Sans ça, toute
+« recommandation d'optimisation » serait une opinion déguisée en calcul.
+
+**4. La dégradation est une valeur de retour, pas une liste vide.**
+Un tableau de bord ne sait pas distinguer « rien à améliorer » de « pas de
+données ». `DataBundle.available` / `.reason_key` répondent à la question :
+sans `items_all.json`, `next_best_actions()` renvoie **une** recommandation
+portant `armory_reco_needs_data`, et la carte affiche la phrase. C'est l'état
+normal d'un clone frais (le pack de données fait ~278 Mo et n'est pas dans
+git), donc c'est le chemin nominal, pas une branche d'erreur.
+
+**5. Style.** La carte `#armoryRecoCard` reprend la surface, la bordure et le
+rayon de `#armoryCard` (§15) et n'a **ni `:hover` ni `:focus` accentué** :
+elle n'est pas un bouton, ses lignes le sont. « Why? » est un lien accentué
+(`#armoryRecoWhyButton`), pas un second bouton primaire — §3, un primaire par
+surface. Volontairement **non animée** : `ui/motion.fade_in` conviendrait,
+mais §4-6 dit « aucune autre animation ailleurs » et
+`tests/test_theme_wiring.py::test_exactly_three_places_animate` compte les
+sites d'appel. Un sixième est une décision de design qui passe par ce
+document d'abord, pas un détail de cette carte.
 
 ## Journal d'implémentation
 
@@ -546,16 +629,114 @@ vivaient tous les défauts :
   valeurs Abyss dans trois documents et comparée à elles dans aucun : un
   miroir sans comparaison est un commentaire, pas un contrat. Gate ajouté.
 
+### 2026-09-19 — vague icônes
+
+§3 posait deux lignes (« Icônes : Lucide (ISC), 16/20/24 px, couleur héritée
+via `fg.*` » et « État vide : icône Lucide 24 px `fg.muted` ») que **rien ne
+pouvait tenir** : le dépôt n'embarquait aucun jeu d'icônes. Trois lignes des
+« Décisions différées » pointaient toutes vers la même cause. Elles sont
+closes (ou réduites) ici.
+
+**Le jeu.** 51 SVG Lucide vendorés depuis le tag **1.47.0**, sous
+`assets/icons/lucide/`, avec la licence ISC et un `SOURCES.md` qui nomme le
+tag, la méthode de récupération (un `curl` par fichier, jamais `curl | sh`) et
+les trois renommages amont (`trash-2` → `trash`, `filter` → `funnel`,
+`circle-help` → `circle-question-mark`). 21 ko au total — le jeu complet en
+pèse ~5 Mo pour ~3 % d'usage.
+
+**La teinture, et pourquoi un `QIconEngine`.** Un SVG Lucide se peint en
+`stroke="currentColor"` ; Qt n'a pas de `currentColor`, donc la couleur est
+substituée dans le **texte** du SVG avant `QSvgRenderer`. Une icône teintée est
+donc l'instantané d'**un** thème, et un `QIcon(QPixmap)` posé sur un bouton
+garderait la couleur de l'ancien thème pour toujours après une bascule. Deux
+manières de s'en sortir : rappeler chaque site d'appel depuis
+`MainWindow.apply_theme` (une chose de plus à ne pas oublier, dans un fichier
+que cette vague ne possédait pas), ou résoudre la couleur **au moment de
+peindre**. C'est la seconde : `ui/widgets/icons.py` expose un `QIconEngine`
+qui interroge `theme.current_tokens()` à chaque `pixmap()`/`paint()`, et un
+`IconLabel` qui fait la même chose dans son `paintEvent` pour les endroits où
+un bouton mentirait. Le cache est indexé sur la couleur **résolue** : une
+bascule de thème le rate simplement, il n'y a aucune entrée périmée à
+invalider, et aucun hôte à prévenir. Un site d'appel ne nomme jamais une
+couleur, il nomme un **token** (`fg`, `fg.muted`, `ok`, `accent`) — §4-3 sans
+exception.
+
+**Les flèches, et pourquoi au build.** QSS `image: url(...)` charge un fichier
+tel quel : il ne sait ni teindre, ni masquer, ni recolorer. La seule sortie est
+que le fichier soit déjà de la bonne couleur — donc un fichier par thème. Reste
+le *quand* : à l'exécution dans le répertoire d'installation (impossible, il est
+en lecture seule sur un install packagé), à l'exécution dans le cache
+utilisateur (inatteignable : la feuille adresse ses fichiers par le marqueur
+`ASSET_PATH`, qui est la racine du **bundle**, et pointer ailleurs demanderait
+un second placeholder dans `core/theme.py`), ou **au build, commité**. 6 thèmes
+× 4 chevrons × 2 états = 48 fichiers de ~230 octets, générés par
+`scripts/gen_tinted_icons.py`, relisibles dans un diff, et comparés aux tokens
+par `tests/test_icons.py` — ils ne peuvent pas se périmer en silence. La
+feuille les sélectionne par `{{name}}`, le nom du thème actif.
+
+Deux états, et c'est le second qui justifie la découpe par thème : au repos le
+chevron est `fg.muted`, un token que §2 **n'autorise aucun thème à
+redéfinir** — les six dossiers contiennent donc les mêmes octets, exprès. Au
+survol il passe à `accent`, qui est précisément ce qui distingue un thème d'un
+autre (cyan, teal, orange, lavande, blanc, violet). Le contrôle retrouve ainsi
+la touche de couleur que le PNG orange lui donnait — mais celle du thème que
+l'utilisateur a choisi, pas celle d'un bitmap. Un test exige que les six
+accents survolés soient six couleurs distinctes.
+
+#### Une pseudo-classe de survol va sur le **sous-contrôle**, pas sur le widget
+
+La règle de survol ci-dessus a d'abord été écrite
+`#settingsCombo:hover::down-arrow` — la forme CSS naturelle, « quand le combo
+est survolé, sa flèche ». Elle **parse**, et elle fait dessiner l'image une
+**seconde fois** : non redimensionnée, non positionnée, par-dessus le texte du
+combo. Un chevron à moitié rogné, qui se lit comme une coche `✓` parasite à
+côté de la valeur — dans les six thèmes, dans tous les combos, **sans qu'aucun
+survol soit en jeu**. Repéré dans une capture, pas par un nom : les tests de
+tokens voyaient une feuille parfaitement correcte.
+
+La forme juste met l'état sur le sous-contrôle :
+`#settingsCombo::down-arrow:hover`. Même famille que la leçon `outline` de
+l'anneau de focus (§ « `focus.ring` », plus haut) — la feuille est valide, et
+l'idée que Qt se fait de ce qu'elle veut dire n'est pas celle de CSS. Gardé
+par `tests/test_icons.py::test_no_arrow_rule_puts_its_pseudo_state_on_the_widget`,
+qui refuse la forme `:<état>::<flèche>` dans les deux feuilles.
+
+**Ce qui a changé de glyphe à icône** (16/20/24 px, jamais autre chose — gaté) :
+engrenage et fermeture de l'overlay, chevron d'accordéon de l'overlay,
+engrenage de la page Timers, suppressions du gestionnaire de Custom Timers,
+reset manuel de ToDo, édition/enregistrement du nom de profil (le `💾` était un
+emoji **couleur** sur la plupart des piles de polices Linux — le seul glyphe de
+l'app qui ignorait le thème entièrement), suppression et reset de la Flow Map,
+bouton « fait » d'une carte de nœud, boutons « fait »/« éditer » du mode Guide
+et la coche peinte dans sa pastille, bascule de description du dialogue
+Templates, et les quatre pastilles du résumé de progression (`✓ ○ ! Σ` →
+`check` / `circle` / `triangle-alert` / `sigma`, chacune sur le **token que sa
+règle QSS utilisait déjà**, parce qu'un `color:` de feuille n'atteint pas un SVG
+rendu).
+
+**Ce qui reste un glyphe, et pourquoi** (`tests/fixtures/icon_emoji_allowlist.txt`,
+une raison par entrée, et un test qui échoue sur une entrée **morte** comme sur
+un nouveau glyphe) : la bascule de complétion `○`/`●`/`✓`, dont l'exemplaire
+canonique vit dans `ui/main_window.py` — la convertir sur Shopping et l'overlay
+seuls aurait rendu l'app **moins** cohérente qu'avant ; les pastilles de
+couleur, qui ne sont pas des icônes déguisées mais le moyen le moins cher
+d'afficher une couleur venue de la donnée ou d'une règle `[status=…]` ; et le
+symbole de nœud Flow, **choisi par l'utilisateur** et stocké dans sa map.
+
+**Revue D/m4 (« une pastille de couleur a besoin d'une forme ») n'est pas
+close** : elle demande quatre formes distinctes par statut dans la légende de la
+Flow Map, ce qui est une décision de design, pas une substitution d'icône.
+
 ### Décisions différées (posées explicitement, pas oubliées)
 
 | Sujet | Décision | Pourquoi pas maintenant |
 |---|---|---|
 | `app.setFont()` comme véhicule de la police de base | **toujours différé** (l'Armory est tokenisée, mais pas re-typographiée) | `setFont` ne passe pas par la cascade QSS : il atteindrait l'Armory quoi qu'on fasse. La vague Armory (2026-09-18) a migré ses **couleurs**, pas ses métriques — sa feuille ne déclare toujours aucune `font-family`, et ses 22k lignes de layout sont calées au doigt sur la police système. Barlow reste posée par la règle scopée. Le jour où l'Armory est re-typographiée, `setFont` devient le bon véhicule. |
-| Emoji utilisés comme icônes (`"📋 Vorlagen"`, `"🛒 Einkauf"`, `"👤 Charaktere"`) dans `core/translations.py` | vague icônes | §3 dit « aucun emoji comme icône » et ces glyphes sont dans les chaînes traduites des trois langues. Les remplacer demande de vrais `QIcon` Lucide posés sur les boutons — un travail d'icônes, pas une retouche de chaîne. Le double sélecteur de thème du `SettingsDialog` a en revanche perdu ses emoji tout de suite (ils n'étaient pas traduits). |
+| Emoji utilisés comme icônes (`"📋 Vorlagen"`, `"🛒 Einkauf"`, `"👤 Charaktere"`) dans `core/translations.py` | **réduit** (vague icônes 2026-09-19) — reste les seules **chaînes traduites** | §3 dit « aucun emoji comme icône » et ces glyphes sont dans les chaînes traduites des trois langues. La vague icônes du 2026-09-19 a livré le moteur (`ui/widgets/icons.py`) et **tous les glyphes posés dans le code** ; il reste exactement les ~40 clés de `core/translations.py` (de + ru + en), qui appartiennent à un autre chantier au même moment. Ce qui manque n'est plus un jeu d'icônes, c'est un passage clé par clé : retirer le glyphe de la chaîne et poser `icons.set_icon(bouton, …, clear_text=False)` au site d'appel. Liste exacte dans le rapport de la vague. Le double sélecteur de thème du `SettingsDialog` avait en revanche perdu ses emoji tout de suite (ils n'étaient pas traduits). |
 | Deux sélecteurs de thème (`SettingsDialog` + page Appearance) | à dédupliquer | Le dialogue est vivant (en-tête → `open_settings`) ; retirer un contrôle qu'un utilisateur utilise peut-être est une décision produit, pas un correctif de revue. Sa version emoji est corrigée, la duplication reste. |
-| Flèches de spinbox/combo (`assets/icons/arrow_*_orange.png`) | vague icônes | Assets PNG oranges, donc hors thème sur Abyss/Emerald/Void. Corriger demande des icônes par thème ou teintées à l'exécution. |
+| ~~Flèches de spinbox/combo (`assets/icons/arrow_*_orange.png`)~~ | **fait** (2026-09-19, vague icônes) | Les deux PNG oranges sont supprimés. Les trois règles `::down-arrow`/`::up-arrow` de `ui/styles.template.qss` pointent maintenant sur `assets/icons/lucide/tinted/{{name}}/chevron-*.svg` — « par thème » plutôt que « teintées à l'exécution », parce que QSS `image: url()` ne sait pas teindre et que les deux chemins d'exécution possibles échouent (écrire dans le bundle est impossible en install packagé ; écrire dans le cache utilisateur est inatteignable, `ASSET_PATH` étant la racine du bundle). Les 6 × 4 × 2 fichiers sont **générés et commités** par `scripts/gen_tinted_icons.py` — `fg.muted` au repos (§3 : « couleur héritée via `fg.*` »), **`accent` au survol et au focus**, ce qui rend au contrôle la touche de couleur que le PNG orange portait, mais celle du thème choisi. `tests/test_icons.py` échoue s'ils s'écartent des tokens, et exige que les six accents survolés soient bien six couleurs distinctes. La flèche de l'Armory (`ItemDatabase/styles.template.qss`, `QComboBox::down-arrow` → `assets/ui/dropdown_arrow.png`) n'est **pas** dans ce lot : c'est un PNG gris neutre, pas un accent chaud hors thème, et sa déclaration est tenue par le gate de parité octet-pour-octet (`tests/fixtures/armory_abyss_declarations.json`) — la toucher est une décision de la vague Armory, pas de celle-ci. |
 | Deux libellés tronqués dans le Build Planner : « Constitutior » (colonne Stat Values, `Constitution` coupé) et « 1aterials & Enhancemer » (en-tête de section du Crafting, `Materials & Enhancement` coupé aux deux bouts) | dette de **layout**, pas de style | Repérés dans les captures de la vague Armory (`docs/audit-2026-09-18/shots/aether-armory/`) et **antérieurs** à elle : la vague n'a changé aucune métrique (ni police, ni padding, ni largeur — voir « NOT tokenised, on purpose » dans l'en-tête de `ItemDatabase/styles.template.qss`). Ce sont des largeurs fixes trop courtes pour la chaîne rendue ; corriger demande de toucher au layout (élargir la colonne, ou élider proprement), ce qui est hors d'une vague de couleurs. |
-| Icône de l'**état vide** (§3 : « icône Lucide 24 px `fg.muted` ») | vague icônes | Revue G/m13. `ui/widgets/empty_state.py` n'a pas d'icône, et la page Armory en fait la première vue d'un nouvel utilisateur — mais le dépôt n'embarque **aucun jeu Lucide** (`assets/icons/` ne contient que l'icône d'app et les PNG d'outils Flow). Poser un emoji à la place violerait la ligne « aucun emoji comme icône » du même §3. Donc : même vague que les deux lignes ci-dessus (emoji des onglets, flèches spinbox/combo) — un travail d'assets, pas une retouche de style. Le widget est déjà prêt à la recevoir (il n'expose que des `objectName`, zéro style en dur). |
+| ~~Icône de l'**état vide** (§3 : « icône Lucide 24 px `fg.muted` »)~~ | **fait** (2026-09-19, vague icônes) | Revue G/m13. `EmptyStateWidget.set_icon(name)` pose une icône Lucide 24 px `fg.muted` au-dessus du titre ; elle est **optionnelle et absente par défaut**, parce que `ui/pages/armory_page.py` construit le même widget et appartenait à un autre chantier le jour même — une icône obligatoire aurait modifié une page hors périmètre. Posée sur ToDo (`list-todo`), Shopping (`shopping-cart`) et le gestionnaire de Custom Timers (`timer`) ; l'Armory reste à brancher (une ligne, `set_icon("shield")`). Raison d'origine, conservée :  `ui/widgets/empty_state.py` n'a pas d'icône, et la page Armory en fait la première vue d'un nouvel utilisateur — mais le dépôt n'embarque **aucun jeu Lucide** (`assets/icons/` ne contient que l'icône d'app et les PNG d'outils Flow). Poser un emoji à la place violerait la ligne « aucun emoji comme icône » du même §3. Donc : même vague que les deux lignes ci-dessus (emoji des onglets, flèches spinbox/combo) — un travail d'assets, pas une retouche de style. Le widget est déjà prêt à la recevoir (il n'expose que des `objectName`, zéro style en dur). |
 | Pastille de grade du **nœud « start »** des tooltips Daevanion | à corriger dans `ItemDatabase/` | Revue G/m9. `_DAEVANION_GRADE_TO_ITEM_GRADE` mappe `"start"` sur `""`, que `_set_data_color` traite comme « efface » ; le chemin canvas (`_daevanion_grade_color`) sait déjà spécialiser `start` → `accent`, pas le chemin tooltip. Correctif d'une ligne, mais **dans `ItemDatabase/app.py`** : hors du périmètre de la passe MINOR du 2026-09-19 (fichier tenu par un autre chantier au même moment). À prendre avec m7 (early return de `apply_theme`), qui vit dans le même fichier. |
 | 4 `objectName` morts dans la feuille de l'Armory (`#ChainNode`, `#ChainSideLabel`, `#ExpandableMaterialHeader`, `#SkillRow`) | à câbler ou à supprimer | Règles sans widget : les quatre sont déjà morts dans `eb53cd6` (avant la vague) et leurs règles existaient dans l'ancienne feuille écrite à la main. Supprimer une règle est une décision sur une **fonctionnalité** (widget renommé ? panneau retiré ?), pas une retouche de style — d'où l'attente. Ils sont listés avec cette raison dans `tests/fixtures/armory_dead_selectors.txt`, et le gate `test_every_objectname_rule_has_a_widget_that_sets_it` échoue sur tout **nouveau** mort. |
 

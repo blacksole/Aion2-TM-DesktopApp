@@ -920,6 +920,83 @@ class MainWindow(QMainWindow):
         page = getattr(self, "armory_page", None)
         if page is not None:
             page.set_build_planner_state(state)
+            page.set_recommendations(self._armory_recommendations(state))
+
+    # ── Armory recommendations (Stage 2, B-armory.md §3.4 #1/#2) ─────────
+    # Computed HERE and pushed, not derived in the page: they need the
+    # catalog under ItemDatabase/data and a DetailProvider over its detail
+    # cache, and ui/pages/armory_page.py's first rule is that it imports
+    # neither ItemDatabase nor the network.  The host already owns the one
+    # writer of the state (above), so it is also the one place that knows
+    # when a recommendation could have changed.
+
+    def _armory_data_dir(self) -> Path:
+        """``ItemDatabase/data``, in both run modes.
+
+        Mirrors ``ItemDatabase/app.py``'s ``_BUNDLE_DIR`` (read-only, not
+        imported — importing app.py is the 23 000-line module load this
+        page exists to avoid).  Same two branches as
+        ``_ensure_item_database_window`` right below: bundled datas extract
+        under ``_MEIPASS``, not next to the executable.
+        """
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            return Path(sys._MEIPASS) / "ItemDatabase" / "data"
+        return self.project_root / "ItemDatabase" / "data"
+
+    def _armory_engine(self):
+        """``(recommend module, DetailProvider, DataBundle)``, or ``None``.
+
+        Loaded once per session and memoized: the bundle parses
+        ``items_all.json`` (a few MB) and the provider memoizes every detail
+        it reads, while the caller below runs on every activation change.
+        Re-reading the catalog on each focus change would be a file parse
+        per Alt-Tab.
+
+        ``ItemDatabase`` goes on ``sys.path`` for the same reason app.py
+        puts it there itself: the engine is a package inside that directory,
+        and both the source checkout and the frozen bundle resolve it that
+        way.  APPENDED, not inserted at 0 the way app.py does it: that
+        directory also holds a dozen top-level modules (``app``,
+        ``fetch_*``, ``compute_*``), and the host has no business letting
+        any of them win a name against its own packages.
+        """
+        cached = getattr(self, "_armory_engine_cache", None)
+        if cached is not None:
+            return cached or None
+        data_dir = self._armory_data_dir()
+        try:
+            engine_parent = str(data_dir.parent)
+            if engine_parent not in sys.path:
+                sys.path.append(engine_parent)
+            from armory_engine import providers, recommend
+
+            cached = (
+                recommend,
+                providers.DiskDetailProvider(data_dir / "details"),
+                providers.load_data_bundle(data_dir),
+            )
+        except Exception:  # pragma: no cover - a broken engine must not break the app
+            logger.exception("Armory recommendations unavailable: engine could not be loaded")
+            cached = ()
+        self._armory_engine_cache = cached
+        return cached or None
+
+    def _armory_recommendations(self, state: dict | None) -> list:
+        """The engine's next best actions for ``state`` — never raising.
+
+        A dashboard card is not worth an unhandled exception on a window
+        activation, so every failure degrades to "no recommendations", which
+        the page renders as its own honest line.
+        """
+        engine = self._armory_engine()
+        if engine is None:
+            return []
+        recommend, provider, bundle = engine
+        try:
+            return recommend.next_best_actions(state, provider, bundle)
+        except Exception:  # pragma: no cover - same reasoning as above
+            logger.exception("Armory recommendations failed for the current build")
+            return []
 
     def _refresh_armory_summary(self):
         """Re-read the live Build Planner into the dict, then the page.

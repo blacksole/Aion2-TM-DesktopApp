@@ -80,8 +80,32 @@ class Recommendation:
     :param reasons: the per-stat breakdown, best first.  Never empty for a
         real recommendation — a pick with no reasons is a pick with no
         explanation, which §3.3 exists to forbid.
+    :param text_key: translation key for the recommendation's own headline —
+        the one line the dashboard shows before the player expands "Why?".
+        Added in Stage 2, with a default, because the first two solvers
+        proved the shape was incomplete: every ``Reason`` could name itself
+        and the ``Recommendation`` holding them could not, so the headline
+        had to be re-derived from ``pick`` at the widget, which is exactly
+        the "render out of data the engine already computed" this contract
+        exists to prevent.  A KEY, never display text, for the same reason
+        ``Reason.text_key`` is one.
+    :param text_kwargs: its format arguments, same pair as ``Reason``'s.
+
+    **On ``score_delta`` and the reasons' sum.**  For a stat-space solver
+    (audit §3.4 #3/#4) ``score_delta`` is Σ ``reason.score_contribution``,
+    and a solver whose parts do not add up to its whole is showing an
+    explanation that is not the reason.  Stage 2's two features are not
+    stat-space solvers — they are completeness statements in [0, 1], because
+    the combat model that would make a stat-space delta meaningful is not in
+    the data (§3.4's closing line).  Their reasons therefore ENUMERATE the
+    finding rather than decompose it, except ``recommend.missing_set_pieces``
+    where the decomposition happens to be exact (one reason per missing
+    piece, each worth ``1/total`` of the set).  Which of the two a given
+    recommendation is, is stated in that solver's own docstring.
     """
 
     pick: object
     score_delta: float
     reasons: tuple[Reason, ...] = ()
+    text_key: str = ""
+    text_kwargs: dict = field(default_factory=dict)

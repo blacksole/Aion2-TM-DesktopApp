@@ -20,9 +20,20 @@ Two deliberate constraints:
   without touching a widget, so the numbers are unit-testable without a
   QApplication (``tests/test_armory_dashboard.py``).
 
+Stage 2 (2026-09-19) adds one card the page does NOT derive: the
+recommendations.  They come from ``ItemDatabase/armory_engine`` — which
+needs the catalog on disk and a detail provider — so they are **pushed in**
+by the host through :meth:`ArmoryPage.set_recommendations`, exactly like the
+state is.  What arrives is duck-typed on purpose (``.text_key``,
+``.text_kwargs``, ``.reasons``): the page never imports the engine, so the
+two constraints above still hold, and a recommendation stays a translation
+KEY plus arguments until this file renders it — which is what lets a
+language switch re-render recommendations computed minutes earlier.
+
 Styling is tokens-only via objectNames (``armoryCard`` /
 ``armoryCardTitle`` / ``armoryCardValue`` / ``armoryCardHint`` /
-``armoryCardCta``), styled in ``ui/styles.template.qss`` §15 — this file
+``armoryCardCta`` / ``armoryRecoCard`` / ``armoryRecoItem`` /
+``armoryRecoWhy``), styled in ``ui/styles.template.qss`` §15 — this file
 contains no colour and no font.
 """
 
@@ -35,10 +46,12 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -419,6 +432,133 @@ class ArmoryCard(QFrame):
         super().keyPressEvent(event)
 
 
+class RecommendationRow(QWidget):
+    """One recommendation: its line, and a "Why?" that opens the reasons.
+
+    The explainability contract (``armory_engine/explain.py`` §3.3: solvers
+    never return bare picks) only pays off if the player can actually see
+    the reasons, and only stays readable if they are not all on screen at
+    once — three set recommendations with four missing pieces each is twelve
+    lines of small print above the fold.  So the headline is always visible
+    and the breakdown is one click away, per row.
+
+    Deliberately NOT animated.  ``ui/motion.fade_in`` would suit the reveal,
+    but MASTER §4-6 says "aucune autre animation ailleurs" and
+    ``tests/test_theme_wiring.py::test_exactly_three_places_animate`` counts
+    the call sites: a sixth is a design decision that goes through MASTER
+    first, not a detail of this card.
+
+    The button is a ``QToolButton`` rather than a ``QPushButton`` for the
+    same reason the rest of the app uses one for inline affordances: it
+    carries no button chrome by default, so it reads as the text link it is.
+    """
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("armoryRecoItem")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+        head.setSpacing(6)
+
+        self.text_label = QLabel("")
+        self.text_label.setObjectName("armoryCardHint")
+        self.text_label.setWordWrap(True)
+        self.text_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        head.addWidget(self.text_label, 1)
+
+        self.why_button = QToolButton()
+        self.why_button.setObjectName("armoryRecoWhyButton")
+        self.why_button.setCheckable(True)
+        self.why_button.setCursor(Qt.PointingHandCursor)
+        self.why_button.toggled.connect(self._on_toggled)
+        head.addWidget(self.why_button, 0, Qt.AlignTop)
+        layout.addLayout(head)
+
+        self.why_label = QLabel("")
+        self.why_label.setObjectName("armoryRecoWhy")
+        self.why_label.setWordWrap(True)
+        self.why_label.setVisible(False)
+        layout.addWidget(self.why_label)
+
+    def _on_toggled(self, checked: bool):
+        self.why_label.setVisible(checked and bool(self.why_label.text()))
+
+    def set_content(self, text: str, reasons: list[str], why_text: str):
+        """Fill the row.  No reason -> no button, not a button that opens
+        an empty box (a recommendation with no reasons is the degradation
+        line, which explains itself)."""
+        self.text_label.setText(text)
+        self.why_button.setText(why_text)
+        self.why_label.setText("\n".join(reasons))
+        has_reasons = bool(reasons)
+        self.why_button.setVisible(has_reasons)
+        if not has_reasons:
+            self.why_button.setChecked(False)
+        self.why_label.setVisible(self.why_button.isChecked() and has_reasons)
+
+
+class ArmoryRecommendationCard(QFrame):
+    """The card the rows live in — a list, not a figure.
+
+    Not an :class:`ArmoryCard`: that one is a whole-card button with one big
+    value and a CTA, and this card's rows are individually interactive, so
+    making the frame clickable too would mean a click on "Why?" also fired
+    the card's own action.  It shares the card *surface* through its own
+    objectName in §15 instead.
+
+    Rows are reused across renders, like ``ArmoryCard.set_hints`` does and
+    for the same reason: this page lives for the whole session and
+    re-renders on every language switch and every state push.
+    """
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("armoryRecoCard")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING)
+        layout.setSpacing(6)
+
+        self.title_label = QLabel("")
+        self.title_label.setObjectName("armoryCardTitle")
+        layout.addWidget(self.title_label)
+
+        self._rows_layout = QVBoxLayout()
+        self._rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._rows_layout.setSpacing(8)
+        layout.addLayout(self._rows_layout)
+        self._rows: list[RecommendationRow] = []
+
+    @property
+    def rows(self) -> list[RecommendationRow]:
+        """Every row ever built, visible or not (read by tests)."""
+        return list(self._rows)
+
+    def visible_rows(self) -> list[RecommendationRow]:
+        return [row for row in self._rows if not row.isHidden()]
+
+    def set_title(self, text: str):
+        self.title_label.setText(text)
+
+    def set_rows(self, entries: list[tuple[str, list[str]]], why_text: str):
+        for index, (text, reasons) in enumerate(entries):
+            if index >= len(self._rows):
+                row = RecommendationRow()
+                self._rows_layout.addWidget(row)
+                self._rows.append(row)
+            self._rows[index].set_content(text, reasons, why_text)
+            self._rows[index].setVisible(True)
+        for row in self._rows[len(entries):]:
+            row.set_content("", [], why_text)
+            row.setVisible(False)
+
+
 class ArmoryPage(QWidget):
     """Armory dashboard: build summary cards + the two tool launchers.
 
@@ -441,6 +581,10 @@ class ArmoryPage(QWidget):
         self._language = DEFAULT_LANGUAGE
         self._tr = _default_tr
         self._summary = ArmorySummary()
+        # Pushed in by the host (see set_recommendations); never derived
+        # here, and kept as engine objects rather than as rendered strings
+        # so a language switch re-renders them.
+        self._recommendations: tuple = ()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -486,6 +630,7 @@ class ArmoryPage(QWidget):
         grid.setColumnStretch(1, 1)
 
         self.build_card = ArmoryCard()
+        self.reco_card = ArmoryRecommendationCard()
         self.daevanion_card = ArmoryCard()
         self.skill_card = ArmoryCard()
         self.items_card = ArmoryCard()
@@ -494,10 +639,15 @@ class ArmoryPage(QWidget):
         # The build summary is the hero row (it carries three hint lines);
         # everything else pairs up two per row.
         grid.addWidget(self.build_card, 0, 0, 1, 2)
-        grid.addWidget(self.daevanion_card, 1, 0)
-        grid.addWidget(self.skill_card, 1, 1)
-        grid.addWidget(self.items_card, 2, 0)
-        grid.addWidget(self.crafting_card, 2, 1)
+        # Directly under the hero row: audit §3 Phase 4c calls this page a
+        # "tableau de bord next best action", and the next best action is
+        # not something the reader should have to scroll past two launchers
+        # to find.
+        grid.addWidget(self.reco_card, 1, 0, 1, 2)
+        grid.addWidget(self.daevanion_card, 2, 0)
+        grid.addWidget(self.skill_card, 2, 1)
+        grid.addWidget(self.items_card, 3, 0)
+        grid.addWidget(self.crafting_card, 3, 1)
         body_layout.addWidget(self.cards_container)
         body_layout.addStretch()
 
@@ -528,6 +678,27 @@ class ArmoryPage(QWidget):
         self._summary = summarize_build_planner(state)
         self._render()
 
+    @property
+    def recommendations(self) -> tuple:
+        """What the recommendation card currently holds (read by tests)."""
+        return self._recommendations
+
+    def set_recommendations(self, recommendations) -> None:
+        """Host hook: the engine's ``next_best_actions`` output, unrendered.
+
+        Duck-typed (``.text_key``, ``.text_kwargs``, ``.reasons``) so this
+        module keeps its no-ItemDatabase-import rule; ``None`` and anything
+        that is not a list or a tuple are the same as "none yet", because
+        the host computes these behind a try/except and must be able to say
+        so without inventing a shape.  The type is checked rather than
+        ``tuple()``-ed: a string is iterable, and tuple("abc") would put
+        three characters on the dashboard instead of nothing.
+        """
+        self._recommendations = (
+            tuple(recommendations) if isinstance(recommendations, (list, tuple)) else ()
+        )
+        self._render()
+
     # ── language ──────────────────────────────────────────────────────────
 
     def update_language(self, language: str, tr_func):
@@ -551,8 +722,36 @@ class ArmoryPage(QWidget):
             t("armory_empty_title"), t("armory_empty_hint"), t("armory_card_open_build")
         )
         self.empty_state.setVisible(empty)
-        for card in (self.build_card, self.daevanion_card, self.skill_card):
+        for card in (self.build_card, self.daevanion_card, self.skill_card, self.reco_card):
             card.setVisible(not empty)
+
+        # ── Recommendations (Stage 2) ──
+        def resolve(item, fallback_key: str = "") -> str:
+            """An engine text_key + its kwargs -> a sentence.
+
+            Guarded: ``tr`` formats with ``str.format``, so a key whose
+            placeholders and an engine's kwargs ever disagree raises
+            KeyError/IndexError — inside a paint, on a dashboard, for a
+            string.  Falling back to the untranslated key makes that a
+            visible typo instead of a page that does not draw.
+            """
+            key = getattr(item, "text_key", "") or fallback_key
+            if not key:
+                return ""
+            try:
+                return t(key, **(getattr(item, "text_kwargs", None) or {}))
+            except (KeyError, IndexError, ValueError):
+                return key
+
+        self.reco_card.set_title(t("armory_reco_title"))
+        entries = [
+            (resolve(reco), [line for line in (resolve(reason) for reason in getattr(reco, "reasons", ()) or ()) if line])
+            for reco in self._recommendations
+        ]
+        entries = [entry for entry in entries if entry[0]]
+        if not entries:
+            entries = [(t("armory_reco_empty"), [])]
+        self.reco_card.set_rows(entries, t("armory_reco_why"))
 
         # ── Build Planner ──
         self.build_card.set_title(t("armory_card_build_title"))
