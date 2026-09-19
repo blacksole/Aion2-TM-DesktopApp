@@ -1,51 +1,40 @@
-# Glyphs that are still drawn as text in the files the icons wave owns.
+# Glyphs that are still drawn as text in the UI.
 #
 # Format: <path>:<line>  # <reason>   (two spaces before the '#')
 # An entry without a reason fails the test, and so does an entry that no
 # longer matches anything (tests/test_icons.py) -- an allow-list that
 # outlives its offender hides the next one.
 #
-# Two families, two different reasons. Neither is "we forgot".
+# ── The completion toggle: CLOSED 2026-09-19, kept as a note ────────────
+# The ○ / ● / ✓ toggle was once allow-listed here, on the ground that
+# TaskCard's canonical copy lived in a file the icons wave did not own.
+# When ownership widened, all five call sites -- TaskCard, ShoppingCard and
+# the three overlay rows -- moved together to Lucide `circle` /
+# `circle-check` at 16 px, tinted `fg.muted` / `ok`.  Converting a subset
+# would have put a Lucide ring on a shopping row and a fallback dingbat on
+# the task row directly above it: less consistent after the wave than
+# before.  That is why they moved as one unit and not one at a time.
 #
-# ── 1. The ○ / ● / ✓ completion toggle ──────────────────────────────────
-# Every card in the app carries the same three-state check button, and the
-# canonical one -- TaskCard's -- lives in ui/main_window.py (:162, :262),
-# which this change must not touch (another change owns it at the time of
-# writing). Converting Shopping and the Overlay alone would put a Lucide
-# circle on a shopping row and a text "○" on the task row directly above
-# it: the app would be LESS consistent after the wave than before it. So
-# the toggle moves as one unit, in the wave that can reach main_window.
-# What that wave needs: unchecked -> `circle` (fg.muted), completed ->
-# `check` (ok). The QSS rules involved are #checkButton / #OverlayCheckBtn,
-# whose `color:` stops applying once the glyph is a rendered SVG -- the
-# token has to move into the icons.set_icon() call, exactly as the four
-# #Progress*Icon labels in ui/pages/tasks_page.py already did here.
-ui/widgets/shopping_card.py:123  # completion toggle — moves with TaskCard (ui/main_window.py:162)
-ui/widgets/shopping_card.py:246  # completion toggle — moves with TaskCard (ui/main_window.py:262)
-ui/overlay/overlay_window.py:170  # completion toggle — moves with TaskCard (ui/main_window.py:162)
-ui/overlay/overlay_window.py:201  # completion toggle — moves with TaskCard (ui/main_window.py:162)
-ui/overlay/overlay_window.py:264  # completion toggle — moves with TaskCard (ui/main_window.py:162)
-#
-# ── 2. Colour swatches, not icons ───────────────────────────────────────
-# A "●" whose whole job is to be a COLOUR is not an emoji standing in for
+# ── What is left: colour swatches, not icons ───────────────────────────
+# A "●" whose whole job is to BE a colour is not an emoji standing in for
 # an icon -- it is the cheapest possible colour swatch, and its hue comes
 # from data (a custom timer's own colour, MASTER §4-4) or from a QSS
-# [status=…] rule (the Flow guide's node state). A Lucide `circle` is a
+# [status=...] rule (the Flow guide's node state).  Lucide `circle` is a
 # 2 px-stroked ring, not a filled disc: swapping it in would either lose
 # the fill that carries the meaning, or need a `circle` + `circle-filled`
-# pair that Lucide does not ship. Review D/m4 ("colour dots need a shape
+# pair that Lucide does not ship.  Review D/m4 ("a colour dot needs a shape
 # too") is a real finding and is NOT closed by this wave: closing it means
-# four distinct SHAPES per status, which is a design decision for the Flow
-# legend, not an icon substitution. Logged here so it cannot be forgotten.
-ui/overlay/overlay_window.py:505  # live dot — colour swatch (#OverlayLiveDot), not an icon
+# four distinct SHAPES per status in the Flow legend, which is a design
+# decision, not an icon substitution.  Logged here so it cannot be lost.
+ui/overlay/overlay_window.py:535  # live dot — colour swatch (#OverlayLiveDot), not an icon
 ui/custom_timer_manager_dialog.py:117  # category marker — colour swatch (#ctCategoryDot)
 ui/custom_timer_manager_dialog.py:285  # the timer's OWN colour (data colour, MASTER §4-4)
 ui/flow/flow_debug.py:133  # debug overlay colour swatch, never shipped to a user
 ui/flow/widgets/flow_guide_view.py:270  # node-status swatch (#GuideInfoIcon[status=…]) — review D/m4
 ui/flow/widgets/flow_guide_view.py:380  # node-status swatch (#GuideInfoIcon[status=…]) — review D/m4
 #
-# ── 3. User data ────────────────────────────────────────────────────────
+# ── User data ──────────────────────────────────────────────────────────
 # The Flow node symbol is CHOSEN BY THE USER from #FlowSymbolCombo and
-# stored in the map. "☆" is this field's default value, not an icon the
+# stored in the map.  "☆" is this field's default value, not an icon the
 # design system picked -- replacing it would silently rewrite user data.
 ui/flow/widgets/flow_node_card.py:77  # user-chosen node symbol (default value), not a UI icon

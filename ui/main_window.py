@@ -35,6 +35,7 @@ from . import motion
 from core.update_checker import UpdateChecker
 from core.version import ARMORY_ENABLED
 from utils import paths
+from ui.widgets import icons
 
 logger = get_logger("main_window")
 from PySide6.QtWidgets import QTimeEdit
@@ -159,9 +160,19 @@ class TaskCard(QFrame):
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(12)
 
-        self.check_btn = QPushButton("○")
+        # MASTER §3: was "○"/"●" — two dingbats Barlow does not carry, so
+        # the system fell back to another face for the single most-repeated
+        # control in the app.  Converted together with ShoppingCard and the
+        # three overlay rows: one of them alone would have made the ToDo
+        # list mix a Lucide ring with a fallback dingbat, row by row.
+        self.check_btn = QPushButton()
         self.check_btn.setObjectName("checkButton")
         self.check_btn.setFixedWidth(32)
+        icons.set_icon(self.check_btn, "circle", 16, "fg.muted")
+        # Icon-only: the "○" it replaced WAS the accessible name (review
+        # H/15).  Not a tooltip -- this control is clicked, not hovered for
+        # help, and an untranslated tooltip would be visible UI.
+        self.check_btn.setAccessibleName("Toggle completed")
         self.check_btn.clicked.connect(self.toggle)
 
         text_box = QVBoxLayout()
@@ -259,7 +270,12 @@ class TaskCard(QFrame):
         ANCESTOR's dynamic property is only re-evaluated when the child
         itself is repolished, hence the two extra passes.
         """
-        self.check_btn.setText("●" if self.completed else "○")
+        icons.set_icon(
+            self.check_btn,
+            "circle-check" if self.completed else "circle",
+            16,
+            "ok" if self.completed else "fg.muted",
+        )
         self.setProperty("completed", self.completed)
         for widget in (self, self.title_label, self.check_btn):
             widget.style().unpolish(widget)
@@ -930,18 +946,70 @@ class MainWindow(QMainWindow):
     # writer of the state (above), so it is also the one place that knows
     # when a recommendation could have changed.
 
-    def _armory_data_dir(self) -> Path:
-        """``ItemDatabase/data``, in both run modes.
+    def _armory_bundle_dir(self) -> Path:
+        """``ItemDatabase/``, in both run modes.
 
         Mirrors ``ItemDatabase/app.py``'s ``_BUNDLE_DIR`` (read-only, not
         imported — importing app.py is the 23 000-line module load this
         page exists to avoid).  Same two branches as
         ``_ensure_item_database_window`` right below: bundled datas extract
         under ``_MEIPASS``, not next to the executable.
+
+        Pure, and no engine import: :meth:`_armory_dirs` needs this to put
+        the engine package on ``sys.path`` in the first place.
         """
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-            return Path(sys._MEIPASS) / "ItemDatabase" / "data"
-        return self.project_root / "ItemDatabase" / "data"
+            return Path(sys._MEIPASS) / "ItemDatabase"
+        return self.project_root / "ItemDatabase"
+
+    def _armory_dirs(self) -> tuple[Path, Path]:
+        """``(catalog_dir, details_dir)`` — deliberately not one directory.
+
+        This used to be a single ``_armory_data_dir()`` feeding both the
+        catalog loader and ``DiskDetailProvider(data_dir / "details")``.
+        From source that is correct, because app.py's ``_cache_root()``
+        returns ``ItemDatabase/data`` there and the two trees coincide.
+        **Frozen they do not**: ``_cache_root()`` returns
+        ``user_cache_dir()/armory``, ``ItemDetailCache`` writes its
+        ``{id}.json`` files there, and ``"Aion2 TM.spec"`` never ships a
+        ``details/`` folder — so the provider was pointed at a directory
+        that is empty for the life of the install, and two of the three
+        recommendation features could never appear in a release build.
+        Invisible from source, invisible to the suite.
+
+        The arithmetic lives in
+        :func:`armory_engine.providers.resolve_armory_dirs` so that the host
+        and the Armory window cannot disagree about it, and so that a frozen
+        layout is assertable from a source run.
+        """
+        bundle = self._armory_bundle_dir()
+        self._ensure_armory_engine_importable(bundle)
+        from armory_engine.providers import resolve_armory_dirs
+
+        return resolve_armory_dirs(
+            getattr(sys, "frozen", False), bundle, paths.user_cache_dir()
+        )
+
+    def _armory_data_dir(self) -> Path:
+        """The **catalog** directory (``items_all.json`` & co.)."""
+        return self._armory_dirs()[0]
+
+    def _armory_details_dir(self) -> Path:
+        """The **runtime detail cache** ``ItemDetailCache`` writes into."""
+        return self._armory_dirs()[1]
+
+    @staticmethod
+    def _ensure_armory_engine_importable(bundle_dir: Path) -> None:
+        """Put ``ItemDatabase/`` on ``sys.path`` for ``import armory_engine``.
+
+        APPENDED, not inserted at 0 the way app.py does it: that directory
+        also holds a dozen top-level modules (``app``, ``fetch_*``,
+        ``compute_*``), and the host has no business letting any of them win
+        a name against its own packages.
+        """
+        parent = str(bundle_dir)
+        if parent not in sys.path:
+            sys.path.append(parent)
 
     def _armory_engine(self):
         """``(recommend module, DetailProvider, DataBundle)``, or ``None``.
@@ -953,27 +1021,24 @@ class MainWindow(QMainWindow):
         per Alt-Tab.
 
         ``ItemDatabase`` goes on ``sys.path`` for the same reason app.py
-        puts it there itself: the engine is a package inside that directory,
-        and both the source checkout and the frozen bundle resolve it that
-        way.  APPENDED, not inserted at 0 the way app.py does it: that
-        directory also holds a dozen top-level modules (``app``,
-        ``fetch_*``, ``compute_*``), and the host has no business letting
-        any of them win a name against its own packages.
+        puts it there itself: the engine is a package inside that directory
+        (see :meth:`_ensure_armory_engine_importable`).
+
+        The provider gets :meth:`_armory_details_dir`, the bundle gets
+        :meth:`_armory_data_dir` — two different trees in a frozen build,
+        see :meth:`_armory_dirs`.
         """
         cached = getattr(self, "_armory_engine_cache", None)
         if cached is not None:
             return cached or None
-        data_dir = self._armory_data_dir()
         try:
-            engine_parent = str(data_dir.parent)
-            if engine_parent not in sys.path:
-                sys.path.append(engine_parent)
+            catalog_dir, details_dir = self._armory_dirs()
             from armory_engine import providers, recommend
 
             cached = (
                 recommend,
-                providers.DiskDetailProvider(data_dir / "details"),
-                providers.load_data_bundle(data_dir),
+                providers.DiskDetailProvider(details_dir),
+                providers.load_data_bundle(catalog_dir),
             )
         except Exception:  # pragma: no cover - a broken engine must not break the app
             logger.exception("Armory recommendations unavailable: engine could not be loaded")
@@ -1409,6 +1474,13 @@ class MainWindow(QMainWindow):
         toast_row.setContentsMargins(0, 0, 0, 0)
         toast_row.setSpacing(10)
 
+        # The "✓ " the toast used to prepend to every message was a
+        # dingbat inside the *text*, so it was also inside everything that
+        # read that text back (five assertions across two test modules).
+        # It is a real icon beside the label now.
+        self.toast_icon = icons.IconLabel("circle-check", 16, "ok")
+        self.toast_icon.setObjectName("toastIcon")
+
         self.toast_label = QLabel()
         self.toast_label.setObjectName("toastLabel")
 
@@ -1418,6 +1490,7 @@ class MainWindow(QMainWindow):
         self.toast_action_btn.clicked.connect(self._on_toast_action)
         self.toast_action_btn.hide()
 
+        toast_row.addWidget(self.toast_icon)
         toast_row.addWidget(self.toast_label)
         toast_row.addWidget(self.toast_action_btn)
         toast_row.addStretch()
@@ -1486,8 +1559,9 @@ class MainWindow(QMainWindow):
         self.left_layout.addWidget(self.sidebar)
         self.left_layout.addStretch()
 
-        self.overlay_toggle_btn = QPushButton("⬛  Overlay")
+        self.overlay_toggle_btn = QPushButton("Overlay")
         self.overlay_toggle_btn.setObjectName("overlayToggleBtn")
+        icons.set_icon(self.overlay_toggle_btn, "eye", 16, clear_text=False)
         self.overlay_toggle_btn.setCheckable(True)
         self.overlay_toggle_btn.clicked.connect(self._toggle_overlay)
         self.left_layout.addWidget(self.overlay_toggle_btn)
@@ -3481,7 +3555,7 @@ class MainWindow(QMainWindow):
         lets ``apply_language`` retranslate a toast that is still on screen
         when the user switches language (review F-10).
         """
-        self.toast_label.setText(f"✓ {text}")
+        self.toast_label.setText(text)
 
         if action_label and on_action is not None:
             self._toast_action = on_action

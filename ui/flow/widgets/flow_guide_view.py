@@ -390,8 +390,10 @@ class FlowGuideView(QWidget):
 
         if node.status == "completed":
             self.done_btn.setText(self._tr("flow_mark_open"))
+            icons.set_icon(self.done_btn, "rotate-ccw", 16, "ok", clear_text=False)
         else:
             self.done_btn.setText(self._tr("flow_mark_done"))
+            icons.set_icon(self.done_btn, "check", 16, "ok", clear_text=False)
 
     def _set_info_icon_status(self, status: str):
         """Tag the info dot with a node status so the QSS can colour it.
@@ -417,7 +419,8 @@ class FlowGuideView(QWidget):
     def _tr(self, key: str) -> str:
         if self._tr_func:
             return self._tr_func(self._language, key)
-        _fallback = {"flow_mark_done": "✓  Als erledigt markieren", "flow_mark_open": "↩  Als offen markieren"}
+        _fallback = {"flow_mark_done": "Als erledigt markieren",
+                     "flow_mark_open": "Als offen markieren"}
         return _fallback.get(key, key)
 
     def _on_done_clicked(self):

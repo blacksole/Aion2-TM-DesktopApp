@@ -115,6 +115,10 @@ class FlowNodeCard(QFrame):
         self.done_btn.setObjectName("FlowDoneButton")
         self.done_btn.setFixedSize(34, 34)
         icons.set_icon(self.done_btn, "check", 16)
+        # The "✓" this button used to show WAS its accessible name; an
+        # icon-only button has none unless it is given one (review H/15).
+        self.done_btn.setToolTip("Als erledigt markieren")
+        self.done_btn.setAccessibleName("Als erledigt markieren")
         self.done_btn.setCursor(Qt.PointingHandCursor)
 
         grid = QGridLayout(self)

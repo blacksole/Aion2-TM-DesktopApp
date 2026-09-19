@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QTabWidget, QCompleter,
 )
 from PySide6.QtCore import QTime, Qt
+from ui.widgets import icons
 
 from core import theme
 from core.sound import play_wav
@@ -427,6 +428,7 @@ class CustomTimerDialog(QDialog):
         self.sound_combo.currentIndexChanged.connect(self._on_sound_combo_changed)
 
         self.sound_test_btn = QPushButton(self._tr(self._language, "ct_dialog_test_button"))
+        icons.set_icon(self.sound_test_btn, "play", 16, clear_text=False)
         self.sound_test_btn.setObjectName("secondaryButton")
         self.sound_test_btn.setFixedWidth(70)
         self.sound_test_btn.clicked.connect(self._preview_sound)

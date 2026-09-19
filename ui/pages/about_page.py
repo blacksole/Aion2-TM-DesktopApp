@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap, QIcon, QPainter
 from PySide6.QtCore import Qt, QByteArray
+from ui.widgets import icons
 from PySide6.QtSvg import QSvgRenderer
 from core.translations import tr as _default_tr
 from core.version import APP_VERSION, GITHUB_REPO, GITHUB_USER
@@ -187,11 +188,13 @@ class AboutPage(QWidget):
         self.copy_ver_btn.clicked.connect(self._copy_version)
 
         self.discord_btn = QPushButton()
+        icons.set_icon(self.discord_btn, "external-link", 16, clear_text=False)
         self.discord_btn.setObjectName("secondaryButton")
         self.discord_btn.setFixedWidth(140)
         self.discord_btn.clicked.connect(lambda: webbrowser.open(_DISCORD_PROFILE_URL))
 
         self.bugreport_btn = QPushButton()
+        icons.set_icon(self.bugreport_btn, "bug", 16, clear_text=False)
         self.bugreport_btn.setObjectName("secondaryButton")
         self.bugreport_btn.setFixedWidth(140)
         self.bugreport_btn.clicked.connect(lambda: webbrowser.open(_BUG_REPORT_URL))
@@ -260,6 +263,7 @@ class AboutPage(QWidget):
         donate_text.addWidget(self.donate_desc_lbl)
 
         self.donate_btn = QPushButton()
+        icons.set_icon(self.donate_btn, "coffee", 16, clear_text=False)
         self.donate_btn.setObjectName("donateButton")
         self.donate_btn.setFixedWidth(110)
         self.donate_btn.clicked.connect(lambda: webbrowser.open(_PAYPAL_URL))

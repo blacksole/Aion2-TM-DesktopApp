@@ -167,10 +167,11 @@ class OverlayTaskRow(_ColoredRow):
         layout.setContentsMargins(_BORDER_W + 6, 0, 8, 0)
         layout.setSpacing(6)
 
-        self.check_btn = QPushButton("○")
+        self.check_btn = QPushButton()
         self.check_btn.setObjectName("OverlayCheckBtn")
         self.check_btn.setFixedSize(16, 16)
         self.check_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self.check_btn, "circle", 16, "fg.muted")
 
         title_lbl = QLabel(title if len(title) <= 44 else title[:43] + "…")
         title_lbl.setObjectName("OverlayRowTitle")
@@ -198,9 +199,12 @@ class OverlayGuideRow(_ColoredRow):
 
         can_toggle = status in ("active", "completed")
 
-        self.check_btn = QPushButton("✓" if status == "completed" else "○")
+        self.check_btn = QPushButton()
         self.check_btn.setObjectName("OverlayCheckBtn")
         self.check_btn.setFixedSize(16, 16)
+        done = status == "completed"
+        icons.set_icon(self.check_btn, "circle-check" if done else "circle", 16,
+                       "ok" if done else "fg.muted")
         self.check_btn.setEnabled(can_toggle)
         self.check_btn.setCursor(Qt.PointingHandCursor if can_toggle else Qt.ArrowCursor)
 
@@ -261,10 +265,11 @@ class OverlayCheckRow(_ColoredRow):
         layout.setContentsMargins(_BORDER_W + 6, 0, 8, 0)
         layout.setSpacing(6)
 
-        self.check_btn = QPushButton("○")
+        self.check_btn = QPushButton()
         self.check_btn.setObjectName("OverlayCheckBtn")
         self.check_btn.setFixedSize(16, 16)
         self.check_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self.check_btn, "circle", 16, "fg.muted")
         self.check_btn.clicked.connect(on_check)
 
         title_lbl = QLabel(title if len(title) <= 40 else title[:39] + "…")
@@ -356,9 +361,22 @@ class _ClickableWidget(QWidget):
     clicked = Signal()
 
     def mousePressEvent(self, event):
+        # CONSUMED, never chained to super().  QWidget::mousePressEvent
+        # *ignores* the event, so a chained press walks up to
+        # OverlayWindow.mousePressEvent, whose drag band is `pos().y() <= 38`
+        # -- and the first accordion header's top pixel rows sit inside that
+        # band.  One click on them used to collapse the section AND grab the
+        # always-on HUD, so the next mouse move dragged the whole overlay
+        # across the screen.  The closure this class replaced
+        # (`header.mousePressEvent = lambda _e: self._toggle()`) did not
+        # chain either; the signal refactor is what introduced the super()
+        # call, and this is where it goes back out.  Same deliberate
+        # non-chaining as ui/flow/widgets/flow_node_card.py.
         if event.button() == Qt.LeftButton:
             self.clicked.emit()
-        super().mousePressEvent(event)
+            event.accept()
+            return
+        event.ignore()
 
 
 class _ResizeHandle(QWidget):
@@ -378,20 +396,32 @@ class _ResizeHandle(QWidget):
     moved = Signal(QPoint)
     released = Signal()
 
+    # Consumed, for the reason spelled out in _ClickableWidget above: a
+    # chained press reaches OverlayWindow's drag band and a chained move
+    # reaches its window-move.  The grip sits at y ~ 394 today, so resize
+    # and window-move were one coordinate coincidence apart rather than
+    # actually broken -- which is not a property worth relying on.
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.pressed.emit(event.globalPosition().toPoint())
-        super().mousePressEvent(event)
+            event.accept()
+            return
+        event.ignore()
 
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.LeftButton:
             self.moved.emit(event.globalPosition().toPoint())
-        super().mouseMoveEvent(event)
+            event.accept()
+            return
+        event.ignore()
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.released.emit()
-        super().mouseReleaseEvent(event)
+            event.accept()
+            return
+        event.ignore()
 
 
 class _AccordionSection(QWidget):
@@ -1000,7 +1030,7 @@ class OverlayWindow(QWidget):
         for row in rows:
             section.add_row(row)
         if not rows:
-            section.add_row(self._empty_row("No flow loaded" if not fw else "All steps completed ✓"))
+            section.add_row(self._empty_row("No flow loaded" if not fw else "All steps completed"))
         return section
 
     def _toggle_node(self, node_id: str, map_name: str = None):

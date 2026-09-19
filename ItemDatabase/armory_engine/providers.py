@@ -35,7 +35,10 @@ from pathlib import Path
 from armory_engine.model import Detail
 
 __all__ = [
+    "ARMORY_CACHE_SUBDIR",
+    "CATALOG_SUBDIR",
     "DATA_MISSING_KEY",
+    "DETAILS_SUBDIR",
     "DUNGEON_SETS_FILE",
     "ITEMS_FILE",
     "STAT_PRIORITY_OPTIONS_FILE",
@@ -43,6 +46,7 @@ __all__ = [
     "DiskDetailProvider",
     "load_data_bundle",
     "load_json_or_none",
+    "resolve_armory_dirs",
 ]
 
 logger = logging.getLogger("item_database")
@@ -57,6 +61,55 @@ STAT_PRIORITY_OPTIONS_FILE = "stat_priority_options.json"
 #: Translation key for "the Armory data pack is not on this machine".  A KEY,
 #: like every other string the engine produces (see :mod:`armory_engine.explain`).
 DATA_MISSING_KEY = "armory_reco_needs_data"
+
+#: Directory names ``ItemDatabase/app.py`` uses.  Mirrored here, in the one
+#: module of the engine that is allowed to know a path, so that the host and
+#: the Armory window cannot drift (see :func:`resolve_armory_dirs`).
+CATALOG_SUBDIR = "data"
+DETAILS_SUBDIR = "details"
+ARMORY_CACHE_SUBDIR = "armory"
+
+
+def resolve_armory_dirs(frozen: bool, bundle_dir: Path | str,
+                        cache_dir: Path | str) -> tuple[Path, Path]:
+    """``(catalog_dir, details_dir)`` — the two trees, which are NOT one tree.
+
+    This function exists because one caller assumed they were.  The catalog
+    (``items_all.json`` & co.) is **read-only payload**: it ships in the
+    bundle and, frozen, extracts under ``_MEIPASS/ItemDatabase/data``.  The
+    detail cache is **written at runtime** by ``ItemDetailCache``, so frozen
+    it cannot live in the bundle at all — ``app.py``'s ``_cache_root()``
+    puts it under ``user_cache_dir()/armory``, because the bundle directory
+    is re-extracted every launch (onefile) and an install under
+    ``/opt``, ``/usr/lib`` or ``Program Files`` is not writable.
+
+    From source the two coincide (``ItemDatabase/data`` and
+    ``ItemDatabase/data/details``), which is exactly why deriving the second
+    from the first passed every test and every dev run while being wrong in
+    the only build users install: ``"Aion2 TM.spec"`` deliberately never
+    ships ``details/``, so a provider pointed at the bundle reads an empty
+    directory **forever** and two of the three recommendation features
+    silently never appear.
+
+    ``frozen``, ``bundle_dir`` and ``cache_dir`` are parameters rather than
+    read off ``sys`` here for two reasons: the engine must stay Qt-free and
+    side-effect-free (MASTER §5-1), and a frozen layout has to be testable
+    from a source run — see
+    ``tests/test_armory_dashboard.py::test_the_two_armory_dirs_mirror_the_armorys_own_constants``,
+    which computes app.py's own ``_BUNDLE_DIR``/``DETAIL_CACHE_DIR`` under a
+    faked frozen layout and compares them to this function's answer.
+
+    ``cache_dir`` is ``utils.paths.user_cache_dir()`` — the *parent* of the
+    Armory's cache root, not the root itself, so the ``"armory"`` segment
+    that ``_cache_root()`` appends is spelled in exactly one place here.
+    Nothing is created: this is a pure path computation.
+    """
+    catalog = Path(bundle_dir) / CATALOG_SUBDIR
+    if not frozen:
+        # app.py: `_cache_root()` -> `BASE_DIR / "data"`, and from source
+        # BASE_DIR is ItemDatabase/ -- the same tree as the catalog.
+        return catalog, catalog / DETAILS_SUBDIR
+    return catalog, Path(cache_dir) / ARMORY_CACHE_SUBDIR / DETAILS_SUBDIR
 
 
 def load_json_or_none(path: Path | str):

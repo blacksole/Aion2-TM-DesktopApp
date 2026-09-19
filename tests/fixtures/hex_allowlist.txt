@@ -18,7 +18,7 @@
 # core/theme.py is exempt as the single OWNER of the token values -- that is
 # not an exception to the rule, it is the rule (see OWNER_FILES in the test).
 
-ui/pages/about_page.py:43:#5865F2  # Third-party BRAND glyph, inline SVG (Simple Icons, CC0): Discord blurple, the platform's own registered colour. A brand mark is not a theme decision -- recolouring it to an accent token would misrepresent the service the button links to.
+ui/pages/about_page.py:44:#5865F2  # Third-party BRAND glyph, inline SVG (Simple Icons, CC0): Discord blurple, the platform's own registered colour. A brand mark is not a theme decision -- recolouring it to an accent token would misrepresent the service the button links to.
 ui/full_view_export.py:370:#22d3ee  # Avatar palette of the EXPORTED HTML document, cycled per character. Deliberately the document's own palette, not the app's tokens: a file exported yesterday must not look different from one exported today because the user changed theme in between. The document's stylesheet itself lives in assets/full_view/export.css, which the scanner does not read.
 ui/full_view_export.py:370:#a78bfa  # Same line and same reason as the entry above: the exported document's own avatar palette, one list literal, deliberately theme-independent.
 ui/full_view_export.py:370:#4ade80  # Same line and same reason as the entry above: the exported document's own avatar palette, one list literal, deliberately theme-independent.

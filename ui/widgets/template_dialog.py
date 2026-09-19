@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from ui.widgets.shopping_card import format_currency_price
 from ui.widgets import icons
-from PySide6.QtCore import Qt, QEvent, QObject
+from PySide6.QtCore import Qt, QEvent, QObject, QSize
 from PySide6.QtGui import QRegularExpressionValidator, QIntValidator
 from PySide6.QtCore import QRegularExpression
 from PySide6.QtWidgets import (
@@ -191,6 +191,11 @@ class TemplateDialog(QDialog):
         self._tabs = QTabWidget()
         self._tabs.addTab(self._make_shop_tab(), self._t("tab_shopping"))
         self._tabs.addTab(self._make_tasks_tab(), self._t("tab_tasks"))
+        # The two labels used to start with "🛒"/"📋" — tofu on a stock
+        # Linux font stack.  A QTabWidget takes a real QIcon instead.
+        self._tabs.setTabIcon(0, icons.icon("shopping-cart", 16))
+        self._tabs.setTabIcon(1, icons.icon("list-todo", 16))
+        self._tabs.setIconSize(QSize(16, 16))
         if initial_tab == "tasks":
             self._tabs.setCurrentIndex(1)
         layout.addWidget(self._tabs, 1)
@@ -243,6 +248,7 @@ class TemplateDialog(QDialog):
         self._shop_info_label = QLabel(self._t("shop_tab_info"))
         self._shop_info_label.setObjectName("subtitle")
         self._shop_sync_btn = QPushButton()
+        icons.set_icon(self._shop_sync_btn, "refresh-cw", 16, clear_text=False)
         self._shop_sync_btn.setObjectName("secondaryButton")
         self._shop_sync_btn.setCursor(Qt.PointingHandCursor)
         self._shop_sync_btn.clicked.connect(lambda: self._open_sync_dialog("shopping"))
@@ -326,6 +332,7 @@ class TemplateDialog(QDialog):
         self._task_info_label = QLabel(self._t("task_tab_info"))
         self._task_info_label.setObjectName("subtitle")
         self._task_sync_btn = QPushButton()
+        icons.set_icon(self._task_sync_btn, "refresh-cw", 16, clear_text=False)
         self._task_sync_btn.setObjectName("secondaryButton")
         self._task_sync_btn.setCursor(Qt.PointingHandCursor)
         self._task_sync_btn.clicked.connect(lambda: self._open_sync_dialog("tasks"))
@@ -1469,6 +1476,7 @@ class _TemplateEditDialog(QDialog):
             import_link.setObjectName("linkButton")
             import_link.setCursor(Qt.PointingHandCursor)
             import_link.setFlat(True)
+            icons.set_icon(import_link, "database", 16, clear_text=False)
             import_link.clicked.connect(self._open_import_from_db)
             layout.addWidget(import_link, 0, Qt.AlignLeft)
 

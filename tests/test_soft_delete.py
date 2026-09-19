@@ -428,7 +428,7 @@ def test_closing_the_app_commits_the_pending_delete(win, writes):
 def test_plain_toast_has_no_action_button(win):
     win.show_toast("saved")
 
-    assert win.toast_label.text() == "✓ saved"
+    assert win.toast_label.text() == "saved"
     assert win.toast_action_btn.isHidden()
 
 
@@ -437,7 +437,7 @@ def test_delete_shows_an_undo_action_toast(win):
 
     win._delete_card(card)
 
-    assert win.toast_label.text() == f"✓ {tr('en', 'toast_task_removed')}"
+    assert win.toast_label.text() == tr("en", "toast_task_removed")
     assert not win.toast_action_btn.isHidden()
     assert win.toast_action_btn.text() == tr("en", "undo")
 
@@ -480,7 +480,7 @@ def test_an_expired_toasts_timer_does_not_close_a_newer_toast(win):
 
     win._hide_toast(stale_seq)
 
-    assert win.toast_label.text() == "✓ second"
+    assert win.toast_label.text() == "second"
     assert not win.toast_widget.isHidden()
 
     win._hide_toast(win._toast_seq)

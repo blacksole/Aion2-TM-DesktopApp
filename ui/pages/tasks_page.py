@@ -10,6 +10,10 @@ from core import theme
 from ui.widgets.empty_state import EmptyStateWidget
 from ui.widgets import icons
 
+#: Which Lucide icon each ToDo pill carries (MASTER §3).
+_TAB_ICONS = {"tasks": "list-todo", "shopping": "shopping-cart"}
+
+
 class TaskProgressBar(QFrame):
     def __init__(self):
         super().__init__()
@@ -192,9 +196,14 @@ class TasksPage(QWidget):
 
         self.tab_buttons = {}
 
+        # MASTER §3: the pills carried "📋"/"🛒" inside their translated
+        # label, which is a missing-glyph rectangle on a stock Linux font
+        # stack (Barlow has no pictographs — see tests/test_icons.py).
         for key, label in self.tabs.items():
             btn = QPushButton(self.tr(self.language, label))
             btn.setObjectName("tabButton")
+            icons.set_icon(btn, _TAB_ICONS.get(key, "list-todo"), 16,
+                           clear_text=False)
             btn.clicked.connect(
                 lambda checked=False, k=key: self.set_active_tab(k)
             )
@@ -208,6 +217,7 @@ class TasksPage(QWidget):
         self._template_btn.setObjectName("templateButton")
         self._template_btn.setCursor(Qt.PointingHandCursor)
         self._template_btn.setVisible(False)
+        icons.set_icon(self._template_btn, "clipboard-list", 16, clear_text=False)
         self._template_btn.clicked.connect(self.template_requested.emit)
         self.tab_row.addWidget(self._template_btn)
 
@@ -219,6 +229,7 @@ class TasksPage(QWidget):
         self._character_btn.setObjectName("templateButton")
         self._character_btn.setCursor(Qt.PointingHandCursor)
         self._character_btn.setVisible(False)
+        icons.set_icon(self._character_btn, "user", 16, clear_text=False)
         self._character_btn.clicked.connect(self.character_requested.emit)
         self.tab_row.addWidget(self._character_btn)
 
@@ -235,11 +246,13 @@ class TasksPage(QWidget):
         self._full_view_btn = QPushButton(self.tr(self.language, "full_view_btn"))
         self._full_view_btn.setObjectName("templateButton")
         self._full_view_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self._full_view_btn, "globe", 16, clear_text=False)
         self._full_view_btn.clicked.connect(self.full_view_requested.emit)
 
         self._import_btn = QPushButton(self.tr(self.language, "full_view_import_btn"))
         self._import_btn.setObjectName("templateButton")
         self._import_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self._import_btn, "upload", 16, clear_text=False)
         self._import_btn.clicked.connect(self.import_requested.emit)
 
         layout.addLayout(self.tab_row)
@@ -275,6 +288,7 @@ class TasksPage(QWidget):
         self.source_standards_btn.setObjectName("templateSourceTab")
         self.source_standards_btn.setCheckable(True)
         self.source_standards_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self.source_standards_btn, "star", 16, clear_text=False)
         self.source_standards_btn.clicked.connect(lambda: self._set_template_source("standards"))
 
         self._source_btn_group = QButtonGroup(self)
@@ -597,6 +611,7 @@ class TasksPage(QWidget):
         # buttons, since the character list is open-ended/variable-length.
         self.char_filter_btn = QPushButton()
         self.char_filter_btn.setObjectName("filterButton")
+        icons.set_icon(self.char_filter_btn, "users", 16, clear_text=False)
         self.char_filter_btn.clicked.connect(self._show_char_filter_popover)
         self._update_char_filter_btn_label()
 

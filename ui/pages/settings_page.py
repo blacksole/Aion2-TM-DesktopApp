@@ -1456,6 +1456,7 @@ class SettingsPage(QWidget):
 
         self.notif_test_btn = QPushButton("Test")
         self.notif_test_btn.setObjectName("secondaryButton")
+        icons.set_icon(self.notif_test_btn, "play", 16, clear_text=False)
         self.notif_test_btn.setFixedWidth(70)
         self.notif_test_btn.clicked.connect(self._preview_sound)
 
@@ -1688,6 +1689,7 @@ class SettingsPage(QWidget):
         self.dps_browse_btn.setFixedWidth(100)
         self.dps_browse_btn.clicked.connect(self._browse_dps_exe)
         self.dps_start_btn = QPushButton("Start")
+        icons.set_icon(self.dps_start_btn, "play", 16, clear_text=False)
         self.dps_start_btn.setObjectName("secondaryButton")
         self.dps_start_btn.setFixedWidth(80)
         self.dps_start_btn.clicked.connect(
@@ -1962,6 +1964,8 @@ class SettingsPage(QWidget):
         # colour emoji on most Linux font stacks -- the one glyph in the app
         # that ignored the theme entirely.
         icons.set_icon(self.profiles_name_edit_btn, "pencil", 16)
+        self.profiles_name_edit_btn.setToolTip("Profilnamen bearbeiten")
+        self.profiles_name_edit_btn.setAccessibleName("Profilnamen bearbeiten")
         self.profiles_name_edit_btn.clicked.connect(self._toggle_profile_edit)
 
         name_layout.addWidget(self.profiles_name_label)
@@ -1982,6 +1986,7 @@ class SettingsPage(QWidget):
         self.save_profile_btn.setObjectName("secondaryButton")
 
         self.load_profile_btn = QPushButton("Load Profile")
+        icons.set_icon(self.load_profile_btn, "chevron-down", 16, clear_text=False)
         self.load_profile_btn.setObjectName("secondaryButton")
 
         self.reset_profile_btn = QPushButton("Reset Profile")
@@ -2110,6 +2115,8 @@ class SettingsPage(QWidget):
             self.profiles_name_label.setVisible(False)
             self.profiles_name_input.setVisible(True)
             icons.set_icon(self.profiles_name_edit_btn, "save", 16)
+            self.profiles_name_edit_btn.setToolTip("Profilnamen speichern")
+            self.profiles_name_edit_btn.setAccessibleName("Profilnamen speichern")
             self.profiles_name_input.setFocus()
             self.profiles_name_input.selectAll()
             return
@@ -2125,6 +2132,8 @@ class SettingsPage(QWidget):
         self.profiles_name_input.setVisible(False)
         self.profiles_name_label.setVisible(True)
         icons.set_icon(self.profiles_name_edit_btn, "pencil", 16)
+        self.profiles_name_edit_btn.setToolTip("Profilnamen bearbeiten")
+        self.profiles_name_edit_btn.setAccessibleName("Profilnamen bearbeiten")
 
     def _pick_profile_dir(self):
         current = self.profiles_path_label.text()

@@ -1021,14 +1021,136 @@ def test_this_clone_has_no_data_pack_so_the_card_says_so(host):
     )
 
 
-def test_the_data_dir_mirrors_the_armorys_own_bundle_dir(host):
-    """``MainWindow._armory_data_dir`` mirrors ``ItemDatabase/app.py``'s
-    ``_BUNDLE_DIR`` (read-only, never imported).  Drift here means the
-    dashboard reads a catalog the Armory window does not."""
-    assert host._armory_data_dir() == host.project_root / "ItemDatabase" / "data"
-    app_source = (REPO / "ItemDatabase" / "app.py").read_text(encoding="utf-8")
-    assert '_BUNDLE_DIR = Path(sys._MEIPASS) / "ItemDatabase"' in app_source
-    assert "_BUNDLE_DIR = Path(__file__).parent" in app_source
+#: The top-level names of ``ItemDatabase/app.py`` that decide where the
+#: Armory reads its catalog and writes its detail cache.  Lifted out of the
+#: module by AST rather than imported (importing app.py is a 23 000-line
+#: load that monkey-patches Qt) and rather than string-matched (a grep can
+#: only prove a line is *present*, never what it computes).
+#:
+#: ``_migrate_legacy_cache`` and its call site are deliberately NOT lifted:
+#: it moves directories on disk, and this test fakes a frozen layout.
+_APP_PATH_NAMES = ("_BUNDLE_DIR", "BASE_DIR", "_cache_root", "CACHE_ROOT",
+                   "DETAIL_CACHE_DIR")
+
+
+def _app_py_path_constants(frozen: bool, meipass: Path, executable: Path,
+                           cache_parent: Path) -> dict:
+    """Run app.py's OWN path arithmetic under a synthetic layout.
+
+    Executes the real statements out of the real file, so a change to
+    ``_cache_root()`` or ``_BUNDLE_DIR`` lands here on the next run instead
+    of silently diverging from the host.
+    """
+    import ast
+    import types
+
+    from utils import paths as real_paths
+
+    tree = ast.parse((REPO / "ItemDatabase" / "app.py").read_text(encoding="utf-8"))
+    wanted: list[ast.stmt] = []
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name in _APP_PATH_NAMES:
+            wanted.append(node)
+        elif isinstance(node, ast.Assign):
+            names = {t.id for t in node.targets if isinstance(t, ast.Name)}
+            if names & set(_APP_PATH_NAMES):
+                wanted.append(node)
+        elif isinstance(node, ast.If):
+            assigned = {
+                t.id
+                for inner in ast.walk(node)
+                if isinstance(inner, ast.Assign)
+                for t in inner.targets
+                if isinstance(t, ast.Name)
+            }
+            if assigned & set(_APP_PATH_NAMES):
+                wanted.append(node)
+    lifted = [
+        n.name if isinstance(n, ast.FunctionDef) else
+        [t.id for t in n.targets if isinstance(t, ast.Name)] if isinstance(n, ast.Assign) else
+        "if/else"
+        for n in wanted
+    ]
+    assert len(wanted) >= 4, f"app.py's path statements moved — lifted only {lifted}"
+
+    fake_sys = types.SimpleNamespace(executable=str(executable / "Aion2 TM"))
+    if frozen:
+        fake_sys.frozen = True
+        fake_sys._MEIPASS = str(meipass)
+
+    namespace = {"sys": fake_sys, "Path": Path, "__file__": str(
+        REPO / "ItemDatabase" / "app.py")}
+    original = real_paths.user_cache_dir
+    real_paths.user_cache_dir = lambda *a, **k: cache_parent
+    try:
+        exec(compile(ast.Module(body=wanted, type_ignores=[]), "<app.py paths>", "exec"),
+             namespace)
+    finally:
+        real_paths.user_cache_dir = original
+    return namespace
+
+
+def test_the_two_armory_dirs_mirror_the_armorys_own_constants(host, tmp_path):
+    """Catalog **and** details, in source mode **and** frozen mode.
+
+    The version of this test that shipped with the dashboard asserted only
+    ``_armory_data_dir() == project_root/ItemDatabase/data`` and grepped for
+    the two ``_BUNDLE_DIR`` lines.  It therefore encoded a bug as the
+    intended invariant: the provider read ``_MEIPASS/ItemDatabase/data/
+    details`` while ``ItemDetailCache`` wrote ``user_cache_dir()/armory/
+    details``, so in the only build users install the detail cache the
+    recommender reads is empty forever — and this test kept passing,
+    because from source those two paths are the same directory.
+
+    Both modes are pinned now, against app.py's own arithmetic rather than
+    against a re-typed copy of it.
+    """
+    sys.path.append(str(REPO / "ItemDatabase"))
+    from armory_engine.providers import resolve_armory_dirs
+
+    # ── source mode: the host, and app.py, and the two trees coincide ──
+    catalog, details = host._armory_dirs()
+    assert catalog == host.project_root / "ItemDatabase" / "data"
+    assert details == catalog / "details"
+    assert (catalog, details) == (host._armory_data_dir(), host._armory_details_dir())
+
+    from_app = _app_py_path_constants(
+        frozen=False, meipass=tmp_path / "meipass",
+        executable=tmp_path / "install", cache_parent=tmp_path / "cache")
+    assert catalog == from_app["_BUNDLE_DIR"] / "data"
+    assert details == from_app["DETAIL_CACHE_DIR"]
+
+    # ── frozen mode: they do NOT coincide, and both sides must agree ──
+    meipass = tmp_path / "meipass"
+    cache_parent = tmp_path / "cache"
+    frozen_app = _app_py_path_constants(
+        frozen=True, meipass=meipass,
+        executable=tmp_path / "install", cache_parent=cache_parent)
+    frozen_catalog, frozen_details = resolve_armory_dirs(
+        True, meipass / "ItemDatabase", cache_parent)
+
+    assert frozen_catalog == frozen_app["_BUNDLE_DIR"] / "data"
+    assert frozen_details == frozen_app["DETAIL_CACHE_DIR"]
+    assert frozen_details != frozen_catalog / "details", (
+        "the frozen layout is the whole point: the detail cache is NOT in "
+        "the bundle, and a test that lets these be equal cannot see the bug"
+    )
+
+
+def test_the_spec_never_ships_a_details_folder(host):
+    """Why the frozen split above is not theoretical.
+
+    ``details/`` is a runtime HTTP cache (~278 MB on a played account) and
+    the spec names each data file individually precisely so it can never be
+    swept in.  If that ever changes, the frozen provider path becomes a
+    judgement call again rather than a fact.
+    """
+    spec = (REPO / "Aion2 TM.spec").read_text(encoding="utf-8")
+    assert "ItemDatabase/data/details" not in spec
+    assert "('ItemDatabase/data'," not in spec, (
+        "the whole data/ folder is bundled now — re-decide where the "
+        "recommender's DiskDetailProvider should read from"
+    )
 
 
 def test_the_engine_is_loaded_once_per_session(host):

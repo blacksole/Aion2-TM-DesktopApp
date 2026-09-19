@@ -727,6 +727,65 @@ symbole de nœud Flow, **choisi par l'utilisateur** et stocké dans sa map.
 close** : elle demande quatre formes distinctes par statut dans la légende de la
 Flow Map, ce qui est une décision de design, pas une substitution d'icône.
 
+### 2026-09-19 (soir) — la vague icônes, finie côté **chaînes**
+
+La revue H d'Apex a montré que la vague du matin ne faisait pas, dans
+l'application qui tourne, ce que son message de commit annonçait. Deux
+défauts, une seule cause.
+
+**Un glyphe retiré d'un constructeur revient au premier `update_language()`.**
+`QPushButton("▶ Test")` était devenu `QPushButton("Test")`, mais
+`update_language()` — appelé au démarrage **et** à chaque changement de langue
+— fait `setText(tr(langue, "test_sound"))`, et la valeur traduite portait
+toujours le `▶`. Le nettoyage était un no-op. Le seul endroit où il pouvait
+avoir lieu est la table de traduction.
+
+**Et une bonne moitié de ces glyphes ne s'affichait pas du tout.** Mesuré, pas
+supposé : `QRawFont(…"Barlow-Regular.ttf").supportsCharacter(ord(c))` sur les
+faces réellement embarquées dit que Barlow ne contient **aucun** des
+pictogrammes (📋 🛒 👤 🎉 🌐 🐛 🗄), ni aucun des dingbats (▾ ● ○ ✓ ★ ⚙ ↺ ▶ ⬆).
+Les premiers rendaient donc des **rectangles ▯** sur la page d'accueil
+(« ▯ Templates », « ▯ Import », « ▯ Overlay ») ; les seconds passaient par une
+police de repli du système — ce qui est pire autrement, un glyphe filiforme
+d'une autre fonte à huit pixels d'un chevron Lucide net se lit comme une icône
+cassée, pas comme un style. Ce que Barlow **a** : `× · — …`.
+
+**Ce qui a été fait.** 44 clés × 3 langues balayées dans `core/translations.py`
+(plus `standards_sync_btn` et un `＋` pleine-chasse que le balayage a
+découverts) ; le glyphe part de la **chaîne**, et l'icône Lucide se pose sur le
+**widget** avec `icons.set_icon(..., clear_text=False)`. Trois phrases où le
+glyphe était au milieu ont été réécrites plutôt qu'amputées
+(`no_templates_hint`, `shop_tab_info`, `task_tab_info` : « ☑ = … » devient
+« Häkchen / Отмечено / Checked = … »).
+
+**La bascule de complétion est passée d'un bloc.** `○`/`●`/`✓` → Lucide
+`circle` / `circle-check`, 16 px, teintés `fg.muted` / `ok`, sur les **cinq**
+sites à la fois (TaskCard, ShoppingCard et les trois lignes de l'overlay).
+C'est la raison pour laquelle la vague du matin l'avait *reportée* plutôt que
+faite à moitié : convertir un sous-ensemble aurait mis un anneau Lucide sur une
+ligne Shopping et un dingbat de repli sur la ligne Tasks juste au-dessus. Le
+préfixe « ✓ » du toast disparaît de la même façon — il était dans le *texte*,
+donc aussi dans les cinq assertions qui relisaient ce texte ; c'est un
+`IconLabel` à côté du label maintenant.
+
+**Deux garde-fous, parce qu'un seul regardait au mauvais endroit.** L'ancien
+scannait les **littéraux source** — exactement ce qu'un `update_language()`
+remet en place derrière lui. Il reste (il attrape le glyphe posé en dur), et
+`test_no_translated_string_carries_an_icon_glyph` lit désormais les **valeurs
+résolues** des trois langues. Le second est une liste noire, donc aveugle au
+prochain glyphe que personne n'a pensé à interdire :
+`test_every_other_symbol_in_a_translation_is_allow_listed` prend l'autre sens —
+tout symbole non-ASCII qui n'est ni une lettre, ni de la ponctuation d'une
+vraie langue, ni explicitement autorisé, échoue. Et la liste des autorisés
+n'est pas une affaire de goût : `test_the_allowed_text_symbols_really_are_in_the_body_font`
+la confronte au **cmap de Barlow**. Une seule exception nommée, `→`, connecteur
+de prose (« {done} → erledigt »), jamais une icône.
+
+**Piège relevé au passage** : `QRawFont.supportsCharacter("→")` — la chaîne
+d'un caractère — répond `False` pour *tout*, y compris pour `A`. Il faut
+`ord()`. Une liste « vérifiée » de cette façon n'aurait rien vérifié ; le test
+teste donc d'abord sa propre sonde (`supportsCharacter(ord("A"))`).
+
 ### Décisions différées (posées explicitement, pas oubliées)
 
 | Sujet | Décision | Pourquoi pas maintenant |

@@ -421,6 +421,124 @@ def test_no_emoji_is_used_as_an_icon_in_the_owned_files():
     )
 
 
+# ---------------------------------------------------------------------------
+# ... and none came back through a translated string either
+# ---------------------------------------------------------------------------
+
+#: The glyphs the app used as icons, banned from every translated value.
+#: Two groups, both verified against the real fonts by the test below:
+#:
+#: * pictographs (📋 🛒 👤 🎉 🌐 …) — Barlow has no cmap entry for any of
+#:   them and neither does a stock Linux font stack, so they rendered as
+#:   **tofu boxes** on the landing page (visible in the review's reading of
+#:   ``icons_todo_abyss.png``: "▯ Templates", "▯ Import", "▯ Overlay");
+#: * dingbats, geometric shapes and arrows (▾ ● ○ ✓ ★ ⚙ ↺ ▶ ⬆ …) — not in
+#:   Barlow either.  They *render*, through a system fallback face, which is
+#:   worse in a different way: a hairline glyph from another typeface eight
+#:   pixels from a crisp Lucide chevron reads as a broken icon rather than
+#:   as a style.
+_BANNED_IN_TRANSLATIONS = "🎉📋📅🛒🛍🎁👤🌐🗄🐛🔍▾▸▴▪●○✓✕✎✏★☆☑⚙↺↻↩↗⬆⬇⬛▶⏸☕❤️"
+
+#: Text characters a translated string MAY carry.  Everything here except
+#: ``→`` is in Barlow's own cmap — asserted below, so this list cannot grow
+#: by taste.  ``→`` is the one documented exception: it is a prose
+#: connective ("{done} → erledigt", "used for your wish → 3 more"), never an
+#: icon standing in for a control, and rewriting four sentences in three
+#: languages to avoid a fallback-rendered arrow buys nothing.
+_ALLOWED_TEXT_SYMBOLS = "×·—…"
+_FALLBACK_TEXT_EXCEPTIONS = {"→": "prose connective, never an icon; not in Barlow's cmap"}
+
+
+def _body_font_path() -> Path:
+    return REPO / "assets" / "fonts" / "Barlow-Regular.ttf"
+
+
+def test_the_allowed_text_symbols_really_are_in_the_body_font(qapp):
+    """The allow-list above is a claim about a font file; check the file.
+
+    ``QRawFont.supportsCharacter`` needs an int code point — passing the
+    one-character string answers False for everything, which is how a
+    "verified" list could quietly be verified against nothing.
+    """
+    from PySide6.QtGui import QRawFont
+
+    raw = QRawFont(str(_body_font_path()), 16.0)
+    assert raw.isValid(), f"{_body_font_path()} did not load"
+    assert raw.supportsCharacter(ord("A")), "the cmap probe itself is broken"
+
+    missing = [c for c in _ALLOWED_TEXT_SYMBOLS if not raw.supportsCharacter(ord(c))]
+    assert not missing, (
+        f"{missing} are allow-listed as text but Barlow has no glyph for them — "
+        "they would render from a fallback face, which is what this gate exists "
+        "to stop.  Move them to _FALLBACK_TEXT_EXCEPTIONS with a reason, or ban them."
+    )
+    for glyph in _FALLBACK_TEXT_EXCEPTIONS:
+        assert not raw.supportsCharacter(ord(glyph)), (
+            f"{glyph!r} IS in Barlow now — move it to _ALLOWED_TEXT_SYMBOLS"
+        )
+
+
+def test_no_translated_string_carries_an_icon_glyph():
+    """The gate the source-literal scan could not be.
+
+    Stripping ``"▶ Test"`` down to ``"Test"`` in a constructor is a **no-op
+    in the running app**: ``update_language()`` runs at startup and on every
+    language change and puts the translated value back, glyph and all.  The
+    only place that sweep can happen is the translation table, so that is
+    what this reads — the resolved values, all three languages.
+    """
+    from core.translations import TRANSLATIONS
+
+    offenders: list[str] = []
+    for language, table in sorted(TRANSLATIONS.items()):
+        for key, value in sorted(table.items()):
+            if not isinstance(value, str):
+                continue
+            found = {c for c in value if c in _BANNED_IN_TRANSLATIONS}
+            if found:
+                offenders.append(f"{language}/{key}: {''.join(sorted(found))} in {value!r}")
+    assert not offenders, (
+        "MASTER §3 « aucun emoji comme icône » — icon glyphs in translated "
+        "text:\n  " + "\n  ".join(offenders)
+        + "\nStrip the glyph from the STRING and put a Lucide icon on the "
+          "widget with icons.set_icon(..., clear_text=False)."
+    )
+
+
+def test_every_other_symbol_in_a_translation_is_allow_listed():
+    """Catches the next glyph nobody thought to ban.
+
+    The banned list above is a denylist, which only ever knows about the
+    characters someone already found.  This is the other direction: every
+    non-ASCII symbol in every translated value must be either a letter of
+    that language, allow-listed punctuation, or a named exception.
+    """
+    import unicodedata
+
+    from core.translations import TRANSLATIONS
+
+    allowed = set(_ALLOWED_TEXT_SYMBOLS) | set(_FALLBACK_TEXT_EXCEPTIONS)
+    unexpected: dict[str, set[str]] = {}
+    for language, table in TRANSLATIONS.items():
+        for key, value in table.items():
+            if not isinstance(value, str):
+                continue
+            for char in value:
+                if char.isalnum() or char.isspace() or ord(char) < 128 or char in allowed:
+                    continue
+                if unicodedata.category(char) in (
+                        "Pd", "Pi", "Pf", "Po", "Ps", "Pe", "Zs"):
+                    # Dashes, quotation marks and brackets of a real
+                    # language -- German „…“ and Russian «…» included.
+                    continue
+                unexpected.setdefault(char, set()).add(f"{language}/{key}")
+    assert not unexpected, (
+        "new non-text symbol(s) in the translation tables: "
+        + ", ".join(f"{c!r} ({sorted(k)[0]})" for c, k in sorted(unexpected.items()))
+        + " — ban it in _BANNED_IN_TRANSLATIONS or allow-list it with a reason"
+    )
+
+
 def test_the_allowlist_has_no_dead_entries():
     """An allow-list that outlives its offender hides the next one."""
     live = set(_emoji_text_sites())

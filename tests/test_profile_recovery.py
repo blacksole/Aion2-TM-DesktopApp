@@ -97,7 +97,7 @@ def test_keep_the_file_leaves_autosave_off_and_says_so(window, corrupt_profile, 
 
     assert window._profile_loading is True
     assert window._profile_unreadable is True
-    assert window.toast_label.text() == f"✓ {tr(window.language, 'profile_autosave_disabled')}"
+    assert window.toast_label.text() == tr(window.language, "profile_autosave_disabled")
     # The file is untouched and no snapshot was taken -- nothing overwrote it.
     assert corrupt_profile.read_text(encoding="utf-8") == CORRUPT
     assert list(window.profile_dir.glob("Broken.json.corrupt-*")) == []
@@ -160,7 +160,7 @@ def test_backup_recovery_toast_is_translated(window, monkeypatch):
 
     window.load_profile(path)
 
-    assert window.toast_label.text() == f"✓ {tr(window.language, 'profile_restored_from_backup')}"
+    assert window.toast_label.text() == tr(window.language, "profile_restored_from_backup")
     assert "Profile restored from backup" not in window.toast_label.text() or window.language == "en"
 
 

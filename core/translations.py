@@ -9,7 +9,7 @@ TRANSLATIONS = {
         # ================= PROFILE =================
         "current_profile": 'Aktuelles Profil: "{name}"',
         "save_profile": "Profil sichern",
-        "load_profile": "Profil laden ▾",
+        "load_profile": "Profil laden",
         "reset_profile": "Profil zurücksetzen",
         "profile_saved": "Profil gespeichert",
         "profile_restored_from_backup": "Profil aus der Sicherungskopie wiederhergestellt",
@@ -48,18 +48,18 @@ TRANSLATIONS = {
         "offline": "Offline",
 
         # ================= TASKS =================
-        "daily_tasks": "📋 Tägl. Aufgaben",
-        "weekly_tasks": "📅 Wöch. Aufgaben",
-        "event_tasks": "🎉 Event Aufgaben",
+        "daily_tasks": "Tägl. Aufgaben",
+        "weekly_tasks": "Wöch. Aufgaben",
+        "event_tasks": "Event Aufgaben",
         "tasks": "Aufgaben",
         "tasks_subtitle": "Daily, Weekly und Event Aufgaben",
         "todo": "ToDo",
 
         # ================= SHOPPING =================
-        "daily_shopping": "🛒 Tägl. Einkauf",
-        "weekly_shopping": "🛍️ Wöch. Einkauf",
-        "event_shopping": "🎁 Event Einkauf",
-        "shopping": "🛒 Einkauf",
+        "daily_shopping": "Tägl. Einkauf",
+        "weekly_shopping": "Wöch. Einkauf",
+        "event_shopping": "Event Einkauf",
+        "shopping": "Einkauf",
         "priority": "Priorität",
         "priority_low": "Niedrig",
         "priority_middle": "Mittel",
@@ -83,20 +83,20 @@ TRANSLATIONS = {
             "Entfernt alle Event-Einträge aus Aufgaben "
             "und Shopping-Listen.\n\n"
             "Normale Daily- und Weekly-Einträge bleiben erhalten.",
-        "event_entries_removed": "✓ Event-Einträge gelöscht",
+        "event_entries_removed": "Event-Einträge gelöscht",
 
         # ================= SORTING =================
-        "sort_by": "Sortieren nach ▾",
+        "sort_by": "Sortieren nach",
         "sort_by_title": "Titel",
         "sort_by_location": "Ort",
         "sort_by_price": "Preis",
         "sort_by_priority": "Priorität",
 
         # ================= FILTERING =================
-        "filter_by": "Filtern nach ▾",
+        "filter_by": "Filtern nach",
         "filter_by_all": "Alle",
         "filter_by_events": "Event",
-        "todo_char_filter_btn": "Alle Charaktere ▾",
+        "todo_char_filter_btn": "Alle Charaktere",
         "todo_char_filter_all": "Alle Charaktere",
 
         # ================= STATS =================
@@ -140,7 +140,7 @@ TRANSLATIONS = {
         "ct_color_blue": "Blau",
         "ct_dialog_notification_sound_label": "Benachrichtigungston",
         "ct_dialog_no_sound": "-- Kein Sound --",
-        "ct_dialog_test_button": "▶ Test",
+        "ct_dialog_test_button": "Test",
         "ct_dialog_warn_label": "Vorwarnung",
         "ct_manager_title": "Custom Timer verwalten",
         "ct_manager_categories_title": "Kategorien",
@@ -186,7 +186,7 @@ TRANSLATIONS = {
         "about":            "Über Aion2 TM",
         "about_desc":       "Task Manager für Aion2 — Tägliche & wöchentliche Aufgaben, Timer, Flow Map.",
         "about_github":     "GitHub",
-        "bug_report_btn":   "🐛 Bug melden",
+        "bug_report_btn":   "Bug melden",
         "about_copy_ver":   "Version kopieren",
         "about_changelog_history": "Changelog",
 
@@ -238,7 +238,7 @@ TRANSLATIONS = {
 
         # ================= MISC =================
         "no_sound":        "Kein Sound",
-        "test_sound":      "▶ Test",
+        "test_sound":      "Test",
         "win_notif_title": "Windows Benachrichtigungen",
         "min_abbr":        "Min",
         "notif_sync":      "Synchron",
@@ -339,11 +339,11 @@ TRANSLATIONS = {
         "status_locked_short": "Gesperrt",
 
         # ================= FLOW MAP UI =================
-        "flow_saved": "✓ Gespeichert",
+        "flow_saved": "Gespeichert",
         "flow_saving": "Speichern...",
         "flow_zoom_hint": "Scrollen | Zoom {pct}%",
-        "flow_mark_done":      "✓  Als erledigt markieren",
-        "flow_mark_open":      "↩  Als offen markieren",
+        "flow_mark_done":      "Als erledigt markieren",
+        "flow_mark_open":      "Als offen markieren",
         "flow_tooltip_home": "Zur Wurzel",
         "flow_tooltip_select": "Auswählen",
         "flow_tooltip_add_node": "Knoten hinzufügen",
@@ -401,14 +401,14 @@ TRANSLATIONS = {
         "duplicate_profile_title": "Profil duplizieren",
         "duplicate_profile_label": "Name des neuen Profils:",
         "duplicate_profile_success": "Profil \"{name}\" wurde erstellt.",
-        "profile_exported": "✓ Profil exportiert",
-        "profile_imported": "✓ Profil importiert",
+        "profile_exported": "Profil exportiert",
+        "profile_imported": "Profil importiert",
         "profile_import_error": "Ungültige Profil-Datei",
 
         # ================= DISCORD COMMUNITY =================
         "discord_row_title": "Discord",
         "discord_row_desc": "Tritt der Community bei — offiziell gelistet im Aion2-Discord.",
-        "discord_row_btn": "Discord ▾",
+        "discord_row_btn": "Discord",
 
         # ================= COOPERATION =================
         "coop_title": "Kooperation",
@@ -417,16 +417,16 @@ TRANSLATIONS = {
         "coop_zassezero_desc": "Support-Discord für diese App.",
 
         # ================= DONATE =================
-        "donate": "Unterstützen ❤",
+        "donate": "Unterstützen",
         "donate_desc": "Die App gefällt dir? Eine kleine Spende hilft bei der Weiterentwicklung.",
-        "donate_btn": "Spenden ☕",
+        "donate_btn": "Spenden",
 
         # ================= USEFUL LINKS =================
         "useful_links_title": "Nützliche Links",
         "useful_links_desc": "Praktische Tools für Aion2.",
         "sources_title": "Quellen",
         "sources_desc": "Item-, Skill-, Rezept- und Board-Daten sowie Recherchen zu Formeln stammen von: shugo.gg, gamers4.life, questlog.gg, talentbuilds.com, aion2hub.com, Kanon's Aion 2 Bible (Aion Research Lab).",
-        "useful_links_open": "Öffnen ↗",
+        "useful_links_open": "Öffnen",
         "useful_link_guildnest_desc": "Kostenloses Gilden-Management-Tool, direkt nutzbar im Discord. Für Aion2 besonders interessant: Build-Editor für Charakter-Builds und Item-Datenbank. Dazu Loot-Verwaltung, Event-Planung und Anwesenheits-Tracking für die Gilde.",
         "useful_link_bible_desc": "Community-Recherche-Dokument zu Aion 2 — u.a. Gear/Enhancement-Erklärungen, Skill-/Arcana-/Daevanion-Board-Übersicht und die bisher genaueste bekannte Schadensformel.",
 
@@ -454,14 +454,14 @@ TRANSLATIONS = {
         "tray_setting_desc": "Beim Schließen im System-Tray verbleiben statt zu beenden.",
 
         # ================= TEMPLATES =================
-        "templates_btn": "📋 Vorlagen",
+        "templates_btn": "Vorlagen",
         "template_placeholder": "Vorlage",
         "standard_template_placeholder": "Standardvorlage",
         "template_source_templates": "Vorlagen",
-        "template_source_standards": "★ Standardvorlagen",
-        "no_templates_hint": "Keine Vorlagen — öffne 📋 und füge Einträge hinzu",
-        "full_view_btn": "🌐 Full View",
-        "full_view_import_btn": "⬆ Import",
+        "template_source_standards": "Standardvorlagen",
+        "no_templates_hint": "Keine Vorlagen — öffne „Vorlagen“ und füge Einträge hinzu",
+        "full_view_btn": "Full View",
+        "full_view_import_btn": "Import",
         "full_view_import_title": "Aus Full View importieren",
         "full_view_import_desc": "Wähle die (ggf. in Excel bearbeitete) CSV- oder Excel-Datei aus dem Full-View-Export. Vorschau prüfen, dann mit Sync direkt ins Profil schreiben.",
         "full_view_import_choose_file_btn": "Datei wählen…",
@@ -490,16 +490,16 @@ TRANSLATIONS = {
         "manual_reset_tooltip": "Manuell zurücksetzen",
 
         "templates_title": "Vorlagen",
-        "tab_shopping": "🛒 Einkauf",
-        "tab_tasks": "📋 Aufgaben",
-        "tab_character": "👤 Charaktere",
+        "tab_shopping": "Einkauf",
+        "tab_tasks": "Aufgaben",
+        "tab_character": "Charaktere",
         "character_tab_info": "Charaktere anlegen und verwalten — dieselben, die überall im Programm zur Auswahl stehen (max. 8).",
         "remove": "Entfernen",
         "close": "Schließen",
-        "shop_tab_info": "☑ = als allgemeiner Einkauf aktiv",
+        "shop_tab_info": "Häkchen = als allgemeiner Einkauf aktiv",
         "template_add_btn": "+ Vorlage hinzufügen",
-        "template_update_btn": "✏ Aktualisieren",
-        "task_tab_info": "☑ = Quest erscheint automatisch in der Aufgabenliste",
+        "template_update_btn": "Aktualisieren",
+        "task_tab_info": "Häkchen = Quest erscheint automatisch in der Aufgabenliste",
         "task_add_btn": "+ Aufgabe hinzufügen",
         "standards_pick_title": "Aus vorhandenen Templates wählen",
         "standards_pick_empty": "Keine passenden Templates gefunden — lege zuerst welche in der Liste an, oder alle vorhandenen sind bereits als Standard hinterlegt.",
@@ -508,7 +508,7 @@ TRANSLATIONS = {
         "standards_pick_deselect_all": "Alle abwählen",
         "standards_pick_filter_all_schedules": "Alle",
         "standards_pick_filter_all_locations": "Alle Orte",
-        "standards_sync_btn": "⟳ Sync",
+        "standards_sync_btn": "Sync",
         "standards_sync_title": "Standard Templates synchen",
         "standards_sync_desc": "Diese Einträge gibt es im Standard-Profil, aber noch nicht in deiner eigenen Liste. Wähle aus, was übernommen werden soll — nichts, das du bereits hast, wird verändert oder entfernt.",
         "standards_sync_new_tag": "NEU",
@@ -527,7 +527,7 @@ TRANSLATIONS = {
         "placeholder_taskname": "Aufgabenname",
         "placeholder_location_short": "Ort",
         "placeholder_task_description": "Optionale Beschreibung",
-        "template_import_from_db": "🗄 Aus Datenbank importieren",
+        "template_import_from_db": "Aus Datenbank importieren",
         "template_import_from_db_title": "Item aus Datenbank wählen",
         "template_import_select_btn": "Auswählen",
         "template_import_all_categories": "Alle Kategorien",
@@ -558,8 +558,8 @@ TRANSLATIONS = {
         "arm_name_colon": "Name:",
         "arm_rename_hint": "Doppelklick zum Umbenennen",
         "arm_slot_empty_hint": "Kein Item in diesem Slot ausgerüstet",
-        "arm_manual_select_collapsed": "Manuelle Auswahl ▸",
-        "arm_manual_select_expanded": "Manuelle Auswahl ▾",
+        "arm_manual_select_collapsed": "Manuelle Auswahl",
+        "arm_manual_select_expanded": "Manuelle Auswahl",
         "arm_filter_category": "Kategorie",
         "arm_filter_shop": "Shop",
         "arm_filter_equip_effect": "Ausrüstungseffekt",
@@ -669,7 +669,7 @@ TRANSLATIONS = {
         "arm_build_cost_empty": "In diesem Build ist noch kein craftbares Gear ausgerüstet.",
         "arm_build_cost_summary": "{craftable} von {equipped} ausgerüsteten Slots sind craftbar",
         "arm_choose_item_from_db": "Item aus Datenbank wählen…",
-        "arm_priority_list_btn": "Prio-Liste ▾",
+        "arm_priority_list_btn": "Prio-Liste",
         "arm_choose_item_hint": "Wähle ein Item, um Materialien und Kinah-Kosten zu berechnen.",
         "arm_quantity_label": "Anzahl:",
         "arm_add_to_priority_tooltip": "Zur Prio-Liste hinzufügen",
@@ -833,7 +833,7 @@ TRANSLATIONS = {
         "arm_choose_a_skill": "Wähle einen Skill",
         "arm_specializations": "Spezialisierungen",
         "arm_details_label": "Details",
-        "arm_skill_priority_hint": "Lege je eine Skill-Reihenfolge für Aktive, Passive und Stigma-Skills fest — klicke auf ein Feld, um einen Skill zuzuweisen, und auf '＋', um ein weiteres Feld anzuhängen. Jeder Skill kann pro Liste nur einmal vorkommen.",
+        "arm_skill_priority_hint": "Lege je eine Skill-Reihenfolge für Aktive, Passive und Stigma-Skills fest — klicke auf ein Feld, um einen Skill zuzuweisen, und auf '+', um ein weiteres Feld anzuhängen. Jeder Skill kann pro Liste nur einmal vorkommen.",
         "arm_add_new_build": "Neuen Build hinzufügen",
         "arm_rename_current_build": "Aktuellen Build umbenennen",
         "arm_new_build_title": "Neuer Build",
@@ -845,7 +845,7 @@ TRANSLATIONS = {
         "arm_delete_build_confirm_text": "„{name}“ wirklich löschen? Dies kann nicht rückgängig gemacht werden.",
         "arm_arcana_information_tab": "Informationen",
         "arm_arcana_sets_tab": "Sets",
-        "arm_equip_priority_hint": "Lege je eine Beschaffungs-/Aufwertungsreihenfolge pro Ausrüstungsteil fest — klicke auf ein Feld, um ein Item zuzuweisen, und auf '＋', um ein weiteres Feld anzuhängen.",
+        "arm_equip_priority_hint": "Lege je eine Beschaffungs-/Aufwertungsreihenfolge pro Ausrüstungsteil fest — klicke auf ein Feld, um ein Item zuzuweisen, und auf '+', um ein weiteres Feld anzuhängen.",
         "arm_no_sets": "Keine Sets",
         "arm_source_aion2hub": "Quelle: aion2hub.com (Community, ungeprüft)",
         "arm_arcana_types": "ARCANA-TYPEN",
@@ -953,7 +953,7 @@ TRANSLATIONS = {
         "undo": "Rückgängig",
 
         # Hardcoded literals swept out of the pages (M3).
-        "about_open_discord": "Discord öffnen ↗",
+        "about_open_discord": "Discord öffnen",
         "open_in_browser": "Im Browser öffnen",
         "timers_open_settings_tooltip": "Timer-Einstellungen öffnen",
         "open_folder": "Ordner öffnen",
@@ -979,7 +979,7 @@ TRANSLATIONS = {
         # ================= PROFILE =================
         "current_profile": 'Текущий профиль: "{name}"',
         "save_profile": "Сохранить профиль",
-        "load_profile": "Загрузить профиль ▾",
+        "load_profile": "Загрузить профиль",
         "reset_profile": "Сбросить профиль",
         "profile_saved": "Профиль сохранён",
         "profile_restored_from_backup": "Профиль восстановлен из резервной копии",
@@ -1017,18 +1017,18 @@ TRANSLATIONS = {
         "offline": "Не в сети",
 
         # ================= TASKS =================
-        "daily_tasks": "📋 Ежедневные задачи",
-        "weekly_tasks": "📅 Еженедельные задачи",
-        "event_tasks": "🎉 Событийные задачи",
+        "daily_tasks": "Ежедневные задачи",
+        "weekly_tasks": "Еженедельные задачи",
+        "event_tasks": "Событийные задачи",
         "tasks": "Задачи",
         "tasks_subtitle": "Ежедневные, еженедельные и событийные задачи",
         "todo": "ToDo",
 
         # ================= SHOPPING =================
-        "daily_shopping": "🛒 Ежедневные покупки",
-        "weekly_shopping": "🛍️ Еженедельные покупки",
-        "event_shopping": "🎁 Событийные покупки",
-        "shopping": "🛒 Покупки",
+        "daily_shopping": "Ежедневные покупки",
+        "weekly_shopping": "Еженедельные покупки",
+        "event_shopping": "Событийные покупки",
+        "shopping": "Покупки",
         "priority": "Приоритет",
         "priority_low": "Низкий",
         "priority_middle": "Средний",
@@ -1051,20 +1051,20 @@ TRANSLATIONS = {
             "Удаляет все событийные записи из задач "
             "и списков покупок.\n\n"
             "Обычные ежедневные и еженедельные записи остаются.",
-        "event_entries_removed": "✓ Событийные записи удалены",
+        "event_entries_removed": "Событийные записи удалены",
 
         # ================= SORTING =================
-        "sort_by": "Сортировка ▾",
+        "sort_by": "Сортировка",
         "sort_by_title": "Название",
         "sort_by_location": "Место",
         "sort_by_price": "Цена",
         "sort_by_priority": "Приоритет",
 
         # ================= FILTERING =================
-        "filter_by": "Фильтр ▾",
+        "filter_by": "Фильтр",
         "filter_by_all": "Все",
         "filter_by_events": "Событие",
-        "todo_char_filter_btn": "Все персонажи ▾",
+        "todo_char_filter_btn": "Все персонажи",
         "todo_char_filter_all": "Все персонажи",
 
         # ================= STATS =================
@@ -1108,7 +1108,7 @@ TRANSLATIONS = {
         "ct_color_blue": "Синий",
         "ct_dialog_notification_sound_label": "Звук уведомления",
         "ct_dialog_no_sound": "-- Без звука --",
-        "ct_dialog_test_button": "▶ Тест",
+        "ct_dialog_test_button": "Тест",
         "ct_dialog_warn_label": "Предупреждение",
         "ct_manager_title": "Управление кастомными таймерами",
         "ct_manager_categories_title": "Категории",
@@ -1154,7 +1154,7 @@ TRANSLATIONS = {
         "about":            "Об Aion2 TM",
         "about_desc":       "Менеджер задач для Aion2 — Ежедневные и еженедельные задачи, таймеры, Flow Map.",
         "about_github":     "GitHub",
-        "bug_report_btn":   "🐛 Сообщить об ошибке",
+        "bug_report_btn":   "Сообщить об ошибке",
         "about_copy_ver":   "Скопировать версию",
         "about_changelog_history": "Журнал изменений",
 
@@ -1206,7 +1206,7 @@ TRANSLATIONS = {
 
         # ================= MISC =================
         "no_sound":        "Без звука",
-        "test_sound":      "▶ Тест",
+        "test_sound":      "Тест",
         "win_notif_title": "Уведомления Windows",
         "min_abbr":        "мин",
         "notif_sync":      "Синхронно",
@@ -1304,11 +1304,11 @@ TRANSLATIONS = {
         "status_locked_short": "Заблокировано",
 
         # ================= FLOW MAP UI =================
-        "flow_saved": "✓ Сохранено",
+        "flow_saved": "Сохранено",
         "flow_saving": "Сохранение...",
         "flow_zoom_hint": "Прокрутка | Масштаб {pct}%",
-        "flow_mark_done":      "✓  Отметить как выполненное",
-        "flow_mark_open":      "↩  Отметить как открытое",
+        "flow_mark_done":      "Отметить как выполненное",
+        "flow_mark_open":      "Отметить как открытое",
         "flow_tooltip_home": "К корню",
         "flow_tooltip_select": "Выбрать",
         "flow_tooltip_add_node": "Добавить узел",
@@ -1366,14 +1366,14 @@ TRANSLATIONS = {
         "duplicate_profile_title": "Дублировать профиль",
         "duplicate_profile_label": "Имя нового профиля:",
         "duplicate_profile_success": "Профиль \"{name}\" создан.",
-        "profile_exported": "✓ Профиль экспортирован",
-        "profile_imported": "✓ Профиль импортирован",
+        "profile_exported": "Профиль экспортирован",
+        "profile_imported": "Профиль импортирован",
         "profile_import_error": "Неверный файл профиля",
 
         # ================= DISCORD COMMUNITY =================
         "discord_row_title": "Discord",
         "discord_row_desc": "Присоединяйся к сообществу — официально в списке Aion2 Discord.",
-        "discord_row_btn": "Discord ▾",
+        "discord_row_btn": "Discord",
 
         # ================= COOPERATION =================
         "coop_title": "Сотрудничество",
@@ -1382,16 +1382,16 @@ TRANSLATIONS = {
         "coop_zassezero_desc": "Discord поддержки для этого приложения.",
 
         # ================= DONATE =================
-        "donate": "Поддержать ❤",
+        "donate": "Поддержать",
         "donate_desc": "Нравится приложение? Небольшое пожертвование помогает развитию.",
-        "donate_btn": "Пожертвовать ☕",
+        "donate_btn": "Пожертвовать",
 
         # ================= USEFUL LINKS =================
         "useful_links_title": "Полезные ссылки",
         "useful_links_desc": "Полезные инструменты для Aion2.",
         "sources_title": "Источники",
         "sources_desc": "Данные о предметах, навыках, рецептах, досках и формулы взяты из: shugo.gg, gamers4.life, questlog.gg, talentbuilds.com, aion2hub.com, Kanon's Aion 2 Bible (Aion Research Lab).",
-        "useful_links_open": "Открыть ↗",
+        "useful_links_open": "Открыть",
         "useful_link_guildnest_desc": "Бесплатный инструмент управления гильдией, доступный прямо в Discord. Особенно полезно для Aion2: редактор билдов персонажей и база предметов, а также управление лутом, планирование событий и учёт посещаемости гильдии.",
         "useful_link_bible_desc": "Документ с исследованиями сообщества по Aion 2 — объяснения снаряжения/улучшений, обзор навыков/Arcana/Daevanion Board и самая точная известная формула урона.",
 
@@ -1419,14 +1419,14 @@ TRANSLATIONS = {
         "tray_setting_desc": "При закрытии оставаться в системном трее.",
 
         # ================= TEMPLATES =================
-        "templates_btn": "📋 Шаблоны",
+        "templates_btn": "Шаблоны",
         "template_placeholder": "Шаблон",
         "standard_template_placeholder": "Стандартный шаблон",
         "template_source_templates": "Шаблоны",
-        "template_source_standards": "★ Стандартные шаблоны",
-        "no_templates_hint": "Нет шаблонов — откройте 📋 и добавьте записи",
-        "full_view_btn": "🌐 Полный вид",
-        "full_view_import_btn": "⬆ Импорт",
+        "template_source_standards": "Стандартные шаблоны",
+        "no_templates_hint": "Нет шаблонов — откройте «Шаблоны» и добавьте записи",
+        "full_view_btn": "Полный вид",
+        "full_view_import_btn": "Импорт",
         "full_view_import_title": "Импорт из Full View",
         "full_view_import_desc": "Выбери CSV- или Excel-файл из экспорта Full View (при желании отредактированный в Excel). Проверь предпросмотр, затем нажми Sync, чтобы записать прямо в профиль.",
         "full_view_import_choose_file_btn": "Выбрать файл…",
@@ -1455,16 +1455,16 @@ TRANSLATIONS = {
         "manual_reset_tooltip": "Сбросить вручную",
 
         "templates_title": "Шаблоны",
-        "tab_shopping": "🛒 Покупки",
-        "tab_tasks": "📋 Задачи",
-        "tab_character": "👤 Персонажи",
+        "tab_shopping": "Покупки",
+        "tab_tasks": "Задачи",
+        "tab_character": "Персонажи",
         "character_tab_info": "Создавайте и управляйте персонажами — теми же, что доступны для выбора везде в приложении (макс. 8).",
         "remove": "Удалить",
         "close": "Закрыть",
-        "shop_tab_info": "☑ = активен как общий шопинг",
+        "shop_tab_info": "Отмечено = активен как общий шопинг",
         "template_add_btn": "+ Добавить шаблон",
-        "template_update_btn": "✏ Обновить",
-        "task_tab_info": "☑ = квест появляется автоматически в списке задач",
+        "template_update_btn": "Обновить",
+        "task_tab_info": "Отмечено = квест появляется автоматически в списке задач",
         "task_add_btn": "+ Добавить задачу",
         "standards_pick_title": "Выбрать из существующих шаблонов",
         "standards_pick_empty": "Подходящих шаблонов не найдено — сначала добавь их в список, либо все уже добавлены как стандартные.",
@@ -1473,7 +1473,7 @@ TRANSLATIONS = {
         "standards_pick_deselect_all": "Снять выбор",
         "standards_pick_filter_all_schedules": "Все",
         "standards_pick_filter_all_locations": "Все локации",
-        "standards_sync_btn": "⟳ Синхронизировать",
+        "standards_sync_btn": "Синхронизировать",
         "standards_sync_title": "Синхронизировать стандартные шаблоны",
         "standards_sync_desc": "Эти записи есть в стандартном профиле, но пока отсутствуют в твоём собственном списке. Выбери, что добавить — то, что у тебя уже есть, не изменится и не удалится.",
         "standards_sync_new_tag": "НОВОЕ",
@@ -1492,7 +1492,7 @@ TRANSLATIONS = {
         "placeholder_taskname": "Название задачи",
         "placeholder_location_short": "Место",
         "placeholder_task_description": "Необязательное описание",
-        "template_import_from_db": "🗄 Импорт из базы данных",
+        "template_import_from_db": "Импорт из базы данных",
         "template_import_from_db_title": "Выбрать предмет из базы данных",
         "template_import_select_btn": "Выбрать",
         "template_import_all_categories": "Все категории",
@@ -1523,8 +1523,8 @@ TRANSLATIONS = {
         "arm_name_colon": "Название:",
         "arm_rename_hint": "Двойной клик для переименования",
         "arm_slot_empty_hint": "В этом слоте нет предмета",
-        "arm_manual_select_collapsed": "Ручной выбор ▸",
-        "arm_manual_select_expanded": "Ручной выбор ▾",
+        "arm_manual_select_collapsed": "Ручной выбор",
+        "arm_manual_select_expanded": "Ручной выбор",
         "arm_filter_category": "Категория",
         "arm_filter_shop": "Магазин",
         "arm_filter_equip_effect": "Эффект экипировки",
@@ -1634,7 +1634,7 @@ TRANSLATIONS = {
         "arm_build_cost_empty": "В этой сборке пока не экипировано craftable снаряжение.",
         "arm_build_cost_summary": "{craftable} из {equipped} экипированных слотов craftable",
         "arm_choose_item_from_db": "Выбрать предмет из базы…",
-        "arm_priority_list_btn": "Список приоритета ▾",
+        "arm_priority_list_btn": "Список приоритета",
         "arm_choose_item_hint": "Выберите предмет, чтобы рассчитать материалы и стоимость в Kinah.",
         "arm_quantity_label": "Количество:",
         "arm_add_to_priority_tooltip": "Добавить в список приоритета",
@@ -1798,7 +1798,7 @@ TRANSLATIONS = {
         "arm_choose_a_skill": "Выберите навык",
         "arm_specializations": "Специализации",
         "arm_details_label": "Подробности",
-        "arm_skill_priority_hint": "Задайте порядок приоритета навыков отдельно для Активных, Пассивных и Stigma-навыков — щёлкните по полю, чтобы назначить навык, и по '＋', чтобы добавить ещё одно поле. Каждый навык может встречаться в списке только один раз.",
+        "arm_skill_priority_hint": "Задайте порядок приоритета навыков отдельно для Активных, Пассивных и Stigma-навыков — щёлкните по полю, чтобы назначить навык, и по '+', чтобы добавить ещё одно поле. Каждый навык может встречаться в списке только один раз.",
         "arm_add_new_build": "Добавить новую сборку",
         "arm_rename_current_build": "Переименовать текущую сборку",
         "arm_new_build_title": "Новая сборка",
@@ -1810,7 +1810,7 @@ TRANSLATIONS = {
         "arm_delete_build_confirm_text": "Точно удалить «{name}»? Это действие нельзя отменить.",
         "arm_arcana_information_tab": "Информация",
         "arm_arcana_sets_tab": "Наборы",
-        "arm_equip_priority_hint": "Задайте порядок получения/улучшения для каждого предмета экипировки — щёлкните по полю, чтобы назначить предмет, и по '＋', чтобы добавить ещё одно поле.",
+        "arm_equip_priority_hint": "Задайте порядок получения/улучшения для каждого предмета экипировки — щёлкните по полю, чтобы назначить предмет, и по '+', чтобы добавить ещё одно поле.",
         "arm_no_sets": "Нет наборов",
         "arm_source_aion2hub": "Источник: aion2hub.com (сообщество, непроверено)",
         "arm_arcana_types": "ТИПЫ АРКАН",
@@ -1914,7 +1914,7 @@ TRANSLATIONS = {
         "toast_task_removed": "Запись удалена",
         "undo": "Отменить",
 
-        "about_open_discord": "Открыть Discord ↗",
+        "about_open_discord": "Открыть Discord",
         "open_in_browser": "Открыть в браузере",
         "timers_open_settings_tooltip": "Открыть настройки таймеров",
         "open_folder": "Открыть папку",
@@ -1939,7 +1939,7 @@ TRANSLATIONS = {
         # ================= PROFILE =================
         "current_profile": 'Current profile: "{name}"',
         "save_profile": "Save Profile",
-        "load_profile": "Load Profile ▾",
+        "load_profile": "Load Profile",
         "reset_profile": "Reset Profile",
         "profile_saved": "Profile saved",
         "profile_restored_from_backup": "Profile restored from backup",
@@ -1977,18 +1977,18 @@ TRANSLATIONS = {
         "offline": "Offline",
 
         # ================= TASKS =================
-        "daily_tasks": "📋 Daily Tasks",
-        "weekly_tasks": "📅 Weekly Tasks",
-        "event_tasks": "🎉 Event Tasks",
+        "daily_tasks": "Daily Tasks",
+        "weekly_tasks": "Weekly Tasks",
+        "event_tasks": "Event Tasks",
         "tasks": "Tasks",
         "tasks_subtitle": "Daily, weekly and event tasks",
         "todo": "ToDo",
 
         # ================= SHOPPING =================
-        "daily_shopping": "🛒 Daily Shopping",
-        "weekly_shopping": "🛍️ Weekly Shopping",
-        "event_shopping": "🎁 Event Shopping",
-        "shopping": "🛒 Shopping",
+        "daily_shopping": "Daily Shopping",
+        "weekly_shopping": "Weekly Shopping",
+        "event_shopping": "Event Shopping",
+        "shopping": "Shopping",
         "priority": "Priority",
         "priority_low": "Low",
         "priority_middle": "Medium",
@@ -2011,20 +2011,20 @@ TRANSLATIONS = {
             "Removes all Event entries from Tasks "
             "and Shopping lists.\n\n"
             "Normal Daily and Weekly entries remain unchanged.",
-        "event_entries_removed": "✓ Event entries removed",
+        "event_entries_removed": "Event entries removed",
 
         # ================= SORTING =================
-        "sort_by": "Sort by ▾",
+        "sort_by": "Sort by",
         "sort_by_title": "Title",
         "sort_by_location": "Location",
         "sort_by_price": "Price",
         "sort_by_priority": "Priority",
 
         # ================= FILTERING =================
-        "filter_by": "Filter by ▾",
+        "filter_by": "Filter by",
         "filter_by_all": "All",
         "filter_by_events": "Event",
-        "todo_char_filter_btn": "All Characters ▾",
+        "todo_char_filter_btn": "All Characters",
         "todo_char_filter_all": "All Characters",
 
         # ================= STATS =================
@@ -2068,7 +2068,7 @@ TRANSLATIONS = {
         "ct_color_blue": "Blue",
         "ct_dialog_notification_sound_label": "Notification Sound",
         "ct_dialog_no_sound": "-- No Sound --",
-        "ct_dialog_test_button": "▶ Test",
+        "ct_dialog_test_button": "Test",
         "ct_dialog_warn_label": "Early Warning",
         "ct_manager_title": "Manage Custom Timers",
         "ct_manager_categories_title": "Categories",
@@ -2114,7 +2114,7 @@ TRANSLATIONS = {
         "about":            "About Aion2 TM",
         "about_desc":       "Task Manager for Aion2 — Daily & weekly tasks, timers, Flow Map.",
         "about_github":     "GitHub",
-        "bug_report_btn":   "🐛 Report Bug",
+        "bug_report_btn":   "Report Bug",
         "about_copy_ver":   "Copy version",
         "about_changelog_history": "Changelog",
 
@@ -2166,7 +2166,7 @@ TRANSLATIONS = {
 
         # ================= MISC =================
         "no_sound":        "No Sound",
-        "test_sound":      "▶ Test",
+        "test_sound":      "Test",
         "win_notif_title": "Windows Notifications",
         "min_abbr":        "min",
         "notif_sync":      "Synchronized",
@@ -2265,11 +2265,11 @@ TRANSLATIONS = {
 
 
         # ================= FLOW MAP UI =================
-        "flow_saved": "✓ Saved",
+        "flow_saved": "Saved",
         "flow_saving": "Saving...",
         "flow_zoom_hint": "Scroll | Zoom {pct}%",
-        "flow_mark_done":      "✓  Mark as completed",
-        "flow_mark_open":      "↩  Mark as open",
+        "flow_mark_done":      "Mark as completed",
+        "flow_mark_open":      "Mark as open",
         "flow_tooltip_home": "Go to Root",
         "flow_tooltip_select": "Select",
         "flow_tooltip_add_node": "Add Node",
@@ -2327,14 +2327,14 @@ TRANSLATIONS = {
         "duplicate_profile_title": "Duplicate Profile",
         "duplicate_profile_label": "Name of the new profile:",
         "duplicate_profile_success": "Profile \"{name}\" has been created.",
-        "profile_exported": "✓ Profile exported",
-        "profile_imported": "✓ Profile imported",
+        "profile_exported": "Profile exported",
+        "profile_imported": "Profile imported",
         "profile_import_error": "Invalid profile file",
 
         # ================= DISCORD COMMUNITY =================
         "discord_row_title": "Discord",
         "discord_row_desc": "Join the community — officially listed in the Aion2 Discord.",
-        "discord_row_btn": "Discord ▾",
+        "discord_row_btn": "Discord",
 
         # ================= COOPERATION =================
         "coop_title": "Cooperation",
@@ -2343,16 +2343,16 @@ TRANSLATIONS = {
         "coop_zassezero_desc": "Support Discord for this app.",
 
         # ================= DONATE =================
-        "donate": "Support ❤",
+        "donate": "Support",
         "donate_desc": "Enjoying the app? A small donation helps keep it going.",
-        "donate_btn": "Donate ☕",
+        "donate_btn": "Donate",
 
         # ================= USEFUL LINKS =================
         "useful_links_title": "Useful Links",
         "useful_links_desc": "Handy tools for Aion2.",
         "sources_title": "Sources",
         "sources_desc": "Item, skill, recipe, and board data, plus formula research, come from: shugo.gg, gamers4.life, questlog.gg, talentbuilds.com, aion2hub.com, Kanon's Aion 2 Bible (Aion Research Lab).",
-        "useful_links_open": "Open ↗",
+        "useful_links_open": "Open",
         "useful_link_guildnest_desc": "Free guild management tool, usable right inside Discord. Especially useful for Aion2: a build editor for character builds and an item database, plus loot management, event planning, and attendance tracking for the guild.",
         "useful_link_bible_desc": "Community research doc for Aion 2 — gear/enhancement explanations, a skills/Arcana/Daevanion Board overview, and the most accurate known damage formula so far.",
 
@@ -2380,14 +2380,14 @@ TRANSLATIONS = {
         "tray_setting_desc": "Stay in the system tray instead of closing.",
 
         # ================= TEMPLATES =================
-        "templates_btn": "📋 Templates",
+        "templates_btn": "Templates",
         "template_placeholder": "Template",
         "standard_template_placeholder": "Standard Template",
         "template_source_templates": "Templates",
-        "template_source_standards": "★ Standard Templates",
-        "no_templates_hint": "No templates — open 📋 and add entries",
-        "full_view_btn": "🌐 Full View",
-        "full_view_import_btn": "⬆ Import",
+        "template_source_standards": "Standard Templates",
+        "no_templates_hint": "No templates — open “Templates” and add entries",
+        "full_view_btn": "Full View",
+        "full_view_import_btn": "Import",
         "full_view_import_title": "Import from Full View",
         "full_view_import_desc": "Choose the (optionally Excel-edited) CSV or Excel file from the Full View export. Check the preview, then Sync writes it straight into your profile.",
         "full_view_import_choose_file_btn": "Choose File…",
@@ -2416,16 +2416,16 @@ TRANSLATIONS = {
         "manual_reset_tooltip": "Reset manually",
 
         "templates_title": "Templates",
-        "tab_shopping": "🛒 Shopping",
-        "tab_tasks": "📋 Tasks",
-        "tab_character": "👤 Characters",
+        "tab_shopping": "Shopping",
+        "tab_tasks": "Tasks",
+        "tab_character": "Characters",
         "character_tab_info": "Create and manage characters — the same ones offered for selection everywhere in the app (max. 8).",
         "remove": "Remove",
         "close": "Close",
-        "shop_tab_info": "☑ = active as general shopping entry",
+        "shop_tab_info": "Checked = active as general shopping entry",
         "template_add_btn": "+ Add Template",
-        "template_update_btn": "✏ Update",
-        "task_tab_info": "☑ = quest appears automatically in the task list",
+        "template_update_btn": "Update",
+        "task_tab_info": "Checked = quest appears automatically in the task list",
         "task_add_btn": "+ Add Task",
         "standards_pick_title": "Pick From Existing Templates",
         "standards_pick_empty": "No matching templates found — add one to the list first, or every existing one is already a Standard.",
@@ -2434,7 +2434,7 @@ TRANSLATIONS = {
         "standards_pick_deselect_all": "Deselect All",
         "standards_pick_filter_all_schedules": "All",
         "standards_pick_filter_all_locations": "All Locations",
-        "standards_sync_btn": "⟳ Sync",
+        "standards_sync_btn": "Sync",
         "standards_sync_title": "Sync Standard Templates",
         "standards_sync_desc": "These entries exist in the Default profile but not in your own list yet. Pick which ones to add — nothing you already have gets changed or removed.",
         "standards_sync_new_tag": "NEW",
@@ -2454,7 +2454,7 @@ TRANSLATIONS = {
         "placeholder_taskname": "Task name",
         "placeholder_location_short": "Location",
         "placeholder_price_k": "Price (in K)",
-        "template_import_from_db": "🗄 Import from Database",
+        "template_import_from_db": "Import from Database",
         "template_import_from_db_title": "Choose Item from Database",
         "template_import_select_btn": "Select",
         "template_import_all_categories": "All Categories",
@@ -2484,8 +2484,8 @@ TRANSLATIONS = {
         "arm_name_colon": "Name:",
         "arm_rename_hint": "Double-click to rename",
         "arm_slot_empty_hint": "No item equipped in this slot",
-        "arm_manual_select_collapsed": "Manual Selection ▸",
-        "arm_manual_select_expanded": "Manual Selection ▾",
+        "arm_manual_select_collapsed": "Manual Selection",
+        "arm_manual_select_expanded": "Manual Selection",
         "arm_filter_category": "Category",
         "arm_filter_shop": "Shop",
         "arm_filter_equip_effect": "Equip Effect",
@@ -2595,7 +2595,7 @@ TRANSLATIONS = {
         "arm_build_cost_empty": "No craftable gear equipped in this build yet.",
         "arm_build_cost_summary": "{craftable} of {equipped} equipped slots are craftable",
         "arm_choose_item_from_db": "Choose item from database…",
-        "arm_priority_list_btn": "Priority List ▾",
+        "arm_priority_list_btn": "Priority List",
         "arm_choose_item_hint": "Choose an item to calculate materials and Kinah costs.",
         "arm_quantity_label": "Quantity:",
         "arm_add_to_priority_tooltip": "Add to priority list",
@@ -2759,7 +2759,7 @@ TRANSLATIONS = {
         "arm_choose_a_skill": "Choose a skill",
         "arm_specializations": "Specializations",
         "arm_details_label": "Details",
-        "arm_skill_priority_hint": "Set a skill priority order for Active, Passive, and Stigma skills each — click a slot to assign a skill, and '＋' to add another slot. Each skill can only appear once per list.",
+        "arm_skill_priority_hint": "Set a skill priority order for Active, Passive, and Stigma skills each — click a slot to assign a skill, and '+' to add another slot. Each skill can only appear once per list.",
         "arm_add_new_build": "Add new build",
         "arm_rename_current_build": "Rename current build",
         "arm_new_build_title": "New Build",
@@ -2771,7 +2771,7 @@ TRANSLATIONS = {
         "arm_delete_build_confirm_text": "Really delete \"{name}\"? This cannot be undone.",
         "arm_arcana_information_tab": "Information",
         "arm_arcana_sets_tab": "Sets",
-        "arm_equip_priority_hint": "Set an acquisition/upgrade order per equipment slot — click a slot to assign an item, and '＋' to add another slot.",
+        "arm_equip_priority_hint": "Set an acquisition/upgrade order per equipment slot — click a slot to assign an item, and '+' to add another slot.",
         "arm_no_sets": "No Sets",
         "arm_source_aion2hub": "Source: aion2hub.com (community, unverified)",
         "arm_arcana_types": "ARCANA TYPES",
@@ -2875,7 +2875,7 @@ TRANSLATIONS = {
         "toast_task_removed": "Entry removed",
         "undo": "Undo",
 
-        "about_open_discord": "Open Discord ↗",
+        "about_open_discord": "Open Discord",
         "open_in_browser": "Open in browser",
         "timers_open_settings_tooltip": "Open timer settings",
         "open_folder": "Open folder",

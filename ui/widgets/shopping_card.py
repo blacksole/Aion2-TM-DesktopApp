@@ -1,6 +1,8 @@
 from uuid import uuid4
 
 from PySide6.QtCore import Qt
+
+from ui.widgets import icons
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -120,9 +122,14 @@ class ShoppingCard(QFrame):
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(12)
 
-        self.check_btn = QPushButton("○")
+        self.check_btn = QPushButton()
         self.check_btn.setObjectName("checkButton")
         self.check_btn.setFixedWidth(32)
+        icons.set_icon(self.check_btn, "circle", 16, "fg.muted")
+        # Icon-only: the "○" it replaced WAS the accessible name (review
+        # H/15).  Not a tooltip -- this control is clicked, not hovered for
+        # help, and an untranslated tooltip would be visible UI.
+        self.check_btn.setAccessibleName("Toggle completed")
         self.check_btn.clicked.connect(self.toggle)
 
         text_box = QVBoxLayout()
@@ -243,7 +250,12 @@ class ShoppingCard(QFrame):
         self._apply_completed_style()
 
     def _apply_completed_style(self):
-        self.check_btn.setText("●" if self.completed else "○")
+        icons.set_icon(
+            self.check_btn,
+            "circle-check" if self.completed else "circle",
+            16,
+            "ok" if self.completed else "fg.muted",
+        )
         self.setProperty("completed", self.completed)
         # The muted, struck-through title and the green check come from
         # #taskCard[completed="true"] #taskTitle / #checkButton in the

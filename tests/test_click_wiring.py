@@ -39,7 +39,7 @@ import weakref
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication, QCheckBox
 
@@ -342,6 +342,78 @@ def test_clicking_a_section_header_collapses_it(qapp):
     finally:
         section.deleteLater()
         _flush()
+
+
+def _first_section(overlay):
+    """The first real ``_AccordionSection`` inside a live overlay."""
+    from ui.overlay.overlay_window import _AccordionSection
+
+    overlay.refresh()
+    _flush()
+    sections = overlay.findChildren(_AccordionSection)
+    assert sections, "the overlay rendered no accordion section to click"
+    return sections[0]
+
+
+def test_the_header_press_never_reaches_the_overlays_drag_band(win):
+    """The header is INSIDE the overlay here, and that is the whole point.
+
+    ``OverlayWindow.mousePressEvent`` starts a window drag for any press
+    with ``pos().y() <= 38``, and the first accordion header's top rows sit
+    inside that band.  ``_ClickableWidget`` used to end in
+    ``super().mousePressEvent(event)``; ``QWidget::mousePressEvent``
+    *ignores* the event, so Qt walked the press up to the overlay and one
+    click on the top pixel row both collapsed the section and grabbed the
+    always-on HUD — the next mouse move dragged the whole window.
+
+    The test that shipped with that change built a **parentless**
+    ``_AccordionSection``, so the parent chain the bug needs did not exist
+    under test.  This one uses the real overlay, and proves three things:
+    the press is consumed, the coordinate really is inside the drag band
+    (otherwise consuming it would prove nothing), and the window does not
+    move afterwards.
+    """
+    overlay = win.overlay
+    section = _first_section(overlay)
+    header = section._header
+
+    # The header's top-left in overlay coordinates -- inside the band.
+    in_overlay = header.mapTo(overlay, QPoint(20, 0))
+    assert in_overlay.y() <= 38, (
+        "this header no longer overlaps the drag band; move the test to one "
+        "that does, or the assertion below is vacuous"
+    )
+
+    overlay._drag_pos = None
+    was_open = section._open
+    before = overlay.pos()
+
+    event = QMouseEvent(
+        QEvent.MouseButtonPress, QPointF(20.0, 0.0), QPointF(500.0, 500.0),
+        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier,
+    )
+    QApplication.sendEvent(header, event)
+
+    assert section._open is not was_open, "the header click no longer toggles"
+    assert event.isAccepted(), (
+        "the header must CONSUME the press; an ignored one is propagated to "
+        "the overlay by Qt and starts a window drag"
+    )
+    assert overlay._drag_pos is None, "the press started a window drag"
+
+    _send(overlay, QEvent.MouseMove, at=(40.0, 60.0), globally=(540.0, 560.0))
+    assert overlay.pos() == before, "the HUD moved after a header click"
+
+    # And the band IS live at that coordinate: the same press delivered to
+    # the overlay itself does start a drag.  Without this the assertion
+    # above would pass on a header that simply sits below y=38.
+    _send(overlay, QEvent.MouseButtonPress, at=(float(in_overlay.x()), 0.0))
+    assert overlay._drag_pos is not None, (
+        "the drag band no longer covers the header's top row — re-anchor "
+        "this test rather than deleting it"
+    )
+    overlay._drag_pos = None
+    section._toggle()  # leave the overlay as it was found
 
 
 def test_a_section_header_carries_no_handler_of_its_own(qapp):
