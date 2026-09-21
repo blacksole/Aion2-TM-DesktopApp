@@ -97,6 +97,12 @@ a = Analysis(
         ('profiles/Default.json', 'default_profiles'),
         ('profiles/Default_de.json', 'default_profiles'),
         ('profiles/Default_ru.json', 'default_profiles'),
+        # The Settings -> Changelog "Update History" dialog now reads this
+        # directly (User-Wunsch, 2026-09-17: show every version, including
+        # ones that were tagged/built but never separately published as a
+        # GitHub Release) instead of only what GitHub's /releases list
+        # happens to contain -- see ui/update_dialog.py's _changelog_path().
+        ('CHANGELOG.md', '.'),
     ],
     hiddenimports=['email', 'email.mime', 'email.mime.text', 'email.mime.multipart'],
     hookspath=[],

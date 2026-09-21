@@ -1880,6 +1880,25 @@ QWidget[aion2="true"] #changelogVersionHeader {
     font-weight: {{font_weight_bold}};
 }
 
+QWidget[aion2="true"] #changelogLoadMoreBtn {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+}
+
+QWidget[aion2="true"] #changelogLoadMoreBtn:hover {
+    background-color: {{bg_overlay}};
+    border-color: {{border_strong}};
+}
+
+QWidget[aion2="true"] #changelogLoadMoreLabel {
+    background: transparent;
+    border: none;
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
 /* ---------------------------------------------------------------------
    16. Flow Map  (MASTER §2: the Flow Map reads in secondary, not in a
    separate blue palette)

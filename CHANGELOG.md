@@ -1,3 +1,11 @@
+# Version 2.0.8
+
+## 🐛 Bug Fixes
+
+- **The Settings → Changelog "Update History" window always showed German text ("Update-Verlauf", "Versionen", etc.) regardless of the app's own language setting**, and only ever showed the last 3 versions that happened to be published as an actual GitHub Release — so a version like 2.0.6 or 2.0.4, tagged and built but never separately published, silently never appeared. The window now fully follows your language setting and shows every version in the current release line (2.0.0 onward) straight from the app's own bundled changelog, with a "Show older versions" button underneath for everything before that. The version list on the left was also slightly widened so its own scroll area no longer needs a horizontal scrollbar to show each version button.
+
+---
+
 # Version 2.0.7
 
 ## ✨ New Features
