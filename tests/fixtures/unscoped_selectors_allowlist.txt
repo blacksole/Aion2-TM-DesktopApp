@@ -1,0 +1,26 @@
+# Selectors allowed to appear in the application stylesheet WITHOUT the
+# `QWidget[aion2="true"]` scope prefix, one per line as
+#
+#     <selector>  # reason
+#
+# Why the scope exists (review F-0, F-0b, F-0c, and the interim decision
+# that came with them): the sheet lives on the QApplication, and Qt merges
+# two stylesheets PER PROPERTY rather than letting the deeper one replace
+# the shallower one.  So every property the Armory's own 1,205-line sheet
+# does not happen to declare cascaded down from ours into its windows --
+# Barlow into a layout hand-tuned against the system font, letter-spacing
+# into its table headers, `color` onto item views where it flattened every
+# per-rarity setForeground() (the BLOCKER), and theme-following badge fills
+# into a window that is otherwise hardcoded Abyss.  Half-themed is worse
+# than either pure outcome.
+#
+# The scope makes the sheet reach our own window tree and nothing else:
+# MainWindow, OverlayWindow and FlowMapWindow set `aion2` in __init__, and
+# Qt's descendant matching walks parentWidget(), so every dialog, popup and
+# child of theirs matches while the Armory's parentless top-levels never do.
+# tests/test_theme_wiring.py asserts the coverage widget by widget.
+#
+# An entry here is therefore a hole in that guarantee and needs a reason
+# Qt itself forces.  There is exactly one.
+
+QToolTip  # Qt renders a tooltip in an internal QTipLabel that is a top-level widget with NO widget parent, so no descendant selector can ever reach it -- a scoped rule would silently leave our tooltips in the native OS style (white on black, one unwrapped line; the exact defect a user reported on 2026-08-29). Safe to leave unscoped: ItemDatabase/styles.qss:14 declares QToolTip with BOTH a background and a foreground, so its own windows keep their own tooltip look and nothing of ours leaks in.

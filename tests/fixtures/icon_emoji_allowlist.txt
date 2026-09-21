@@ -1,0 +1,40 @@
+# Glyphs that are still drawn as text in the UI.
+#
+# Format: <path>:<line>  # <reason>   (two spaces before the '#')
+# An entry without a reason fails the test, and so does an entry that no
+# longer matches anything (tests/test_icons.py) -- an allow-list that
+# outlives its offender hides the next one.
+#
+# ── The completion toggle: CLOSED 2026-09-19, kept as a note ────────────
+# The ○ / ● / ✓ toggle was once allow-listed here, on the ground that
+# TaskCard's canonical copy lived in a file the icons wave did not own.
+# When ownership widened, all five call sites -- TaskCard, ShoppingCard and
+# the three overlay rows -- moved together to Lucide `circle` /
+# `circle-check` at 16 px, tinted `fg.muted` / `ok`.  Converting a subset
+# would have put a Lucide ring on a shopping row and a fallback dingbat on
+# the task row directly above it: less consistent after the wave than
+# before.  That is why they moved as one unit and not one at a time.
+#
+# ── What is left: colour swatches, not icons ───────────────────────────
+# A "●" whose whole job is to BE a colour is not an emoji standing in for
+# an icon -- it is the cheapest possible colour swatch, and its hue comes
+# from data (a custom timer's own colour, MASTER §4-4) or from a QSS
+# [status=...] rule (the Flow guide's node state).  Lucide `circle` is a
+# 2 px-stroked ring, not a filled disc: swapping it in would either lose
+# the fill that carries the meaning, or need a `circle` + `circle-filled`
+# pair that Lucide does not ship.  Review D/m4 ("a colour dot needs a shape
+# too") is a real finding and is NOT closed by this wave: closing it means
+# four distinct SHAPES per status in the Flow legend, which is a design
+# decision, not an icon substitution.  Logged here so it cannot be lost.
+ui/overlay/overlay_window.py:535  # live dot — colour swatch (#OverlayLiveDot), not an icon
+ui/custom_timer_manager_dialog.py:117  # category marker — colour swatch (#ctCategoryDot)
+ui/custom_timer_manager_dialog.py:285  # the timer's OWN colour (data colour, MASTER §4-4)
+ui/flow/flow_debug.py:133  # debug overlay colour swatch, never shipped to a user
+ui/flow/widgets/flow_guide_view.py:270  # node-status swatch (#GuideInfoIcon[status=…]) — review D/m4
+ui/flow/widgets/flow_guide_view.py:380  # node-status swatch (#GuideInfoIcon[status=…]) — review D/m4
+#
+# ── User data ──────────────────────────────────────────────────────────
+# The Flow node symbol is CHOSEN BY THE USER from #FlowSymbolCombo and
+# stored in the map.  "☆" is this field's default value, not an icon the
+# design system picked -- replacing it would silently rewrite user data.
+ui/flow/widgets/flow_node_card.py:77  # user-chosen node symbol (default value), not a UI icon

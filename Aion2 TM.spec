@@ -7,9 +7,52 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
-        ('ui/styles.qss', 'ui'),
+        # The bundled OFL faces core/fonts.py registers at startup. Already
+        # inside ('assets', 'assets') above -- named again on purpose so that
+        # trimming the broad assets entry (it also carries icons/logos/banner)
+        # can never silently ship a build with no typography: MASTER §1 makes
+        # Barlow/Barlow Condensed/JetBrains Mono part of the design system,
+        # not decoration. PyInstaller de-duplicates identical TOC entries.
+        ('assets/fonts', 'assets/fonts'),
+        # The vendored Lucide subset (MASTER §3, "Icônes : Lucide (ISC)") and
+        # the per-theme chevrons under its tinted/ folder.  Same reasoning as
+        # the fonts line above: already inside ('assets', 'assets'), named
+        # again so that trimming the broad entry cannot silently ship a build
+        # with no icons -- and unlike a missing font, a missing icon set
+        # fails *loudly* (ui/widgets/icons.py raises KeyError on an unknown
+        # name) rather than falling back to something that still renders.
+        # The tinted chevrons are what QSS `image: url()` points at, so
+        # losing them un-draws every combo/spin-box arrow.
+        ('assets/icons/lucide', 'assets/icons/lucide'),
+        # ui/styles.qss is gone (2026-09-18): the app renders its stylesheet
+        # from this template via core/theme.build_qss(), so the TEMPLATE is
+        # what has to reach _MEIPASS/ui/.
+        ('ui/styles.template.qss', 'ui'),
         ('ItemDatabase/app.py', 'ItemDatabase'),
-        ('ItemDatabase/styles.qss', 'ItemDatabase'),
+        # The Armory's calculation core (Stage 1 of the split in
+        # docs/audit-2026-09-18/B-armory.md §4.2).  app.py is shipped as a
+        # DATA file above, not in the PYZ -- the host loads it with
+        # spec_from_file_location -- so PyInstaller never follows its
+        # imports, and a package it imports has to be shipped as data too or
+        # the frozen app dies at Armory-open with ModuleNotFoundError.  A
+        # directory source is copied recursively, which is what makes this
+        # ONE line instead of one per module: unlike ItemDatabase/data/
+        # below, there is nothing in here but source to ship, so the
+        # per-file discipline that folder needs does not apply.
+        #
+        # The destination has to be exactly beside app.py: app.py puts its
+        # own directory (and, frozen, _MEIPASS/ItemDatabase) on sys.path so
+        # `import armory_engine` resolves.  Gated by
+        # tests/test_armory_engine_packaging.py.
+        ('ItemDatabase/armory_engine', 'ItemDatabase/armory_engine'),
+        # ItemDatabase/styles.qss is gone (2026-09-18, the Armory
+        # tokenization wave): the Armory renders its own sheet from this
+        # TEMPLATE via core.theme.build_qss_from(), per theme, exactly as
+        # the app does from ui/styles.template.qss above.  Both halves have
+        # to reach _MEIPASS/ItemDatabase/ -- the template AND the
+        # dropdown-arrow PNG its one url() points at, which travels inside
+        # ('ItemDatabase/assets', …) below.
+        ('ItemDatabase/styles.template.qss', 'ItemDatabase'),
         ('ItemDatabase/assets', 'ItemDatabase/assets'),
         # Real bug found + fixed (User-reported, 2026-09-05, screenshot:
         # the Pantheon Lord filter always showed zero results after
@@ -78,7 +121,12 @@ a = Analysis(
         'PySide6.QtWebSockets', 'PySide6.Qt3DCore', 'PySide6.Qt3DRender',
         'PySide6.Qt3DInput', 'PySide6.Qt3DLogic', 'PySide6.Qt3DAnimation',
         'PySide6.Qt3DExtras', 'PySide6.QtCharts', 'PySide6.QtDataVisualization',
-        'PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
+        # 'PySide6.QtMultimedia' removed (Linux port, 2026-09-18): core/sound.py
+        # plays notification sounds through QSoundEffect on every non-Windows
+        # host (winsound stays the Windows backend). Excluding it shipped a
+        # build that could never make a sound outside Windows. QtMultimedia
+        # WIDGETS stays excluded -- no video surface is used anywhere.
+        'PySide6.QtMultimediaWidgets',
         'PySide6.QtLocation', 'PySide6.QtPositioning',
         'PySide6.QtRemoteObjects', 'PySide6.QtScxml',
         'PySide6.QtSerialPort', 'PySide6.QtSerialBus',
@@ -104,7 +152,9 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\icons\\aion2_tm_icon.ico'],
+    # Forward slashes: a backslash path is one literal filename on a
+    # Linux PyInstaller run, and the Linux port landed 2026-09-18.
+    icon=['assets/icons/aion2_tm_icon.ico'],
 )
 coll = COLLECT(
     exe,

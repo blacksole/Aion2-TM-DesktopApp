@@ -2,11 +2,12 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import (
     QPainter,
-    QColor,
     QPen,
     QPainterPath,
     QPolygonF,
 )
+
+from core import theme
 
 
 class FlowPointConnector(QWidget):
@@ -32,7 +33,8 @@ class FlowPointConnector(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        color = QColor(95, 170, 255, 210)
+        # Same connector colour as FlowMapArea: MASTER §2 `secondary`.
+        color = theme.qcolor(theme.current_tokens(), "secondary")
 
         pen = QPen(color)
         pen.setWidth(max(2, int(3 * self.zoom)))

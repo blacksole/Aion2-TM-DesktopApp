@@ -1,9 +1,7 @@
-import glob
 import json
-import os
 import shutil
+import os
 import sys
-import winsound
 from pathlib import Path
 from uuid import uuid4
 from .settings_dialog import SettingsDialog
@@ -29,20 +27,47 @@ from .pages.about_page import AboutPage
 from .flow.flow_app_window import FlowMapWindow
 from .overlay.overlay_window import OverlayWindow
 from core.app_logger import get_logger
+from core.platform import launch_external, tray_available
+from core.sound import play_wav
 from core.translations import tr
+from core import theme
+from . import motion
 from core.update_checker import UpdateChecker
 from core.version import ARMORY_ENABLED
+from utils import paths
+from ui.widgets import icons
 
 logger = get_logger("main_window")
 from PySide6.QtWidgets import QTimeEdit
-from PySide6.QtGui import QIcon, QPainter, QLinearGradient, QColor, Qt, QPixmap
+from PySide6.QtGui import (
+    QIcon, QPainter, Qt, QPixmap, QKeySequence, QShortcut,
+)
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QMenu, QComboBox, QStackedWidget, QFileDialog, QMessageBox,
-    QSystemTrayIcon, QInputDialog, QApplication,
+    QSystemTrayIcon, QInputDialog, QApplication, QLineEdit, QTextEdit, QAbstractSpinBox,
 )
 from datetime import datetime, timedelta
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QObject, QTimer, QEvent
+
+#: ``(theme, asset_base)`` currently installed on the QApplication by
+#: :meth:`MainWindow.load_styles` — see the note there.  Module level, not
+#: per instance, because the stylesheet it tracks is process-wide.
+_APPLIED_STYLE_KEY = None
+
+#: Theme whose palette is currently installed on the QApplication.
+#:
+#: Tracked separately from ``MainWindow.current_theme`` because the two
+#: answer different questions: ``current_theme`` is what the app WANTS,
+#: this is what has actually been rendered.  Conflating them cost a real
+#: bug (review F-1): both callers that matter -- ``__init__`` and
+#: ``load_profile`` -- assign ``current_theme`` *before* calling
+#: ``apply_theme(self.current_theme)``, so a "did the theme move?" test
+#: against ``current_theme`` was always False and the palette silently
+#: stayed on whatever ``main.py`` had set.  The sheet followed the theme,
+#: the palette did not: exactly the "navy baseline under an Inferno sheet"
+#: that ``core.theme.build_palette``'s docstring exists to prevent.
+_APPLIED_PALETTE_THEME = None
 
 THEME_LOGOS = {
     "abyss": "assets/logos/logo_abyss.png",
@@ -54,36 +79,40 @@ THEME_LOGOS = {
 }
 
 
-class GradientBackground(QWidget):
-    THEMES = {
-        "abyss": ["#0f172a", "#111827", "#121212", "#2e0f28"],
-        "inferno": ["#140f0f", "#1f1111", "#281212", "#3b0f0f"],
-        "emerald": ["#07130f", "#0b1f17", "#10261f", "#132d26"],
-        "frostbite": ["#0b1120", "#111827", "#172554", "#1e3a8a"],
-        "obsidian": ["#111111", "#171717", "#1f1f1f", "#262626"],
-        "void": ["#120c1c", "#1b1028", "#231236", "#2f1547"],
-    }
+#: priority -> the objectName MASTER §3 colours (ok / warn / danger).  Shared
+#: with ui/widgets/shopping_card.py and mirrored by template_dialog's own map.
+PRIORITY_OBJECT_NAMES = {
+    "low": "priorityLow",
+    "middle": "priorityMiddle",
+    "medium": "priorityMiddle",
+    "high": "priorityHigh",
+}
+
+
+class ThemedBackground(QWidget):
+    """The window's ground: a flat ``bg.window`` fill from the active theme.
+
+    Was ``GradientBackground``, a hand-rolled 4-stop diagonal gradient with
+    its own per-theme hex table (24 literals that had to be kept in step
+    with the QSS by hand, and were not: Frostbite's last stop was a bright
+    ``#1e3a8a`` that no token anywhere used). MASTER's visual thesis is
+    explicit — "zéro dégradé décoratif" — and §2 names ``bg.window`` as the
+    fond of the main window and the overlay, so the ground is now one token,
+    read live from ``core.theme``. Depth comes from the surface ladder
+    (window → surface → elevated → overlay), not from a gradient.
+    """
 
     def __init__(self):
         super().__init__()
-        self.theme = "abyss"
+        self.theme = theme.DEFAULT_THEME
 
-    def set_theme(self, theme):
-        self.theme = theme
+    def set_theme(self, theme_name):
+        self.theme = theme_name
         self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
-
-        colors = self.THEMES.get(self.theme, self.THEMES["abyss"])
-
-        gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor(colors[0]))
-        gradient.setColorAt(0.35, QColor(colors[1]))
-        gradient.setColorAt(0.75, QColor(colors[2]))
-        gradient.setColorAt(1.0, QColor(colors[3]))
-
-        painter.fillRect(self.rect(), gradient)
+        painter.fillRect(self.rect(), theme.qcolor(self.theme, "bg.window"))
 
 class TaskCard(QFrame):
     def __init__(self, title, description="", priority="low", is_event=False,
@@ -121,14 +150,29 @@ class TaskCard(QFrame):
         self.location = location
         self.setProperty("event", self.is_event)
         self.setObjectName("taskCard")
+        # Keyboard reachability (UX audit 2026-09-18, C1): a card has to
+        # be able to HOLD focus before Delete can act on "the focused
+        # card". Deliberately no focus styling here -- the QSS is owned
+        # by a separate design pass.
+        self.setFocusPolicy(Qt.StrongFocus)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(12)
 
-        self.check_btn = QPushButton("○")
+        # MASTER §3: was "○"/"●" — two dingbats Barlow does not carry, so
+        # the system fell back to another face for the single most-repeated
+        # control in the app.  Converted together with ShoppingCard and the
+        # three overlay rows: one of them alone would have made the ToDo
+        # list mix a Lucide ring with a fallback dingbat, row by row.
+        self.check_btn = QPushButton()
         self.check_btn.setObjectName("checkButton")
         self.check_btn.setFixedWidth(32)
+        icons.set_icon(self.check_btn, "circle", 16, "fg.muted")
+        # Icon-only: the "○" it replaced WAS the accessible name (review
+        # H/15).  Not a tooltip -- this control is clicked, not hovered for
+        # help, and an untranslated tooltip would be visible UI.
+        self.check_btn.setAccessibleName("Toggle completed")
         self.check_btn.clicked.connect(self.toggle)
 
         text_box = QVBoxLayout()
@@ -191,7 +235,13 @@ class TaskCard(QFrame):
 
         self.priority_value = priority
         self.priority = QLabel(priority.upper())
-        self.priority.setObjectName("priorityMedium")
+        # Real bug, found while reviewing the wired-up render (2026-09-18):
+        # this objectName was the LITERAL "priorityMedium" for every card, so
+        # every priority came out warn-coloured -- a HIGH task looked exactly
+        # like a MIDDLE one, and the ok/warn/danger mapping MASTER §3
+        # specifies only ever worked in the Templates dialog (which has had
+        # its own _PRIO_NAMES map all along).
+        self._apply_priority_style()
 
         self.delete_btn = QPushButton("×")
         self.delete_btn.setObjectName("deleteButton")
@@ -205,39 +255,43 @@ class TaskCard(QFrame):
 
     def toggle(self):
         self.completed = not self.completed
-
-        if self.completed:
-            self.check_btn.setText("●")
-            self.setProperty("completed", True)
-
-            self.title_label.setStyleSheet(
-                "color: #64748b; text-decoration: line-through;"
-            )
-
-        else:
-            self.check_btn.setText("○")
-            self.setProperty("completed", False)
-            self.title_label.setStyleSheet("")
-
-        self.style().unpolish(self)
-        self.style().polish(self)
+        self._apply_completed_style()
 
     def set_completed(self, value):
         self.completed = value
+        self._apply_completed_style()
 
-        if self.completed:
-            self.check_btn.setText("●")
-            self.setProperty("completed", True)
-            self.title_label.setStyleSheet(
-                "color: #64748b; text-decoration: line-through;"
-            )
-        else:
-            self.check_btn.setText("○")
-            self.setProperty("completed", False)
-            self.title_label.setStyleSheet("")
+    def _apply_completed_style(self):
+        """Muted struck-through title + green check, entirely from the QSS.
 
-        self.style().unpolish(self)
-        self.style().polish(self)
+        ``#taskCard[completed="true"] #taskTitle`` / ``#checkButton`` in
+        ui/styles.template.qss own the look now (it used to be an inline
+        ``color: #64748b`` literal here). A descendant rule keyed off an
+        ANCESTOR's dynamic property is only re-evaluated when the child
+        itself is repolished, hence the two extra passes.
+        """
+        icons.set_icon(
+            self.check_btn,
+            "circle-check" if self.completed else "circle",
+            16,
+            "ok" if self.completed else "fg.muted",
+        )
+        self.setProperty("completed", self.completed)
+        for widget in (self, self.title_label, self.check_btn):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+
+    def _apply_priority_style(self, text: str | None = None):
+        """Label text + the objectName MASTER §3's ok/warn/danger rule needs.
+
+        ``text`` is the already-translated label (the edit form and the
+        language switch both have it); without it the plain English
+        uppercase value is used, as at construction.
+        """
+        self.priority.setText(text if text is not None else str(self.priority_value or "").upper())
+        self.priority.setObjectName(PRIORITY_OBJECT_NAMES.get(self.priority_value, "priorityMiddle"))
+        self.priority.style().unpolish(self.priority)
+        self.priority.style().polish(self.priority)
 
     def set_missed(self, value: bool):
         self.missed_badge.setVisible(value)
@@ -268,7 +322,7 @@ class TaskCard(QFrame):
         self.set_title(tmpl.get("title", self.title))
         self.location_label.setText(self.location)
         self.location_label.setVisible(bool(self.location))
-        self.priority.setText(self.priority_value.upper())
+        self._apply_priority_style()
 
         description = tmpl.get("description", self.desc_label.text())
         self.desc_label.setText(description)
@@ -287,6 +341,15 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.auto_save = True
+        # Structural guard for the 2.0.5 data-loss class: True while
+        # load_profile is still restoring fields, so nothing can serialize
+        # half-restored state over the file on disk (see load_profile/save_profile).
+        self._profile_loading: bool = False
+        # Set when the loaded profile (and its .bak) could not be parsed: the
+        # guard above then stays on past load_profile, and only this flag --
+        # not the re-entrancy one -- authorises a snapshot + warning.
+        self._profile_unreadable: bool = False
+        self._autosave_disabled_notified: bool = False
         self._pending_update = None
         self._checker = None
 
@@ -298,6 +361,10 @@ class MainWindow(QMainWindow):
 
         self.language = "en"
         self.current_theme = "abyss"
+        # MASTER §1 "motion.reduced" -- an accessibility switch, so it is a
+        # per-profile setting, not a hidden constant. Pushed into
+        # ui.motion (a module-level flag) on every load and on every toggle.
+        self.reduce_motion = False
 
         self.active_tab = "tasks"
         self.active_filter = "all"
@@ -333,8 +400,12 @@ class MainWindow(QMainWindow):
             self.project_root = Path(sys.executable).parent
         else:
             self.project_root = Path(__file__).resolve().parent.parent
+        # Frozen: the per-user config location (%APPDATA%\Aion2 TM on Windows,
+        # ~/.config/aion2-tm on Linux, ~/Library/Application Support on macOS
+        # -- see utils/paths.py). From source: the repo root, so a dev run keeps
+        # its config next to the code instead of polluting the user profile.
         if getattr(sys, "frozen", False):
-            self.app_config_dir = Path(os.environ["APPDATA"]) / "Aion2 TM"
+            self.app_config_dir = paths.user_config_dir()
         else:
             self.app_config_dir = self.project_root
         self.app_config_path = self.app_config_dir / "config.json"
@@ -383,6 +454,12 @@ class MainWindow(QMainWindow):
             key: [] for key in self.tabs
         }
 
+        # Soft-delete state (UX audit 2026-09-18, C2). At most one card
+        # is ever pending; the sequence number is what lets a fired undo
+        # timer tell "still mine" from "already superseded".
+        self._pending_delete = None
+        self._pending_delete_seq = 0
+
         self.item_templates: list = []
         self.task_templates: list = []
         self.standard_templates: dict = {"tasks": [], "shopping": []}
@@ -399,6 +476,9 @@ class MainWindow(QMainWindow):
         # was last loaded/saved even while neither window exists yet this
         # session -- handed off to the LoadoutWindow the moment it's
         # actually created, and refreshed from it (if open) on every save.
+        # Written here directly (the page does not exist yet); every LATER
+        # write goes through _set_build_planner_state(), which is also what
+        # keeps the Armory dashboard in step -- see its docstring.
         self._build_planner_state: dict | None = None
 
         # In-game overlay: which accordion sections are shown (User-Wunsch,
@@ -429,7 +509,18 @@ class MainWindow(QMainWindow):
         self.flow_map_window.root_renamed.connect(self._on_flow_map_root_renamed)
         self.flow_map_window.map_overlay_changed.connect(self._on_flow_map_overlay_changed)
 
+        # The application stylesheet is scoped to `QWidget[aion2="true"]`
+        # and its descendants (ui/styles.template.qss §0).  Set before
+        # setup_ui() builds anything, so every child is polished with the
+        # scope already in place -- and so that the sheet cannot reach the
+        # Armory's parentless windows, whose 1,205-line sheet was tuned
+        # against the default font and its own per-item colours.
+        self.setProperty("aion2", True)
+
         self.setup_ui()
+        # The tab pill highlight was only ever set by a click, so the app
+        # opened with neither Tasks nor Shopping marked active.
+        self.tasks_page.mark_active_tab(self.active_tab)
         self.overlay = OverlayWindow(self)
         self.load_styles()
         self.apply_language()
@@ -441,6 +532,13 @@ class MainWindow(QMainWindow):
             self._show_first_run_dialog()
         else:
             self.load_last_profile()
+
+        # The startup theme belongs to the profile, which is only known once
+        # the two branches above have run -- so the stylesheet AND the Fusion
+        # fallback palette are (re)built here rather than guessed in main.py.
+        # A profile that carries no theme leaves current_theme at its default
+        # and this is simply a no-op re-render.
+        self.apply_theme(self.current_theme)
 
         # Pre-create the native OS window handle so first show() has no flash
         if self.flow_map_window:
@@ -454,54 +552,211 @@ class MainWindow(QMainWindow):
 
         self._editing_card = None
         self._setup_tray_icon()
+        self._setup_shortcuts()
         self.update_countdowns()
+
+    #: The one :class:`_CardPressFilter` this window installs on its cards,
+    #: built on first use.  A class-level default rather than an ``__init__``
+    #: assignment because ``refresh()`` (and therefore ``_wire_card``) already
+    #: runs while ``__init__`` is still building the window.
+    _card_press_filter = None
+
+    class _CardPressFilter(QObject):
+        """Turns a left-click on a card into "edit this card", for every card.
+
+        This used to be ``card.mousePressEvent = on_press``: a closure that
+        captured the card (as a default argument) and the window (as a free
+        variable), stored in the *card's own* ``__dict__``.  That is a
+        reference cycle rooted on a live Qt object -- card -> its instance
+        dict -> the function -> the card again, and on to the MainWindow --
+        so ``deleteLater()`` could free the C++ widget while the Python
+        wrapper, the window and every other card stayed reachable until a
+        full ``gc.collect()`` happened to run.  In the app that is a slow
+        drip; in the test suite it is ~600 widgets per MainWindow that never
+        left, and since the stylesheet lives on the QApplication (MASTER
+        §4-1) every ``setStyleSheet`` had to re-resolve against all of them
+        (F-apex "Re-verification 2": one theme switch, 9 s).
+
+        An event filter needs neither capture: Qt hands it the event target,
+        so the card comes in as ``obj``, and the owning window is reachable
+        through the filter's Qt parent.  Both links are C++ -- nothing here
+        holds a Python reference to a card or to the window.
+        """
+
+        def eventFilter(self, obj, event):
+            if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+                window = self.parent()
+                child = obj.childAt(event.position().toPoint())
+                if not isinstance(child, QPushButton):
+                    if window._editing_card is obj:
+                        window._cancel_edit()
+                    else:
+                        window._start_editing(obj)
+            # False: the card's own mousePressEvent still runs, which is what
+            # the old closure's trailing ``type(c).mousePressEvent(c, event)``
+            # did by hand.
+            return False
 
     def _wire_card(self, card):
         card.check_btn.clicked.connect(self._on_task_toggled)
         card.delete_btn.clicked.disconnect()
-        card.delete_btn.clicked.connect(lambda checked=False, c=card: self._delete_card(c))
+        # A bound method, not ``lambda c=card: ...``: PySide holds bound-method
+        # slots weakly, so this connection adds no reference to the card or to
+        # the window (the lambda did both, and outlived the card).
+        card.delete_btn.clicked.connect(self._on_card_delete_clicked)
         card.setCursor(Qt.PointingHandCursor)
 
-        def on_press(event, c=card):
-            if event.button() == Qt.LeftButton:
-                child = c.childAt(event.pos())
-                if not isinstance(child, QPushButton):
-                    if self._editing_card is c:
-                        self._cancel_edit()
-                    else:
-                        self._start_editing(c)
-            type(c).mousePressEvent(c, event)
+        if self._card_press_filter is None:
+            self._card_press_filter = self._CardPressFilter(self)
+        card.installEventFilter(self._card_press_filter)
 
-        card.mousePressEvent = on_press
+    def _on_card_delete_clicked(self):
+        """The "x" on a card. Resolves the card from the button, not a closure."""
+        button = self.sender()
+        if button is None:
+            return
+        card = button.parentWidget()
+        while card is not None and getattr(card, "delete_btn", None) is not button:
+            card = card.parentWidget()
+        if card is not None:
+            self._delete_card(card)
 
     def _on_task_toggled(self):
         self.refresh()
         if self.auto_save:
             self.save_profile(silent=True)
 
+    # How long a deleted card stays undoable. Long enough to read the
+    # toast and aim for the button (UX audit 2026-09-18, C2 asked for 5-8 s).
+    UNDO_WINDOW_MS = 6000
+
     def _delete_card(self, card):
+        """Soft delete: the card leaves the list (and therefore every
+        serialization, count and refresh) immediately, but nothing is
+        actually destroyed or saved until the undo window closes.
+
+        Before this, the "x" was a single irreversible click: it dropped the
+        card, flipped the matching template's ``is_general`` and auto-saved,
+        with no confirmation and no way back (UX audit 2026-09-18, C2).
+
+        The three effects that used to fire here are now split:
+          * removing the card from ``task_lists`` happens NOW, so a pending
+            card can never be serialized, counted, rendered or resurrected
+            by a reset that runs while the toast is up;
+          * the template mutation + ``deleteLater`` + save are deferred into
+            ``_commit_pending_delete``;
+          * ``_undo_pending_delete`` puts the card back at its exact index,
+            which needs no save at all (nothing was written yet).
+        """
         if self._editing_card is card:
             self._cancel_edit()
-        for cards in self.task_lists.values():
+
+        # Only one card may be pending at a time: a second delete commits the
+        # first (its undo chance is over the moment its toast is replaced).
+        self._commit_pending_delete()
+
+        tab = None
+        index = None
+        for key, cards in self.task_lists.items():
             if card in cards:
+                tab = key
+                index = cards.index(card)
                 cards.remove(card)
                 break
+
+        if tab is None:
+            # Not in any list (already deleted / never added) -- nothing to
+            # undo, so fall back to the old destructive path for that card.
+            card.deleteLater()
+            return
+
+        self._pending_delete_seq += 1
+        seq = self._pending_delete_seq
+        self._pending_delete = {
+            "seq": seq,
+            "tab": tab,
+            "index": index,
+            "card": card,
+            "apply": self._template_delete_side_effects(card),
+        }
+
+        # refresh() re-renders from task_lists, which no longer holds the
+        # card -- render_tasks hides and unparents it for us, which is why
+        # the fade has to COMPLETE first: a card already unparented has
+        # nothing left to fade. `task_lists` was mutated synchronously
+        # above, so every count, serialization and reset already sees the
+        # card as gone while it is still fading (MASTER §3, motion.base).
+        # With reduced motion the duration is 0 and ui.motion applies the
+        # end state and calls `then` inline, i.e. exactly the old behaviour.
+        motion.fade_out(card, then=self.refresh, theme=self.current_theme)
+
+        self.show_toast(
+            tr(self.language, "toast_task_removed"),
+            action_label=tr(self.language, "undo"),
+            on_action=self._undo_pending_delete,
+            duration_ms=self.UNDO_WINDOW_MS,
+            action_key="undo",
+        )
+        # `self` as the context object: Qt drops the callback if the window
+        # is destroyed before the timer fires, instead of running it against
+        # already-deleted C++ widgets (a real RuntimeError, surfaced the
+        # moment the test suite started destroying its windows for real).
+        QTimer.singleShot(self.UNDO_WINDOW_MS, self, lambda: self._commit_pending_delete(seq))
+
+    def _template_delete_side_effects(self, card):
+        """The template mutation the old ``_delete_card`` did inline, frozen
+        into a closure so it can run later (on commit) or never (on undo)."""
         if isinstance(card, ShoppingCard):
-            title_lower = card.title.lower()
-            for tmpl in self.item_templates:
-                if tmpl.get("title", "").lower() == title_lower:
-                    tmpl["is_general"] = False
-                    break
+            templates = self.item_templates
         elif isinstance(card, TaskCard):
-            title_lower = card.title.lower()
-            for tmpl in self.task_templates:
+            templates = self.task_templates
+        else:
+            return lambda: None
+
+        title_lower = card.title.lower()
+
+        def _apply():
+            for tmpl in templates:
                 if tmpl.get("title", "").lower() == title_lower:
                     tmpl["is_general"] = False
                     break
+
+        return _apply
+
+    def _commit_pending_delete(self, seq=None):
+        """Makes the pending delete real. Idempotent and safe to call from
+        anywhere; ``seq`` lets a fired timer bow out when the delete it was
+        scheduled for is already gone (undone, or committed by a newer one)."""
+        pending = self._pending_delete
+        if not pending:
+            return
+        if seq is not None and pending["seq"] != seq:
+            return
+
+        self._pending_delete = None
+        pending["apply"]()
+        card = pending["card"]
+        card.setParent(None)
         card.deleteLater()
-        self.refresh()
         if self.auto_save:
             self.save_profile(silent=True)
+
+    def _undo_pending_delete(self):
+        """Puts the card back exactly where it was. No save: the deletion was
+        never written, so the file on disk is still the pre-delete state."""
+        pending = self._pending_delete
+        if not pending:
+            return
+        self._pending_delete = None
+
+        cards = self.task_lists.setdefault(pending["tab"], [])
+        index = min(pending["index"], len(cards))
+        cards.insert(index, pending["card"])
+        self._hide_toast()
+        self.refresh()
+        # refresh() has re-parented and shown the card; fade it back in so
+        # the restore reads as the inverse of the delete.
+        motion.fade_in(pending["card"], theme=self.current_theme)
 
     def _set_card_selected(self, card, selected: bool):
         card.setProperty("selected", selected)
@@ -568,7 +823,7 @@ class MainWindow(QMainWindow):
         prio_text = tr(self.language, prio_map.get(priority, priority))
         if isinstance(card, ShoppingCard):
             card.priority = priority
-            card.priority_label.setText(prio_text)
+            card._apply_priority_style(prio_text)
             card.set_title(title)
             card.set_amount(p.amount_input.text().strip() or "1")
             card.location = p.location_input.text().strip()
@@ -587,7 +842,7 @@ class MainWindow(QMainWindow):
                 card.schedule_label.style().polish(card.schedule_label)
         else:
             card.priority_value = priority
-            card.priority.setText(prio_text)
+            card._apply_priority_style(prio_text)
             card.set_title(title)
             card.set_amount(p.amount_input.text().strip() or "1")
             desc = p.desc_input.text().strip()
@@ -660,6 +915,187 @@ class MainWindow(QMainWindow):
         self.flow_map_window.raise_()
         self.flow_map_window.activateWindow()
 
+    # ── Armory state: ONE writer (review G/M1) ───────────────────────────
+    # `_build_planner_state` used to be assigned at four sites and only two
+    # of them told the dashboard, so the Armory landing page went stale and
+    # stayed stale: the Build Planner is a PARENTLESS, MODELESS top-level
+    # (ItemDatabase/app.py, `create_window(parent=None)`), so the dashboard
+    # sits *visible behind it* -- closing the planner fires neither hide nor
+    # show on the page, and nothing re-read the dict.  Every write now goes
+    # through the setter below, which is the only place that knows the page
+    # has to be told.
+
+    def _set_build_planner_state(self, state: dict | None):
+        """The single writer of ``_build_planner_state``.
+
+        Pushes to the Armory dashboard as well, so the page can never
+        disagree with the dict.  ``getattr`` because ``__init__`` assigns the
+        attribute (as None) before ``_setup_pages()`` builds the page.
+        """
+        self._build_planner_state = state
+        page = getattr(self, "armory_page", None)
+        if page is not None:
+            page.set_build_planner_state(state)
+            page.set_recommendations(self._armory_recommendations(state))
+
+    # ── Armory recommendations (Stage 2, B-armory.md §3.4 #1/#2) ─────────
+    # Computed HERE and pushed, not derived in the page: they need the
+    # catalog under ItemDatabase/data and a DetailProvider over its detail
+    # cache, and ui/pages/armory_page.py's first rule is that it imports
+    # neither ItemDatabase nor the network.  The host already owns the one
+    # writer of the state (above), so it is also the one place that knows
+    # when a recommendation could have changed.
+
+    def _armory_bundle_dir(self) -> Path:
+        """``ItemDatabase/``, in both run modes.
+
+        Mirrors ``ItemDatabase/app.py``'s ``_BUNDLE_DIR`` (read-only, not
+        imported — importing app.py is the 23 000-line module load this
+        page exists to avoid).  Same two branches as
+        ``_ensure_item_database_window`` right below: bundled datas extract
+        under ``_MEIPASS``, not next to the executable.
+
+        Pure, and no engine import: :meth:`_armory_dirs` needs this to put
+        the engine package on ``sys.path`` in the first place.
+        """
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            return Path(sys._MEIPASS) / "ItemDatabase"
+        return self.project_root / "ItemDatabase"
+
+    def _armory_dirs(self) -> tuple[Path, Path]:
+        """``(catalog_dir, details_dir)`` — deliberately not one directory.
+
+        This used to be a single ``_armory_data_dir()`` feeding both the
+        catalog loader and ``DiskDetailProvider(data_dir / "details")``.
+        From source that is correct, because app.py's ``_cache_root()``
+        returns ``ItemDatabase/data`` there and the two trees coincide.
+        **Frozen they do not**: ``_cache_root()`` returns
+        ``user_cache_dir()/armory``, ``ItemDetailCache`` writes its
+        ``{id}.json`` files there, and ``"Aion2 TM.spec"`` never ships a
+        ``details/`` folder — so the provider was pointed at a directory
+        that is empty for the life of the install, and two of the three
+        recommendation features could never appear in a release build.
+        Invisible from source, invisible to the suite.
+
+        The arithmetic lives in
+        :func:`armory_engine.providers.resolve_armory_dirs` so that the host
+        and the Armory window cannot disagree about it, and so that a frozen
+        layout is assertable from a source run.
+        """
+        bundle = self._armory_bundle_dir()
+        self._ensure_armory_engine_importable(bundle)
+        from armory_engine.providers import resolve_armory_dirs
+
+        return resolve_armory_dirs(
+            getattr(sys, "frozen", False), bundle, paths.user_cache_dir()
+        )
+
+    def _armory_data_dir(self) -> Path:
+        """The **catalog** directory (``items_all.json`` & co.)."""
+        return self._armory_dirs()[0]
+
+    def _armory_details_dir(self) -> Path:
+        """The **runtime detail cache** ``ItemDetailCache`` writes into."""
+        return self._armory_dirs()[1]
+
+    @staticmethod
+    def _ensure_armory_engine_importable(bundle_dir: Path) -> None:
+        """Put ``ItemDatabase/`` on ``sys.path`` for ``import armory_engine``.
+
+        APPENDED, not inserted at 0 the way app.py does it: that directory
+        also holds a dozen top-level modules (``app``, ``fetch_*``,
+        ``compute_*``), and the host has no business letting any of them win
+        a name against its own packages.
+        """
+        parent = str(bundle_dir)
+        if parent not in sys.path:
+            sys.path.append(parent)
+
+    def _armory_engine(self):
+        """``(recommend module, DetailProvider, DataBundle)``, or ``None``.
+
+        Loaded once per session and memoized: the bundle parses
+        ``items_all.json`` (a few MB) and the provider memoizes every detail
+        it reads, while the caller below runs on every activation change.
+        Re-reading the catalog on each focus change would be a file parse
+        per Alt-Tab.
+
+        ``ItemDatabase`` goes on ``sys.path`` for the same reason app.py
+        puts it there itself: the engine is a package inside that directory
+        (see :meth:`_ensure_armory_engine_importable`).
+
+        The provider gets :meth:`_armory_details_dir`, the bundle gets
+        :meth:`_armory_data_dir` — two different trees in a frozen build,
+        see :meth:`_armory_dirs`.
+        """
+        cached = getattr(self, "_armory_engine_cache", None)
+        if cached is not None:
+            return cached or None
+        try:
+            catalog_dir, details_dir = self._armory_dirs()
+            from armory_engine import providers, recommend
+
+            cached = (
+                recommend,
+                providers.DiskDetailProvider(details_dir),
+                providers.load_data_bundle(catalog_dir),
+            )
+        except Exception:  # pragma: no cover - a broken engine must not break the app
+            logger.exception("Armory recommendations unavailable: engine could not be loaded")
+            cached = ()
+        self._armory_engine_cache = cached
+        return cached or None
+
+    def _armory_recommendations(self, state: dict | None) -> list:
+        """The engine's next best actions for ``state`` — never raising.
+
+        A dashboard card is not worth an unhandled exception on a window
+        activation, so every failure degrades to "no recommendations", which
+        the page renders as its own honest line.
+        """
+        engine = self._armory_engine()
+        if engine is None:
+            return []
+        recommend, provider, bundle = engine
+        try:
+            return recommend.next_best_actions(state, provider, bundle)
+        except Exception:  # pragma: no cover - same reasoning as above
+            logger.exception("Armory recommendations failed for the current build")
+            return []
+
+    def _refresh_armory_summary(self):
+        """Re-read the live Build Planner into the dict, then the page.
+
+        Reads only: nothing is written to disk, so this is safe to call from
+        an event handler and on a template profile alike.  Falls back to the
+        persisted dict when the Armory was never opened this session
+        (``get_loadout_state`` does that itself, ItemDatabase/app.py).
+        Skipped while a profile is loading -- the live window still holds the
+        PREVIOUS profile's state at that moment, and pulling it would
+        clobber what load_profile just restored.
+        """
+        if getattr(self, "_profile_loading", False):
+            return
+        window = getattr(self, "item_database_window", None)
+        if window is not None and hasattr(window, "get_loadout_state"):
+            pulled = window.get_loadout_state()
+            if pulled:
+                self._set_build_planner_state(pulled)
+                return
+        self._set_build_planner_state(self._build_planner_state)
+
+    def changeEvent(self, event):
+        """Refresh the dashboard when the app regains focus (review G/M1).
+
+        The user path the review named: dashboard on screen -> CTA -> edit
+        gear in the parentless planner -> close it.  No Qt show/hide reaches
+        this window, but its activation DOES change, and that is exactly the
+        moment the numbers behind the planner became wrong.
+        """
+        if event.type() == QEvent.ActivationChange and self.isActiveWindow():
+            self._refresh_armory_summary()
+        super().changeEvent(event)
+
     def _ensure_item_database_window(self):
         if self.item_database_window is None:
             import importlib.util
@@ -688,6 +1124,9 @@ class MainWindow(QMainWindow):
                 self.item_database_window.set_theme(self.current_theme)
             if self._build_planner_state and hasattr(self.item_database_window, "set_pending_loadout_state"):
                 self.item_database_window.set_pending_loadout_state(self._build_planner_state)
+            # Through the setter like every other path, so there is exactly
+            # one line in this file that knows the page must be told.
+            self._set_build_planner_state(self._build_planner_state)
             if hasattr(self.item_database_window, "add_to_templates_requested"):
                 self.item_database_window.add_to_templates_requested.connect(
                     self._add_item_database_item_to_templates
@@ -772,6 +1211,20 @@ class MainWindow(QMainWindow):
         dlg = module.TemplateItemPickerDialog(
             window._raw_items, window.icon_cache, window.detail_cache, parent=parent_widget,
         )
+        # KEPT deliberately, against review F-0e's "delete the line".
+        #
+        # This is an ItemDatabase widget: it renders the item catalog and
+        # colours each row by rarity with QStandardItem.setForeground().  It
+        # is the one Armory widget that lives INSIDE our widget tree
+        # (parent=parent_widget), so unlike the Armory's own parentless
+        # windows it does match the app sheet's `QWidget[aion2="true"]`
+        # scope.  Its own sheet is the deeper one and wins every property it
+        # declares, which is precisely what keeps its rarity colours, its
+        # font metrics and its icon-column widths intact.  Dropping it would
+        # hand this dialog to a sheet tuned for a different widget set --
+        # the same class of regression as the BLOCKER (F-0), just delivered
+        # from the other side.  It goes away with the Armory tokenization
+        # wave, together with ItemDatabase/styles.qss itself.
         dlg.setStyleSheet(module._load_qss_text())
         if dlg.exec() and dlg.selected_item:
             return dlg.selected_item
@@ -870,7 +1323,7 @@ class MainWindow(QMainWindow):
         )
         if live_matches:
             live_loadout.advance_equip_priority(section_key)
-            self._build_planner_state = window.get_loadout_state()
+            self._set_build_planner_state(window.get_loadout_state())
         else:
             build = state.get("equip_builds_data", {}).get(class_name, {}).get(build_name)
             if build is not None:
@@ -972,7 +1425,10 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         self.setWindowTitle(self.tr("app.title"))
         self.resize(1200, 800)
-        self.setMinimumSize(1100, 820)
+        # 820 exceeded the usable height of a 1366x768 laptop screen (and of
+        # a 1920x1080 one with a top+bottom panel), which made the window
+        # impossible to fit or resize down on those setups.
+        self.setMinimumSize(1100, 700)
         icon_path = self.project_root / "assets" / "icons" / "aion2_tm_icon.ico"
         self.setWindowIcon(QIcon(str(icon_path)))
 
@@ -983,7 +1439,7 @@ class MainWindow(QMainWindow):
 
 
     def _setup_central_widget(self):
-        self.background = GradientBackground()
+        self.background = ThemedBackground()
         self.background.set_theme(self.current_theme)
         self.setCentralWidget(self.background)
 
@@ -1006,9 +1462,43 @@ class MainWindow(QMainWindow):
 
         self.page_stack = QStackedWidget()
 
+        # A row, not a bare label, so a toast can carry ONE action button
+        # (UX audit 2026-09-18, C2 -- "Task removed / Undo"). The label keeps
+        # its #toastLabel objectName so every existing QSS rule still
+        # matches; the container and the button get their own names rather
+        # than any inline colour (the design pass owns the styling).
+        self.toast_widget = QWidget()
+        self.toast_widget.setObjectName("toastBar")
+
+        toast_row = QHBoxLayout(self.toast_widget)
+        toast_row.setContentsMargins(0, 0, 0, 0)
+        toast_row.setSpacing(10)
+
+        # The "✓ " the toast used to prepend to every message was a
+        # dingbat inside the *text*, so it was also inside everything that
+        # read that text back (five assertions across two test modules).
+        # It is a real icon beside the label now.
+        self.toast_icon = icons.IconLabel("circle-check", 16, "ok")
+        self.toast_icon.setObjectName("toastIcon")
+
         self.toast_label = QLabel()
         self.toast_label.setObjectName("toastLabel")
-        self.toast_label.hide()
+
+        self.toast_action_btn = QPushButton()
+        self.toast_action_btn.setObjectName("toastActionButton")
+        self.toast_action_btn.setCursor(Qt.PointingHandCursor)
+        self.toast_action_btn.clicked.connect(self._on_toast_action)
+        self.toast_action_btn.hide()
+
+        toast_row.addWidget(self.toast_icon)
+        toast_row.addWidget(self.toast_label)
+        toast_row.addWidget(self.toast_action_btn)
+        toast_row.addStretch()
+
+        self.toast_widget.hide()
+        self._toast_action = None
+        self._toast_action_key = None
+        self._toast_seq = 0
     
     def _setup_sidebar(self):
         self.sidebar = SidebarWidget()
@@ -1037,6 +1527,11 @@ class MainWindow(QMainWindow):
 
         self.timers_page = TimersPage()
         self.todo_page = TodoTabsPage(self.tasks_page, self.timers_page)
+        # State is PUSHED in, by _set_build_planner_state() -- the page
+        # pulls nothing and holds no callable of ours (review G/m10: the
+        # `state_provider=lambda: self._build_planner_state` this replaces
+        # re-created the MainWindow->page->lambda->MainWindow cycle the
+        # same batch removed from the task cards).
         self.armory_page = ArmoryPage()
         self.settings_page = SettingsPage()
         self.about_page = AboutPage()
@@ -1064,14 +1559,15 @@ class MainWindow(QMainWindow):
         self.left_layout.addWidget(self.sidebar)
         self.left_layout.addStretch()
 
-        self.overlay_toggle_btn = QPushButton("⬛  Overlay")
+        self.overlay_toggle_btn = QPushButton("Overlay")
         self.overlay_toggle_btn.setObjectName("overlayToggleBtn")
+        icons.set_icon(self.overlay_toggle_btn, "eye", 16, clear_text=False)
         self.overlay_toggle_btn.setCheckable(True)
         self.overlay_toggle_btn.clicked.connect(self._toggle_overlay)
         self.left_layout.addWidget(self.overlay_toggle_btn)
 
         self.content_layout.addWidget(self.page_stack, 1)
-        self.content_layout.addWidget(self.toast_label)
+        self.content_layout.addWidget(self.toast_widget)
 
         self.main_layout.addWidget(self.left_panel)
         self.main_layout.addWidget(self.content_container, 1)
@@ -1111,6 +1607,11 @@ class MainWindow(QMainWindow):
         if hasattr(self.settings_page, "settings_save_requested"):
             self.settings_page.settings_save_requested.connect(
                 self.apply_settings_from_page
+            )
+
+        if hasattr(self.settings_page, "reduce_motion_changed"):
+            self.settings_page.reduce_motion_changed.connect(
+                self.set_reduce_motion
             )
 
         if hasattr(self.settings_page, "save_profile_btn"):
@@ -1177,7 +1678,12 @@ class MainWindow(QMainWindow):
         if hasattr(self.settings_page, "dps_start_requested"):
             self.settings_page.dps_start_requested.connect(self._start_dps_meter)
 
-        QTimer.singleShot(2000, self.run_update_check)
+        # AION2TM_NO_UPDATE_CHECK=1 skips the startup update check (tests, CI,
+        # packaged Linux builds where the distribution channel owns updates).
+        # Without it, any event-loop pump 2 s after construction starts a real
+        # network QThread that can still be running at interpreter exit.
+        if not os.environ.get("AION2TM_NO_UPDATE_CHECK"):
+            QTimer.singleShot(2000, self, self.run_update_check)
 
     def open_main_menu(self):
         menu = QMenu(self)
@@ -1373,7 +1879,7 @@ class MainWindow(QMainWindow):
         minutes, secs = divmod(remainder, 60)
 
         if days > 0:
-            return f"{days}T {hours:02}:{minutes:02}"
+            return f"{days}{tr(self.language, 'day_abbrev')} {hours:02}:{minutes:02}"
 
         return f"{hours:02}:{minutes:02}:{secs:02}"
 
@@ -1504,6 +2010,10 @@ class MainWindow(QMainWindow):
 
     def select_tab(self, tab):
         self.active_tab = tab
+        # MainWindow is the authority on which tab is active (it restores it
+        # from the profile), so it has to move the highlight too -- see
+        # TasksPage.mark_active_tab.
+        self.tasks_page.mark_active_tab(tab)
         self._update_task_reset_hint()
         self.refresh()
 
@@ -1520,7 +2030,7 @@ class MainWindow(QMainWindow):
             hours = int((diff % 86400) // 3600)
             minutes = int((diff % 3600) // 60)
             if days > 0:
-                return f"{days}T {hours:02d}:{minutes:02d}"
+                return f"{days}{tr(self.language, 'day_abbrev')} {hours:02d}:{minutes:02d}"
             return f"{hours:02d}:{minutes:02d}"
         except (ValueError, TypeError):
             return ""
@@ -1675,25 +2185,53 @@ class MainWindow(QMainWindow):
         if hasattr(self, "overlay") and self.overlay.isVisible():
             self.overlay.refresh()
 
-    def load_styles(self):
+    @staticmethod
+    def _asset_base_path() -> Path:
+        """Root the QSS's ``url(ASSET_PATH/...)`` references resolve against.
+
+        ``sys._MEIPASS`` when frozen (PyInstaller extracts the bundled datas
+        there), the repo root in a dev checkout.
+        """
         if hasattr(sys, "_MEIPASS"):
-            base_path = Path(sys._MEIPASS)
-            style_path = base_path / "ui" / "styles.qss"
-        else:
-            style_path = Path(__file__).resolve().parent / "styles.qss"
-            base_path = Path(__file__).resolve().parent.parent
+            return Path(sys._MEIPASS)
+        return Path(__file__).resolve().parent.parent
 
-        with open(style_path, "r", encoding="utf-8") as f:
-            styles = f.read()
+    def load_styles(self):
+        """Render the token template for the active theme onto the *application*.
 
-        styles = styles.replace("ASSET_PATH", base_path.as_posix())
-        self.setStyleSheet(styles)
-        # OverlayWindow has no Qt parent (it's a standalone Qt.Tool window, see
-        # its __init__), so it never receives this stylesheet through normal
-        # widget-tree cascade -- it needs its own copy applied directly.
-        if hasattr(self, "overlay"):
-            self.overlay.setStyleSheet(styles)
-        logger.debug("Stylesheet loaded: %s (%d bytes)", style_path, len(styles))
+        One sheet for the whole process, not one per window: OverlayWindow,
+        FlowMapWindow and the ItemDatabase window are all parentless
+        top-levels, so a ``MainWindow.setStyleSheet`` never reached them
+        through the widget-tree cascade and each needed its own hand-pushed
+        copy (three delivery paths, three chances to drift).
+        ``QApplication.setStyleSheet`` reaches every one of them, including
+        windows created later (MASTER §4-1).
+        """
+        app = QApplication.instance()
+        if app is None:  # a widget built without an app cannot be styled anyway
+            logger.warning("load_styles(): no QApplication — stylesheet not applied")
+            return ""
+
+        theme.set_current(self.current_theme)
+        base = self._asset_base_path().as_posix()
+
+        # QApplication.setStyleSheet re-resolves the sheet against EVERY
+        # widget of EVERY open window, so it is by far the most expensive
+        # call in a theme switch -- and apply_theme() runs on every profile
+        # load, which usually means "the same theme again".  Re-applying an
+        # identical sheet is pure cost, so it is skipped; the key is global
+        # because the sheet is (one QApplication per process).
+        global _APPLIED_STYLE_KEY
+        if _APPLIED_STYLE_KEY == (self.current_theme, base) and app.styleSheet():
+            return app.styleSheet()
+
+        styles = theme.build_qss(self.current_theme, base)
+        app.setStyleSheet(styles)
+        _APPLIED_STYLE_KEY = (self.current_theme, base)
+        logger.debug(
+            "Stylesheet rendered for theme %r (%d bytes)", self.current_theme, len(styles)
+        )
+        return styles
 
     def toggle_events(self):
         self.tasks_page.set_event_features_visible(
@@ -1724,7 +2262,32 @@ class MainWindow(QMainWindow):
         return 1
 
 
+    def _tray_ready(self) -> bool:
+        """True when a tray icon was actually created (see _setup_tray_icon)."""
+        return hasattr(self, "tray_icon")
+
+    def _notify(self, title: str, message: str, msecs: int = 5000):
+        """Desktop balloon through the tray when there is one, in-app toast
+        otherwise. On a bare Wayland session without a StatusNotifier host
+        (Hyprland with no Waybar tray module, a minimal WM, a headless test)
+        showMessage() is silently swallowed, which used to lose every
+        notification the app produced."""
+        if self._tray_ready():
+            self.tray_icon.showMessage(
+                title, message,
+                QSystemTrayIcon.MessageIcon.Information,
+                msecs,
+            )
+            return
+        self.show_toast(message)
+
     def _setup_tray_icon(self):
+        # Must run after QApplication exists -- QSystemTrayIcon.isSystemTrayAvailable()
+        # segfaults when called before it (PySide6 6.11). Called from __init__,
+        # which is only reached once main.py has constructed the app.
+        if not tray_available():
+            logger.info("No system tray available -- notifications fall back to in-app toasts")
+            return
         icon = self.windowIcon()
         self.tray_icon = QSystemTrayIcon(icon, self)
 
@@ -1769,31 +2332,37 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
 
+        # Same reasoning as in load_profile: the undo window cannot outlive
+        # the session.  Committed on each path that actually CLOSES the app,
+        # not here -- hiding into the tray does not end the session, and
+        # committing before the tray branch silently ended the undo window
+        # every time the user closed the window with tray mode on (review
+        # F-8; the comment used to claim the behaviour this now has).
         if getattr(self, "_force_quit", False):
+            self._commit_pending_delete()
             self.save_profile(silent=True)
             event.accept()
             QApplication.instance().quit()
             return
 
-        if self.minimize_to_tray is True:
+        # Hiding into a tray that does not exist would strand the window with
+        # no way back, so the preference is honoured only when there IS a tray.
+        # The stored setting is deliberately left untouched: the same profile
+        # may well be used on a machine that has one.
+        if self.minimize_to_tray is True and self._tray_ready():
             event.ignore()
             self.hide()
-            self.tray_icon.showMessage(
-                "Aion2 TM",
-                tr(self.language, "tray_running"),
-                QSystemTrayIcon.MessageIcon.Information,
-                3000,
-            )
+            self._notify("Aion2 TM", tr(self.language, "tray_running"), 3000)
             return
 
-        if self.minimize_to_tray is None:
+        if self.minimize_to_tray is None and self._tray_ready():
             box = QMessageBox(self)
             box.setWindowTitle(tr(self.language, "tray_minimize_title"))
             box.setText(tr(self.language, "tray_minimize_text"))
             tray_btn = box.addButton(
                 tr(self.language, "tray_minimize_yes"), QMessageBox.AcceptRole
             )
-            close_btn = box.addButton(
+            box.addButton(
                 tr(self.language, "tray_minimize_no"), QMessageBox.RejectRole
             )
             box.exec()
@@ -1802,20 +2371,17 @@ class MainWindow(QMainWindow):
                 self._save_app_config()
                 event.ignore()
                 self.hide()
-                self.tray_icon.showMessage(
-                    "Aion2 TM",
-                    tr(self.language, "tray_running"),
-                    QSystemTrayIcon.MessageIcon.Information,
-                    3000,
-                )
+                self._notify("Aion2 TM", tr(self.language, "tray_running"), 3000)
             else:
                 self.minimize_to_tray = False
                 self._save_app_config()
+                self._commit_pending_delete()
                 self.save_profile(silent=True)
                 event.accept()
                 QApplication.instance().quit()
             return
 
+        self._commit_pending_delete()
         self.save_profile(silent=True)
         event.accept()
         QApplication.instance().quit()
@@ -1825,97 +2391,30 @@ class MainWindow(QMainWindow):
             self._start_dps_meter(self.dps_meter_path)
 
     def _start_dps_meter(self, path: str):
-        """Launches the user's configured external DPS Meter tool. Uses
-        ShellExecuteEx directly (not the simpler os.startfile) with
-        SEE_MASK_FLAG_NO_UI (User-reported, 2026-08-30: declining the UAC
-        elevation prompt for a DPS Meter that requires admin rights also
-        popped up a SECOND "elevation failed" error dialog, carrying OUR
-        app's own taskbar icon since we're the process that requested the
-        launch). SEE_MASK_FLAG_NO_UI only suppresses the SHELL's own
-        follow-up error UI (missing file, access denied, elevation
-        cancelled, ...) -- it does NOT and cannot suppress the actual UAC
-        consent prompt itself (that's a Windows security boundary no
-        application can bypass, by design, and shouldn't want to). The
-        user still sees the normal "Do you want to allow..." prompt every
-        time; declining it just no longer also throws up a confusing
-        second popup -- a failure is instead reported back to us as a
-        plain error code, which we log instead of displaying."""
-        import ctypes
-        from ctypes import wintypes
+        """Launches the user's configured external DPS Meter tool.
 
+        On Windows this still goes through ShellExecuteEx with
+        SEE_MASK_FLAG_NO_UI rather than the simpler os.startfile
+        (core.platform.launch_windows_shellexecute holds the verbatim code and
+        the full rationale): User-reported, 2026-08-30, declining the UAC
+        elevation prompt for a DPS Meter that requires admin rights also popped
+        up a SECOND "elevation failed" dialog carrying OUR app's taskbar icon,
+        since we are the process that requested the launch. The UAC consent
+        prompt itself is a Windows security boundary and is NOT suppressed --
+        only the shell's follow-up error UI is, so a declined elevation comes
+        back as an error code we log instead of a confusing second popup.
+
+        Off Windows there is no UAC and no shell verb: a plain Popen from the
+        program's own directory is the correct equivalent (a Windows .exe is
+        routed through wine when it is installed).
+        """
         if not path:
             return
-        if not os.path.isfile(path):
-            logger.warning("DPS Meter file not found: %s", path)
-            return
-
-        class _SHELLEXECUTEINFO(ctypes.Structure):
-            _fields_ = [
-                ("cbSize", wintypes.DWORD),
-                ("fMask", ctypes.c_ulong),
-                ("hwnd", wintypes.HWND),
-                ("lpVerb", wintypes.LPCWSTR),
-                ("lpFile", wintypes.LPCWSTR),
-                ("lpParameters", wintypes.LPCWSTR),
-                ("lpDirectory", wintypes.LPCWSTR),
-                ("nShow", ctypes.c_int),
-                ("hInstApp", wintypes.HINSTANCE),
-                ("lpIDList", ctypes.c_void_p),
-                ("lpClass", wintypes.LPCWSTR),
-                ("hKeyClass", wintypes.HKEY),
-                ("dwHotKey", wintypes.DWORD),
-                ("hIcon", wintypes.HANDLE),
-                ("hProcess", wintypes.HANDLE),
-            ]
-
-        SEE_MASK_NOCLOSEPROCESS = 0x00000040
-        SEE_MASK_FLAG_NO_UI = 0x00000400
-        SW_SHOWNORMAL = 1
-
-        sei = _SHELLEXECUTEINFO()
-        sei.cbSize = ctypes.sizeof(sei)
-        sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI
-        sei.hwnd = None
-        sei.lpVerb = "open"
-        sei.lpFile = path
-        sei.lpParameters = None
-        sei.lpDirectory = os.path.dirname(path) or None
-        sei.nShow = SW_SHOWNORMAL
-        sei.hInstApp = None
-
-        try:
-            ok = ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei))
-            if not ok:
-                error = ctypes.get_last_error()
-                logger.warning(
-                    "DPS Meter did not start (error=%s, e.g. UAC elevation was declined) -- "
-                    "no popup shown, see SEE_MASK_FLAG_NO_UI note above", error,
-                )
-            else:
-                logger.info("DPS Meter started: %s", path)
-        except Exception as e:
-            logger.error("DPS Meter failed to start: %s", e)
+        launch_external(Path(path), elevate_hint=True)
 
     def _fire_notification(self, title: str, message: str):
-        if hasattr(self, "tray_icon"):
-            self.tray_icon.showMessage(
-                title, message,
-                QSystemTrayIcon.MessageIcon.Information,
-                5000,
-            )
-        if self.notification_sound and os.path.isfile(self.notification_sound):
-            winsound.PlaySound(
-                self.notification_sound,
-                winsound.SND_FILENAME | winsound.SND_ASYNC,
-            )
-
-    @staticmethod
-    def get_windows_sounds() -> dict:
-        sounds = {"-- Kein Sound --": ""}
-        for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
-            name = os.path.splitext(os.path.basename(path))[0]
-            sounds[name] = path
-        return sounds
+        self._notify(title, message)
+        play_wav(self.notification_sound)
 
     def format_countdown(self, seconds):
         seconds = max(0, int(seconds))
@@ -2047,8 +2546,7 @@ class MainWindow(QMainWindow):
             reset += timedelta(days=7)
         return reset
 
-    @staticmethod
-    def _format_custom_countdown(seconds: float, fmt: str) -> str:
+    def _format_custom_countdown(self, seconds: float, fmt: str) -> str:
         s = max(0, int(seconds))
         if fmt == "mm:ss":
             total_minutes, secs = divmod(s, 60)
@@ -2058,7 +2556,7 @@ class MainWindow(QMainWindow):
             hours, remainder = divmod(remainder, 3600)
             minutes, secs = divmod(remainder, 60)
             if days > 0:
-                return f"{days}T {hours:02}:{minutes:02}:{secs:02}"
+                return f"{days}{tr(self.language, 'day_abbrev')} {hours:02}:{minutes:02}:{secs:02}"
             return f"{hours:02}:{minutes:02}:{secs:02}"
         # default: hh:mm:ss
         minutes, secs = divmod(s, 60)
@@ -2067,14 +2565,8 @@ class MainWindow(QMainWindow):
 
     def _fire_custom_notification(self, name: str, sound_path: str, warn_minutes: int = 0):
         msg = f"{name} läuft jetzt ab!" if warn_minutes <= 0 else f"{name} läuft in {warn_minutes} Min ab!"
-        if hasattr(self, "tray_icon"):
-            self.tray_icon.showMessage(
-                name, msg,
-                QSystemTrayIcon.MessageIcon.Information,
-                5000,
-            )
-        if sound_path and os.path.isfile(sound_path):
-            winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        self._notify(name, msg)
+        play_wav(sound_path)
 
     def open_profile_menu(self, checked=False, anchor=None):
         menu = QMenu(self)
@@ -2124,200 +2616,299 @@ class MainWindow(QMainWindow):
             if self.auto_save:
                 self.save_profile(silent=True)
 
+    def _ask_unreadable_profile_choice(self, profile_path: Path) -> str:
+        """Modal asking what to do about a profile that could not be read.
+
+        Returns "overwrite" or "keep". Split out from the handler below so a
+        test can drive both answers without a real dialog.
+        """
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(tr(self.language, "profile_unreadable_title"))
+        box.setText(tr(self.language, "profile_unreadable_text", file=profile_path))
+        save_btn = box.addButton(
+            tr(self.language, "profile_unreadable_overwrite"), QMessageBox.AcceptRole
+        )
+        box.addButton(tr(self.language, "profile_unreadable_keep"), QMessageBox.RejectRole)
+        box.setDefaultButton(box.buttons()[-1])
+        box.exec()
+        return "overwrite" if box.clickedButton() is save_btn else "keep"
+
+    def _handle_unreadable_profile(self, profile_path: Path):
+        """Tell the user the profile is unreadable and let them choose.
+
+        A safety system that engages without saying so is indistinguishable,
+        from the user's chair, from the app being broken: before this, a
+        profile whose file AND .bak were both unparsable silently disabled
+        auto-save for the whole session, with nothing but a line in app.log.
+
+        "Save anyway" copies the unreadable file aside (so a manual rescue
+        stays possible) and releases the guard; "Keep the file" leaves
+        auto-save off, and says so once.
+        """
+        if self._ask_unreadable_profile_choice(profile_path) == "overwrite":
+            from core.persistence import snapshot_corrupt
+
+            snapshot = snapshot_corrupt(profile_path)
+            self._profile_loading = False
+            self._profile_unreadable = False
+            self._autosave_disabled_notified = False
+            self.show_toast(
+                tr(self.language, "profile_unreadable_snapshot", file=snapshot.name)
+                if snapshot else tr(self.language, "profile_saved")
+            )
+            return
+        self._note_autosave_disabled()
+
+    def _note_autosave_disabled(self):
+        """Say once per session that auto-save is off. Called from the dialog
+        above and from every skipped auto-save, so the message reappears if
+        the user never saw the modal (a load that failed before the UI was
+        up, for instance) -- but never turns into a toast storm."""
+        if self._autosave_disabled_notified:
+            return
+        self._autosave_disabled_notified = True
+        self.show_toast(tr(self.language, "profile_autosave_disabled"))
+
     def load_profile(self, profile_path):
+        # Self-healing load (audit §2): a truncated/corrupt profile is no
+        # longer silently turned into {} -- load_json_with_fallback tries the
+        # <name>.json.bak copy atomic_write_json keeps, and tells us which
+        # copy we actually got so the user can be warned (and so a file that
+        # is beyond rescue never gets overwritten).
+        from core.persistence import load_json_with_fallback
+
+        # A card whose undo window is still open belongs to the profile we
+        # are about to leave -- commit it against THAT profile (self.profile_
+        # name is still the old one here) rather than let the switch quietly
+        # resurrect or strand it (UX audit 2026-09-18, C2).
+        self._commit_pending_delete()
+
+        profile_path = Path(profile_path)
+        data, status = load_json_with_fallback(profile_path)
+
+        # Nothing may save while the fields below are still half-restored
+        # (see save_profile's guard and the call-order note at the end).
+        self._profile_loading = True
+
+        # Both the profile AND its backup are unreadable: keep the guard on
+        # past this method so no auto-save buries whatever is still on disk.
+        # Only a deliberate "Save Profile" click writes from here on.
+        unrecoverable = status == "empty" and profile_path.exists()
+        # Why the guard is on matters: `_profile_loading` is also True during
+        # a perfectly normal load, and only the unreadable-file case may
+        # snapshot and warn.
+        self._profile_unreadable = unrecoverable
+        if unrecoverable:
+            logger.error(
+                "Profile %s and its backup are both unreadable -- loaded as empty; "
+                "auto-save stays disabled so the file on disk is not overwritten.",
+                profile_path,
+            )
+
         try:
-            with open(profile_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
-            data = {}
-        except FileNotFoundError:
-            data = {}
+            self.profile_name = profile_path.stem
+            if not isinstance(data, dict):
+                data = {}
 
-        self.profile_name = profile_path.stem
-        if not isinstance(data, dict):
-            data = {}
+            self.current_theme = data.get("theme", "abyss")
+            self.apply_theme(self.current_theme)
 
-        self.current_theme = data.get("theme", "abyss")
-        self.apply_theme(self.current_theme)
+            self.language = data.get("language", "en")
+            self.apply_language()
 
-        self.language = data.get("language", "en")
-        self.apply_language()
+            settings = data.get("settings", {})
 
-        settings = data.get("settings", {})
+            self.daily_reset_time = settings.get("daily_reset_time", "09:00")
+            self.weekly_reset_day = settings.get("weekly_reset_day", "Mo")
+            self.weekly_reset_time = settings.get("weekly_reset_time", "09:00")
+            self.season_reset_datetime = settings.get("season_reset_datetime", "")
+            self.season_enabled = settings.get("season_enabled", False)
 
-        self.daily_reset_time = settings.get("daily_reset_time", "09:00")
-        self.weekly_reset_day = settings.get("weekly_reset_day", "Mo")
-        self.weekly_reset_time = settings.get("weekly_reset_time", "09:00")
-        self.season_reset_datetime = settings.get("season_reset_datetime", "")
-        self.season_enabled = settings.get("season_enabled", False)
+            from datetime import date as _date
+            _d = settings.get("last_daily_reset_date")
+            self.last_daily_reset_date = _date.fromisoformat(_d) if _d else None
+            _w = settings.get("last_weekly_reset_date")
+            self.last_weekly_reset_date = _date.fromisoformat(_w) if _w else None
+            self.last_season_reset_datetime = settings.get("last_season_reset_datetime")
+            self.missed_daily_activities = settings.get("missed_daily_activities", [])
 
-        from datetime import date as _date
-        _d = settings.get("last_daily_reset_date")
-        self.last_daily_reset_date = _date.fromisoformat(_d) if _d else None
-        _w = settings.get("last_weekly_reset_date")
-        self.last_weekly_reset_date = _date.fromisoformat(_w) if _w else None
-        self.last_season_reset_datetime = settings.get("last_season_reset_datetime")
-        self.missed_daily_activities = settings.get("missed_daily_activities", [])
+            self.show_events = settings.get("show_events", True)
+            # Straight into ui.motion: the profile's own preference has to be
+            # live before the first fade this load could trigger.
+            self.set_reduce_motion(settings.get("reduce_motion", False), save=False)
+            self.auto_save = settings.get("auto_save", True)
+            self.notification_enabled = settings.get("notification_enabled", False)
+            self.notification_warn_minutes = settings.get("notification_warn_minutes", 1)
+            self.notification_sync = settings.get("notification_sync", True)
+            self.notification_shugo_enabled = settings.get("notification_shugo_enabled", False)
+            self.notification_shugo_warn_minutes = settings.get("notification_shugo_warn_minutes", 1)
+            self.notification_riss_enabled = settings.get("notification_riss_enabled", False)
+            self.notification_riss_warn_minutes = settings.get("notification_riss_warn_minutes", 1)
+            self.notification_sound = settings.get("notification_sound", "")
+            self.shugo_enabled = settings.get("shugo_enabled", False)
+            self.shugo_start_minute = settings.get("shugo_start_minute", 15)
+            self.shugo_interval_text = settings.get("shugo_interval_text", "30 min")
+            self.shugo_interval_minutes = self.interval_text_to_minutes(
+                self.shugo_interval_text
+            )
 
-        self.show_events = settings.get("show_events", True)
-        self.auto_save = settings.get("auto_save", True)
-        self.notification_enabled = settings.get("notification_enabled", False)
-        self.notification_warn_minutes = settings.get("notification_warn_minutes", 1)
-        self.notification_sync = settings.get("notification_sync", True)
-        self.notification_shugo_enabled = settings.get("notification_shugo_enabled", False)
-        self.notification_shugo_warn_minutes = settings.get("notification_shugo_warn_minutes", 1)
-        self.notification_riss_enabled = settings.get("notification_riss_enabled", False)
-        self.notification_riss_warn_minutes = settings.get("notification_riss_warn_minutes", 1)
-        self.notification_sound = settings.get("notification_sound", "")
-        self.shugo_enabled = settings.get("shugo_enabled", False)
-        self.shugo_start_minute = settings.get("shugo_start_minute", 15)
-        self.shugo_interval_text = settings.get("shugo_interval_text", "30 min")
-        self.shugo_interval_minutes = self.interval_text_to_minutes(
-            self.shugo_interval_text
-        )
+            self.riss_enabled = settings.get("riss_enabled", False)
+            self.riss_anchor_hour = settings.get("riss_anchor_hour", 0)
+            self.riss_interval_text = settings.get("riss_interval_text", "1 Stunde")
+            self.riss_interval_hours = self.interval_text_to_hours(
+                self.riss_interval_text
+            )
 
-        self.riss_enabled = settings.get("riss_enabled", False)
-        self.riss_anchor_hour = settings.get("riss_anchor_hour", 0)
-        self.riss_interval_text = settings.get("riss_interval_text", "1 Stunde")
-        self.riss_interval_hours = self.interval_text_to_hours(
-            self.riss_interval_text
-        )
+            self.timers_page.set_shugo_visible(self.shugo_enabled)
+            self.timers_page.set_riss_visible(self.riss_enabled)
+            self.timers_page.set_season_visible(bool(self.season_enabled and self._get_season_countdown_text()))
 
-        self.timers_page.set_shugo_visible(self.shugo_enabled)
-        self.timers_page.set_riss_visible(self.riss_enabled)
-        self.timers_page.set_season_visible(bool(self.season_enabled and self._get_season_countdown_text()))
+            self.timer_categories = settings.get("timer_categories", ["Custom Timer"]) or ["Custom Timer"]
+            self.custom_timers = settings.get("custom_timers", [])[:8]
+            for ct in self.custom_timers:
+                if "timer_mode" not in ct:
+                    ct["timer_mode"] = "hourly"
+            self._custom_notified = [False] * 8
+            self.timers_page.rebuild_custom_sections(self.timer_categories, self.custom_timers)
 
-        self.timer_categories = settings.get("timer_categories", ["Custom Timer"]) or ["Custom Timer"]
-        self.custom_timers = settings.get("custom_timers", [])[:8]
-        for ct in self.custom_timers:
-            if "timer_mode" not in ct:
-                ct["timer_mode"] = "hourly"
-        self._custom_notified = [False] * 8
-        self.timers_page.rebuild_custom_sections(self.timer_categories, self.custom_timers)
+            saved_overlay_sections = settings.get("overlay_visible_sections")
+            if isinstance(saved_overlay_sections, dict):
+                self.overlay_visible_sections.update(saved_overlay_sections)
+            self.overlay_char_filter = settings.get("overlay_char_filter", "")
+            self.todo_char_filter = settings.get("todo_char_filter", "")
+            self.tasks_page.set_char_filter_value(self.todo_char_filter)
 
-        saved_overlay_sections = settings.get("overlay_visible_sections")
-        if isinstance(saved_overlay_sections, dict):
-            self.overlay_visible_sections.update(saved_overlay_sections)
-        self.overlay_char_filter = settings.get("overlay_char_filter", "")
-        self.todo_char_filter = settings.get("todo_char_filter", "")
-        self.tasks_page.set_char_filter_value(self.todo_char_filter)
+            self.toggle_events()
 
-        self.toggle_events()
+            self.settings_page.set_profile_name(self.profile_name)
+            self.sync_settings_page()
 
-        self.settings_page.set_profile_name(self.profile_name)
-        self.sync_settings_page()
+            # Aktuelle Listen immer leeren
+            self.task_lists = {key: [] for key in self.tabs}
 
-        # Aktuelle Listen immer leeren
-        self.task_lists = {key: [] for key in self.tabs}
+            if isinstance(data, dict):
+                saved_tasks = data.get("tasks", {})
 
-        if isinstance(data, dict):
-            saved_tasks = data.get("tasks", {})
+            # ===== MIGRATION: old event tabs → tasks =====
+            old_event_tasks = saved_tasks.get("eventTasks", [])
+            old_event_shopping = saved_tasks.get("eventShopping", [])
 
-        # ===== MIGRATION: old event tabs → tasks =====
-        old_event_tasks = saved_tasks.get("eventTasks", [])
-        old_event_shopping = saved_tasks.get("eventShopping", [])
+            if old_event_tasks:
+                for item in old_event_tasks:
+                    item["event"] = True
+                    item.setdefault("schedule", "daily")
+                saved_tasks.setdefault("tasks", []).extend(old_event_tasks)
 
-        if old_event_tasks:
-            for item in old_event_tasks:
-                item["event"] = True
-                item.setdefault("schedule", "daily")
-            saved_tasks.setdefault("tasks", []).extend(old_event_tasks)
+            if old_event_shopping:
+                for item in old_event_shopping:
+                    item.setdefault("schedule", "season")
+                    item["type"] = "shopping"
+                saved_tasks.setdefault("shopping", []).extend(old_event_shopping)
 
-        if old_event_shopping:
-            for item in old_event_shopping:
-                item.setdefault("schedule", "season")
-                item["type"] = "shopping"
-            saved_tasks.setdefault("shopping", []).extend(old_event_shopping)
+            # ===== MIGRATION: dailyTasks / weeklyTasks → tasks =====
+            for old_tab, default_schedule in (("dailyTasks", "daily"), ("weeklyTasks", "weekly")):
+                for item in saved_tasks.get(old_tab, []):
+                    if item.get("type") != "shopping":
+                        item.setdefault("schedule", default_schedule)
+                        saved_tasks.setdefault("tasks", []).append(item)
 
-        # ===== MIGRATION: dailyTasks / weeklyTasks → tasks =====
-        for old_tab, default_schedule in (("dailyTasks", "daily"), ("weeklyTasks", "weekly")):
-            for item in saved_tasks.get(old_tab, []):
-                if item.get("type") != "shopping":
+            # ===== MIGRATION: dailyShopping + weeklyShopping → shopping =====
+            for old_tab, default_schedule in (("dailyShopping", "daily"), ("weeklyShopping", "weekly")):
+                for item in saved_tasks.get(old_tab, []):
                     item.setdefault("schedule", default_schedule)
-                    saved_tasks.setdefault("tasks", []).append(item)
+                    item["type"] = "shopping"
+                    saved_tasks.setdefault("shopping", []).append(item)
 
-        # ===== MIGRATION: dailyShopping + weeklyShopping → shopping =====
-        for old_tab, default_schedule in (("dailyShopping", "daily"), ("weeklyShopping", "weekly")):
-            for item in saved_tasks.get(old_tab, []):
-                item.setdefault("schedule", default_schedule)
-                item["type"] = "shopping"
-                saved_tasks.setdefault("shopping", []).append(item)
+            for tab, items in saved_tasks.items():
+                if tab not in self.task_lists:
+                    continue
 
-        for tab, items in saved_tasks.items():
-            if tab not in self.task_lists:
-                continue
+                for item in items:
+                    if item.get("type") == "shopping":
+                        card = ShoppingCard(
+                            priority=item.get("priority", "middle"),
+                            amount=str(item.get("amount", "1")),
+                            title=item.get("title", ""),
+                            location=item.get("location", ""),
+                            price=item.get("price", "0"),
+                            schedule=item.get("schedule", "daily"),
+                            is_event=item.get("event", False),
+                            currency=item.get("currency", "kinah"),
+                            character=item.get("character", ""),
+                            template_id=item.get("template_id", ""),
+                            card_id=item.get("card_id", ""),
+                        )
+                    else:
+                        card = TaskCard(
+                            item.get("title", ""),
+                            item.get("description", ""),
+                            item.get("priority", "middle"),
+                            item.get("event", False),
+                            schedule=item.get("schedule", "daily"),
+                            character=item.get("character", ""),
+                            template_id=item.get("template_id", ""),
+                            location=item.get("location", ""),
+                            card_id=item.get("card_id", ""),
+                            amount=item.get("amount", "1"),
+                        )
 
-            for item in items:
-                if item.get("type") == "shopping":
-                    card = ShoppingCard(
-                        priority=item.get("priority", "middle"),
-                        amount=str(item.get("amount", "1")),
-                        title=item.get("title", ""),
-                        location=item.get("location", ""),
-                        price=item.get("price", "0"),
-                        schedule=item.get("schedule", "daily"),
-                        is_event=item.get("event", False),
-                        currency=item.get("currency", "kinah"),
-                        character=item.get("character", ""),
-                        template_id=item.get("template_id", ""),
-                        card_id=item.get("card_id", ""),
-                    )
-                else:
-                    card = TaskCard(
-                        item.get("title", ""),
-                        item.get("description", ""),
-                        item.get("priority", "middle"),
-                        item.get("event", False),
-                        schedule=item.get("schedule", "daily"),
-                        character=item.get("character", ""),
-                        template_id=item.get("template_id", ""),
-                        location=item.get("location", ""),
-                        card_id=item.get("card_id", ""),
-                        amount=item.get("amount", "1"),
-                    )
+                    if item.get("completed", False):
+                        card.set_completed(True)
 
-                if item.get("completed", False):
-                    card.set_completed(True)
+                    self._wire_card(card)
+                    self.task_lists[tab].append(card)
 
-                self._wire_card(card)
-                self.task_lists[tab].append(card)
+            self.item_templates = data.get("item_templates", [])
+            self.task_templates = data.get("task_templates", [])
+            self.standard_templates = data.get("standard_templates", {"tasks": [], "shopping": []})
+            self.tasks_page.update_templates(self.item_templates)
+            self.tasks_page.update_task_templates(self.task_templates)
+            self.tasks_page.update_standard_templates(self.standard_templates)
 
-        self.item_templates = data.get("item_templates", [])
-        self.task_templates = data.get("task_templates", [])
-        self.standard_templates = data.get("standard_templates", {"tasks": [], "shopping": []})
-        self.tasks_page.update_templates(self.item_templates)
-        self.tasks_page.update_task_templates(self.task_templates)
-        self.tasks_page.update_standard_templates(self.standard_templates)
+            # Reconcile: add missing cards for templates that are still is_general=True
+            self._sync_shopping_from_templates({})
+            self._sync_tasks_from_templates({})
 
-        # Reconcile: add missing cards for templates that are still is_general=True
-        self._sync_shopping_from_templates({})
-        self._sync_tasks_from_templates({})
+            self.refresh()
+            raw_maps = data.get("flow_maps")
+            old_map = data.get("flow_map", {})
+            if raw_maps:
+                self.flow_maps = raw_maps
+                self.active_flow_map_name = data.get("active_flow_map", next(iter(raw_maps)))
+            elif old_map:
+                self.flow_maps = {"Map 1": old_map}
+                self.active_flow_map_name = "Map 1"
+            else:
+                self.flow_maps = {}
+                self.active_flow_map_name = "Map 1"
+            if self.flow_map_window:
+                self.flow_map_window.load_flow_data(self.flow_maps.get(self.active_flow_map_name, {}))
+                self.flow_map_window.set_map_list(list(self.flow_maps.keys()) or ["Map 1"], self.active_flow_map_name)
+                for node in self.flow_map_window.nodes.values():
+                    if node.icon == "character" and node.character_items:
+                        self._sync_character_items_to_shopping(node.title, node.character_items)
+            # The setter pushes to the Armory dashboard itself.
+            self._set_build_planner_state(data.get("build_planner"))
+            if self.item_database_window and hasattr(self.item_database_window, "set_pending_loadout_state"):
+                self.item_database_window.set_pending_loadout_state(self._build_planner_state)
 
-        self.refresh()
-        raw_maps = data.get("flow_maps")
-        old_map = data.get("flow_map", {})
-        if raw_maps:
-            self.flow_maps = raw_maps
-            self.active_flow_map_name = data.get("active_flow_map", next(iter(raw_maps)))
-        elif old_map:
-            self.flow_maps = {"Map 1": old_map}
-            self.active_flow_map_name = "Map 1"
-        else:
-            self.flow_maps = {}
-            self.active_flow_map_name = "Map 1"
-        if self.flow_map_window:
-            self.flow_map_window.load_flow_data(self.flow_maps.get(self.active_flow_map_name, {}))
-            self.flow_map_window.set_map_list(list(self.flow_maps.keys()) or ["Map 1"], self.active_flow_map_name)
-            for node in self.flow_map_window.nodes.values():
-                if node.icon == "character" and node.character_items:
-                    self._sync_character_items_to_shopping(node.title, node.character_items)
-        self._build_planner_state = data.get("build_planner")
-        if self.item_database_window and hasattr(self.item_database_window, "set_pending_loadout_state"):
-            self.item_database_window.set_pending_loadout_state(self._build_planner_state)
+            self._rebuild_characters()
+            if hasattr(self.header, "set_profile"):
+                self.header.set_profile(self.profile_name)
+        finally:
+            # Restore finished -- releasing the guard HERE, before
+            # update_countdowns() below, deliberately keeps that call's
+            # documented behaviour intact (a reset that is due at load time
+            # still persists itself), while everything above it is now
+            # structurally unable to save stale state. The guard stays on
+            # only when the file on disk could not be read at all.
+            self._profile_loading = unrecoverable
 
-        self._rebuild_characters()
-        if hasattr(self.header, "set_profile"):
-            self.header.set_profile(self.profile_name)
+        if status == "bak":
+            self.show_toast(tr(self.language, "profile_restored_from_backup"))
+        elif unrecoverable:
+            self._handle_unreadable_profile(profile_path)
 
         # Real, confirmed data-loss bug found + fixed (User-reported,
         # 2026-09-10, screenshot: a 122 KB profile got reduced to 23 KB just
@@ -2402,6 +2993,32 @@ class MainWindow(QMainWindow):
             self.save_profile(silent=True)
 
     def save_profile(self, silent=False, explicit=False):
+        # Re-entrancy guard, the STRUCTURAL half of the 2.0.5 data-loss fix
+        # (the other half is the call ORDER documented at the end of
+        # load_profile). While load_profile is restoring, every attribute
+        # read below may still hold the PREVIOUS profile's value (or None),
+        # so any save triggered from inside that window -- most famously
+        # update_countdowns() -> check_auto_resets() -> save_profile() when a
+        # daily/weekly reset is due -- would write stale data straight over
+        # the real file. The flag also stays True after a load that found
+        # BOTH the profile and its .bak unreadable, so a corrupt file is
+        # never overwritten by a background auto-save; a deliberate
+        # "Save Profile" click (explicit=True) is the user's way out.
+        if self._profile_loading and not explicit:
+            logger.debug("save_profile skipped: profile load in progress / profile file unreadable")
+            if self._profile_unreadable:
+                self._note_autosave_disabled()
+            return
+
+        if explicit and self._profile_unreadable:
+            # The guard is on because the file on disk could not be parsed.
+            # This deliberate save is about to overwrite it, so preserve it
+            # first -- the user may still want to hand-repair the original.
+            from core.persistence import snapshot_corrupt
+
+            snapshot_corrupt(self.profile_dir / f"{self.profile_name}.json")
+            self._profile_unreadable = False
+
         # "Default"/"Default_de"/"Default_ru" are the language-picker starter
         # templates (see _is_lang_default), not a real ongoing profile --
         # renaming away from "Default" already re-creates a fresh template
@@ -2414,11 +3031,17 @@ class MainWindow(QMainWindow):
         # every other call site keeps working exactly as before for any
         # real (non-template) profile, since this guard only ever applies
         # while the CURRENT profile is still one of the three templates.
+        # Pulled BEFORE the template guard below (review G/M2): the pull
+        # only reads the live planner into memory and pushes it to the
+        # dashboard -- it writes no file, so it must not be skipped for a
+        # template profile.  It was, and the consequence was the first-run
+        # path: a new user on "Default" equipped a full set and the Armory
+        # page still said "No build yet" until they renamed the profile.
+        if self.item_database_window and hasattr(self.item_database_window, "get_loadout_state"):
+            self._set_build_planner_state(self.item_database_window.get_loadout_state())
+
         if not explicit and self._is_lang_default(self.profile_dir / f"{self.profile_name}.json"):
             return
-
-        if self.item_database_window and hasattr(self.item_database_window, "get_loadout_state"):
-            self._build_planner_state = self.item_database_window.get_loadout_state()
 
         data = {
             "profile_name": self.profile_name,
@@ -2433,6 +3056,7 @@ class MainWindow(QMainWindow):
                 "season_enabled": self.season_enabled,
 
                 "show_events": self.show_events,
+                "reduce_motion": self.reduce_motion,
 
                 "shugo_enabled": self.shugo_enabled,
                 "shugo_start_minute": self.shugo_start_minute,
@@ -2487,8 +3111,14 @@ class MainWindow(QMainWindow):
 
         profile_path = self.profile_dir / f"{self.profile_name}.json"
 
-        with open(profile_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        # Local import, mirroring this file's existing in-method imports --
+        # keeps the new dependency next to the only two places that use it.
+        from core.persistence import atomic_write_json, stamp_schema
+
+        # tmp + fsync + .bak rotation + os.replace: a crash mid-write can no
+        # longer truncate the profile (audit §2, "non-atomic writes"), and the
+        # previous good content always survives one write as <name>.json.bak.
+        atomic_write_json(profile_path, stamp_schema(data))
 
         self.save_last_profile(profile_path)
 
@@ -2497,6 +3127,30 @@ class MainWindow(QMainWindow):
             self.show_toast(tr(self.language, "profile_saved"))
 
     def _resolve_profile_dir(self) -> Path:
+        """Where this installation keeps its profiles, in strict precedence:
+
+        1. ``config.json``'s ``profile_dir``, when that path still exists --
+           the user's explicit choice always wins.
+        2. Running from source: ``<repo>/profiles`` when present. That folder
+           *is* the developer's profile directory; nothing to opt into.
+        3. Frozen: ``<install>/profiles`` when it already holds ``*.json``
+           (an existing install, including every portable one that predates
+           the marker -- their profiles must not appear to vanish just
+           because a stored absolute path stopped resolving), OR when
+           ``portable.txt`` sits next to the executable (the documented way
+           to CREATE a new portable installation).
+        4. Otherwise the per-user data directory
+           (``%APPDATA%\\Aion2 TM\\Profiles`` on Windows).
+
+        The marker is looked up next to the EXECUTABLE (``paths.install_root()``
+        == ``self.project_root``), never under ``sys._MEIPASS``: for this
+        onedir build that is ``<install>/_internal``, a directory the user
+        never sees and where the documentation never tells them to put it.
+        A bare empty ``profiles/`` folder is deliberately not enough to flip a
+        frozen install into portable mode -- a system-wide install must never
+        write next to its own read-only files, and an installer that happened
+        to create the folder would silently redirect every fresh install.
+        """
         # 1. User hat explizit einen Pfad gesetzt → immer bevorzugen
         if self.app_config_path.exists():
             try:
@@ -2514,13 +3168,18 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        # 2. Bestehender profiles-Ordner neben der App / EXE
+        # 2./3. profiles/ next to the app (see the docstring above).
         local_dir = self.project_root / "profiles"
-        if local_dir.exists():
-            return local_dir
+        frozen = getattr(sys, "frozen", False)
+        if not frozen:
+            if local_dir.exists():
+                return local_dir
+        else:
+            if any(local_dir.glob("*.json")) or paths.is_portable(paths.install_root()):
+                return local_dir
 
-        # 3. Neue Installation → AppData
-        return Path(os.environ["APPDATA"]) / "Aion2 TM" / "Profiles"
+        # 4. Neue Installation → per-user data dir
+        return paths.default_profiles_dir()
 
     def _save_app_config(self):
         cfg = {
@@ -2559,7 +3218,7 @@ class MainWindow(QMainWindow):
 
         # Immer aus dem neuen Ordner laden – last_profile.txt könnte auf alten Ordner zeigen
         self._load_best_profile_from_dir(new_dir)
-        self.show_toast("Profilpfad gespeichert")
+        self.show_toast(tr(self.language, "profile_path_saved"))
 
     # ── Language-default helpers ──────────────────────────────────────────────
     _LANG_DEFAULT_STEMS = {"en": "Default", "de": "Default_de", "ru": "Default_ru"}
@@ -2715,6 +3374,13 @@ class MainWindow(QMainWindow):
         if box.clickedButton() is not yes_btn:
             return
 
+        # Close the undo window BEFORE wiping the lists, exactly as
+        # load_profile does. Without this the pending card survives the
+        # reset in _pending_delete, and clicking Undo afterwards puts it
+        # back into a list the user just emptied -- then persists it on the
+        # next save (review F-2, reproduced offscreen).
+        self._commit_pending_delete()
+
         self.task_lists = {key: [] for key in self.tabs}
         self.refresh()
         self.save_profile(silent=True)
@@ -2728,6 +3394,10 @@ class MainWindow(QMainWindow):
         box.exec()
         if box.clickedButton() is not yes_btn:
             return
+
+        # Same reason as reset_profile: a pending delete must not be
+        # undoable across a destructive clear (review F-2).
+        self._commit_pending_delete()
 
         for tab in self.task_lists:
             self.task_lists[tab] = [
@@ -2764,16 +3434,30 @@ class MainWindow(QMainWindow):
             "high":   tr(self.language, "priority_high"),
         }
         event_text = tr(self.language, "event_badge")
-        for cards in self.task_lists.values():
+        # The pending soft-deleted card is deliberately NOT in task_lists
+        # (that exclusion is the whole point of the design), so it has to be
+        # retranslated explicitly -- otherwise Undo brings back a card still
+        # labelled in the previous language, for the rest of the session,
+        # since _apply_priority_style runs nowhere else (review F-10).
+        pending = self._pending_delete
+        card_groups = list(self.task_lists.values())
+        if pending is not None:
+            card_groups.append([pending["card"]])
+        for cards in card_groups:
             for card in cards:
                 if isinstance(card, ShoppingCard):
                     raw = card.priority
-                    card.priority_label.setText(prio_display.get(raw, raw))
+                    card._apply_priority_style(prio_display.get(raw, raw))
                 else:
                     raw = card.priority_value
-                    card.priority.setText(prio_display.get(raw, raw))
+                    card._apply_priority_style(prio_display.get(raw, raw))
                     if getattr(card, "is_event", False) and hasattr(card, "event_badge"):
                         card.event_badge.setText(event_text)
+
+        # A toast still on screen keeps its action button, so its label has
+        # to follow the switch too (review F-10).
+        if getattr(self, "_toast_action_key", None) and not self.toast_action_btn.isHidden():
+            self.toast_action_btn.setText(tr(self.language, self._toast_action_key))
 
         self.sidebar.update_language(self.language, tr)
         self.header.update_language(self.language, tr)
@@ -2796,58 +3480,225 @@ class MainWindow(QMainWindow):
                 return
         self.save_profile()
 
-    def apply_theme(self, theme):
-        self.current_theme = theme
+    def apply_theme(self, theme_name):
+        global _APPLIED_PALETTE_THEME
+        # Against the APPLIED theme, never against the desired one -- see
+        # the note on _APPLIED_PALETTE_THEME.  The first application always
+        # runs, whatever the profile asked for.
+        unchanged = theme_name == _APPLIED_PALETTE_THEME
+        self.current_theme = theme_name
 
-        # Real bug found + fixed (User-reported, 2026-09-08, screenshot:
-        # Templates dialog's "Add Task"/"Close" buttons stayed cyan/purple
-        # on Inferno) -- the theme property only ever lived on
-        # self.background (the central widget), so the `QWidget[theme=...]
-        # #selector` rules only ever matched widgets nested INSIDE it. Any
-        # QDialog(parent=self) -- Templates, Custom Timer manager, etc. --
-        # is a QObject child of MainWindow itself, not of self.background,
-        # so it was never a descendant of anything carrying the property.
-        # Setting it here too (self is the one common ancestor of both)
-        # covers every such dialog in one place instead of one at a time.
-        self.setProperty("theme", theme)
+        # A theme is now a different set of token VALUES, not a different
+        # QSS block: re-rendering the sheet IS the theme switch (MASTER
+        # §4-2).  This replaces the ~100 `QWidget[theme="…"] #selector`
+        # rules and the three `setProperty("theme", …)` calls that used to
+        # feed them -- nothing selects on that property any more, so a
+        # dialog can no longer miss the switch by not descending from
+        # whichever widget happened to carry it (the 2026-09-08 bug:
+        # Templates buttons stayed cyan on Inferno).
+        self.load_styles()
+        app = QApplication.instance()
+        # setPalette also walks every widget of every window, so it is
+        # skipped when the theme did not actually move (apply_theme is
+        # called on every profile load, usually with the same theme).
+        if app is not None and not unchanged:
+            app.setPalette(theme.build_palette(self.current_theme))
+            _APPLIED_PALETTE_THEME = theme.tokens(self.current_theme).name
 
         if hasattr(self, "background"):
-            self.background.set_theme(theme)
+            self.background.set_theme(theme_name)
             if hasattr(self, "theme_logo_label"):
                 self.update_theme_logo()
-            self.background.setProperty("theme", theme)
 
         if self.item_database_window is not None and hasattr(self.item_database_window, "set_theme"):
-            self.item_database_window.set_theme(theme)
+            self.item_database_window.set_theme(theme_name)
 
+        if unchanged:
+            # Nothing was re-rendered, so there is nothing to re-resolve.
+            # This matters: the walk below touches every widget in the
+            # window (thousands), and apply_theme() is called on every
+            # profile load, almost always with the theme already active.
+            self.update()
+            return
+
+        # A re-rendered stylesheet is not re-evaluated against widgets that
+        # already computed their style, and property-based rules
+        # (#taskCard[completed="true"], #settingsNavButton[active="true"]…)
+        # need a repolish regardless.
         for widget in self.findChildren(QWidget):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
 
-        # OverlayWindow has no Qt parent (standalone Qt.Tool window), so it's
-        # invisible to self.findChildren() above and never picked up the
-        # theme property that drives the per-theme QSS -- its own buttons
-        # (Overlay*, including the Countdown Timer's Start/Stop) stayed
-        # whatever the unscoped/Abyss style said regardless of the active
-        # theme until now.
+        # OverlayWindow has no Qt parent (standalone Qt.Tool window), so it
+        # is invisible to self.findChildren() above.  It reads the app-wide
+        # sheet now, but its own children still need the repolish, and its
+        # painters need a repaint for the new token colors.
         if hasattr(self, "overlay"):
-            self.overlay.setProperty("theme", theme)
             self.overlay.style().unpolish(self.overlay)
             self.overlay.style().polish(self.overlay)
             for widget in self.overlay.findChildren(QWidget):
                 widget.style().unpolish(widget)
                 widget.style().polish(widget)
+            self.overlay.update()
+
+        if self.flow_map_window is not None:
+            self.flow_map_window.update()
 
         self.update()
 
-    def show_toast(self, text):
-        self.toast_label.setText(f"✓ {text}")
-        self.toast_label.show()
+    def show_toast(self, text, action_label=None, on_action=None, duration_ms=2200,
+                   action_key=None):
+        """Bottom-of-content status line. ``action_label``/``on_action`` add a
+        single clickable action (Undo) for the lifetime of this toast.
 
-        QTimer.singleShot(
-            2200,
-            self.toast_label.hide
-        )
+        ``action_key`` is the translation key the label came from; keeping it
+        lets ``apply_language`` retranslate a toast that is still on screen
+        when the user switches language (review F-10).
+        """
+        self.toast_label.setText(text)
+
+        if action_label and on_action is not None:
+            self._toast_action = on_action
+            self._toast_action_key = action_key
+            self.toast_action_btn.setText(action_label)
+            self.toast_action_btn.show()
+        else:
+            self._toast_action = None
+            self._toast_action_key = None
+            self.toast_action_btn.hide()
+
+        self._toast_seq += 1
+        seq = self._toast_seq
+        # MASTER §3 "Toast": entrée/sortie motion.base. One of the exactly
+        # three places in the app that animates.
+        motion.fade_in(self.toast_widget, theme=self.current_theme)
+
+        # See _delete_card: `self` as the context so a pending toast timer
+        # cannot outlive the window it would touch.
+        QTimer.singleShot(duration_ms, self, lambda: self._hide_toast(seq))
+
+    def _on_toast_action(self):
+        action = self._toast_action
+        self._toast_action = None
+        if action is not None:
+            action()
+
+    def _hide_toast(self, seq=None):
+        """``seq`` makes an expiring toast's timer a no-op once a NEWER toast
+        has taken the row over -- otherwise the first toast's timer would cut
+        the second one short."""
+        if seq is not None and seq != self._toast_seq:
+            return
+        self._toast_action = None
+        self.toast_action_btn.hide()
+        motion.fade_out(self.toast_widget, theme=self.current_theme)
+
+    # ── Keyboard (UX audit 2026-09-18, C1) ────────────────────────────────
+
+    def _setup_shortcuts(self):
+        """The app had literally zero QShortcut/keyPressEvent before this
+        (audit C1). Deliberately a small map of the five things a user does
+        every session, plus Delete on a focused card.
+
+        Delete is NOT a QShortcut: a window-context shortcut is resolved
+        BEFORE the key ever reaches the focused widget, so binding it here
+        would silently break Delete inside every QLineEdit/QTextEdit in the
+        window. An application event filter sees the same key press but can
+        decline it (return False) and let the editor have it.
+        """
+        self._shortcuts = {}
+
+        def _bind(key, slot):
+            sc = QShortcut(QKeySequence(key), self)
+            sc.activated.connect(slot)
+            self._shortcuts[key] = sc
+            return sc
+
+        _bind("Ctrl+N", self._focus_add_task_input)
+        _bind("Ctrl+1", lambda: self._activate_todo_tab("todo"))
+        _bind("Ctrl+2", lambda: self._activate_todo_tab("timer"))
+        _bind("Ctrl+O", self._toggle_overlay)
+        _bind("Ctrl+S", lambda: self.save_profile(explicit=True))
+
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+
+    # The add-row's entry points, most-typed first. Ctrl+N has to pick the
+    # first one that is actually on screen: TasksPage.update_input_mode()
+    # shows a DIFFERENT set per tab and template source -- on the
+    # Tasks/Shopping tabs the free-text title field is hidden entirely in
+    # favour of the template picker, so hardcoding title_input would make
+    # Ctrl+N a no-op exactly where it is used most.
+    _ADD_ROW_FOCUS_ORDER = ("title_input", "template_combo", "char_input", "amount_input", "add_btn")
+
+    def _focus_add_task_input(self):
+        """Ctrl+N -- jump to the ToDo tab's add row. Returns the widget that
+        took focus, or None when the row has nothing focusable (e.g. the
+        Templates source is empty, which also disables "+ Add")."""
+        self._activate_todo_tab("todo")
+
+        for name in self._ADD_ROW_FOCUS_ORDER:
+            widget = getattr(self.tasks_page, name, None)
+            if widget is None or not widget.isEnabled():
+                continue
+            # isVisibleTo, not isVisible: "would be shown if the window is"
+            # -- the answer must not depend on the window being mapped.
+            if not widget.isVisibleTo(self.tasks_page):
+                continue
+            widget.setFocus(Qt.ShortcutFocusReason)
+            if isinstance(widget, QLineEdit):
+                widget.selectAll()
+            return widget
+
+        return None
+
+    def _activate_todo_tab(self, key: str):
+        """Ctrl+1 / Ctrl+2 -- show the ToDo page and select one of its tabs.
+        Goes through the sidebar so its highlight never lies about which page
+        is on screen."""
+        self.sidebar.set_active_page("tasks")
+        self.page_stack.setCurrentWidget(self.todo_page)
+        self.todo_page.set_active_tab(key)
+
+    @staticmethod
+    def _card_for_widget(widget):
+        """The TaskCard/ShoppingCard ``widget`` sits in, if any."""
+        node = widget
+        while node is not None:
+            if isinstance(node, (TaskCard, ShoppingCard)):
+                return node
+            node = node.parentWidget()
+        return None
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Delete:
+            if self._delete_focused_card():
+                return True
+        return super().eventFilter(obj, event)
+
+    def _delete_focused_card(self) -> bool:
+        """Soft-deletes the focused card. Returns False -- key not consumed --
+        whenever focus is in a text/selection editor or outside any card, so
+        Delete keeps its normal meaning everywhere else."""
+        focused = QApplication.focusWidget()
+        if focused is None:
+            return False
+        # The filter is installed on the QApplication, so it sees key presses
+        # meant for OTHER top-level windows too (the overlay, the Flow Map,
+        # the Armory windows -- and, in the test suite, a second MainWindow).
+        # Only this window's own cards are ours to delete.
+        if focused is not self and not self.isAncestorOf(focused):
+            return False
+        if isinstance(focused, (QLineEdit, QTextEdit, QComboBox, QAbstractSpinBox)):
+            return False
+
+        card = self._card_for_widget(focused)
+        if card is None:
+            return False
+
+        self._delete_card(card)
+        return True
 
     def reset_tasks_for_tabs(self, tabs, do_refresh=True):
         for tab in tabs:
@@ -3665,11 +4516,21 @@ class MainWindow(QMainWindow):
 
         if page_key in self.page_indexes:
             self.page_stack.setCurrentIndex(self.page_indexes[page_key])
+            # MASTER §1: motion.slow, "changement de page (opacité seule)".
+            # No slide -- a stacked page is layout-managed, and animating
+            # its geometry fights the layout (see ui/motion.py).
+            motion.fade_in(
+                self.page_stack.currentWidget(), theme=self.current_theme, kind="slow"
+            )
 
-        if page_key == "tasks":
-            self.show_toast(tr(self.language, "toast_tasks_opened"))
-
-        elif page_key == "plan":
+        # No "Tasks opened"/"Plan opened"/"Settings opened" toast here any
+        # more (UX audit 2026-09-18, M4): confirming a navigation the sidebar
+        # highlight already shows is chatter, and because About fired none the
+        # previous page's toast used to sit under the About page. Toasts are
+        # reserved for state changes now (saved / reset / imported / undo).
+        # The translation keys stay in place -- harmless, and still used by
+        # nothing else that would break.
+        if page_key == "plan":
             # Deferred a tick (User-reported, 2026-09-13, screenshot: a
             # tiny ~3x4cm window with no content, just minimize/maximize/
             # close buttons, flashes every time) -- same real bug already
@@ -3680,11 +4541,7 @@ class MainWindow(QMainWindow):
             # Windows shows the new window's bare frame (no content
             # painted yet) for a moment before it either gets its real
             # size/content or gets misread as something to dismiss.
-            QTimer.singleShot(0, self.open_flow_map_window)
-            self.show_toast(tr(self.language, "toast_plan_opened"))
-
-        elif page_key == "settings":
-            self.show_toast(tr(self.language, "toast_settings_opened"))
+            QTimer.singleShot(0, self, self.open_flow_map_window)
 
         elif page_key == "about":
             self.about_page.update_language(self.language, tr)
@@ -3771,10 +4628,6 @@ class MainWindow(QMainWindow):
                 open(default_path, "w", encoding="utf-8"),
                 indent=4, ensure_ascii=False,
             )
-
-    def change_theme_from_page(self, theme: str):
-        self.apply_theme(theme)
-        self.save_profile()
 
     def _setup_theme_logo(self):
         self.theme_logo_label = QLabel()
@@ -3867,6 +4720,9 @@ class MainWindow(QMainWindow):
             self.show_events
         )
 
+        if "reduce_motion" in data:
+            self.set_reduce_motion(data["reduce_motion"], save=False)
+
         self.toggle_events()
 
         self.update_countdowns()
@@ -3938,6 +4794,22 @@ class MainWindow(QMainWindow):
 
         self.save_profile(silent=True)
 
+    def set_reduce_motion(self, enabled: bool, save: bool = True):
+        """Store MASTER §1's ``motion.reduced`` preference and apply it now.
+
+        ``ui.motion`` keeps the flag module-level (MASTER calls the setting
+        "non négociable", so it has to reach every animation, and threading
+        it through each call site would mean it could be forgotten in one).
+        ``save=False`` is the profile-load path: the value came FROM the
+        file, so writing it straight back would be a pointless write — and
+        would happen while the profile is still half-restored.
+        """
+        self.reduce_motion = bool(enabled)
+        motion.set_reduced_motion(self.reduce_motion)
+        logger.debug("Reduced motion: %s", self.reduce_motion)
+        if save and self.auto_save:
+            self.save_profile(silent=True)
+
     def change_theme_from_page(self, theme: str):
         self.apply_theme(theme)
         self.save_profile()
@@ -3951,6 +4823,7 @@ class MainWindow(QMainWindow):
             "theme": self.current_theme,
 
             "show_events": self.show_events,
+            "reduce_motion": self.reduce_motion,
 
             "daily_reset_time": self.daily_reset_time,
             "weekly_reset_day": self.weekly_reset_day,
@@ -4091,17 +4964,40 @@ class MainWindow(QMainWindow):
         self._checker.up_to_date.connect(lambda: None)
         self._checker.start()
 
-    def _on_update_available(self, version: str, body: str, asset_url: str):
-        self._pending_update = (version, body, asset_url)
+    def _on_update_available(self, version: str, body: str, asset_url: str, sha256_url: str = ""):
+        # sha256_url is "" when the release published no checksum sidecar --
+        # the installer needs that distinction (core.update_checker.
+        # decide_checksum_policy), so it travels with the rest.
+        self._pending_update = (version, body, asset_url, sha256_url)
         if hasattr(self.header, "show_update"):
             self.header.show_update(version)
 
     def _open_update_dialog(self):
         if not self._pending_update:
             return
-        version, body, asset_url = self._pending_update
+        version, body, asset_url, sha256_url = self._pending_update
+
+        if sys.platform != "win32":
+            # UpdateDialog installs in place through a Windows .bat +
+            # robocopy swap-on-restart (ui/update_dialog.py). There is no
+            # equivalent off Windows, and there should not be: an AUR
+            # package, an AppImage or a Flatpak is updated by its own
+            # channel, and a self-updating app inside /opt or /usr would
+            # either fail on permissions or fight the package manager.
+            # Show the release page instead and let the user take it from
+            # there.
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            from core.version import GITHUB_REPO, GITHUB_USER
+
+            url = f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
+            logger.info("Update %s available; opening the release page (%s)", version, url)
+            QDesktopServices.openUrl(QUrl(url))
+            self.show_toast(f"Update {version} → {url}")
+            return
+
         app_root = self.project_root
-        dlg = UpdateDialog(version, body, asset_url, app_root, parent=self)
+        dlg = UpdateDialog(version, body, asset_url, app_root, sha256_url, parent=self)
         dlg.exec()
 
     def _on_avatar_changed(self, b64: str):

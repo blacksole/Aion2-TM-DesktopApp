@@ -1,7 +1,6 @@
 import os
 import sys
 import shutil
-import zipfile
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +14,13 @@ from PySide6.QtWidgets import (
     QPushButton, QTextBrowser, QFrame, QScrollArea, QWidget, QButtonGroup,
 )
 
+from core.app_logger import get_logger
+from core.update_checker import (
+    decide_checksum_policy, parse_sha256_sidecar, safe_extract, verify_sha256,
+)
 from core.version import GITHUB_USER, GITHUB_REPO
+
+logger = get_logger("update_dialog")
 
 _RELEASES_LIST_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases"
 
@@ -56,11 +61,14 @@ class _InstallerThread(QThread):
     finished = Signal()
     failed = Signal(str)
 
-    def __init__(self, version: str, asset_url: str, app_root: Path, parent=None):
+    def __init__(self, version: str, asset_url: str, app_root: Path, sha256_url: str = "", parent=None):
         super().__init__(parent)
         self.version = version
         self.asset_url = asset_url
         self.app_root = app_root
+        # "" means the release published no checksum sidecar (see
+        # decide_checksum_policy) -- NOT that we failed to fetch one.
+        self.sha256_url = sha256_url
         self.bat_path: Path | None = None
 
     def run(self):
@@ -94,11 +102,56 @@ class _InstallerThread(QThread):
             with urllib.request.urlopen(req, timeout=120) as resp:
                 zip_path.write_bytes(resp.read())
 
+            # Integrity check before anything from this archive touches the
+            # installed app (audit §5): the release publishes a
+            # "<asset>.sha256" sidecar, so a swapped/truncated/MITM'd
+            # download is caught here instead of being robocopy'd over the
+            # user's installation. Releases predating the sidecar have none
+            # -- those still install, with a warning in app.log.
+            self.status.emit("Download prüfen...")
+            sidecar_url = self.sha256_url
+            expected = self._fetch_expected_sha256(sidecar_url) if sidecar_url else ""
+            policy = decide_checksum_policy(sidecar_url, expected)
+
+            if policy == "abort":
+                # The release publishes a checksum; we could not read it. A
+                # network failure and a tampered mirror look identical from
+                # here, and the next step overwrites the user's install.
+                zip_path.unlink(missing_ok=True)
+                logger.error(
+                    "Checksum sidecar %s published but unreadable -- update aborted", sidecar_url
+                )
+                self.failed.emit(
+                    "Die Prüfsumme des Downloads konnte nicht geladen werden.\n"
+                    "Das Update wurde aus Sicherheitsgründen abgebrochen und die "
+                    "Datei gelöscht.\n"
+                    "Bitte später erneut versuchen."
+                )
+                return
+
+            if policy == "verify":
+                if not verify_sha256(zip_path, expected):
+                    zip_path.unlink(missing_ok=True)
+                    logger.error("SHA-256 mismatch for %s -- download deleted", download_url)
+                    self.failed.emit(
+                        "Prüfsumme des Downloads stimmt nicht überein.\n"
+                        "Das Update wurde abgebrochen und die Datei gelöscht.\n"
+                        "Bitte später erneut versuchen."
+                    )
+                    return
+                logger.info("Update archive SHA-256 verified: %s", download_url)
+            else:
+                logger.warning(
+                    "Release published no SHA-256 sidecar for %s -- installing unverified",
+                    download_url,
+                )
+
             self.status.emit("Entpacken...")
             extract_dir = tmp_dir / "extracted"
             extract_dir.mkdir()
-            with zipfile.ZipFile(zip_path) as zf:
-                zf.extractall(extract_dir)
+            # Zip-Slip guard: reject any member resolving outside extract_dir
+            # before a single byte is written.
+            safe_extract(zip_path, extract_dir)
 
             if is_frozen:
                 # EXE-Modus: prüfen ob ZIP einen Unterordner hat (z.B. "Aion2 TM v0.8.4/")
@@ -132,6 +185,23 @@ class _InstallerThread(QThread):
         except Exception as e:
             self.failed.emit(str(e))
 
+    def _fetch_expected_sha256(self, sidecar_url: str) -> str:
+        """Digest published at ``sidecar_url``, or "" when it could not be
+        fetched or parsed. The CALLER decides what "" means -- see
+        decide_checksum_policy."""
+        if not sidecar_url:
+            return ""
+        try:
+            req = urllib.request.Request(
+                sidecar_url, headers={"User-Agent": "Aion2-TM-Updater"}
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                text = resp.read().decode("utf-8", "replace")
+        except Exception as e:
+            logger.warning("Could not fetch checksum sidecar %s: %s", sidecar_url, e)
+            return ""
+        return parse_sha256_sidecar(text)
+
     def _copy_dir(self, src: Path, dest: Path):
         dest.mkdir(exist_ok=True)
         for item in src.iterdir():
@@ -149,11 +219,13 @@ class _InstallerThread(QThread):
 
 
 class UpdateDialog(QDialog):
-    def __init__(self, version: str, body: str, asset_url: str, app_root: Path, parent=None):
+    def __init__(self, version: str, body: str, asset_url: str, app_root: Path,
+                 sha256_url: str = "", parent=None):
         super().__init__(parent)
         self.version = version
         self.asset_url = asset_url
         self.app_root = app_root
+        self.sha256_url = sha256_url
         self._thread = None
         self._setup_ui(body)
 
@@ -220,11 +292,18 @@ class UpdateDialog(QDialog):
         self.status_label.show()
         self.status_label.setText("Vorbereitung...")
 
-        self._thread = _InstallerThread(self.version, self.asset_url, self.app_root, parent=self)
+        self._thread = self._build_installer_thread()
         self._thread.status.connect(self.status_label.setText)
         self._thread.finished.connect(self._on_done)
         self._thread.failed.connect(self._on_failed)
         self._thread.start()
+
+    def _build_installer_thread(self) -> _InstallerThread:
+        """The installer thread, fully wired. Split from _start_install so the
+        checksum plumbing can be asserted without starting a download."""
+        return _InstallerThread(
+            self.version, self.asset_url, self.app_root, self.sha256_url, parent=self
+        )
 
     def _on_done(self):
         self.status_label.setText("Fertig! App wird beim Neustart aktualisiert.")
@@ -291,7 +370,7 @@ class ChangelogHistoryDialog(QDialog):
     """"Update-Verlauf" (User-Wunsch, 2026-09-14): shows the last 3 GitHub
     releases' notes at once, same visual language as UpdateDialog above (the
     #UpdateDialog/#updateDialogTitle/#updateDialogNotes/#updateDialogSep/
-    #updateDialogLaterBtn styles are all reused as-is -- see styles.qss's
+    #updateDialogLaterBtn styles are all reused as-is -- see
     "UPDATE DIALOG" section) plus one small new left-rail control
     (#changelogVersionBtn) for picking which version to jump to. Clicking a
     version scrolls its section into view; scrolling manually keeps the

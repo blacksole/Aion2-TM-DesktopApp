@@ -2,14 +2,34 @@ from PySide6.QtWidgets import QFrame, QLabel, QPushButton, QGridLayout
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPixmap, QIcon
 
+from ui.widgets import icons
 from ui.flow.flow_layout import (
     NODE_WIDTH,
     NODE_HEIGHT,
     ICON_BOX_SIZE,
     ICON_SIZE,
-    TITLE_SIZE,
-    DESCRIPTION_SIZE,
 )
+
+
+#: Zoom buckets the Flow Map's three discrete label sizes used to be
+#: expressed as inline ``font-size:`` literals.  There were only ever three,
+#: so they are a *state*, not a continuous scale: the value goes on the
+#: labels as a ``zoomStep`` property and ui/styles.template.qss holds the
+#: sizes (``#FlowNodeTitle[zoomStep="mid"]`` &c.), which is what MASTER §4-4
+#: asks for — no setStyleSheet in a widget.
+_ZOOM_STEPS = (
+    (1.0, "full"),
+    (0.8, "mid"),
+    (0.0, "small"),
+)
+
+
+def _zoom_step(zoom: float) -> str:
+    """Name of the zoom bucket ``zoom`` falls in."""
+    for threshold, name in _ZOOM_STEPS:
+        if zoom >= threshold:
+            return name
+    return _ZOOM_STEPS[-1][1]
 
 
 class FlowNodeCard(QFrame):
@@ -58,20 +78,7 @@ class FlowNodeCard(QFrame):
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("FlowNodeTitle")
-
-        if zoom >= 1.0:
-            title_size = TITLE_SIZE
-        elif zoom >= 0.8:
-            title_size = 16
-        else:
-            title_size = 15
-
-        self.title_label.setStyleSheet(
-            f"""
-            font-size: {title_size}px;
-            font-weight: 700;
-            """
-        )
+        self._apply_zoom_step(zoom)
 
         if zoom >= 1.0:
             visible_description = description
@@ -87,19 +94,7 @@ class FlowNodeCard(QFrame):
         self.desc_label = QLabel(visible_description)
         self.desc_label.setObjectName("FlowNodeDescription")
         self.desc_label.setWordWrap(True)
-
-        if zoom >= 1.0:
-            desc_size = DESCRIPTION_SIZE
-        elif zoom >= 0.8:
-            desc_size = 12
-        else:
-            desc_size = 1
-
-        self.desc_label.setStyleSheet(
-            f"""
-            font-size: {desc_size}px;
-            """
-        )
+        self._apply_zoom_step(zoom)
         self.desc_label.setVisible(zoom >= 0.8)
 
         self.add_node_hint_btn = QPushButton()
@@ -116,9 +111,14 @@ class FlowNodeCard(QFrame):
         else:
             self.add_node_hint_btn.setText("+")
 
-        self.done_btn = QPushButton("✓")
+        self.done_btn = QPushButton()
         self.done_btn.setObjectName("FlowDoneButton")
         self.done_btn.setFixedSize(34, 34)
+        icons.set_icon(self.done_btn, "check", 16)
+        # The "✓" this button used to show WAS its accessible name; an
+        # icon-only button has none unless it is given one (review H/15).
+        self.done_btn.setToolTip("Als erledigt markieren")
+        self.done_btn.setAccessibleName("Als erledigt markieren")
         self.done_btn.setCursor(Qt.PointingHandCursor)
 
         grid = QGridLayout(self)
@@ -139,6 +139,50 @@ class FlowNodeCard(QFrame):
         # Let mouse events pass through to the card frame
         for w in (self.icon_box, self.title_label, self.desc_label, self.add_node_hint_btn):
             w.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+    def _apply_zoom_step(self, zoom: float):
+        """Tag both labels with the zoom bucket so the QSS can size them."""
+        step = _zoom_step(zoom)
+        for label in (getattr(self, "title_label", None), getattr(self, "desc_label", None)):
+            if label is None:  # __init__ builds the title before the description
+                continue
+            label.setProperty("zoomStep", step)
+            label.style().unpolish(label)
+            label.style().polish(label)
+
+    # ── mouse: click-to-select and drag, owned by the window ──────────────
+    #
+    # These three used to be closures assigned onto each card from
+    # ``FlowAppWindow.create_node_card`` (``card.mousePressEvent =
+    # on_press`` &c.).  Each captured the node, the card and the window and
+    # lived in this widget's own ``__dict__`` — a reference cycle rooted on
+    # a live Qt object, three per card plus a shared ``drag_state`` dict, so
+    # a 40-node map orphaned 120 closures and the window on every rebuild
+    # (review G/L3).  Class-level handlers capture nothing; the window is
+    # reached through the ``parent_window`` link the card already had, and
+    # the node through ``node_id``.
+    #
+    # Deliberately no ``super()`` call: the old closures did not chain
+    # either, so the press stays accepted here and does not fall through to
+    # the map area behind the card (which does its own rubber-band/pan).
+
+    def _window_handler(self, name: str):
+        return getattr(self.parent_window, name, None) if self.parent_window else None
+
+    def mousePressEvent(self, event):
+        handler = self._window_handler("on_node_card_press")
+        if handler is not None:
+            handler(self, event)
+
+    def mouseMoveEvent(self, event):
+        handler = self._window_handler("on_node_card_move")
+        if handler is not None:
+            handler(self, event)
+
+    def mouseReleaseEvent(self, event):
+        handler = self._window_handler("on_node_card_release")
+        if handler is not None:
+            handler(self, event)
 
     def enterEvent(self, event):
         if self.parent_window:
@@ -181,11 +225,7 @@ class FlowNodeCard(QFrame):
                 )
             )
 
-        title_size = TITLE_SIZE if zoom >= 1.0 else (16 if zoom >= 0.8 else 15)
-        self.title_label.setStyleSheet(f"font-size: {title_size}px; font-weight: 700;")
-
-        desc_size = DESCRIPTION_SIZE if zoom >= 1.0 else (12 if zoom >= 0.8 else 1)
-        self.desc_label.setStyleSheet(f"font-size: {desc_size}px;")
+        self._apply_zoom_step(zoom)
         self.desc_label.setVisible(zoom >= 0.8)
 
         if zoom >= 1.0:

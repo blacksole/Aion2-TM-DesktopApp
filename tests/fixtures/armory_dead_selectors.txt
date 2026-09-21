@@ -1,0 +1,22 @@
+# objectNames the Armory sheet styles that ItemDatabase/app.py never sets.
+#
+# Every entry here is a rule with no widget behind it — dead CSS. The gate
+# in tests/test_armory_theme.py
+# (test_every_objectname_rule_has_a_widget_that_sets_it) fails on any id
+# NOT listed here, because that is how three rules shipped unstyled in the
+# 2026-09-18 tokenization wave (#TooltipStatusPill, #EquipItemIconLabel,
+# #SimGradeLabel: the rule was written, the setObjectName was not).
+#
+# The four below are *older* than that wave — all four are equally dead in
+# eb53cd6, the commit before it, and their rules were in the hand-written
+# styles.qss too. They are listed rather than deleted because deleting a
+# rule is a decision about a feature (was the widget renamed, or is the
+# whole panel gone?), and this wave's brief was style-only. Whoever knows
+# the answer should wire them up or delete them.
+#
+# Format: one objectName per line, no leading '#', with the reason above.
+
+ChainNode
+ChainSideLabel
+ExpandableMaterialHeader
+SkillRow

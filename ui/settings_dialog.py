@@ -27,7 +27,9 @@ class SettingsDialog(QDialog):
 
         self.language = language
         self.current_theme = current_theme
-        self.setProperty("theme", self.current_theme)
+        # No setProperty("theme", …): nothing selects on that property since
+        # a theme became token VALUES instead of a `[theme="…"]`-scoped QSS
+        # block (MASTER §4-2).  The application sheet themes this dialog.
 
         self.setWindowTitle("Settings")
         self.setMinimumSize(640, 420)
@@ -182,15 +184,22 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(self.create_section_title("Theme"))
 
+        # No emoji glyphs here any more: MASTER §3 says "aucun emoji comme
+        # icône" (review F-16), and these were doing exactly that. The
+        # canonical picker is Settings -> Appearance, which shows each
+        # theme's own Aion logo image; this row stays because the dialog is
+        # live (header -> open_settings) and removing a control a user may
+        # be using is a product decision, not a lint fix. Deduplicating the
+        # two pickers is noted in MASTER as a deferred decision.
         self.theme_selector = self.create_theme_button_row(
             "Farbstil",
             [
-                ("Abyss Neon", "abyss", "🌌"),
-                ("Inferno Crimson", "inferno", "🔥"),
-                ("Emerald Night", "emerald", "🌲"),
-                ("Frostbite", "frostbite", "❄️"),
-                ("Obsidian Gold", "obsidian", "🌑"),
-                ("Void Purple", "void", "🟣"),
+                ("Abyss Neon", "abyss"),
+                ("Inferno Crimson", "inferno"),
+                ("Emerald Night", "emerald"),
+                ("Frostbite", "frostbite"),
+                ("Obsidian Gold", "obsidian"),
+                ("Void Purple", "void"),
             ]
         )
 
@@ -441,8 +450,8 @@ class SettingsDialog(QDialog):
         button_group = QButtonGroup(frame)
         button_group.setExclusive(True)
 
-        for text, value, icon in themes:
-            btn = QPushButton(f"{icon}  {text}")
+        for text, value in themes:
+            btn = QPushButton(text)
             btn.setCheckable(True)
             btn.setObjectName("themeToggleButton")
             btn.setMinimumHeight(40)
@@ -473,11 +482,23 @@ class SettingsDialog(QDialog):
         return "abyss"
     
     def apply_dialog_theme(self, theme):
+        """Track the picked theme and repolish.
+
+        No ``setProperty("theme", …)`` any more: nothing selects on that
+        property since a theme became token VALUES rather than a
+        ``[theme="…"]``-scoped QSS block (MASTER §4-2).  MainWindow's own
+        ``apply_theme`` — called right after this, from the same click —
+        re-renders the application sheet, which is what actually recolours
+        this dialog.  The repolish stays: this dialog's own
+        property-driven rules (``#themeToggleButton:checked``) need it.
+        """
         self.current_theme = theme
-        self.setProperty("theme", theme)
 
         self.style().unpolish(self)
         self.style().polish(self)
+        for child in self.findChildren(QWidget):
+            child.style().unpolish(child)
+            child.style().polish(child)
 
         for widget in self.findChildren(QWidget):
             widget.style().unpolish(widget)

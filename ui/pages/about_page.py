@@ -6,7 +6,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap, QIcon, QPainter
 from PySide6.QtCore import Qt, QByteArray
+from ui.widgets import icons
 from PySide6.QtSvg import QSvgRenderer
+from core.translations import tr as _default_tr
 from core.version import APP_VERSION, GITHUB_REPO, GITHUB_USER
 
 _PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=US4YUPTVHG87C"
@@ -83,6 +85,12 @@ _USEFUL_LINKS = [
 class AboutPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Last language this page was retranslated into. The donate QR
+        # dialog is built on demand, long after update_language ran, so it
+        # has to read the language from somewhere -- these defaults keep it
+        # working even if the dialog is somehow reached first.
+        self._cur_lang = "en"
+        self._cur_tr = _default_tr
         self._setup_ui()
 
     def _setup_ui(self):
@@ -102,7 +110,7 @@ class AboutPage(QWidget):
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.viewport().setStyleSheet("background: transparent;")
+        scroll_area.viewport().setObjectName("transparentViewport")
         root_layout.addWidget(scroll_area)
 
         content = QWidget()
@@ -179,12 +187,14 @@ class AboutPage(QWidget):
         self.copy_ver_btn.setFixedWidth(140)
         self.copy_ver_btn.clicked.connect(self._copy_version)
 
-        self.discord_btn = QPushButton("Discord öffnen ↗")
+        self.discord_btn = QPushButton()
+        icons.set_icon(self.discord_btn, "external-link", 16, clear_text=False)
         self.discord_btn.setObjectName("secondaryButton")
         self.discord_btn.setFixedWidth(140)
         self.discord_btn.clicked.connect(lambda: webbrowser.open(_DISCORD_PROFILE_URL))
 
         self.bugreport_btn = QPushButton()
+        icons.set_icon(self.bugreport_btn, "bug", 16, clear_text=False)
         self.bugreport_btn.setObjectName("secondaryButton")
         self.bugreport_btn.setFixedWidth(140)
         self.bugreport_btn.clicked.connect(lambda: webbrowser.open(_BUG_REPORT_URL))
@@ -253,6 +263,7 @@ class AboutPage(QWidget):
         donate_text.addWidget(self.donate_desc_lbl)
 
         self.donate_btn = QPushButton()
+        icons.set_icon(self.donate_btn, "coffee", 16, clear_text=False)
         self.donate_btn.setObjectName("donateButton")
         self.donate_btn.setFixedWidth(110)
         self.donate_btn.clicked.connect(lambda: webbrowser.open(_PAYPAL_URL))
@@ -339,6 +350,10 @@ class AboutPage(QWidget):
         layout.addStretch()
 
     def update_language(self, language: str, tr_func):
+        # Remembered so the on-demand donate dialog below (built long after
+        # this call) can translate its own button too.
+        self._cur_lang = language
+        self._cur_tr = tr_func
         _nav_labels = {"de": "Über Aion2 TM", "ru": "Об Aion2 TM"}
         self.page_title.setText(_nav_labels.get(language, "About Aion2 TM"))
         self.about_title_lbl.setText(tr_func(language, "about"))
@@ -348,6 +363,7 @@ class AboutPage(QWidget):
         self.github_btn.setText(tr_func(language, "about_github"))
         self.bugreport_btn.setText(tr_func(language, "bug_report_btn"))
         self.copy_ver_btn.setText(tr_func(language, "about_copy_ver"))
+        self.discord_btn.setText(tr_func(language, "about_open_discord"))
         self.coop_title_lbl.setText(tr_func(language, "coop_title"))
         self.coop_desc_lbl.setText(tr_func(language, "coop_desc"))
         self.donate_title_lbl.setText(tr_func(language, "donate"))
@@ -386,7 +402,7 @@ class AboutPage(QWidget):
         hint = QLabel("Mit PayPal-App scannen")
         hint.setObjectName("donateQrHint")
         hint.setAlignment(Qt.AlignCenter)
-        open_btn = QPushButton("Im Browser öffnen")
+        open_btn = QPushButton(self._cur_tr(self._cur_lang, "open_in_browser"))
         open_btn.setObjectName("donateButton")
         open_btn.clicked.connect(lambda: webbrowser.open(_PAYPAL_URL))
         v_layout.addWidget(qr_label)

@@ -1,7 +1,8 @@
 from uuid import uuid4
 
 from ui.widgets.shopping_card import format_currency_price
-from PySide6.QtCore import Qt
+from ui.widgets import icons
+from PySide6.QtCore import Qt, QEvent, QObject, QSize
 from PySide6.QtGui import QRegularExpressionValidator, QIntValidator
 from PySide6.QtCore import QRegularExpression
 from PySide6.QtWidgets import (
@@ -14,7 +15,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -29,10 +29,78 @@ _PRIO_TEXTS = {"low": "LOW", "middle": "MID", "high": "HIGH"}
 _SORT_LABELS = {"name": "Name", "priority": "Prio", "schedule": "Schedule", "location": "Location"}
 
 
+class _CheckRow(QFrame):
+    """A row whose whole surface toggles the one checkbox it contains.
+
+    Replaces ``row.mousePressEvent = on_row_press`` (review G/L4), a closure
+    that captured the row *and* its checkbox as default arguments and was
+    stored in the row's own ``__dict__`` — a reference cycle rooted on a
+    live Qt object, which ``deleteLater()`` cannot break: the C++ widget is
+    freed while the Python wrapper keeps the whole dialog subtree reachable
+    until a full ``gc.collect()`` happens to run.
+
+    The checkbox is found through the Qt parent/child tree rather than
+    captured, so this class holds no Python reference to anything: exactly
+    the ``ui/main_window.py::_CardPressFilter`` / ``ArmoryCard`` pattern,
+    in the one shape that fits here (the rows are built inline, one
+    checkbox each, and the behaviour belongs to the row itself).
+
+    The children are ``WA_TransparentForMouseEvents`` (User-reported,
+    2026-09-05: QCheckBox's own hitButton region is narrower than the
+    widget once QSS is applied, and a QLabel swallows the press), so this
+    one handler really does own every pixel of the row.
+    """
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            check = self.findChild(QCheckBox)
+            if check is not None:
+                check.setChecked(not check.isChecked())
+        # The old closure ended in ``QFrame.mousePressEvent(r, event)``.
+        super().mousePressEvent(event)
+
+
+class _RowSelectFilter(QObject):
+    """Turns a left-click on a template row into "select that row".
+
+    Replaces ``row.mousePressEvent = lambda _e, i=index: self._select_*(i)``
+    (review G/L1) — the same cycle as above and the highest-frequency one in
+    the app: the rows are rebuilt on **every keystroke** in the search box
+    (``_on_shop_search_changed`` / ``_on_task_search_changed``), so each
+    keystroke orphaned a pinned copy of the row subtree.
+
+    An event filter needs no capture at all: Qt hands it the event target,
+    so the row arrives as ``obj``, its index comes off the row as a Qt
+    *property* (C++ side), and the dialog is reachable through the filter's
+    Qt parent.  One filter serves every row of both lists.
+    """
+
+    #: Row property -> the ``TemplateDialog`` method that selects it.
+    _SELECTORS = {"shop": "_select_shop_row", "task": "_select_task_row"}
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.MouseButtonPress or event.button() != Qt.LeftButton:
+            return False
+        dialog = self.parent()
+        index = obj.property("rowIndex")
+        selector = self._SELECTORS.get(obj.property("rowKind"))
+        if dialog is None or index is None or selector is None:
+            return False
+        getattr(dialog, selector)(int(index))
+        # True, not False: the old closure REPLACED the row's
+        # mousePressEvent, so the row's own handler never ran and the press
+        # never propagated to the list container behind it.
+        return True
+
+
 def _h_separator() -> QFrame:
+    # A 1 px rule, coloured by #dialogSeparator in the template.  Was an
+    # inline rgba(100, 116, 139, 0.3) -- slate.500 at 30 %, a value in no
+    # token table, repeated in three places in this file with two different
+    # spellings.  The other two call sites now come here instead.
     line = QFrame()
     line.setFrameShape(QFrame.HLine)
-    line.setStyleSheet("color: rgba(100, 116, 139, 0.3);")
+    line.setObjectName("dialogSeparator")
     return line
 
 
@@ -123,6 +191,11 @@ class TemplateDialog(QDialog):
         self._tabs = QTabWidget()
         self._tabs.addTab(self._make_shop_tab(), self._t("tab_shopping"))
         self._tabs.addTab(self._make_tasks_tab(), self._t("tab_tasks"))
+        # The two labels used to start with "🛒"/"📋" — tofu on a stock
+        # Linux font stack.  A QTabWidget takes a real QIcon instead.
+        self._tabs.setTabIcon(0, icons.icon("shopping-cart", 16))
+        self._tabs.setTabIcon(1, icons.icon("list-todo", 16))
+        self._tabs.setIconSize(QSize(16, 16))
         if initial_tab == "tasks":
             self._tabs.setCurrentIndex(1)
         layout.addWidget(self._tabs, 1)
@@ -175,6 +248,7 @@ class TemplateDialog(QDialog):
         self._shop_info_label = QLabel(self._t("shop_tab_info"))
         self._shop_info_label.setObjectName("subtitle")
         self._shop_sync_btn = QPushButton()
+        icons.set_icon(self._shop_sync_btn, "refresh-cw", 16, clear_text=False)
         self._shop_sync_btn.setObjectName("secondaryButton")
         self._shop_sync_btn.setCursor(Qt.PointingHandCursor)
         self._shop_sync_btn.clicked.connect(lambda: self._open_sync_dialog("shopping"))
@@ -184,11 +258,18 @@ class TemplateDialog(QDialog):
         self._shop_add_btn.clicked.connect(self._handle_shop_add_btn)
         header.addWidget(self._shop_source_tmpl_btn)
         header.addWidget(self._shop_source_std_btn)
-        header.addWidget(self._shop_info_label)
         header.addStretch()
         header.addWidget(self._shop_sync_btn)
         header.addWidget(self._shop_add_btn)
         vl.addLayout(header)
+
+        # UX audit 2026-09-18, M1: sitting inside the header row, this
+        # legend got squeezed between the source tabs and the "Add" button
+        # and rendered clipped ("☑ = quest appears automatically in the
+        # task…"). It reads as a caption for the list below anyway, so it
+        # gets its own full-width row under the controls.
+        self._shop_info_label.setWordWrap(True)
+        vl.addWidget(self._shop_info_label)
 
         self._shop_search_input = QLineEdit()
         self._shop_search_input.setObjectName("FlowInput")
@@ -223,7 +304,7 @@ class TemplateDialog(QDialog):
         # Viewport paints its own background separately from #scrollArea's
         # own QSS rule -- can show up as a plain white box when Windows
         # itself is set to dark mode (User-reported, 2026-08-29).
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
         vl.addWidget(scroll, 1)
 
         self._rebuild_shop_list()
@@ -251,6 +332,7 @@ class TemplateDialog(QDialog):
         self._task_info_label = QLabel(self._t("task_tab_info"))
         self._task_info_label.setObjectName("subtitle")
         self._task_sync_btn = QPushButton()
+        icons.set_icon(self._task_sync_btn, "refresh-cw", 16, clear_text=False)
         self._task_sync_btn.setObjectName("secondaryButton")
         self._task_sync_btn.setCursor(Qt.PointingHandCursor)
         self._task_sync_btn.clicked.connect(lambda: self._open_sync_dialog("tasks"))
@@ -260,11 +342,15 @@ class TemplateDialog(QDialog):
         self._task_add_btn.clicked.connect(self._handle_task_add_btn)
         header.addWidget(self._task_source_tmpl_btn)
         header.addWidget(self._task_source_std_btn)
-        header.addWidget(self._task_info_label)
         header.addStretch()
         header.addWidget(self._task_sync_btn)
         header.addWidget(self._task_add_btn)
         vl.addLayout(header)
+
+        # Own row under the controls -- see the Shopping tab's twin comment
+        # (UX audit 2026-09-18, M1: clipped by the Add Task button).
+        self._task_info_label.setWordWrap(True)
+        vl.addWidget(self._task_info_label)
 
         self._task_search_input = QLineEdit()
         self._task_search_input.setObjectName("FlowInput")
@@ -298,7 +384,7 @@ class TemplateDialog(QDialog):
         scroll.setObjectName("scrollArea")
         # Same viewport-background fix as the shop-list scroll area above
         # (User-reported Windows-dark-mode white box, 2026-08-29).
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
         vl.addWidget(scroll, 1)
 
         self._rebuild_task_list()
@@ -371,7 +457,7 @@ class TemplateDialog(QDialog):
         row.setProperty("selected", (not is_std) and index == self._selected_shop_index)
         if not is_std:
             row.setCursor(Qt.PointingHandCursor)
-            row.mousePressEvent = lambda _e, i=index: self._select_shop_row(i)
+            self._wire_row(row, "shop", index)
 
         hl = QHBoxLayout(row)
         hl.setContentsMargins(12, 10, 12, 10)
@@ -495,7 +581,7 @@ class TemplateDialog(QDialog):
         row.setProperty("selected", (not is_std) and index == self._selected_task_index)
         if not is_std:
             row.setCursor(Qt.PointingHandCursor)
-            row.mousePressEvent = lambda _e, i=index: self._select_task_row(i)
+            self._wire_row(row, "task", index)
 
         hl = QHBoxLayout(row)
         hl.setContentsMargins(12, 10, 12, 10)
@@ -557,6 +643,27 @@ class TemplateDialog(QDialog):
         hl.addWidget(edit_btn)
         hl.addWidget(del_btn)
         return row
+
+    # ── Row wiring ────────────────────────────────────────────────────────────
+
+    #: The one :class:`_RowSelectFilter` this dialog installs on its rows,
+    #: built on first use.  A class-level default rather than an ``__init__``
+    #: assignment because the first ``_rebuild_shop_list()`` already runs
+    #: while ``__init__`` is still building the dialog.
+    _row_select_filter = None
+
+    def _wire_row(self, row, kind: str, index: int):
+        """Make ``row`` selectable without storing anything on it.
+
+        The index goes on the row as a Qt property (C++ side, freed with
+        the widget) and the behaviour comes from a single filter owned by
+        the dialog — see :class:`_RowSelectFilter` for why not a closure.
+        """
+        row.setProperty("rowKind", kind)
+        row.setProperty("rowIndex", index)
+        if self._row_select_filter is None:
+            self._row_select_filter = _RowSelectFilter(self)
+        row.installEventFilter(self._row_select_filter)
 
     # ── Shopping actions ──────────────────────────────────────────────────────
 
@@ -1081,7 +1188,10 @@ class _StandardTemplatePickerDialog(QDialog):
             list_layout.setContentsMargins(0, 0, 0, 0)
             list_layout.setSpacing(4)
             for tmpl in templates:
-                row = QFrame()
+                # _CheckRow, not QFrame: the whole row toggles its checkbox
+                # from a class-level handler instead of a per-row closure
+                # stored on the widget (review G/L4).
+                row = _CheckRow()
                 row.setObjectName("taskCard")
                 row.setCursor(Qt.PointingHandCursor)
                 hl = QHBoxLayout(row)
@@ -1111,11 +1221,6 @@ class _StandardTemplatePickerDialog(QDialog):
                 sched_badge.setAttribute(Qt.WA_TransparentForMouseEvents)
                 hl.addWidget(sched_badge)
 
-                def on_row_press(event, c=check, r=row):
-                    c.setChecked(not c.isChecked())
-                    QFrame.mousePressEvent(r, event)
-                row.mousePressEvent = on_row_press
-
                 self._rows.append((row, sched, tmpl.get("location", "").strip()))
                 list_layout.addWidget(row)
             list_layout.addStretch()
@@ -1125,7 +1230,7 @@ class _StandardTemplatePickerDialog(QDialog):
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.NoFrame)
             scroll.setObjectName("scrollArea")
-            scroll.viewport().setStyleSheet("background: transparent;")
+            scroll.viewport().setObjectName("transparentViewport")
             layout.addWidget(scroll, 1)
 
         btn_row = QHBoxLayout()
@@ -1218,7 +1323,8 @@ class _StandardSyncDialog(QDialog):
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(6)
         for entry in self._entries:
-            row = QFrame()
+            # _CheckRow: see _StandardTemplatePickerDialog above (G/L4).
+            row = _CheckRow()
             row.setObjectName("taskCard")
             row.setCursor(Qt.PointingHandCursor)
             hl = QHBoxLayout(row)
@@ -1248,11 +1354,6 @@ class _StandardSyncDialog(QDialog):
             new_badge.setAttribute(Qt.WA_TransparentForMouseEvents)
             hl.addWidget(new_badge)
 
-            def on_row_press(event, c=check, r=row):
-                c.setChecked(not c.isChecked())
-                QFrame.mousePressEvent(r, event)
-            row.mousePressEvent = on_row_press
-
             list_layout.addWidget(row)
         list_layout.addStretch()
 
@@ -1261,7 +1362,7 @@ class _StandardSyncDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setObjectName("scrollArea")
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
         layout.addWidget(scroll, 1)
 
         btn_row = QHBoxLayout()
@@ -1375,6 +1476,7 @@ class _TemplateEditDialog(QDialog):
             import_link.setObjectName("linkButton")
             import_link.setCursor(Qt.PointingHandCursor)
             import_link.setFlat(True)
+            icons.set_icon(import_link, "database", 16, clear_text=False)
             import_link.clicked.connect(self._open_import_from_db)
             layout.addWidget(import_link, 0, Qt.AlignLeft)
 
@@ -1400,8 +1502,10 @@ class _TemplateEditDialog(QDialog):
         # rather than adding write-only dead data to shop templates.
         self._description = None
         if task_mode:
-            self._desc_toggle_btn = QPushButton("▸ " + self._t("task_description_toggle"))
+            self._desc_toggle_btn = QPushButton(self._t("task_description_toggle"))
             self._desc_toggle_btn.setObjectName("linkButton")
+            icons.set_icon(self._desc_toggle_btn, "chevron-right", 16,
+                           "accent", clear_text=False)
             self._desc_toggle_btn.setFlat(True)
             self._desc_toggle_btn.setCursor(Qt.PointingHandCursor)
             self._desc_toggle_btn.setCheckable(True)
@@ -1477,8 +1581,10 @@ class _TemplateEditDialog(QDialog):
     def _toggle_description(self):
         expanded = self._desc_toggle_btn.isChecked()
         self._description.setVisible(expanded)
-        arrow = "▾ " if expanded else "▸ "
-        self._desc_toggle_btn.setText(arrow + self._t("task_description_toggle"))
+        icons.set_icon(self._desc_toggle_btn,
+                       "chevron-down" if expanded else "chevron-right",
+                       16, "accent", clear_text=False)
+        self._desc_toggle_btn.setText(self._t("task_description_toggle"))
 
     def _open_import_from_db(self):
         if not self._item_picker_callback:
@@ -1557,10 +1663,7 @@ class _AmountDialog(QDialog):
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color: rgba(100,116,139,0.3);")
-        layout.addWidget(sep)
+        layout.addWidget(_h_separator())
 
         amount_row = QHBoxLayout()
         amount_lbl = QLabel(self._t("amount_label"))
@@ -1613,10 +1716,7 @@ class _AmountDialog(QDialog):
         ).setChecked(True)
         layout.addLayout(sched_row)
 
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.HLine)
-        sep2.setStyleSheet("color: rgba(100,116,139,0.3);")
-        layout.addWidget(sep2)
+        layout.addWidget(_h_separator())
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()

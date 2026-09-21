@@ -3,8 +3,16 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QLineEdit, QScrollArea,
     QComboBox, QCheckBox, QButtonGroup, QCompleter, QMenu
 )
-from PySide6.QtCore import Signal, QRect, Qt, QRegularExpression
-from PySide6.QtGui import QIntValidator, QRegularExpressionValidator, QPainter, QColor, QLinearGradient, QBrush, QActionGroup
+from PySide6.QtCore import Signal, QRect, Qt
+from PySide6.QtGui import QIntValidator, QPainter, QBrush, QActionGroup
+
+from core import theme
+from ui.widgets.empty_state import EmptyStateWidget
+from ui.widgets import icons
+
+#: Which Lucide icon each ToDo pill carries (MASTER §3).
+_TAB_ICONS = {"tasks": "list-todo", "shopping": "shopping-cart"}
+
 
 class TaskProgressBar(QFrame):
     def __init__(self):
@@ -35,13 +43,18 @@ class TaskProgressBar(QFrame):
         # tile already tracks (MainWindow._record_missed_daily_activities)
         # (User-Wunsch, 2026-09-07: "Genauso die Regel dahinter bauen") --
         # just surfaced live in the app itself now too, not only on export.
-        for val, icon, label, val_obj, icon_obj, sub_obj in [
-            (self._done_val,   "✓", "done",      "ProgressDoneVal",   "ProgressDoneIcon",   "ProgressDoneSub"),
-            (self._open_val,   "○", "remaining", "ProgressOpenVal",   "ProgressOpenIcon",   "ProgressOpenSub"),
-            (self._missed_val, "!", "missed",    "ProgressMissedVal", "ProgressMissedIcon", "ProgressMissedSub"),
-            (self._total_val,  "Σ", "total",     "ProgressTotalVal",  "ProgressTotalIcon",  "ProgressTotalSub"),
+        # Was four text glyphs ("✓", "○", "!", "Σ") coloured by the
+        # #Progress*Icon rules.  MASTER §3 forbids a glyph standing in for
+        # an icon, and a QSS `color:` cannot reach a rendered SVG, so each
+        # one names its own token here -- the SAME token its rule used, so
+        # the row keeps the meaning it had (ok / warn / danger / accent).
+        for val, icon_name, icon_token, label, val_obj, icon_obj, sub_obj in [
+            (self._done_val,   "check",          "ok",      "done",      "ProgressDoneVal",   "ProgressDoneIcon",   "ProgressDoneSub"),
+            (self._open_val,   "circle",         "warn",    "remaining", "ProgressOpenVal",   "ProgressOpenIcon",   "ProgressOpenSub"),
+            (self._missed_val, "triangle-alert", "danger",  "missed",    "ProgressMissedVal", "ProgressMissedIcon", "ProgressMissedSub"),
+            (self._total_val,  "sigma",          "accent",  "total",     "ProgressTotalVal",  "ProgressTotalIcon",  "ProgressTotalSub"),
         ]:
-            icon_lbl = QLabel(icon)
+            icon_lbl = icons.IconLabel(icon_name, 16, icon_token)
             icon_lbl.setObjectName(icon_obj)
             val.setObjectName(val_obj)
             sub = QLabel("")
@@ -111,20 +124,23 @@ class TaskProgressBar(QFrame):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        # track
-        p.setBrush(QBrush(QColor(15, 23, 42, 180)))
-        p.setPen(Qt.NoPen)
-        p.drawRoundedRect(bar, 4, 4)
+        tokens = theme.current_tokens()
 
-        # fill
+        # Track: one step down the surface ladder (was a QColor(15,23,42,180)
+        # literal -- navy.900 at 70 % alpha, i.e. Abyss hardcoded, so the
+        # track stayed navy on Inferno).
+        p.setBrush(QBrush(theme.qcolor(tokens, "bg.input")))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(bar, tokens.radius_sm, tokens.radius_sm)
+
+        # Fill: flat accent. Was a cyan-to-purple gradient, which MASTER's
+        # visual thesis rules out ("zéro dégradé décoratif") and which also
+        # ignored the theme entirely.
         if self._total > 0 and self._done > 0:
             fill_w = max(8, int(bar.width() * self._done / self._total))
             fill = QRect(bar.x(), bar.y(), fill_w, bar.height())
-            grad = QLinearGradient(fill.left(), 0, fill.right(), 0)
-            grad.setColorAt(0.0, QColor(6, 182, 212))
-            grad.setColorAt(1.0, QColor(168, 85, 247))
-            p.setBrush(QBrush(grad))
-            p.drawRoundedRect(fill, 4, 4)
+            p.setBrush(QBrush(theme.qcolor(tokens, "accent")))
+            p.drawRoundedRect(fill, tokens.radius_sm, tokens.radius_sm)
 
         p.end()
 
@@ -160,6 +176,7 @@ class TasksPage(QWidget):
         self.active_sort = "priority"
         self.sort_direction = "desc"
         self._show_events = True
+        self._rendered_count = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -179,9 +196,14 @@ class TasksPage(QWidget):
 
         self.tab_buttons = {}
 
+        # MASTER §3: the pills carried "📋"/"🛒" inside their translated
+        # label, which is a missing-glyph rectangle on a stock Linux font
+        # stack (Barlow has no pictographs — see tests/test_icons.py).
         for key, label in self.tabs.items():
             btn = QPushButton(self.tr(self.language, label))
             btn.setObjectName("tabButton")
+            icons.set_icon(btn, _TAB_ICONS.get(key, "list-todo"), 16,
+                           clear_text=False)
             btn.clicked.connect(
                 lambda checked=False, k=key: self.set_active_tab(k)
             )
@@ -195,6 +217,7 @@ class TasksPage(QWidget):
         self._template_btn.setObjectName("templateButton")
         self._template_btn.setCursor(Qt.PointingHandCursor)
         self._template_btn.setVisible(False)
+        icons.set_icon(self._template_btn, "clipboard-list", 16, clear_text=False)
         self._template_btn.clicked.connect(self.template_requested.emit)
         self.tab_row.addWidget(self._template_btn)
 
@@ -206,6 +229,7 @@ class TasksPage(QWidget):
         self._character_btn.setObjectName("templateButton")
         self._character_btn.setCursor(Qt.PointingHandCursor)
         self._character_btn.setVisible(False)
+        icons.set_icon(self._character_btn, "user", 16, clear_text=False)
         self._character_btn.clicked.connect(self.character_requested.emit)
         self.tab_row.addWidget(self._character_btn)
 
@@ -222,11 +246,13 @@ class TasksPage(QWidget):
         self._full_view_btn = QPushButton(self.tr(self.language, "full_view_btn"))
         self._full_view_btn.setObjectName("templateButton")
         self._full_view_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self._full_view_btn, "globe", 16, clear_text=False)
         self._full_view_btn.clicked.connect(self.full_view_requested.emit)
 
         self._import_btn = QPushButton(self.tr(self.language, "full_view_import_btn"))
         self._import_btn.setObjectName("templateButton")
         self._import_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self._import_btn, "upload", 16, clear_text=False)
         self._import_btn.clicked.connect(self.import_requested.emit)
 
         layout.addLayout(self.tab_row)
@@ -262,6 +288,7 @@ class TasksPage(QWidget):
         self.source_standards_btn.setObjectName("templateSourceTab")
         self.source_standards_btn.setCheckable(True)
         self.source_standards_btn.setCursor(Qt.PointingHandCursor)
+        icons.set_icon(self.source_standards_btn, "star", 16, clear_text=False)
         self.source_standards_btn.clicked.connect(lambda: self._set_template_source("standards"))
 
         self._source_btn_group = QButtonGroup(self)
@@ -276,9 +303,34 @@ class TasksPage(QWidget):
         add_panel = QFrame()
         add_panel.setObjectName("addPanel")
 
-        add_layout = QHBoxLayout(add_panel)
-        add_layout.setContentsMargins(18, 18, 18, 18)
+        # UX audit 2026-09-18, M1: this used to be ONE QHBoxLayout, whose
+        # combined minimum (880px in EN, 931px in DE) was the single widest
+        # thing on the page and forced the whole window's minimum width.
+        # It is now two stacked rows: everything lives in the first one at
+        # normal widths (pixel-identical to before), and the tail --
+        # template / character / amount / Add -- drops to the second row
+        # once one line no longer fits. See _update_add_row_wrap().
+        add_panel_layout = QVBoxLayout(add_panel)
+        add_panel_layout.setContentsMargins(18, 18, 18, 18)
+        add_panel_layout.setSpacing(10)
+
+        self._add_row_1 = QWidget()
+        add_layout = QHBoxLayout(self._add_row_1)
+        add_layout.setContentsMargins(0, 0, 0, 0)
         add_layout.setSpacing(12)
+
+        self._add_row_2 = QWidget()
+        add_row_2_layout = QHBoxLayout(self._add_row_2)
+        add_row_2_layout.setContentsMargins(0, 0, 0, 0)
+        add_row_2_layout.setSpacing(12)
+        self._add_row_2.setVisible(False)
+
+        add_panel_layout.addWidget(self._add_row_1)
+        add_panel_layout.addWidget(self._add_row_2)
+
+        self._add_row_primary = add_layout
+        self._add_row_secondary = add_row_2_layout
+        self._add_row_wrapped = False
 
         self.title_input = QLineEdit()
         self.title_input.setPlaceholderText(self.tr(self.language, "title"))
@@ -330,7 +382,13 @@ class TasksPage(QWidget):
         self.amount_input = QLineEdit()
         self.amount_input.setValidator(QIntValidator(0, 999999))
         self.amount_input.setPlaceholderText(self.tr(self.language, "amount"))
-        self.amount_input.setMaximumWidth(80)
+        # UX audit 2026-09-18, M1: an 80px hard cap elided the placeholder
+        # to "Amo…" at 1280px in EN already (DE "Anzahl"/RU
+        # "Количество" are longer still). Keep it a narrow field --
+        # it only ever holds up to 6 digits -- but never narrower than its
+        # own placeholder.
+        self.amount_input.setMinimumWidth(92)
+        self.amount_input.setMaximumWidth(130)
 
         # Template selector — replaces free-text title in shopping / tasks mode
         self._templates: list[dict] = []
@@ -365,6 +423,13 @@ class TasksPage(QWidget):
         self.char_input = QComboBox()
         self.char_input.setObjectName("priorityInput")
         self.char_input.setMinimumWidth(110)
+        # UX audit 2026-09-18, M1: rendered "No charac…" at 1280px. The
+        # widest entry this combo ever shows is its own "unassigned" row
+        # ("No character" / "Kein Charakter" / "Без персонажа"), so size to
+        # that and let a long character name grow the box instead of
+        # eliding it.
+        self.char_input.setMinimumContentsLength(14)
+        self.char_input.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         # Real bug found + fixed (GitHub issue #2, 2026-09-04: the "leer"
         # placeholder was untranslated German even in English, and relying
         # on setPlaceholderText()+currentIndex(-1) instead of a real,
@@ -437,6 +502,16 @@ class TasksPage(QWidget):
         self.schedule_season_btn.hide()
 
         add_layout.addWidget(self.add_btn)
+
+        # (widget, stretch) in the order they must reappear -- moved as a
+        # block between the two rows by _update_add_row_wrap().
+        self._add_row_tail = [
+            (self.template_combo, 3),
+            (self.no_templates_hint, 0),
+            (self.char_input, 2),
+            (self.amount_input, 0),
+            (self.add_btn, 0),
+        ]
 
         # Tight spacing here (unlike the page's own 22px section spacing)
         # so the source tabs sit visually flush on top of add_panel, like a
@@ -536,6 +611,7 @@ class TasksPage(QWidget):
         # buttons, since the character list is open-ended/variable-length.
         self.char_filter_btn = QPushButton()
         self.char_filter_btn.setObjectName("filterButton")
+        icons.set_icon(self.char_filter_btn, "users", 16, clear_text=False)
         self.char_filter_btn.clicked.connect(self._show_char_filter_popover)
         self._update_char_filter_btn_label()
 
@@ -574,9 +650,10 @@ class TasksPage(QWidget):
         self._reset_hint_label.setVisible(False)
         self.sort_row.addWidget(self._reset_hint_label)
 
-        self._manual_reset_btn = QPushButton("↺")
+        self._manual_reset_btn = QPushButton()
         self._manual_reset_btn.setObjectName("ManualResetBtn")
         self._manual_reset_btn.setFixedSize(26, 26)
+        icons.set_icon(self._manual_reset_btn, "rotate-ccw", 16)
         self._manual_reset_btn.setToolTip(self.tr(self.language, "manual_reset_tooltip"))
         self._manual_reset_btn.setVisible(False)
         self._manual_reset_btn.clicked.connect(self.manual_reset_requested.emit)
@@ -594,7 +671,7 @@ class TasksPage(QWidget):
         # reported, 2026-08-29) instead of picking up the app's dark theme.
         # Same fix already applied throughout ItemDatabase/app.py and
         # settings_page.py.
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("transparentViewport")
 
         self.list_container = QWidget()
 
@@ -605,20 +682,93 @@ class TasksPage(QWidget):
 
         scroll.setWidget(self.list_container)
 
+        self._list_scroll = scroll
         layout.addWidget(scroll, 1)
 
+        # UX audit 2026-09-18, M2: a Tasks/Shopping tab with zero cards used
+        # to render as a bare void. The placeholder replaces the (equally
+        # empty) scroll area rather than sitting under it, so it can center
+        # itself over the full remaining height.
+        self.empty_state = EmptyStateWidget()
+        layout.addWidget(self.empty_state, 1)
+
         self.update_input_mode()
 
 
-    def set_active_tab(self, tab_key: str):
+    # add_panel's own left+right content margins, subtracted from the page
+    # width to get what the add-row actually has to lay out in.
+    _ADD_PANEL_CHROME = 36
+    # Slack the row must regain before it un-wraps, so a width that lands
+    # exactly on the one-line minimum cannot oscillate between the two
+    # states on consecutive resize events.
+    _ADD_ROW_WRAP_HYSTERESIS = 24
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_add_row_wrap()
+
+    def _update_add_row_wrap(self):
+        """Moves template/character/amount/Add between the add-panel's two
+        rows (UX audit 2026-09-18, M1).
+
+        The threshold is measured, not hardcoded: the width one line would
+        need is the primary row's minimum plus -- while already wrapped --
+        the secondary row's. That keeps it correct per language (DE/RU run
+        20-35% wider) and per tab, since update_input_mode() hides a
+        different set of controls on each.
+        """
+        available = self.width() - self._ADD_PANEL_CHROME
+        one_line_needs = self._add_row_primary.minimumSize().width()
+        if self._add_row_wrapped:
+            one_line_needs += (
+                self._add_row_primary.spacing()
+                + self._add_row_secondary.minimumSize().width()
+            )
+            wrapped = available < one_line_needs + self._ADD_ROW_WRAP_HYSTERESIS
+        else:
+            wrapped = available < one_line_needs
+
+        if wrapped == self._add_row_wrapped:
+            return
+        self._add_row_wrapped = wrapped
+
+        if wrapped:
+            src, dst = self._add_row_primary, self._add_row_secondary
+        else:
+            src, dst = self._add_row_secondary, self._add_row_primary
+
+        for widget, stretch in self._add_row_tail:
+            # addWidget() reparents, and Qt hides a reparented widget --
+            # so each one's own explicit hidden/shown state (set by
+            # update_input_mode() for this tab and template source) has to
+            # be carried across by hand.
+            was_hidden = widget.isHidden()
+            src.removeWidget(widget)
+            dst.addWidget(widget, stretch)
+            widget.setVisible(not was_hidden)
+
+        self._add_row_2.setVisible(wrapped)
+
+    def mark_active_tab(self, tab_key: str):
+        """Paint ``tab_key``'s pill as the active one — no signal.
+
+        Split out of ``set_active_tab`` (2026-09-18) because MainWindow owns
+        the authoritative ``active_tab`` and sets it from the profile at
+        startup and on every tab switch, but had no way to move the
+        highlight without re-emitting ``tab_changed`` back at itself. The
+        visible symptom: the ToDo page opened with NEITHER Tasks nor
+        Shopping marked active, because the property was only ever set by a
+        click.
+        """
         self.active_tab = tab_key
-        self.update_input_mode()
-
         for key, btn in self.tab_buttons.items():
-            btn.setProperty("active", key == self.active_tab)
+            btn.setProperty("active", key == tab_key)
             btn.style().unpolish(btn)
             btn.style().polish(btn)
 
+    def set_active_tab(self, tab_key: str):
+        self.mark_active_tab(tab_key)
+        self.update_input_mode()
         self.tab_changed.emit(tab_key)
 
     def set_events_visible(self, visible: bool):
@@ -707,11 +857,20 @@ class TasksPage(QWidget):
         self._template_btn.setVisible(is_template_mode)
         self._character_btn.setVisible(is_template_mode)
 
+        # This just changed how wide one line would have to be.
+        self._update_add_row_wrap()
+
     def set_reset_hint(self, prefix: str, countdown: str, visible: bool):
         if visible:
+            # Rich text, so QSS cannot reach the two spans -- the colours are
+            # read from the tokens instead of written as literals (they were
+            # Abyss's fg.muted and accent, hardcoded, on every theme).
+            tokens = theme.current_tokens()
+            muted = theme.qcolor(tokens, "fg.muted").name()
+            accent = theme.qcolor(tokens, "accent").name()
             self._reset_hint_label.setText(
-                f'<span style="color:#64748b;font-weight:500;">{prefix}</span>'
-                f' <span style="color:#22d3ee;font-weight:700;">{countdown}</span>'
+                f'<span style="color:{muted};font-weight:{tokens.font_weight_medium};">{prefix}</span>'
+                f' <span style="color:{accent};font-weight:{tokens.font_weight_bold};">{countdown}</span>'
             )
         self._reset_hint_label.setVisible(visible)
         self._manual_reset_btn.setVisible(visible)
@@ -813,6 +972,14 @@ class TasksPage(QWidget):
 
         self._update_char_filter_btn_label()
 
+        # Re-pins the character combo's minimum width to the new locale's
+        # "unassigned" label (see _rebuild_char_input) -- and translates
+        # that row, which a plain text refresh cannot do since it is a
+        # combo item, not a placeholder.
+        self._rebuild_char_input(
+            self._known_characters, select_data=self.char_input.currentData()
+        )
+
         self.event_input.setText(
             self.tr(self.language, "filter_by_events")
         )
@@ -829,6 +996,11 @@ class TasksPage(QWidget):
         self._manual_reset_btn.setToolTip(self.tr(self.language, "manual_reset_tooltip"))
 
         self.progress_bar.update_language(language, self.tr)
+
+        # isHidden(), not isVisible(): the page is a descendant of a
+        # MainWindow that may not be shown yet when the language is applied.
+        if not self.empty_state.isHidden():
+            self._retranslate_empty_state()
 
     def update_stats(self, total: int, done: int, open_count: int, missed_count: int = 0):
         self.progress_bar.update_stats(total, done, open_count, missed_count)
@@ -964,41 +1136,14 @@ class TasksPage(QWidget):
 
     def _show_char_filter_popover(self):
         menu = QMenu(self)
-        # QMenu is a real top-level popup, not a normal cascading child --
-        # it does NOT reliably inherit MainWindow's setStyleSheet() the way
-        # a plain child widget would (User-reported, 2026-09-16, screenshot:
-        # rendered in the plain light native menu style instead of this
-        # app's dark theme, even though a global unscoped "QMenu {...}" rule
-        # already exists in styles.qss). Setting it explicitly here
-        # guarantees it regardless of that cascade gap -- same colors as
-        # that global rule.
-        # Same palette as OverlayWindow's own character-filter menu (this
-        # feature's own direct inspiration) instead of the plain square
-        # global QMenu colors (User-Wunsch, 2026-09-16: "den Stil von dem
-        # kantigen Dropdown anpassen") -- rounded corners, softer border,
-        # rounded item highlight on hover/selection to match the rest of
-        # this app's pill/rounded-card look instead of sharp edges.
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: rgba(14, 16, 24, 0.98);
-                color: #e5e7eb;
-                border: 1px solid rgba(100, 116, 139, 0.35);
-                border-radius: 10px;
-                padding: 6px;
-            }
-            QMenu::item {
-                padding: 8px 20px;
-                border-radius: 6px;
-            }
-            QMenu::item:selected {
-                background-color: rgba(255, 255, 255, 0.08);
-            }
-            QMenu::separator {
-                height: 1px;
-                background: rgba(100, 116, 139, 0.35);
-                margin: 6px 8px;
-            }
-        """)
+        # Styled by the template's own QMenu / #charFilterMenu rules.
+        # The inline sheet that used to live here existed because a
+        # QMenu is a top-level popup and did NOT inherit MainWindow's
+        # setStyleSheet (User-reported, 2026-09-16: the menu rendered in
+        # the light native style). The sheet is on the QApplication now,
+        # which every popup DOES inherit, so the workaround -- and its
+        # four rgba() literals -- is gone.
+        menu.setObjectName("charFilterMenu")
         group = QActionGroup(menu)
         group.setExclusive(True)
 
@@ -1043,6 +1188,18 @@ class TasksPage(QWidget):
         self.char_input.setCurrentIndex(idx if idx >= 0 else 0)
         self.char_input.blockSignals(False)
 
+        # UX audit 2026-09-18, M1: setMinimumContentsLength alone only
+        # feeds minimumSizeHint(), and QComboBox's default size policy
+        # carries the Shrink flag -- so the add-row happily squeezed this
+        # combo down to its explicit 110px minimum and Qt elided the label
+        # to "No charac...". Pinning the explicit minimum to that hint is
+        # what actually holds the width; re-done here rather than once in
+        # __init__ because the hint moves with the language ("No character"
+        # / "Kein Charakter" / "Bez personazha").
+        self.char_input.setMinimumWidth(
+            max(110, self.char_input.minimumSizeHint().width())
+        )
+
     def select_character(self, name: str):
         """Called by MainWindow right after a character was created via the
         Templates dialog's "Character" tab (GitHub issue #2: "automatically
@@ -1079,6 +1236,86 @@ class TasksPage(QWidget):
         for task in tasks:
             self.list_layout.insertWidget(self.list_layout.count() - 1, task)
             task.show()
+
+        self._rendered_count = len(tasks)
+        self.update_empty_state()
+
+    # ── Empty state (UX audit 2026-09-18, M2) ─────────────────────────────
+
+    def update_empty_state(self):
+        """Shows the placeholder whenever the ACTIVE tab rendered zero
+        cards, and swaps the (then pointless) scroll area out for it.
+
+        Public on purpose: ``render_tasks`` -- the one call MainWindow
+        already makes on every ``refresh()`` -- drives it automatically, so
+        MainWindow needs no change; any other owner that mutates the list
+        outside a refresh can call this directly.
+        """
+        is_empty = self._rendered_count == 0 and self.active_tab in ("tasks", "shopping")
+        if is_empty:
+            self._retranslate_empty_state()
+        self.empty_state.setVisible(is_empty)
+        self._list_scroll.setVisible(not is_empty)
+
+    def _retranslate_empty_state(self):
+        """Feeds the placeholder the copy for whichever tab is active.
+
+        The action is the one thing the user can actually do next: Shopping
+        entries only ever come from a template (the add-row is a picker, not
+        a free-text field), so its button opens the Templates dialog via the
+        page's existing ``template_requested`` signal; Tasks focuses its own
+        add-row picker instead -- unless there is no template to pick yet,
+        in which case it falls back to the same Templates dialog.
+        """
+        if self.active_tab == "shopping":
+            title_key, hint_key = "empty_shopping_title", "empty_shopping_hint"
+            action_label = self.tr(self.language, "templates_btn")
+            on_action = self.template_requested.emit
+        else:
+            title_key, hint_key = "empty_tasks_title", "empty_tasks_hint"
+            if self._add_row_target() is None:
+                # No template for this tab yet -- the add-row itself is
+                # inert (it only shows "No templates ..."), so the only
+                # move left is the same one Shopping offers.
+                action_label = self.tr(self.language, "templates_btn")
+                on_action = self.template_requested.emit
+            else:
+                action_label = self.tr(self.language, "add")
+                on_action = self._focus_add_row
+
+        # tr() falls back to the raw key for a key that does not exist yet
+        # (core.translations.tr: ``.get(key, key)``), which would print
+        # "empty_tasks_title" on screen -- so drop the hint and keep a
+        # neutral title until the keys land.
+        title = self.tr(self.language, title_key)
+        hint = self.tr(self.language, hint_key)
+        if title == title_key:
+            title = self.tr(self.language, "no_templates_hint")
+        if hint == hint_key:
+            hint = ""
+
+        # MASTER §3 « État vide : icône Lucide 24 px fg.muted » (review
+        # G/m13).  The glyph names the tab, so it is set here rather than
+        # once at construction: the same widget serves both tabs.
+        self.empty_state.set_icon(
+            "shopping-cart" if self.active_tab == "shopping" else "list-todo"
+        )
+        self.empty_state.set_content(title, hint, action_label, on_action)
+
+    def _add_row_target(self):
+        """Where a new Tasks entry actually starts: the template picker in
+        template mode, the free-text title on the legacy tabs -- whichever
+        of the two update_input_mode() left on screen, or None when neither
+        is (which is the "no templates at all" state)."""
+        for candidate in (self.template_combo, self.title_input):
+            if not candidate.isHidden():
+                return candidate
+        return None
+
+    def _focus_add_row(self):
+        target = self._add_row_target()
+        if target is not None:
+            target.setFocus()
 
     def set_event_features_visible(self, visible: bool):
         self._show_events = visible

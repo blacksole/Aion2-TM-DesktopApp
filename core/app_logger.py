@@ -1,16 +1,18 @@
 """Shared file logger for the whole app (main window + ItemDatabase/Armory).
 
-Writes to app.log next to config.json (%APPDATA%\\Aion2 TM\\ when frozen,
-the project root when running from source) -- same place for both, so
-there is exactly one log to check regardless of which part of the app
-something happened in.
+Writes to app.log in the per-user log directory when frozen (%APPDATA%\\Aion2 TM\\
+on Windows -- unchanged -- , $XDG_STATE_HOME/aion2-tm on Linux, ~/Library/Logs
+on macOS; see utils/paths.py) and in the project root when running from source
+-- same place for both parts of the app, so there is exactly one log to check
+regardless of which part something happened in.
 """
 
 import logging
-import os
 import sys
 from datetime import date
 from pathlib import Path
+
+from utils import paths
 
 _ROOT_LOGGER_NAME = "aion2tm"
 _root_logger = logging.getLogger(_ROOT_LOGGER_NAME)
@@ -18,8 +20,9 @@ _root_logger = logging.getLogger(_ROOT_LOGGER_NAME)
 
 def _log_dir() -> Path:
     if getattr(sys, "frozen", False):
-        return Path(os.environ["APPDATA"]) / "Aion2 TM"
-    return Path(__file__).resolve().parent.parent
+        return paths.user_log_dir()
+    # From source the log stays in the repo root, next to the dev config.json.
+    return paths.app_root()
 
 
 def setup_logging() -> logging.Logger:

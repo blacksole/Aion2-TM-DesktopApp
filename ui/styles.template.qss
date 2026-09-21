@@ -1,0 +1,2920 @@
+/* =====================================================================
+   Aion2 TM — QSS TEMPLATE  (« Aether Cockpit », design-system/aion2-tm/MASTER.md)
+
+   ONE set of rules.  A theme is not another block, it is another set of
+   token values: core/theme.build_qss(theme) substitutes every "curly-curly"
+   placeholder below from core.theme.THEMES[theme].  There is deliberately no
+   QWidget[theme="…"] selector left anywhere in this file — the 100 of them
+   the old ui/styles.qss carried are exactly what made an accent change a
+   six-place edit (audit A §7-1, D/M5).
+
+   ASSET_PATH is replaced by the loader with the repo root (dev) or
+   sys._MEIPASS (frozen), same as before.
+
+   Conventions, all from MASTER:
+     §3 primary   = accent fill + fg_on_accent text, never a gradient
+     §3 pill      = bg_elevated / border / fg_secondary,
+                    active accent_soft + accent border + fg
+     §3 destructive = transparent + danger outline/text, hover danger_soft
+     §2 focus.ring  = focus_ring_width px accent on every focusable widget
+     §1 radii     = radius_sm inputs/pills/badges, radius_md cards/panels
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   0. Base
+   ------------------------------------------------------------------ */
+
+/* The app's own widget tree, and nothing else.
+   `QWidget[aion2="true"]` matches our three top-level windows (MainWindow,
+   OverlayWindow, FlowMapWindow — they set the property in __init__); the
+   descendant form matches everything inside them, including dialogs, since
+   Qt's descendant matching walks parentWidget().  The bare form is listed
+   too because a descendant selector never matches the ancestor itself. */
+QWidget[aion2="true"],
+QWidget[aion2="true"] QWidget {
+    font-family: {{font_body}};
+    font-size: {{text_base}}px;
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] QMainWindow,
+QWidget[aion2="true"] QDialog {
+    background-color: {{bg_window}};
+}
+
+QWidget[aion2="true"] QLabel {
+    background: transparent;
+}
+
+/* ---------------------------------------------------------------------
+   0b. Focus ring — MASTER §2 `focus.ring`, revised 2026-09-18.
+
+   The ring is a BORDER on the control's own edge.  It was an `outline`
+   before, which does not work: Qt cannot paint outside a widget's rect, so
+   `outline` on a QWidget only recolours Fusion's PE_FrameFocusRect — a
+   rectangle drawn around the *label* sub-rect, INSIDE the control and
+   straight through the descenders of its text (visible in
+   docs/audit-2026-09-18/shots/aether/app_focus_ring_detail.png: the
+   focused pill showed a second box hugging the word and cutting the "g").
+   `outline-offset` and the pill radius were both ignored.
+
+   Two consequences drive the shape of everything below:
+
+   * the rules must sit at ID specificity, because 157 `#objectName` rules
+     in this file declare a border and an ID selector (100) outranks a
+     type+pseudo one (11).  `#id:focus` (110) wins;
+   * growing 1 px → `focus_ring_width` grows the widget's sizeHint, which
+     would nudge its whole row on focus, so each rule gives the pixel back
+     as padding.  QSS has no arithmetic: the compensated values are tokens
+     (`space_2_inset` = `space_2` − `focus_inset`, core/theme.py).
+
+   Controls whose resting padding is known take the full ring.  The tail at
+   the bottom — bordered controls with padding this file does not set —
+   takes the accent edge at its own border width instead, which changes no
+   geometry at all.
+   ------------------------------------------------------------------ */
+
+/* Fusion draws its own focus rectangle inside the control; ours replaces
+   it, so suppress it everywhere rather than end up with both. */
+QWidget[aion2="true"],
+QWidget[aion2="true"] QWidget {
+    outline: none;
+}
+
+QWidget[aion2="true"] #tabButton:focus,
+QWidget[aion2="true"] #filterButton:focus,
+QWidget[aion2="true"] #toggleButton:focus,
+QWidget[aion2="true"] #templateSourceTab:focus,
+QWidget[aion2="true"] #minuteToggleButton:focus,
+QWidget[aion2="true"] #GeniusSegBtn:focus,
+QWidget[aion2="true"] #GeniusBoardTabBtn:focus,
+QWidget[aion2="true"] #SkillFilterButton:focus,
+QWidget[aion2="true"] #sortButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_2_inset}}px {{space_3_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #topTabButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_3_inset}}px {{space_6_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #dayButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_1_inset}}px {{space_2_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #themeToggleButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_3_inset}}px {{space_4_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #secondaryButton:focus,
+QWidget[aion2="true"] #themeButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_1_inset}}px {{space_3_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #settingsNavButton:focus,
+QWidget[aion2="true"] #settingsSidebarButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_2_inset}}px {{space_3_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #sidebarButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_3_inset}}px {{space_3_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #emptyStateAction:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_2_inset}}px {{space_4_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #scheduleToggleBtn:focus,
+QWidget[aion2="true"] #priorityToggleLow:focus,
+QWidget[aion2="true"] #priorityToggleMiddle:focus,
+QWidget[aion2="true"] #priorityToggleHigh:focus,
+QWidget[aion2="true"] #currencyToggleKinah:focus,
+QWidget[aion2="true"] #currencyToggleAbyss:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    padding: {{space_1_inset}}px {{space_2_inset}}px;
+    background-color: {{accent_soft}};
+}
+
+/* Accent-FILLED controls: an accent ring on an accent fill is
+   invisible, which is worst on exactly the buttons a keyboard user
+   reaches first (review F-9).  Ring in fg.on-accent instead. */
+QWidget[aion2="true"] #primaryButton:focus,
+QWidget[aion2="true"] #FlowSaveButton:focus,
+QWidget[aion2="true"] #updateAvailableButton:focus {
+    border: {{focus_ring_width}}px solid {{fg_on_accent}};
+    padding: {{space_2_inset}}px {{space_4_inset}}px;
+}
+
+QWidget[aion2="true"] #toastActionButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_0_inset}}px {{space_2_inset}}px;
+}
+
+/* Cards carry a 1 px resting border and no QSS padding of their own
+   (their layout owns the margins), so the ring is the edge colour. */
+QWidget[aion2="true"] #taskCard:focus,
+QWidget[aion2="true"] #statCard:focus,
+QWidget[aion2="true"] #timerCard:focus,
+QWidget[aion2="true"] #armoryCardRow:focus,
+QWidget[aion2="true"] #FlowNodeCard:focus {
+    border-color: {{accent}};
+}
+
+/* Tail: every other bordered control, accent edge at its own width. */
+QWidget[aion2="true"] #BuildSwitcherCombo:focus,
+QWidget[aion2="true"] #DeleteDialogCancelBtn:focus,
+QWidget[aion2="true"] #DeleteDialogDangerBtn:focus,
+QWidget[aion2="true"] #DeleteDialogOptionBtn:focus,
+QWidget[aion2="true"] #FlowCancelButton:focus,
+QWidget[aion2="true"] #FlowDeleteMapBtn:focus,
+QWidget[aion2="true"] #FlowDoneButton:focus,
+QWidget[aion2="true"] #FlowEditorBottomToggle:focus,
+QWidget[aion2="true"] #FlowHomeBtn:focus,
+QWidget[aion2="true"] #FlowIconButton:focus,
+QWidget[aion2="true"] #FlowInput:focus,
+QWidget[aion2="true"] #FlowMapCombo:focus,
+QWidget[aion2="true"] #FlowModeButton:focus,
+QWidget[aion2="true"] #FlowNewMapBtn:focus,
+QWidget[aion2="true"] #FlowNodeAddButton:focus,
+QWidget[aion2="true"] #FlowNodeAddHintButton:focus,
+QWidget[aion2="true"] #FlowResetMapBtn:focus,
+QWidget[aion2="true"] #FlowSymbolCombo:focus,
+QWidget[aion2="true"] #FlowTextEdit:focus,
+QWidget[aion2="true"] #FlowToolButton:focus,
+QWidget[aion2="true"] #FlowZoomCombo:focus,
+QWidget[aion2="true"] #GeniusLineCombo:focus,
+QWidget[aion2="true"] #GuideDoneButton:focus,
+QWidget[aion2="true"] #GuideEditButton:focus,
+QWidget[aion2="true"] #ItemSetCombo:focus,
+QWidget[aion2="true"] #ManualResetBtn:focus,
+QWidget[aion2="true"] #OverlayCharBtn:focus,
+QWidget[aion2="true"] #OverlayCheckBtn:focus,
+QWidget[aion2="true"] #OverlayCountdownToggleBtn:focus,
+QWidget[aion2="true"] #OverlayIconBtn:focus,
+QWidget[aion2="true"] #PanelCloseButton:focus,
+QWidget[aion2="true"] #PanelNavButton:focus,
+QWidget[aion2="true"] #changelogVersionBtn:focus,
+QWidget[aion2="true"] #checkButton:focus,
+QWidget[aion2="true"] #ctColorSwatch:focus,
+QWidget[aion2="true"] #deleteButton:focus,
+QWidget[aion2="true"] #donateButton:focus,
+QWidget[aion2="true"] #donateQrButton:focus,
+QWidget[aion2="true"] #helpButton:focus,
+QWidget[aion2="true"] #iconButton:focus,
+QWidget[aion2="true"] #linkButton:focus,
+QWidget[aion2="true"] #overlayToggleBtn:focus,
+QWidget[aion2="true"] #pageIconButton:focus,
+QWidget[aion2="true"] #priorityInput:focus,
+QWidget[aion2="true"] #profileInput:focus,
+QWidget[aion2="true"] #profileSwitchButton:focus,
+QWidget[aion2="true"] #settingsCombo:focus,
+QWidget[aion2="true"] #settingsComboBox:focus,
+QWidget[aion2="true"] #settingsTimeEdit:focus,
+QWidget[aion2="true"] #settingsTimeInput:focus,
+QWidget[aion2="true"] #smallIconButton:focus,
+QWidget[aion2="true"] #templateButton:focus,
+QWidget[aion2="true"] #updateDialogLaterBtn:focus {
+    border-color: {{accent}};
+}
+
+/* Sub-controls and item views: an indicator or a row cannot carry a
+   border of its own here, so they keep an accent edge too. */
+QWidget[aion2="true"] QCheckBox::indicator:focus,
+QWidget[aion2="true"] QRadioButton::indicator:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+}
+
+QWidget[aion2="true"] QListWidget::item:focus,
+QWidget[aion2="true"] QListView::item:focus,
+QWidget[aion2="true"] QTreeView::item:focus,
+QWidget[aion2="true"] QTableView::item:focus,
+QWidget[aion2="true"] QTabBar::tab:focus {
+    border: {{border_width}}px solid {{accent}};
+}
+
+/* ---------------------------------------------------------------------
+   1. Menus, scrollbars, tooltips
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] QMenuBar {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    padding: {{space_1}}px;
+    border-bottom: {{border_width}}px solid {{border}};
+}
+
+QWidget[aion2="true"] QMenuBar::item {
+    padding: {{space_1}}px {{space_3}}px;
+    border-radius: {{radius_sm}}px;
+}
+
+QWidget[aion2="true"] QMenuBar::item:selected {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] QMenu {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] QMenu::item {
+    padding: {{space_2}}px {{space_6}}px;
+}
+
+QWidget[aion2="true"] QMenu::item:selected {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+/* Flat scrollbars, no arrow buttons — the platform's native ones clash
+   with every one of the app's dark themes. */
+QWidget[aion2="true"] QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0px;
+}
+
+QWidget[aion2="true"] QScrollBar::handle:vertical {
+    background: {{border_strong}};
+    border-radius: 5px;
+    min-height: 24px;
+}
+
+QWidget[aion2="true"] QScrollBar::handle:vertical:hover {
+    background: {{accent}};
+}
+
+QWidget[aion2="true"] QScrollBar::add-line:vertical,
+QWidget[aion2="true"] QScrollBar::sub-line:vertical {
+    height: 0px;
+    background: none;
+    border: none;
+}
+
+QWidget[aion2="true"] QScrollBar::add-page:vertical,
+QWidget[aion2="true"] QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QWidget[aion2="true"] QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0px;
+}
+
+QWidget[aion2="true"] QScrollBar::handle:horizontal {
+    background: {{border_strong}};
+    border-radius: 5px;
+    min-width: 24px;
+}
+
+QWidget[aion2="true"] QScrollBar::handle:horizontal:hover {
+    background: {{accent}};
+}
+
+QWidget[aion2="true"] QScrollBar::add-line:horizontal,
+QWidget[aion2="true"] QScrollBar::sub-line:horizontal {
+    width: 0px;
+    background: none;
+    border: none;
+}
+
+QWidget[aion2="true"] QScrollBar::add-page:horizontal,
+QWidget[aion2="true"] QScrollBar::sub-page:horizontal {
+    background: none;
+}
+
+/* MASTER §1: the single allowed shadow surface. */
+QToolTip {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_medium}};
+}
+
+/* ---------------------------------------------------------------------
+   2. Header / titles / page chrome
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #appIcon {
+    background-color: {{accent}};
+    color: {{fg_on_accent}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_2}}px;
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #mainTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_display}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #subtitle {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+}
+
+QWidget[aion2="true"] #PageTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #PageSubtitle,
+QWidget[aion2="true"] #sectionTitle {
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #userLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    padding-right: {{space_2}}px;
+}
+
+QWidget[aion2="true"] #loginTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #loginInfo {
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+}
+
+QWidget[aion2="true"] #footer {
+    color: {{fg_muted}};
+    border-top: {{border_width}}px solid {{border}};
+    padding-top: {{space_3}}px;
+}
+
+QWidget[aion2="true"] #scrollArea,
+QWidget[aion2="true"] #OverlayScroll {
+    background: transparent;
+    border: none;
+}
+
+QWidget[aion2="true"] #TopBar {
+    background: transparent;
+    border: none;
+}
+
+/* ---------------------------------------------------------------------
+   3. Nav pills / tabs  (MASTER §3 "pill" — one tab style app-wide)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #tabButton,
+QWidget[aion2="true"] #topTabButton,
+QWidget[aion2="true"] #filterButton,
+QWidget[aion2="true"] #sortButton,
+QWidget[aion2="true"] #templateSourceTab,
+QWidget[aion2="true"] #toggleButton,
+QWidget[aion2="true"] #dayButton,
+QWidget[aion2="true"] #minuteToggleButton,
+QWidget[aion2="true"] #themeToggleButton,
+QWidget[aion2="true"] #GeniusSegBtn,
+QWidget[aion2="true"] #GeniusBoardTabBtn,
+QWidget[aion2="true"] #SkillFilterButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #tabButton:hover,
+QWidget[aion2="true"] #topTabButton:hover,
+QWidget[aion2="true"] #filterButton:hover,
+QWidget[aion2="true"] #sortButton:hover,
+QWidget[aion2="true"] #templateSourceTab:hover,
+QWidget[aion2="true"] #toggleButton:hover,
+QWidget[aion2="true"] #dayButton:hover,
+QWidget[aion2="true"] #minuteToggleButton:hover,
+QWidget[aion2="true"] #themeToggleButton:hover,
+QWidget[aion2="true"] #GeniusSegBtn:hover,
+QWidget[aion2="true"] #GeniusBoardTabBtn:hover,
+QWidget[aion2="true"] #SkillFilterButton:hover {
+    border-color: {{border_strong}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #tabButton[active="true"],
+QWidget[aion2="true"] #topTabButton[active="true"],
+QWidget[aion2="true"] #filterButton[active="true"],
+QWidget[aion2="true"] #toggleButton[active="true"],
+QWidget[aion2="true"] #dayButton[active="true"],
+QWidget[aion2="true"] #sortButton:checked,
+QWidget[aion2="true"] #templateSourceTab:checked,
+QWidget[aion2="true"] #minuteToggleButton:checked,
+QWidget[aion2="true"] #themeToggleButton:checked,
+QWidget[aion2="true"] #GeniusSegBtn:checked,
+QWidget[aion2="true"] #GeniusBoardTabBtn:checked,
+QWidget[aion2="true"] #SkillFilterButton:checked {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{accent}};
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #topTabButton {
+    font-size: {{text_lg}}px;
+    padding: {{space_3}}px {{space_6}}px;
+}
+
+QWidget[aion2="true"] #dayButton {
+    font-size: {{text_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+QWidget[aion2="true"] #themeToggleButton {
+    padding: {{space_3}}px {{space_4}}px;
+    font-size: {{text_md}}px;
+    text-align: left;
+}
+
+QWidget[aion2="true"] #pageIconButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
+}
+
+QWidget[aion2="true"] #pageIconButton:hover {
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #pageIconButton:pressed {
+    background-color: {{accent_soft}};
+}
+
+/* QTabWidget natives adopt the same pill style (MASTER §3). */
+QWidget[aion2="true"] #settingsTabWidget,
+QWidget[aion2="true"] #timerModeTabWidget {
+    border: none;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #settingsTabWidget QTabBar::tab,
+QWidget[aion2="true"] #timerModeTabWidget QTabBar::tab {
+    background: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-bottom: none;
+    border-radius: {{radius_sm}}px {{radius_sm}}px 0 0;
+    padding: {{space_2}}px {{space_6}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-width: 110px;
+}
+
+QWidget[aion2="true"] #timerModeTabWidget QTabBar::tab {
+    padding: {{space_1}}px {{space_3}}px;
+    min-width: 60px;
+}
+
+QWidget[aion2="true"] #settingsTabWidget QTabBar::tab:selected,
+QWidget[aion2="true"] #timerModeTabWidget QTabBar::tab:selected {
+    background: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{accent}};
+    border-bottom: none;
+}
+
+QWidget[aion2="true"] #settingsTabWidget QTabBar::tab:hover:!selected,
+QWidget[aion2="true"] #timerModeTabWidget QTabBar::tab:hover:!selected {
+    background: {{bg_overlay}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #settingsTabWidget::pane,
+QWidget[aion2="true"] #timerModeTabWidget::pane {
+    border: {{border_width}}px solid {{border}};
+    border-radius: 0 {{radius_md}}px {{radius_md}}px {{radius_md}}px;
+    background: transparent;
+    padding: {{space_1}}px;
+}
+
+/* ---------------------------------------------------------------------
+   4. Cards  (MASTER §3 "Carte": bg.elevated, 1 px border, radius md,
+   padding 3 — a card has a surface LEVEL, never a shadow)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #statCard,
+QWidget[aion2="true"] #addPanel,
+QWidget[aion2="true"] #taskCard,
+QWidget[aion2="true"] #timerCard,
+QWidget[aion2="true"] #settingsRow,
+QWidget[aion2="true"] #armoryCardRow,
+QWidget[aion2="true"] #settingsThemeContainer,
+QWidget[aion2="true"] #TaskProgressBar,
+QWidget[aion2="true"] #profileCard,
+QWidget[aion2="true"] #SkillDescCard,
+QWidget[aion2="true"] #GeniusOwnedTile,
+QWidget[aion2="true"] #DaevanionAccordionSection {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #settingsRow,
+QWidget[aion2="true"] #armoryCardRow {
+    min-height: 52px;
+}
+
+QWidget[aion2="true"] #armoryCardRow:hover {
+    background-color: {{bg_overlay}};
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #timerCard {
+    max-width: 190px;
+    min-height: 72px;
+}
+
+QWidget[aion2="true"] #taskCard[selected="true"] {
+    border: {{focus_ring_width}}px solid {{accent}};
+    background-color: {{accent_soft}};
+}
+
+/* Completed: title goes muted and the check goes ok (MASTER §3).  The
+   old rule here was `opacity: 0.6`, which QSS silently ignores on a
+   widget — the state simply never showed. */
+QWidget[aion2="true"] #taskCard[completed="true"] {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+}
+
+QWidget[aion2="true"] #taskCard[completed="true"] #taskTitle {
+    color: {{fg_muted}};
+    text-decoration: line-through;
+}
+
+QWidget[aion2="true"] #taskCard[completed="true"] #checkButton {
+    color: {{ok}};
+}
+
+QWidget[aion2="true"] #statTitle {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+QWidget[aion2="true"] #taskTitle {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #taskDescription {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+QWidget[aion2="true"] #taskSection {
+    background: transparent;
+    border: none;
+}
+
+QWidget[aion2="true"] #checkButton {
+    color: {{fg_muted}};
+    background: transparent;
+    border: none;
+    font-size: {{text_2xl}}px;
+}
+
+QWidget[aion2="true"] #checkButton:hover {
+    color: {{ok}};
+}
+
+/* MASTER §3 "Bouton destructif": outline + text danger, no fill. */
+QWidget[aion2="true"] #deleteButton {
+    background: transparent;
+    color: {{danger}};
+    border: none;
+    font-size: {{text_lg}}px;
+}
+
+QWidget[aion2="true"] #deleteButton:hover {
+    color: {{danger}};
+    background-color: {{danger_soft}};
+    border-radius: {{radius_sm}}px;
+}
+
+/* ---------------------------------------------------------------------
+   5. Fields  (MASTER §3 "Champ": bg.input, border, focus accent,
+   placeholder fg.muted — fixes audit D/C3's 2.48:1 placeholder)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] QLineEdit,
+QWidget[aion2="true"] QTextEdit,
+QWidget[aion2="true"] QPlainTextEdit,
+QWidget[aion2="true"] QSpinBox,
+QWidget[aion2="true"] QTimeEdit,
+QWidget[aion2="true"] QDateTimeEdit {
+    background-color: {{bg_input}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    placeholder-text-color: {{fg_muted}};
+}
+
+/* MASTER §3 "Champ": a focused field's own border goes accent, on top of
+   the outline ring above.  border-COLOR, not the `border` shorthand: the
+   shorthand would also change the width, so the field would grow 1 px and
+   nudge its whole row on focus. */
+QWidget[aion2="true"] QLineEdit:focus,
+QWidget[aion2="true"] QTextEdit:focus,
+QWidget[aion2="true"] QPlainTextEdit:focus {
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] QLineEdit:disabled,
+QWidget[aion2="true"] QTextEdit:disabled,
+QWidget[aion2="true"] QPlainTextEdit:disabled {
+    color: {{fg_muted}};
+    background-color: {{bg_surface}};
+    border-color: {{border}};
+}
+
+QWidget[aion2="true"] #profileInput {
+    background-color: {{bg_input}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    min-width: 220px;
+    max-width: 320px;
+}
+
+QWidget[aion2="true"] #settingsLineEditReadOnly {
+    background-color: {{bg_surface}};
+    color: {{fg_muted}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    font-family: {{font_mono}};
+    font-size: {{text_sm}}px;
+}
+
+QWidget[aion2="true"] #settingsPathLabel {
+    background-color: {{bg_input}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+    font-family: {{font_mono}};
+    font-size: {{text_sm}}px;
+}
+
+QWidget[aion2="true"] QComboBox {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+}
+
+/* NO `color` and NO `selection-color` here, and this is load-bearing.
+   A QSS `color` on an item view overrides every QStandardItem's own
+   setForeground() unconditionally, which flattens per-rarity item colours
+   to one flat slate.  ItemDatabase/styles.qss:104-112 removed exactly this
+   declaration on 2026-09-18's predecessor date (2026-08-29) with the user
+   report attached ("Grade/Rarity dropdown items showed plain white instead
+   of their per-rarity color") -- and since the two sheets MERGE per
+   property (Qt weights depth above specificity, so the deeper window sheet
+   wins only the properties it actually declares), putting `color` back on
+   the application sheet silently re-broke that fix in every Armory
+   dropdown.  Item text colour comes from the palette instead
+   (QPalette::Text / ::HighlightedText, both token-derived in
+   core.theme.build_palette), which is what ItemDatabase's own comment says
+   it relies on. */
+QWidget[aion2="true"] QComboBox QAbstractItemView {
+    background-color: {{bg_overlay}};
+    border: {{border_width}}px solid {{border}};
+    selection-background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] QComboBox QAbstractItemView::item {
+    padding: {{space_2}}px;
+}
+
+QWidget[aion2="true"] QComboBox#priorityInput {
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #priorityInput,
+QWidget[aion2="true"] #settingsCombo,
+QWidget[aion2="true"] #ItemSetCombo,
+QWidget[aion2="true"] #BuildSwitcherCombo,
+QWidget[aion2="true"] #GeniusLineCombo {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_8}}px {{space_2}}px {{space_3}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 20px;
+}
+
+QWidget[aion2="true"] #priorityInput:hover,
+QWidget[aion2="true"] #settingsCombo:hover {
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #priorityInput:disabled {
+    color: {{fg_muted}};
+    background-color: {{bg_surface}};
+    border-color: {{border}};
+}
+
+QWidget[aion2="true"] #priorityInput QLineEdit {
+    background: transparent;
+    color: {{fg}};
+    border: none;
+    padding: 0;
+}
+
+QWidget[aion2="true"] #priorityInput::drop-down,
+QWidget[aion2="true"] #FlowMapCombo::drop-down {
+    border: none;
+    width: 24px;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #priorityInput QAbstractItemView {
+    background-color: {{bg_overlay}};
+    border: {{border_width}}px solid {{border}};
+    selection-background-color: {{accent_soft}};
+    selection-color: {{fg}};
+    color: {{fg}};
+    padding: {{space_1}}px;
+}
+
+/* Dropdown chevron — a Lucide chevron, pre-tinted per theme (MASTER §3).
+   Was `assets/icons/arrow_down_orange.png`: one baked ORANGE bitmap for all
+   six themes, so a combo box on Abyss, Emerald or Void carried a warm accent
+   that belongs to none of them (MASTER « Décisions différées », review D/m3).
+   QSS `image: url()` cannot tint, so the file itself has to be the right
+   colour -- `{{name}}` is the active theme's own name, and the 6 × 4 files it
+   selects between are generated from `fg.muted` by
+   scripts/gen_tinted_icons.py (see its docstring for why build time and not
+   a runtime cache). */
+QWidget[aion2="true"] #priorityInput::down-arrow,
+QWidget[aion2="true"] #settingsCombo::down-arrow,
+QWidget[aion2="true"] #FlowZoomCombo::down-arrow,
+QWidget[aion2="true"] #FlowSymbolCombo::down-arrow {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down.svg);
+    width: 14px;
+    height: 14px;
+    border: none;
+    background: transparent;
+}
+
+/* Hover: the theme's OWN accent.  This is the variant that makes the
+   per-theme folders earn their keep -- `fg.muted` is not a token a theme may
+   redefine (MASTER §2), so the resting chevron is the same grey everywhere,
+   while this one is cyan / teal / orange / lavender / white / violet.  The
+   control gets back the splash of colour the orange PNG used to give it,
+   only now it is the colour of the theme the user actually picked.
+
+   The pseudo-state goes on the SUBCONTROL (`::down-arrow:hover`), never on
+   the widget (`:hover::down-arrow`).  Both forms parse, and the second one
+   is what this rule was written as first -- it makes Qt draw the image a
+   SECOND time, unsized and unpositioned, on top of the combo's own text: a
+   half-clipped chevron that reads as a stray "✓" next to the value.  It is
+   visible in every theme and in every combo, with no hover involved.  Same
+   family as the `outline` lesson in MASTER's focus-ring note: the QSS
+   *parses*, and Qt's idea of what it means is not CSS's. */
+QWidget[aion2="true"] #priorityInput::down-arrow:hover,
+QWidget[aion2="true"] #settingsCombo::down-arrow:hover,
+QWidget[aion2="true"] #FlowZoomCombo::down-arrow:hover,
+QWidget[aion2="true"] #FlowSymbolCombo::down-arrow:hover {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down-accent.svg);
+}
+
+QWidget[aion2="true"] #settingsTimeEdit,
+QWidget[aion2="true"] #settingsComboBox {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    min-height: 34px;
+    font-size: {{text_md}}px;
+}
+
+QWidget[aion2="true"] #settingsTimeEdit {
+    min-width: 90px;
+    font-family: {{font_mono}};
+}
+
+QWidget[aion2="true"] #settingsComboBox {
+    min-width: 140px;
+}
+
+QWidget[aion2="true"] #settingsComboBox QAbstractItemView {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    selection-background-color: {{accent_soft}};
+    selection-color: {{fg}};
+}
+
+QWidget[aion2="true"] #settingsTimeInput {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    font-family: {{font_mono}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 20px;
+}
+
+QWidget[aion2="true"] #settingsTimeInput::up-button,
+QWidget[aion2="true"] #settingsTimeInput::down-button {
+    width: 22px;
+    border: none;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #settingsTimeInput::up-button:hover,
+QWidget[aion2="true"] #settingsTimeInput::down-button:hover {
+    background-color: {{accent_soft}};
+    border-radius: {{radius_sm}}px;
+}
+
+/* Same story as the combo chevron above: the spin box's two arrows were the
+   orange PNG pair, now the theme's own Lucide chevrons. */
+QWidget[aion2="true"] #settingsTimeInput::up-arrow {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-up.svg);
+    width: 10px;
+    height: 10px;
+}
+
+QWidget[aion2="true"] #settingsTimeInput::down-arrow {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down.svg);
+    width: 10px;
+    height: 10px;
+}
+
+/* The two spin buttons already light up `accent.soft` on hover (above); the
+   arrow inside follows, same accent variant as the combo chevron. */
+QWidget[aion2="true"] #settingsTimeInput::up-arrow:hover {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-up-accent.svg);
+}
+
+QWidget[aion2="true"] #settingsTimeInput::down-arrow:hover {
+    image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down-accent.svg);
+}
+
+/* Checkbox indicator — checked reads as the accent, MASTER §3. */
+QWidget[aion2="true"] QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_sm}}px;
+    background: {{bg_input}};
+}
+
+QWidget[aion2="true"] QCheckBox::indicator:hover {
+    border: {{border_width}}px solid {{accent}};
+}
+
+QWidget[aion2="true"] QCheckBox::indicator:checked {
+    background: {{accent}};
+    border: {{border_width}}px solid {{accent}};
+}
+
+QWidget[aion2="true"] #settingsCheckbox,
+QWidget[aion2="true"] #eventCheckBox {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    padding: {{space_2}}px;
+    min-height: 34px;
+}
+
+QWidget[aion2="true"] #settingsLabel,
+QWidget[aion2="true"] #settingsInlineLabel,
+QWidget[aion2="true"] #FieldLabel {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    min-height: 28px;
+}
+
+QWidget[aion2="true"] #settingsDescription,
+QWidget[aion2="true"] #settingsSectionDescription,
+QWidget[aion2="true"] #resetHintLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    padding-right: {{space_1}}px;
+}
+
+/* ---------------------------------------------------------------------
+   6. Buttons
+   ------------------------------------------------------------------ */
+
+/* MASTER §3 primary: flat accent + fg_on_accent.  This is the
+   single fix for audit D/C3's 1.81:1 white-on-cyan. */
+QWidget[aion2="true"] #primaryButton,
+QWidget[aion2="true"] #FlowSaveButton,
+QWidget[aion2="true"] #emptyStateAction,
+QWidget[aion2="true"] #toastActionButton {
+    background-color: {{accent}};
+    color: {{fg_on_accent}};
+    border: {{border_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_4}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #primaryButton:hover,
+QWidget[aion2="true"] #FlowSaveButton:hover,
+QWidget[aion2="true"] #emptyStateAction:hover,
+QWidget[aion2="true"] #toastActionButton:hover {
+    background-color: {{accent_hover}};
+    border-color: {{accent_hover}};
+    color: {{fg_on_accent}};
+}
+
+QWidget[aion2="true"] #primaryButton:pressed,
+QWidget[aion2="true"] #FlowSaveButton:pressed,
+QWidget[aion2="true"] #emptyStateAction:pressed,
+QWidget[aion2="true"] #toastActionButton:pressed {
+    background-color: {{accent}};
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #primaryButton:disabled,
+QWidget[aion2="true"] #FlowSaveButton:disabled {
+    background-color: {{bg_elevated}};
+    border-color: {{border}};
+    color: {{fg_muted}};
+}
+
+/* MASTER §3 secondary. */
+QWidget[aion2="true"] #secondaryButton,
+QWidget[aion2="true"] #iconButton,
+QWidget[aion2="true"] #smallIconButton,
+QWidget[aion2="true"] #ManualResetBtn,
+QWidget[aion2="true"] #helpButton,
+QWidget[aion2="true"] #templateButton,
+QWidget[aion2="true"] #FlowCancelButton,
+QWidget[aion2="true"] #GuideEditButton,
+QWidget[aion2="true"] #profileSwitchButton,
+QWidget[aion2="true"] #PanelNavButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_3}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #secondaryButton:hover,
+QWidget[aion2="true"] #iconButton:hover,
+QWidget[aion2="true"] #smallIconButton:hover,
+QWidget[aion2="true"] #ManualResetBtn:hover,
+QWidget[aion2="true"] #helpButton:hover,
+QWidget[aion2="true"] #templateButton:hover,
+QWidget[aion2="true"] #GuideEditButton:hover,
+QWidget[aion2="true"] #profileSwitchButton:hover {
+    background-color: {{bg_overlay}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #secondaryButton:pressed,
+QWidget[aion2="true"] #ManualResetBtn:pressed,
+QWidget[aion2="true"] #helpButton:pressed,
+QWidget[aion2="true"] #profileSwitchButton:pressed {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #iconButton,
+QWidget[aion2="true"] #smallIconButton {
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #helpButton {
+    background-color: transparent;
+    color: {{fg_muted}};
+    border-radius: {{radius_full}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px;
+}
+
+QWidget[aion2="true"] #ManualResetBtn {
+    font-size: {{text_md}}px;
+    padding: 0px;
+}
+
+QWidget[aion2="true"] #templateButton {
+    background-color: {{accent_soft}};
+    color: {{accent}};
+    border-color: {{accent}};
+    padding: {{space_2}}px {{space_3}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* MASTER §3 destructive. */
+QWidget[aion2="true"] #DeleteDialogDangerBtn,
+QWidget[aion2="true"] #FlowDeleteMapBtn,
+QWidget[aion2="true"] #FlowResetMapBtn {
+    background-color: transparent;
+    color: {{danger}};
+    border: {{border_width}}px solid {{danger}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_4}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #DeleteDialogDangerBtn:hover,
+QWidget[aion2="true"] #FlowDeleteMapBtn:hover,
+QWidget[aion2="true"] #FlowResetMapBtn:hover {
+    background-color: {{danger_soft}};
+    color: {{danger}};
+    border-color: {{danger}};
+}
+
+QWidget[aion2="true"] #linkButton {
+    background: transparent;
+    border: none;
+    color: {{secondary}};
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_1}}px 0;
+    text-align: left;
+}
+
+QWidget[aion2="true"] #linkButton:hover {
+    color: {{accent}};
+    text-decoration: underline;
+}
+
+QWidget[aion2="true"] #donateButton {
+    background-color: {{ok_soft}};
+    border: {{border_width}}px solid {{ok}};
+    border-radius: {{radius_sm}}px;
+    color: {{ok}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+QWidget[aion2="true"] #donateButton:hover {
+    background-color: {{ok_soft}};
+    border-color: {{ok}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #donateQrButton {
+    background: transparent;
+    border: {{border_width}}px solid {{ok}};
+    border-radius: {{radius_sm}}px;
+    color: {{ok}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #donateQrButton:hover {
+    background-color: {{ok_soft}};
+    color: {{ok}};
+}
+
+QWidget[aion2="true"] #donateQrHint {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+QWidget[aion2="true"] #updateAvailableButton {
+    background-color: {{warn_soft}};
+    border: {{border_width}}px solid {{warn}};
+    border-radius: {{radius_sm}}px;
+    color: {{warn}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+QWidget[aion2="true"] #updateAvailableButton:hover {
+    background-color: {{warn_soft}};
+    border-color: {{warn}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #overlayToggleBtn {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    color: {{fg_secondary}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_1}}px {{space_2}}px;
+    text-align: left;
+}
+
+QWidget[aion2="true"] #overlayToggleBtn:hover {
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #overlayToggleBtn:checked {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+/* ---------------------------------------------------------------------
+   7. Badges  (MASTER §3: 11 px caps, radius sm, *.soft fill, full-color
+   text; schedule → secondary, MISSED → danger)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #scheduleDaily,
+QWidget[aion2="true"] #scheduleWeekly,
+QWidget[aion2="true"] #scheduleSeason,
+QWidget[aion2="true"] #eventBadge,
+QWidget[aion2="true"] #missedBadge,
+QWidget[aion2="true"] #newBadge,
+QWidget[aion2="true"] #priorityLow,
+QWidget[aion2="true"] #priorityMedium,
+QWidget[aion2="true"] #priorityMiddle,
+QWidget[aion2="true"] #priorityHigh,
+QWidget[aion2="true"] #ArcanaGradePill,
+QWidget[aion2="true"] #GeniusLvlBadge,
+QWidget[aion2="true"] #changelogHotfixBadge {
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: {{letter_spacing_caps}};
+    border: {{border_width}}px solid transparent;
+}
+
+QWidget[aion2="true"] #scheduleDaily,
+QWidget[aion2="true"] #scheduleWeekly,
+QWidget[aion2="true"] #scheduleSeason,
+QWidget[aion2="true"] #ArcanaGradePill,
+QWidget[aion2="true"] #GeniusLvlBadge {
+    color: {{secondary}};
+    background-color: {{secondary_soft}};
+}
+
+/* EVENT / NEW sit next to a priority badge on the same row, and `warn` was
+   the priority colour too -- only the fill separated them (review F-17).
+   MASTER §3 now specs these as `secondary`, the same family as the schedule
+   badge: both answer "what KIND of entry is this", where priority answers
+   "how urgent". */
+QWidget[aion2="true"] #eventBadge,
+QWidget[aion2="true"] #newBadge {
+    color: {{secondary}};
+    background-color: {{secondary_soft}};
+}
+
+QWidget[aion2="true"] #missedBadge,
+QWidget[aion2="true"] #changelogHotfixBadge {
+    color: {{danger}};
+    background-color: {{danger_soft}};
+}
+
+/* MASTER §3, Badge: "priorité → texte seul".  A priority is on every single
+   row, so a filled pill three rows deep turns the list into a colour chart
+   -- the three that DO get a fill (schedule, MISSED, EVENT) are the ones
+   that mean "not like the others".  Colour still carries the meaning
+   (ok / warn / danger), the fill does not. */
+QWidget[aion2="true"] #priorityLow,
+QWidget[aion2="true"] #priorityMedium,
+QWidget[aion2="true"] #priorityMiddle,
+QWidget[aion2="true"] #priorityHigh {
+    background-color: transparent;
+    padding: {{space_1}}px 0px;
+}
+
+QWidget[aion2="true"] #priorityMedium,
+QWidget[aion2="true"] #priorityMiddle {
+    color: {{warn}};
+}
+
+QWidget[aion2="true"] #priorityHigh {
+    color: {{danger}};
+}
+
+QWidget[aion2="true"] #priorityLow {
+    color: {{ok}};
+}
+
+/* Schedule / priority / currency toggles — pill rules, colored by meaning
+   when checked. */
+QWidget[aion2="true"] #scheduleToggleBtn,
+QWidget[aion2="true"] #priorityToggleLow,
+QWidget[aion2="true"] #priorityToggleMiddle,
+QWidget[aion2="true"] #priorityToggleHigh,
+QWidget[aion2="true"] #currencyToggleKinah,
+QWidget[aion2="true"] #currencyToggleAbyss {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #scheduleToggleBtn:checked,
+QWidget[aion2="true"] #currencyToggleAbyss:checked {
+    background-color: {{secondary_soft}};
+    color: {{secondary}};
+    border-color: {{secondary}};
+}
+
+QWidget[aion2="true"] #scheduleToggleBtn:disabled,
+QWidget[aion2="true"] #scheduleToggleBtn:checked:disabled {
+    background-color: {{bg_surface}};
+    color: {{fg_muted}};
+    border-color: {{border}};
+}
+
+QWidget[aion2="true"] #priorityToggleLow:checked {
+    background-color: {{ok_soft}};
+    color: {{ok}};
+    border-color: {{ok}};
+}
+
+QWidget[aion2="true"] #priorityToggleMiddle:checked,
+QWidget[aion2="true"] #currencyToggleKinah:checked {
+    background-color: {{warn_soft}};
+    color: {{warn}};
+    border-color: {{warn}};
+}
+
+QWidget[aion2="true"] #priorityToggleHigh:checked {
+    background-color: {{danger_soft}};
+    color: {{danger}};
+    border-color: {{danger}};
+}
+
+QWidget[aion2="true"] #sortLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #sortSeparator {
+    color: {{border_strong}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* ---------------------------------------------------------------------
+   8. Toast  (MASTER §3: bg.overlay, border.strong, action in accent text)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #toastBar {
+    background-color: {{bg_overlay}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_2}}px {{space_3}}px;
+}
+
+QWidget[aion2="true"] #toastLabel {
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_medium}};
+    background: transparent;
+}
+
+QWidget[aion2="true"] #toastActionButton {
+    background: transparent;
+    border: none;
+    color: {{accent}};
+    font-weight: {{font_weight_bold}};
+    padding: 0px {{space_2}}px;
+}
+
+QWidget[aion2="true"] #toastActionButton:hover {
+    background: transparent;
+    border: none;
+    color: {{accent_hover}};
+    text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------
+   9. Empty state  (MASTER §3: 24 px muted icon, secondary-weight title,
+   muted hint, secondary-button action)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #emptyState {
+    background: transparent;
+    border: none;
+}
+
+QWidget[aion2="true"] #emptyStateTitle {
+    color: {{fg_secondary}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_medium}};
+}
+
+QWidget[aion2="true"] #emptyStateHint {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+}
+
+/* ---------------------------------------------------------------------
+   10. Sidebar  (MASTER §3: active = accent.soft fill + 2 px left bar
+   accent + fg text.  Audit D/M5: this is the element that never
+   rethemed — it was a fixed indigo in every theme.)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #SidebarWidget {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_3}}px;
+}
+
+QWidget[aion2="true"] #sidebarButton {
+    text-align: left;
+    padding: {{space_3}}px {{space_3}}px;
+    border: {{border_width}}px solid transparent;
+    border-left: {{focus_ring_width}}px solid transparent;
+    border-radius: {{radius_sm}}px;
+    background: transparent;
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #sidebarButton:hover {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #sidebarButton:checked {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid transparent;
+    border-left: {{focus_ring_width}}px solid {{accent}};
+}
+
+QWidget[aion2="true"] #ContentArea {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_4}}px;
+}
+
+QWidget[aion2="true"] #leftPanel,
+QWidget[aion2="true"] #LoadoutBackground {
+    background: transparent;
+    border: none;
+}
+
+/* ---------------------------------------------------------------------
+   11. Settings
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #settingsTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #settingsSectionTitle {
+    color: {{accent}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+    margin-top: {{space_2}}px;
+}
+
+QWidget[aion2="true"] #aboutH1 {
+    color: {{accent}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+    margin-top: {{space_1}}px;
+}
+
+QWidget[aion2="true"] #aboutH2 {
+    color: {{fg}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #aboutH3 {
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #aboutSeparator {
+    background-color: {{border}};
+    border: none;
+    max-height: 1px;
+}
+
+QWidget[aion2="true"] #settingsSidebar {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    min-width: 160px;
+    max-width: 180px;
+    padding: {{space_2}}px;
+}
+
+QWidget[aion2="true"] #settingsPageSidebar {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+/* Both settings nav flavors (the dialog's :checked buttons and the page's
+   [active="true"] ones) now share the sidebar rule of MASTER §3 — the
+   "flowing tab" gradient is gone with every other decorative gradient. */
+QWidget[aion2="true"] #settingsSidebarButton,
+QWidget[aion2="true"] #settingsNavButton {
+    background-color: transparent;
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid transparent;
+    border-left: {{focus_ring_width}}px solid transparent;
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_3}}px;
+    text-align: left;
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #settingsSidebarButton:hover,
+QWidget[aion2="true"] #settingsNavButton:hover {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #settingsSidebarButton:checked,
+QWidget[aion2="true"] #settingsNavButton[active="true"],
+QWidget[aion2="true"] #settingsNavButton[active="true"]:hover {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid transparent;
+    border-left: {{focus_ring_width}}px solid {{accent}};
+}
+
+QWidget[aion2="true"] #settingsContentPanel,
+QWidget[aion2="true"] #settingsContentStack {
+    background-color: transparent;
+    border: none;
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #themeButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_3}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 52px;
+}
+
+QWidget[aion2="true"] #themeButton:hover {
+    border-color: {{border_strong}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #themeButton:checked {
+    background-color: {{accent_soft}};
+    border: {{border_width}}px solid {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #themeLogo {
+    background: transparent;
+    border: none;
+}
+
+/* ---------------------------------------------------------------------
+   12. Profile card / header widgets
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #profileAvatar {
+    background-color: {{accent}};
+    border-radius: {{radius_full}}px;
+    color: {{fg_on_accent}};
+    font-family: {{font_display}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #profileUsername {
+    color: {{fg}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #profileVersion {
+    color: {{fg_muted}};
+    font-family: {{font_mono}};
+    font-size: {{text_xs}}px;
+}
+
+QWidget[aion2="true"] #smallTimerLabel {
+    color: {{warn}};
+    font-family: {{font_mono}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_bold}};
+    padding-left: {{space_1}}px;
+}
+
+QWidget[aion2="true"] #systemTimeLabel {
+    color: {{warn}};
+    font-family: {{font_mono}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+    padding-bottom: {{space_1}}px;
+}
+
+/* ---------------------------------------------------------------------
+   13. Progress bar  (MASTER §1: big numbers in the display face, the
+   semantic colors, no per-metric palette of its own)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #ProgressDoneIcon,
+QWidget[aion2="true"] #ProgressOpenIcon,
+QWidget[aion2="true"] #ProgressMissedIcon,
+QWidget[aion2="true"] #ProgressTotalIcon {
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #ProgressDoneVal,
+QWidget[aion2="true"] #ProgressOpenVal,
+QWidget[aion2="true"] #ProgressMissedVal,
+QWidget[aion2="true"] #ProgressTotalVal {
+    font-family: {{font_display}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #ProgressDoneSub,
+QWidget[aion2="true"] #ProgressOpenSub,
+QWidget[aion2="true"] #ProgressMissedSub,
+QWidget[aion2="true"] #ProgressTotalSub {
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+QWidget[aion2="true"] #ProgressDoneIcon,
+QWidget[aion2="true"] #ProgressDoneVal,
+QWidget[aion2="true"] #ProgressDoneSub {
+    color: {{ok}};
+}
+
+QWidget[aion2="true"] #ProgressOpenIcon,
+QWidget[aion2="true"] #ProgressOpenVal,
+QWidget[aion2="true"] #ProgressOpenSub {
+    color: {{warn}};
+}
+
+QWidget[aion2="true"] #ProgressMissedIcon,
+QWidget[aion2="true"] #ProgressMissedVal,
+QWidget[aion2="true"] #ProgressMissedSub {
+    color: {{danger}};
+}
+
+QWidget[aion2="true"] #ProgressTotalIcon,
+QWidget[aion2="true"] #ProgressTotalVal,
+QWidget[aion2="true"] #ProgressTotalSub {
+    color: {{accent}};
+}
+
+QWidget[aion2="true"] #ProgressExtra {
+    color: {{fg_secondary}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #ProgressPct {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+QWidget[aion2="true"] #ProgressPctSub {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+/* ---------------------------------------------------------------------
+   14. Tables  (MASTER §3: caps muted headers, alternating surface levels,
+   mono right-aligned numbers)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] QHeaderView::section {
+    background-color: {{bg_surface}};
+    color: {{fg_muted}};
+    border: none;
+    border-bottom: {{border_width}}px solid {{border}};
+    padding: {{space_2}}px {{space_3}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+/* Same reason as QComboBox QAbstractItemView above: no `color` and no
+   `selection-color` on an item view, ever -- either one overrides every
+   item's own setForeground() unconditionally.  Item text comes from
+   QPalette::Text / ::HighlightedText, both token-derived. */
+QWidget[aion2="true"] QTableView,
+QWidget[aion2="true"] QTreeView,
+QWidget[aion2="true"] QListView {
+    background-color: {{bg_surface}};
+    alternate-background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    gridline-color: {{border}};
+    selection-background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] QTableView::item,
+QWidget[aion2="true"] QTreeView::item,
+QWidget[aion2="true"] QListView::item {
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+QWidget[aion2="true"] QTableView::item:selected,
+QWidget[aion2="true"] QTreeView::item:selected,
+QWidget[aion2="true"] QListView::item:selected {
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #StatRowCell,
+QWidget[aion2="true"] #DetailInfoValue,
+QWidget[aion2="true"] #DetailEnchantValue,
+QWidget[aion2="true"] #GearScoreHeaderLabel,
+QWidget[aion2="true"] #GeniusLineValue,
+QWidget[aion2="true"] #GeniusOwnedValue,
+QWidget[aion2="true"] #SkillLevelValue {
+    font-family: {{font_mono}};
+    font-size: {{text_base}}px;
+}
+
+/* ---------------------------------------------------------------------
+   15. Dialogs
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #DeleteConfirmDialog,
+QWidget[aion2="true"] #UpdateDialog,
+QWidget[aion2="true"] #DonateQrDialog,
+QWidget[aion2="true"] #TemplateItemPickerDialog,
+QWidget[aion2="true"] #ItemPickerPopup,
+QWidget[aion2="true"] #GeniusStatPopup {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #DeleteDialogTitle,
+QWidget[aion2="true"] #updateDialogTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #DeleteDialogDesc,
+QWidget[aion2="true"] #updateDialogStatus,
+QWidget[aion2="true"] #updateDialogNotesLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+}
+
+QWidget[aion2="true"] #DeleteDialogOptionBtn {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_4}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #DeleteDialogOptionBtn:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #DeleteDialogCancelBtn,
+QWidget[aion2="true"] #updateDialogLaterBtn {
+    background-color: transparent;
+    color: {{fg_muted}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_4}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #DeleteDialogCancelBtn:hover,
+QWidget[aion2="true"] #updateDialogLaterBtn:hover {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+    border-color: {{border_strong}};
+}
+
+QWidget[aion2="true"] #updateDialogNotes {
+    background-color: {{bg_input}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+    padding: {{space_3}}px;
+}
+
+QWidget[aion2="true"] #updateDialogSep {
+    color: {{border}};
+}
+
+QWidget[aion2="true"] #changelogVersionBtn {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: {{space_2}}px {{space_3}}px;
+    text-align: left;
+    min-width: 160px;
+}
+
+QWidget[aion2="true"] #changelogVersionBtn:hover {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #changelogVersionBtn:checked {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #changelogVersionBtnTitle {
+    background: transparent;
+    border: none;
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #changelogVersionBtnDate {
+    background: transparent;
+    border: none;
+    color: {{fg_muted}};
+    font-family: {{font_mono}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_regular}};
+}
+
+QWidget[aion2="true"] #changelogVersionHeader {
+    background: transparent;
+    border: none;
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* ---------------------------------------------------------------------
+   16. Flow Map  (MASTER §2: the Flow Map reads in secondary, not in a
+   separate blue palette)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #FlowCanvas,
+QWidget[aion2="true"] #FlowMapViewport,
+QWidget[aion2="true"] #FlowGuideView,
+QWidget[aion2="true"] #FlowContentOverlay {
+    background-color: {{bg_window}};
+}
+
+QWidget[aion2="true"] #FlowGuideView,
+QWidget[aion2="true"] #FlowContentOverlay {
+    background-color: transparent;
+}
+
+QWidget[aion2="true"] #FlowTopbar {
+    background-color: {{bg_surface}};
+    border-bottom: {{border_width}}px solid {{border}};
+}
+
+QWidget[aion2="true"] #FlowPlanTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #FlowModeTabs {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #FlowModeButton,
+QWidget[aion2="true"] #FlowModeTabs #FlowModeButton {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px {{space_8}}px;
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #FlowModeTabs #FlowModeButton {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+QWidget[aion2="true"] #FlowModeButton:checked,
+QWidget[aion2="true"] #FlowModeTabs #FlowModeButton:checked {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{accent}};
+}
+
+QWidget[aion2="true"] #FlowNodeCard {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #FlowNodeCard[status="active"] {
+    border: {{border_width}}px solid {{secondary}};
+}
+
+QWidget[aion2="true"] #FlowNodeCard[status="optional"] {
+    border: {{border_width}}px solid {{warn}};
+}
+
+QWidget[aion2="true"] #FlowNodeCard[status="locked"] {
+    border: {{border_width}}px solid {{border}};
+}
+
+QWidget[aion2="true"] #FlowNodeCard[multiSelected="true"] {
+    border: {{focus_ring_width}}px solid {{accent}};
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #FlowNodeCard[status="completed"] #FlowDoneButton {
+    color: {{ok}};
+    border-color: {{ok}};
+}
+
+QWidget[aion2="true"] #FlowNodeIcon {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #FlowNodeTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #FlowNodeDescription,
+QWidget[aion2="true"] #NodeItemLabel,
+QWidget[aion2="true"] #FlowInfoText,
+QWidget[aion2="true"] #FlowProgressHint,
+QWidget[aion2="true"] #StatusText {
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+}
+
+QWidget[aion2="true"] #FlowNodeAddButton {
+    background-color: transparent;
+    color: {{fg_secondary}};
+    border: none;
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px;
+    margin: 0px;
+}
+
+QWidget[aion2="true"] #FlowNodeAddButton:hover {
+    color: {{accent}};
+}
+
+QWidget[aion2="true"] #FlowNodeAddButton:pressed {
+    color: {{accent_hover}};
+}
+
+QWidget[aion2="true"] #FlowNodeAddHintButton,
+QWidget[aion2="true"] #FlowNodeAddHintButton[visibleState="true"] {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+
+QWidget[aion2="true"] #FlowNodeAddHintButton[visibleState="false"] {
+    icon: none;
+}
+
+QWidget[aion2="true"] #FlowDoneButton {
+    background-color: transparent;
+    color: {{fg_muted}};
+    border: {{focus_ring_width}}px solid {{border_strong}};
+    border-radius: {{radius_full}}px;
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #FlowDoneButton:hover {
+    color: {{ok}};
+    border-color: {{ok}};
+}
+
+QWidget[aion2="true"] #FlowConnectorLine,
+QWidget[aion2="true"] #FlowConnectorArrow {
+    color: {{border_strong}};
+    font-size: {{text_xl}}px;
+    padding: 0px;
+    margin: 0px;
+}
+
+QWidget[aion2="true"] #FlowConnectorPlus {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_full}}px;
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px;
+}
+
+QWidget[aion2="true"] #NodeEditorPanel,
+QWidget[aion2="true"] #StatusPanel,
+QWidget[aion2="true"] #FlowInfoBar,
+QWidget[aion2="true"] #ChainSidePanel,
+QWidget[aion2="true"] #DaevanionCanvasFrame,
+QWidget[aion2="true"] #StatsPane {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #PanelTitle {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+QWidget[aion2="true"] #PanelCloseButton {
+    background: transparent;
+    color: {{fg_muted}};
+    border: none;
+    font-size: {{text_2xl}}px;
+}
+
+QWidget[aion2="true"] #PanelCloseButton:hover {
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #FlowInput,
+QWidget[aion2="true"] #FlowTextEdit,
+QWidget[aion2="true"] #FlowSymbolCombo,
+QWidget[aion2="true"] #FlowZoomCombo,
+QWidget[aion2="true"] #FlowMapCombo {
+    background-color: {{bg_input}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_2}}px;
+    font-size: {{text_md}}px;
+}
+
+QWidget[aion2="true"] #FlowSymbolCombo {
+    min-height: 58px;
+}
+
+QWidget[aion2="true"] #FlowZoomCombo {
+    padding: {{space_1}}px {{space_3}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 38px;
+}
+
+QWidget[aion2="true"] #FlowMapCombo {
+    padding: {{space_1}}px {{space_2}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    min-height: 32px;
+}
+
+QWidget[aion2="true"] #FlowIconButton {
+    background-color: {{bg_elevated}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_display}}px;
+}
+
+QWidget[aion2="true"] #FlowIconButton:checked {
+    border: {{border_width}}px solid {{accent}};
+    background-color: {{accent_soft}};
+}
+
+QWidget[aion2="true"] #FlowMoveChildrenCb,
+QWidget[aion2="true"] #FlowOverlayCb,
+QWidget[aion2="true"] #FlowOptionalCheck {
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+    spacing: {{space_2}}px;
+}
+
+QWidget[aion2="true"] #FlowMoveChildrenCb::indicator,
+QWidget[aion2="true"] #FlowOverlayCb::indicator,
+QWidget[aion2="true"] #FlowOptionalCheck::indicator {
+    width: 16px;
+    height: 16px;
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_sm}}px;
+    background-color: {{bg_input}};
+}
+
+QWidget[aion2="true"] #FlowMoveChildrenCb::indicator:checked {
+    background-color: {{accent}};
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #FlowOverlayCb::indicator:checked {
+    background-color: {{secondary}};
+    border-color: {{secondary}};
+}
+
+QWidget[aion2="true"] #FlowOptionalCheck::indicator:checked {
+    background-color: {{warn}};
+    border-color: {{warn}};
+}
+
+QWidget[aion2="true"] #FlowOptionalCheck::indicator:hover {
+    border-color: {{warn}};
+}
+
+QWidget[aion2="true"] #FlowToolBar {
+    background-color: {{bg_surface}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #FlowToolButton,
+QWidget[aion2="true"] #FlowHomeBtn,
+QWidget[aion2="true"] #FlowResetMapBtn {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+    min-width: 44px;
+    max-width: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    padding: 0px;
+}
+
+QWidget[aion2="true"] #FlowToolButton:hover,
+QWidget[aion2="true"] #FlowHomeBtn:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #FlowToolButton:checked,
+QWidget[aion2="true"] #FlowHomeBtn:pressed {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{accent}};
+}
+
+QWidget[aion2="true"] #FlowToolSeparator {
+    background-color: {{border}};
+    border: none;
+    max-height: 1px;
+}
+
+QWidget[aion2="true"] #FlowNewMapBtn,
+QWidget[aion2="true"] #FlowDeleteMapBtn {
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_semibold}};
+    min-width: 34px;
+    max-width: 34px;
+    min-height: 34px;
+    max-height: 34px;
+    padding: 0px;
+}
+
+QWidget[aion2="true"] #FlowNewMapBtn {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    color: {{fg_secondary}};
+}
+
+QWidget[aion2="true"] #FlowNewMapBtn:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #FlowCancelButton {
+    padding: {{space_3}}px;
+    font-size: {{text_md}}px;
+}
+
+QWidget[aion2="true"] #FlowSaveButton {
+    padding: {{space_3}}px;
+    font-size: {{text_md}}px;
+}
+
+QWidget[aion2="true"] #FlowSaveStatusLabel {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+    padding: 0px {{space_2}}px;
+}
+
+QWidget[aion2="true"] #FlowSaveStatusLabel[state="saving"] {
+    color: {{warn}};
+}
+
+QWidget[aion2="true"] #FlowSaveStatusLabel[state="saved"] {
+    color: {{ok}};
+}
+
+QWidget[aion2="true"] #FlowEditorBottomToggle {
+    background-color: {{bg_elevated}};
+    color: {{fg_secondary}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #FlowEditorBottomToggle:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #FlowInfoIcon {
+    color: {{secondary}};
+    border: {{focus_ring_width}}px solid {{secondary}};
+    border-radius: {{radius_full}}px;
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #FlowZoomHintLabel,
+QWidget[aion2="true"] #FlowMouseDebugLabel,
+QWidget[aion2="true"] #FlowActiveToolLabel {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+    padding-left: {{space_1}}px;
+}
+
+QWidget[aion2="true"] #StatusDot_green {
+    color: {{ok}};
+    font-size: {{text_xl}}px;
+}
+
+QWidget[aion2="true"] #StatusDot_blue {
+    color: {{secondary}};
+    font-size: {{text_xl}}px;
+}
+
+QWidget[aion2="true"] #StatusDot_yellow {
+    color: {{warn}};
+    font-size: {{text_xl}}px;
+}
+
+QWidget[aion2="true"] #StatusDot_gray {
+    color: {{fg_muted}};
+    font-size: {{text_xl}}px;
+}
+
+QWidget[aion2="true"] #FooterStatusTitle {
+    color: {{fg_secondary}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #FooterStatusCompleted {
+    color: {{ok}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #FooterStatusActive {
+    color: {{secondary}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #FooterStatusOptional {
+    color: {{warn}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #FooterStatusLocked {
+    color: {{fg_muted}};
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+/* ----- Guide mode ----- */
+
+QWidget[aion2="true"] #GuideInfoBar {
+    background-color: {{bg_surface}};
+    border-top: {{border_width}}px solid {{border}};
+}
+
+QWidget[aion2="true"] #GuideInfoTitle {
+    color: {{fg}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #GuideInfoDesc {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+QWidget[aion2="true"] #GuideInfoIcon {
+    font-size: {{text_xl}}px;
+    color: {{fg_muted}};
+}
+
+QWidget[aion2="true"] #GuideDoneButton {
+    background-color: {{ok_soft}};
+    color: {{ok}};
+    border: {{border_width}}px solid {{ok}};
+    border-radius: {{radius_sm}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_bold}};
+    padding: 0px {{space_3}}px;
+}
+
+QWidget[aion2="true"] #GuideDoneButton:hover {
+    background-color: {{ok_soft}};
+    border-color: {{ok}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #GuideEditButton {
+    padding: 0px {{space_2}}px;
+}
+
+/* ---------------------------------------------------------------------
+   17. Overlay HUD  (MASTER §3: bg.window, section heads in the display
+   face, timers in mono, text always opaque)
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #OverlayContent {
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlayProfileName {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_bold}};
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlayIconBtn {
+    background: transparent;
+    border: none;
+    color: {{fg_muted}};
+    font-size: {{text_lg}}px;
+    padding: 0px;
+    border-radius: {{radius_sm}}px;
+}
+
+QWidget[aion2="true"] #OverlayIconBtn:hover {
+    background: {{accent_soft}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #OverlayCharBtn {
+    background: {{accent_soft}};
+    border: {{border_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    color: {{accent}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    padding: {{space_1}}px {{space_2}}px;
+}
+
+QWidget[aion2="true"] #OverlayCharBtn:hover {
+    background: {{accent_soft}};
+    border: {{border_width}}px solid {{accent_hover}};
+    color: {{accent_hover}};
+}
+
+QWidget[aion2="true"] #OverlayCheckBtn,
+QWidget[aion2="true"] #OverlayCountdownToggleBtn {
+    background: transparent;
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_sm}}px;
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    padding: 0px;
+}
+
+QWidget[aion2="true"] #OverlayCheckBtn:hover,
+QWidget[aion2="true"] #OverlayCountdownToggleBtn:hover {
+    border-color: {{accent}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #OverlayOpacitySlider {
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlayOpacitySlider::groove:horizontal {
+    height: 3px;
+    background: {{border}};
+    border-radius: 2px;
+}
+
+QWidget[aion2="true"] #OverlayOpacitySlider::sub-page:horizontal {
+    background: {{accent}};
+    border-radius: 2px;
+}
+
+QWidget[aion2="true"] #OverlayOpacitySlider::handle:horizontal {
+    background: {{fg_secondary}};
+    border-radius: {{radius_sm}}px;
+    width: 8px;
+    height: 8px;
+    margin: -3px 0;
+}
+
+QWidget[aion2="true"] #OverlayOpacitySlider::handle:horizontal:hover {
+    background: {{accent}};
+}
+
+QWidget[aion2="true"] #OverlayResizeHandle {
+    background: transparent;
+    border: none;
+}
+
+QWidget[aion2="true"] #OverlayRowTitle {
+    color: {{fg_secondary}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlayRowTitleDim {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlayRowValue {
+    color: {{fg}};
+    font-family: {{font_mono}};
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_medium}};
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlayMenu {
+    background: {{bg_overlay}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_1}}px 0px;
+}
+
+QWidget[aion2="true"] #OverlayMenu QCheckBox {
+    color: {{fg_secondary}};
+    font-size: {{text_sm}}px;
+    padding: {{space_1}}px {{space_3}}px;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlayMenu QCheckBox:hover {
+    background: {{accent_soft}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #OverlayEmpty {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlaySectionHead {
+    background: {{bg_surface}};
+    border-top: {{border_width}}px solid {{border}};
+    border-bottom: {{border_width}}px solid {{border}};
+}
+
+QWidget[aion2="true"] #OverlaySectionHead:hover {
+    background: {{bg_elevated}};
+}
+
+QWidget[aion2="true"] #OverlayChevron {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlaySectionTitle {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlaySectionCount {
+    color: {{fg_muted}};
+    font-family: {{font_mono}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    background: {{bg_elevated}};
+    border-radius: {{radius_sm}}px;
+    padding: 1px {{space_1}}px;
+}
+
+/* ---------------------------------------------------------------------
+   14. Migrated inline styles  (wave 2026-09-18)
+
+   Every rule below replaces a `setStyleSheet(...)` call that used to live
+   in a widget (MASTER §4-4).  Grouped here, with the call site named, so
+   the next person can see at a glance what the widgets stopped doing for
+   themselves.
+   ------------------------------------------------------------------ */
+
+/* QAbstractScrollArea paints its viewport from QPalette::Base, which the
+   outer widget's own rule never reaches -- it showed as a light grey box
+   under a dark theme (User-reported, 2026-08-29).  Nine call sites used to
+   push `background: transparent` onto the viewport directly; they now name
+   it instead. */
+QWidget[aion2="true"] #transparentViewport {
+    background: transparent;
+}
+
+/* HeaderWidget._apply_avatar_pixmap: a real (already circle-clipped)
+   picture must not sit on the accent disc the initials state uses. */
+QWidget[aion2="true"] #profileAvatar[hasAvatar="true"] {
+    background: transparent;
+}
+
+/* Big numbers — MASTER §3 ("gros chiffres" in font.display/mono): the
+   Timers page cards and the custom-timer dialog's preview.  The COLOUR is
+   still set per widget, because it is the timer's own data colour
+   (MASTER §4-4). */
+QWidget[aion2="true"] #bigValue {
+    font-family: {{font_mono}};
+    font-size: {{text_2xl}}px;
+    font-weight: {{font_weight_bold}};
+    background: transparent;
+}
+
+/* settings_page._LogViewerDialog: app.log is column-aligned output. */
+QWidget[aion2="true"] #logViewerText {
+    font-family: {{font_mono}};
+    font-size: {{text_xs}}px;
+}
+
+/* custom_timer_dialog: the 8 colour swatches.  Fill = the swatch's own
+   colour (data); the ring is the theme's (it was a hardcoded white). */
+QWidget[aion2="true"] #ctColorSwatch {
+    border: {{focus_ring_width}}px solid transparent;
+    border-radius: {{radius_md}}px;
+}
+
+QWidget[aion2="true"] #ctColorSwatch:hover {
+    border-color: {{fg_muted}};
+}
+
+QWidget[aion2="true"] #ctColorSwatch:checked {
+    border-color: {{fg}};
+}
+
+/* custom_timer_manager_dialog: a category marker (theme) and a timer's own
+   colour dot (data -- colour set in code, size here). */
+QWidget[aion2="true"] #ctCategoryDot {
+    color: {{accent}};
+    font-size: {{text_md}}px;
+    background: transparent;
+}
+
+QWidget[aion2="true"] #ctTimerColorDot {
+    font-size: {{text_lg}}px;
+    background: transparent;
+}
+
+/* template_dialog._h_separator */
+QWidget[aion2="true"] #dialogSeparator {
+    color: {{border}};
+    background: {{border}};
+    max-height: {{border_width}}px;
+    border: none;
+}
+
+/* tasks_page._show_char_filter_popover: a rounded popup, matching the
+   overlay's own filter menu (User-Wunsch, 2026-09-16).  Was an inline
+   sheet because a QMenu did not inherit MainWindow's stylesheet; it
+   inherits the QApplication's. */
+QWidget[aion2="true"] #charFilterMenu {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+    padding: {{space_1}}px;
+}
+
+QWidget[aion2="true"] #charFilterMenu::item {
+    padding: {{space_2}}px {{space_6}}px;
+    border-radius: {{radius_sm}}px;
+}
+
+QWidget[aion2="true"] #charFilterMenu::item:selected {
+    background-color: {{accent_soft}};
+    color: {{fg}};
+}
+
+QWidget[aion2="true"] #charFilterMenu::separator {
+    height: {{border_width}}px;
+    background: {{border}};
+    margin: {{space_1}}px {{space_2}}px;
+}
+
+/* flow_node_card: three discrete zoom steps, previously three inline
+   font-size literals (18/16/15 and 13/12/1 px, none of them on MASTER
+   §1's scale). */
+QWidget[aion2="true"] #FlowNodeTitle[zoomStep="full"] {
+    font-size: {{text_lg}}px;
+}
+
+QWidget[aion2="true"] #FlowNodeTitle[zoomStep="mid"] {
+    font-size: {{text_md}}px;
+}
+
+QWidget[aion2="true"] #FlowNodeTitle[zoomStep="small"] {
+    font-size: {{text_sm}}px;
+}
+
+QWidget[aion2="true"] #FlowNodeDescription[zoomStep="full"] {
+    font-size: {{text_base}}px;
+}
+
+QWidget[aion2="true"] #FlowNodeDescription[zoomStep="mid"] {
+    font-size: {{text_sm}}px;
+}
+
+QWidget[aion2="true"] #FlowNodeDescription[zoomStep="small"] {
+    font-size: {{text_xs}}px;
+}
+
+/* flow_guide_view.show_node_info: the info dot IS the node's status. */
+QWidget[aion2="true"] #FlowInfoIcon[status="completed"] {
+    color: {{ok}};
+    border-color: {{ok}};
+}
+
+QWidget[aion2="true"] #FlowInfoIcon[status="active"] {
+    color: {{accent}};
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #FlowInfoIcon[status="optional"] {
+    color: {{warn}};
+    border-color: {{warn}};
+}
+
+QWidget[aion2="true"] #FlowInfoIcon[status="locked"],
+QWidget[aion2="true"] #FlowInfoIcon[status="none"] {
+    color: {{fg_muted}};
+    border-color: {{border}};
+}
+
+/* Overlay -------------------------------------------------------------- */
+
+/* The tab / schedule letter on a HUD row (MASTER §3 badge: full-colour
+   text on its own soft fill).  Was an inline rgba() built from a per-tab
+   QColor literal, with near-white text on a saturated fill. */
+QWidget[aion2="true"] #OverlayBadge {
+    color: {{secondary}};
+    background-color: {{secondary_soft}};
+    border-radius: {{radius_sm}}px;
+    padding: 0px {{space_1}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* OverlayGuideRow's ACTV / LOCK / DONE / OPT label. */
+QWidget[aion2="true"] #OverlayStatusLabel {
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+    background: transparent;
+}
+
+QWidget[aion2="true"] #OverlayStatusLabel[status="completed"] {
+    color: {{ok}};
+}
+
+QWidget[aion2="true"] #OverlayStatusLabel[status="active"] {
+    color: {{accent}};
+}
+
+QWidget[aion2="true"] #OverlayStatusLabel[status="optional"] {
+    color: {{warn}};
+}
+
+QWidget[aion2="true"] #OverlayStatusLabel[status="locked"] {
+    color: {{fg_muted}};
+}
+
+/* The "this profile is live" dot in the HUD's title bar. */
+QWidget[aion2="true"] #OverlayLiveDot {
+    color: {{accent}};
+    font-size: {{text_xs}}px;
+    background: transparent;
+}
+
+/* The Countdown Timer's Start/Stop button carries a per-timer DATA fill
+   (set in code), so it needs on-accent text and no border -- unlike the
+   plain #OverlayCountdownToggleBtn rule above, which assumes a
+   transparent background. */
+QWidget[aion2="true"] #OverlayCountdownToggleBtn[running="true"],
+QWidget[aion2="true"] #OverlayCountdownToggleBtn[running="false"] {
+    color: {{fg_on_accent}};
+    border: none;
+    border-radius: {{radius_md}}px;
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+/* MASTER §3 "État vide" — one place the hint colour is defined, reachable
+   by widgets that already own their objectName (the overlay's empty row
+   carries this as a `class` property). */
+QWidget[aion2="true"] QLabel[class="emptyStateHint"] {
+    color: {{fg_muted}};
+}
+
+/* ---------------------------------------------------------------------
+   15. Armory dashboard  (MASTER §3 "Carte" + "Champ"/badge type scale —
+   audit §3 Phase 4c: the Armory landing page is a summary of the
+   persisted Build Planner state, so its cards need the card surface, the
+   caps title, the display-face figure and the muted hint line.
+
+   Appended as one block on purpose (the section numbering above is the
+   file's own history, not a sort key): every rule here is new, none of
+   the rules above is touched.  `#armoryCardRow` in §0b/§4 is the old
+   launcher row this page no longer builds — left in place because those
+   are shared selector lists.
+   ------------------------------------------------------------------ */
+
+QWidget[aion2="true"] #armoryCard {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+    min-height: 84px;
+}
+
+QWidget[aion2="true"] #armoryCard:hover {
+    background-color: {{bg_overlay}};
+    border-color: {{accent}};
+}
+
+/* Same shape as every other card's focus rule (§0b): the card carries a
+   1 px resting border and no QSS padding of its own, so the ring IS the
+   edge colour and nothing moves when focus lands. */
+QWidget[aion2="true"] #armoryCard:focus {
+    border-color: {{accent}};
+}
+
+/* MASTER §3 card title: caps, muted, semibold — the label of the figure
+   below it, never competing with it. */
+QWidget[aion2="true"] #armoryCardTitle {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: {{letter_spacing_caps}};
+}
+
+/* The one big figure per card, in the display face (MASTER §1). */
+QWidget[aion2="true"] #armoryCardValue {
+    color: {{fg}};
+    font-family: {{font_display}};
+    font-size: {{text_xl}}px;
+    font-weight: {{font_weight_bold}};
+}
+
+QWidget[aion2="true"] #armoryCardHint {
+    color: {{fg_secondary}};
+    font-size: {{text_sm}}px;
+}
+
+/* The CTA is a link-weight action inside a card that is itself clickable,
+   so it reads as accent text, not as a second primary button fighting the
+   card for the eye (MASTER §3: one primary per surface). */
+QWidget[aion2="true"] #armoryCardCta {
+    background: transparent;
+    color: {{accent}};
+    border: {{border_width}}px solid transparent;
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1}}px {{space_2}}px;
+    font-size: {{text_base}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #armoryCardCta:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+    color: {{accent}};
+}
+
+QWidget[aion2="true"] #armoryCardCta:pressed {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #armoryCardCta:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    padding: {{space_1_inset}}px {{space_2_inset}}px;
+}
+
+/* Stage 2 (2026-09-19): the Recommendations card.  Audit
+   docs/audit-2026-09-18/B-armory.md §3.4 features #1/#2 — the Armory
+   engine's first two solvers, rendered on the landing page.
+
+   Appended inside §15 rather than opening a §16: it is the same page, the
+   same surface and the same type scale as the cards above, and the only
+   reason it needs rules of its own is that its content is a LIST (rows,
+   each with a disclosure) instead of one figure.  Nothing above is
+   touched. */
+
+/* Same ground, border and radius as `#armoryCard` — the page must read as
+   one set of cards — but no `:hover`/`:focus` accent: this card is not a
+   button.  Its rows are individually interactive, so a card-wide hover
+   would promise a click the frame does not handle. */
+QWidget[aion2="true"] #armoryRecoCard {
+    background-color: {{bg_elevated}};
+    border: {{border_width}}px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+/* The row is a plain container: it carries the separation between
+   recommendations (its layout spacing) and no surface of its own, so a
+   rendered card shows a list, not a stack of nested boxes. */
+QWidget[aion2="true"] #armoryRecoItem {
+    background: transparent;
+}
+
+/* "Why?" — a text link, not a second button per row competing with the
+   card's own CTA (MASTER §3: one primary per surface).  Same accent/size
+   treatment as `#armoryCardCta`, one step smaller because it repeats. */
+QWidget[aion2="true"] #armoryRecoWhyButton {
+    background: transparent;
+    color: {{accent}};
+    border: {{border_width}}px solid transparent;
+    border-radius: {{radius_sm}}px;
+    padding: 0px {{space_1}}px;
+    font-size: {{text_sm}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+QWidget[aion2="true"] #armoryRecoWhyButton:hover {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+}
+
+QWidget[aion2="true"] #armoryRecoWhyButton:checked {
+    background-color: {{accent_soft}};
+    border-color: {{accent}};
+}
+
+/* The ring sits on the control's own edge — the button already carries a
+   1 px transparent border, so nothing moves when focus lands (§0b's rule,
+   and the reason `#armoryCardCta:focus` re-states its padding inset). */
+QWidget[aion2="true"] #armoryRecoWhyButton:focus {
+    border: {{focus_ring_width}}px solid {{accent}};
+    border-radius: {{radius_sm}}px;
+    padding: 0px {{space_1_inset}}px;
+}
+
+/* The expanded reasons: muted and indented, so the explanation reads as
+   subordinate to the line it explains rather than as four more
+   recommendations. */
+QWidget[aion2="true"] #armoryRecoWhy {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    padding-left: {{space_2}}px;
+}

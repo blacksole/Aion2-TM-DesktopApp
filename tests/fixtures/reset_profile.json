@@ -1,0 +1,51 @@
+{
+  "profile_name": "QaProfile",
+  "theme": "abyss",
+  "language": "en",
+  "settings": {
+    "daily_reset_time": "09:00",
+    "weekly_reset_day": "Mo",
+    "weekly_reset_time": "09:00",
+    "season_reset_datetime": "",
+    "season_enabled": false,
+    "show_events": true,
+    "shugo_enabled": false,
+    "riss_enabled": false,
+    "auto_save": true,
+    "notification_enabled": false,
+    "timer_categories": ["Custom Timer"],
+    "custom_timers": [],
+    "last_daily_reset_date": null,
+    "last_weekly_reset_date": null,
+    "last_season_reset_datetime": null
+  },
+  "tasks": {
+    "tasks": [
+      {"type": "task", "priority": "high", "title": "QA Daily Task", "description": "", "event": false,
+       "schedule": "daily", "character": "QA Char", "template_id": "", "location": "", "card_id": "qa-task-daily",
+       "completed": true},
+      {"type": "task", "priority": "high", "title": "QA Weekly Task", "description": "", "event": false,
+       "schedule": "weekly", "character": "QA Char", "template_id": "", "location": "", "card_id": "qa-task-weekly",
+       "completed": true},
+      {"type": "task", "priority": "high", "title": "QA Season Task", "description": "", "event": false,
+       "schedule": "season", "character": "QA Char", "template_id": "", "location": "", "card_id": "qa-task-season",
+       "completed": true}
+    ],
+    "shopping": [
+      {"type": "shopping", "priority": "high", "amount": "1", "title": "QA Daily Item", "location": "",
+       "price": "0", "schedule": "daily", "currency": "kinah", "character": "QA Char", "template_id": "",
+       "card_id": "qa-shop-daily", "completed": true},
+      {"type": "shopping", "priority": "high", "amount": "1", "title": "QA Weekly Item", "location": "",
+       "price": "0", "schedule": "weekly", "currency": "kinah", "character": "QA Char", "template_id": "",
+       "card_id": "qa-shop-weekly", "completed": true},
+      {"type": "shopping", "priority": "high", "amount": "1", "title": "QA Season Item", "location": "",
+       "price": "0", "schedule": "season", "currency": "kinah", "character": "QA Char", "template_id": "",
+       "card_id": "qa-shop-season", "completed": true}
+    ]
+  },
+  "flow_maps": {},
+  "active_flow_map": "Map 1",
+  "item_templates": [],
+  "task_templates": [],
+  "standard_templates": {"tasks": [], "shopping": []}
+}

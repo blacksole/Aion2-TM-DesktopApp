@@ -1,5 +1,7 @@
 from PySide6.QtWidgets import QWidget
-from PySide6.QtGui import QPainter, QColor, QPen
+from PySide6.QtGui import QPainter, QPen
+
+from core import theme
 
 
 class FlowCanvas(QWidget):
@@ -18,7 +20,11 @@ class FlowCanvas(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         spacing = 72
-        color = QColor(255, 255, 255, 12)
+        # The canvas grid is a *line*, so MASTER §1 gives it `border`:
+        # it now follows each theme's own bg family instead of the
+        # 12/255 white it used to be (invisible on a light-ish theme,
+        # and belonging to no token on any of them).
+        color = theme.qcolor(theme.current_tokens(), "border")
 
         pen = QPen(color)
         pen.setWidth(1)

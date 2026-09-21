@@ -1,25 +1,29 @@
-import glob
-import os
-import winsound
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFrame, QButtonGroup, QGridLayout, QTimeEdit, QWidget, QSpinBox, QComboBox,
     QTabWidget, QCompleter,
 )
 from PySide6.QtCore import QTime, Qt
+from ui.widgets import icons
 
-from ui.pages.settings_page import _ScreenAwareComboBox
+from core import theme
+from core.sound import play_wav
+from ui.pages.settings_page import (
+    SOUND_BROWSE_DATA, _ScreenAwareComboBox, browse_for_wav, populate_sound_combo,
+)
 
+#: The eight swatches a user can pick for a custom timer, as
+#: ``(hex, translation key)``.  The hexes used to be literals here; the
+#: table now comes from ``core.theme``'s ``timer_swatch`` data colours, which
+#: makes core/theme.py the single owner (MASTER §4-4) and this list a
+#: rendering of it.  The order is the table's declaration order.
 CUSTOM_TIMER_COLORS = [
-    ("#22d3ee", "ct_color_cyan"),
-    ("#a855f7", "ct_color_purple"),
-    ("#22c55e", "ct_color_green"),
-    ("#ef4444", "ct_color_red"),
-    ("#f97316", "ct_color_orange"),
-    ("#ec4899", "ct_color_pink"),
-    ("#f59e0b", "ct_color_yellow"),
-    ("#3b82f6", "ct_color_blue"),
+    (theme.data_color("timer_swatch", key), f"ct_color_{key}")
+    for key in theme.data_color_keys("timer_swatch")
 ]
+
+#: Colour a brand-new timer starts on (the first swatch).
+DEFAULT_TIMER_COLOR = CUSTOM_TIMER_COLORS[0][0]
 
 _HOUR_PRESETS = [1, 2, 3, 4, 5, 6]
 _DAY_KEYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
@@ -27,7 +31,7 @@ _MODE_ORDER = ["daily", "weekly", "hourly", "custom", "countdown"]
 
 
 class CustomTimerDialog(QDialog):
-    def __init__(self, name: str = "", color: str = "#22d3ee",
+    def __init__(self, name: str = "", color: str = "",
                  timer_mode: str = "hourly",
                  reset_time: str = "09:00", reset_day: str = "Mo",
                  interval_minutes: int = 60, interval_seconds: int = 3600,
@@ -68,9 +72,12 @@ class CustomTimerDialog(QDialog):
         self.preview_title = QLabel((name or "NAME").upper())
         self.preview_title.setObjectName("statTitle")
         self.preview_value = QLabel(self._preview_text_for_mode(timer_mode))
-        self.preview_value.setStyleSheet(
-            f"color: {color}; font-size: 30px; font-weight: bold;"
-        )
+        # #bigValue in the template owns the type (font.mono, text.display,
+        # bold -- MASTER §3 "gros chiffres"); only the COLOUR is set here,
+        # because it is the per-timer colour the user picked, i.e. data
+        # (MASTER §4-4's tolerated exception).
+        self.preview_value.setObjectName("bigValue")
+        self._paint_preview_color(color)
         preview_layout.addWidget(self.preview_title)
         preview_layout.addWidget(self.preview_value)
         layout.addWidget(preview_frame)
@@ -374,12 +381,11 @@ class CustomTimerDialog(QDialog):
             btn.setCheckable(True)
             btn.setFixedSize(44, 30)
             btn.setToolTip(self._tr(self._language, color_name_key))
-            btn.setStyleSheet(
-                f"QPushButton {{ background-color: {hex_color}; border-radius: 6px;"
-                f" border: 2px solid transparent; }}"
-                f"QPushButton:checked {{ border: 2px solid #ffffff; }}"
-                f"QPushButton:hover {{ border: 2px solid rgba(255,255,255,0.6); }}"
-            )
+            # Swatch = the colour itself, so the FILL is data. Radius and
+            # the checked/hover ring come from #ctColorSwatch in the
+            # template (the ring used to be a hardcoded white).
+            btn.setObjectName("ctColorSwatch")
+            btn.setStyleSheet(f"QPushButton {{ background-color: {hex_color}; }}")
             if hex_color == color:
                 btn.setChecked(True)
             btn.clicked.connect(lambda checked=False, c=hex_color: self._select_color(c))
@@ -414,14 +420,15 @@ class CustomTimerDialog(QDialog):
             sound_completer.setCaseSensitivity(Qt.CaseInsensitive)
             sound_completer.setFilterMode(Qt.MatchContains)
             sound_completer.setCompletionMode(QCompleter.PopupCompletion)
-        self.sound_combo.addItem(self._tr(self._language, "ct_dialog_no_sound"), "")
-        for path in sorted(glob.glob(r"C:\Windows\Media\*.wav")):
-            sound_name = os.path.splitext(os.path.basename(path))[0]
-            self.sound_combo.addItem(sound_name, path)
-        idx = self.sound_combo.findData(notification_sound)
-        self.sound_combo.setCurrentIndex(max(0, idx))
+        populate_sound_combo(self.sound_combo, notification_sound, self._tr, self._language)
+        # The sentinel keeps this dialog's own wording ("-- Kein Sound --"),
+        # which differs from Settings' "-- No Sound --" key.
+        self.sound_combo.setItemText(0, self._tr(self._language, "ct_dialog_no_sound"))
+        self._last_sound_index = self.sound_combo.currentIndex()
+        self.sound_combo.currentIndexChanged.connect(self._on_sound_combo_changed)
 
         self.sound_test_btn = QPushButton(self._tr(self._language, "ct_dialog_test_button"))
+        icons.set_icon(self.sound_test_btn, "play", 16, clear_text=False)
         self.sound_test_btn.setObjectName("secondaryButton")
         self.sound_test_btn.setFixedWidth(70)
         self.sound_test_btn.clicked.connect(self._preview_sound)
@@ -464,9 +471,11 @@ class CustomTimerDialog(QDialog):
 
     def _select_color(self, color: str):
         self._selected_color = color
-        self.preview_value.setStyleSheet(
-            f"color: {color}; font-size: 30px; font-weight: bold;"
-        )
+        self._paint_preview_color(color)
+
+    def _paint_preview_color(self, color: str):
+        """The one inline property left here: the timer's own data colour."""
+        self.preview_value.setStyleSheet(f"color: {color or DEFAULT_TIMER_COLOR};")
 
     def _update_preview(self):
         self.preview_title.setText(self.name_input.text().strip().upper() or "NAME")
@@ -474,10 +483,13 @@ class CustomTimerDialog(QDialog):
     def _on_hourly_pencil_clicked(self):
         self._hourly_manual_widget.setVisible(self._hourly_pencil_btn.isChecked())
 
+    def _on_sound_combo_changed(self, index: int):
+        if self.sound_combo.itemData(index) == SOUND_BROWSE_DATA:
+            browse_for_wav(self, self.sound_combo, getattr(self, "_last_sound_index", 0))
+        self._last_sound_index = self.sound_combo.currentIndex()
+
     def _preview_sound(self):
-        path = self.sound_combo.currentData() or ""
-        if path and os.path.isfile(path):
-            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        play_wav(self.sound_combo.currentData() or "")
 
     # ── Helpers ───────────────────────────────────────────────────────────
 

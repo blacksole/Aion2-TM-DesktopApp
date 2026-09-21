@@ -1,9 +1,22 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton
 from PySide6.QtCore import Signal
 
+from core import theme
+from ui.widgets import icons
+
+#: The built-in timers' identity colours (MASTER §4-4 data colours, owned by
+#: core/theme.py).  These used to be five hex literals passed in at the call
+#: site; Season had no entry in the shared table at all and carried its own
+#: #10b981, so it and the overlay's Season badge disagreed.
+_DAILY = theme.data_color("timer", "daily")
+_WEEKLY = theme.data_color("timer", "weekly")
+_SHUGO = theme.data_color("timer", "shugo")
+_RIFT = theme.data_color("timer", "rift")
+_CUSTOM = theme.data_color("timer", "custom")
+
 
 class TimerInfoCard(QFrame):
-    def __init__(self, title: str, value: str = "--:--", color: str = "#22d3ee"):
+    def __init__(self, title: str, value: str = "--:--", color: str = ""):
         super().__init__()
 
         self.setObjectName("timerCard")
@@ -15,9 +28,11 @@ class TimerInfoCard(QFrame):
         self.title_label.setObjectName("statTitle")
 
         self.value_label = QLabel(value)
-        self.value_label.setStyleSheet(
-            f"color: {color}; font-size: 30px; font-weight: bold;"
-        )
+        # #bigValue owns the type (font.mono, text.display, bold -- MASTER
+        # §3 "gros chiffres"); the colour is this timer's own data colour,
+        # the one exception MASTER §4-4 allows to stay in code.
+        self.value_label.setObjectName("bigValue")
+        self.value_label.setStyleSheet(f"color: {color or _DAILY};")
 
         layout.addWidget(self.title_label)
         layout.addWidget(self.value_label)
@@ -59,9 +74,10 @@ class TimersPage(QWidget):
         self.manage_timers_btn.setToolTip("Custom Timer verwalten")
         self.manage_timers_btn.clicked.connect(self.manage_timers_requested.emit)
 
-        self.timer_settings_btn = QPushButton("⚙")
+        self.timer_settings_btn = QPushButton()
         self.timer_settings_btn.setObjectName("pageIconButton")
-        self.timer_settings_btn.setToolTip("Timer-Einstellungen öffnen")
+        self.timer_settings_btn.setToolTip("")
+        icons.set_icon(self.timer_settings_btn, "settings", 16)
         self.timer_settings_btn.clicked.connect(self.timer_settings_requested.emit)
 
         header_row.addWidget(self.manage_timers_btn)
@@ -73,11 +89,11 @@ class TimersPage(QWidget):
         main_row = QHBoxLayout()
         main_row.setSpacing(12)
 
-        self.daily_reset_card = TimerInfoCard("Daily Reset", "--:--", "#22d3ee")
-        self.weekly_reset_card = TimerInfoCard("Weekly Reset", "--:--", "#a855f7")
-        self.season_timer_card = TimerInfoCard("Season", "--:--", "#10b981")
-        self.shugo_timer_card = TimerInfoCard("Shugo", "--:--", "#f59e0b")
-        self.riss_timer_card = TimerInfoCard("Riss", "--:--", "#f59e0b")
+        self.daily_reset_card = TimerInfoCard("Daily Reset", "--:--", _DAILY)
+        self.weekly_reset_card = TimerInfoCard("Weekly Reset", "--:--", _WEEKLY)
+        self.season_timer_card = TimerInfoCard("Season", "--:--", _CUSTOM)
+        self.shugo_timer_card = TimerInfoCard("Shugo", "--:--", _SHUGO)
+        self.riss_timer_card = TimerInfoCard("Riss", "--:--", _RIFT)
 
         self.season_timer_card.setVisible(False)
         self.shugo_timer_card.setVisible(False)
@@ -166,7 +182,7 @@ class TimersPage(QWidget):
                 card = TimerInfoCard(
                     timer_cfg.get("name", f"Timer {idx + 1}"),
                     "--:--",
-                    timer_cfg.get("color", "#22d3ee"),
+                    timer_cfg.get("color") or _CUSTOM,
                 )
                 cards_row.addWidget(card)
                 self._custom_timer_cards[idx] = card
@@ -186,6 +202,7 @@ class TimersPage(QWidget):
         self.title_label.setText(tr_func(language, "timers"))
         self.subtitle_label.setText(tr_func(language, "timers_subtitle"))
         self.manage_timers_btn.setText(tr_func(language, "timers_manage"))
+        self.timer_settings_btn.setToolTip(tr_func(language, "timers_open_settings_tooltip"))
         self.daily_reset_card.title_label.setText(tr_func(language, "daily_reset").upper())
         self.weekly_reset_card.title_label.setText(tr_func(language, "weekly_reset").upper())
         self.season_timer_card.title_label.setText("SEASON")

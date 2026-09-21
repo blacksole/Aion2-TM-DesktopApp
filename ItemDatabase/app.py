@@ -1,6 +1,8 @@
 """Standalone AION 2 item database viewer — filterable, sortable table.
 
-Test app, isolated from cont_ToDo_app (no imports from it, own styles.qss).
+Test app, largely isolated from cont_ToDo_app: it renders its own stylesheet
+from styles.template.qss, and takes the tokens for it from core.theme when
+that is importable (optional -- see the "Design tokens" block below).
 Run fetch_items.py first to populate data/items_all.json, then:
     python app.py
 """
@@ -10,10 +12,133 @@ import html
 import json
 import math
 import re
+import shutil
 import sys
+import weakref
 from collections import deque
 from pathlib import Path
 from urllib.parse import urlparse
+
+# ── The engine package: armory_engine/, next to this file ───────────────────
+#
+# Stage 1 of the split in docs/audit-2026-09-18/B-armory.md §4.2.  Every pure
+# calculation this module used to carry inline -- enchant/GearScore, substat
+# auto-pick, the Arcana solver, the Daevanion router, the transfer graph, the
+# stat merge -- now lives in armory_engine/ and is imported back HERE, under
+# exactly the names it had, so none of the internal call sites changed.  The
+# package imports no Qt at all (tests/test_armory_engine_qt_free.py enforces
+# that in a subprocess), which is the whole point: the arithmetic is testable
+# and reusable without a display.
+#
+# The sys.path insert is not optional.  This module is loaded BY FILE PATH --
+# importlib.util.spec_from_file_location("item_database_app", .../app.py), see
+# MainWindow._ensure_item_database_window -- and that does NOT put the file's
+# own directory on sys.path the way running a script does.  Without this line
+# `import armory_engine` raises ModuleNotFoundError at startup in the host app
+# (it happens to work for a bare `python ItemDatabase/app.py`, which is
+# exactly the trap: the standalone entry point would not have caught it).
+#
+# Frozen, the same reasoning gives the same directory: PyInstaller ships this
+# file as DATA under _MEIPASS/ItemDatabase/ (see both .spec files), so
+# __file__.parent is already _MEIPASS/ItemDatabase and the recursive datas
+# entry puts armory_engine/ right beside it.  _BUNDLE_DIR below is computed
+# the same way, but it is computed ~200 lines further down and these imports
+# have to resolve now.
+_ENGINE_DIR = str(Path(__file__).resolve().parent)
+if _ENGINE_DIR not in sys.path:
+    sys.path.insert(0, _ENGINE_DIR)
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _FROZEN_ENGINE_DIR = str(Path(sys._MEIPASS) / "ItemDatabase")
+    if _FROZEN_ENGINE_DIR not in sys.path:
+        sys.path.insert(0, _FROZEN_ENGINE_DIR)
+
+from armory_engine.arcana import (
+    _ARCANA_ACTIVE_THEMES,
+    _ARCANA_CARD_EXTRA_BUDGET,
+    _ARCANA_DEFAULT_GRADE,
+    _ARCANA_GRADE_MAX_LEVEL,
+    _ARCANA_LORD_CATEGORY,
+    _ARCANA_LORD_TYPES,
+    _ARCANA_MAX_CARD_LEVEL,
+    _ARCANA_PER_SKILL_CAP,
+    _ARCANA_SKILL_BASELINE,
+    _ARCANA_SKILL_SLOTS_PER_CARD,
+    _arcana_best_card_contribution,
+    _arcana_best_combination,
+    _arcana_card_grade,
+    _arcana_card_level,
+    _arcana_card_slot_list,
+    _arcana_compute_combinations,
+    _arcana_eligible_skills_for_type,
+    _arcana_eligible_types,
+    _arcana_full_pool_for_type,
+    _arcana_max_ceiling,
+    _arcana_result_coverage_percent,
+    _arcana_uncovered_reason,
+    _arcana_usable_lord_types,
+)
+from armory_engine.daevanion import (
+    _DAEVANION_MP_NAMES,
+    _daevanion_compute_auto_route,
+    _daevanion_is_reachable,
+    _daevanion_neighbors,
+    _daevanion_node_mp_count,
+    _daevanion_path_nodes_to_add,
+    _daevanion_shortest_from_tree,
+    _daevanion_spent_cost,
+    _daevanion_total_cost,
+)
+from armory_engine.enchant import (
+    _ACCESSORY_CATEGORIES,
+    _ARMOR_CATEGORIES,
+    _BELT_CATEGORY,
+    _DEFENSE_STAT_ID,
+    _GEAR_STAT_ID_ALIASES,
+    _GEARSCORE_EXCEED_RATE,
+    _GEARSCORE_NORMAL_RATE,
+    _HP_STAT_ID,
+    _RUNE_PVE_ITEM_ID,
+    _RUNE_PVP_ITEM_ID,
+    _SCALING_STAT_ID,
+    _gearscore_push,
+    _rune_enchant_bonus,
+    estimate_armor_bonus,
+    estimate_armor_exceed_bonus,
+    estimate_enchant_bonus,
+    estimate_exceed_bonus,
+)
+from armory_engine.sets import _build_dungeon_sets
+from armory_engine.stats import (
+    _parse_stat_value,
+    compute_gearscore,
+    compute_stat_totals_detailed,
+)
+from armory_engine.substats import (
+    _DEFAULT_STAT_PRIORITY_BY_CATEGORY,
+    _STAT_NAME_ALIASES,
+    _STAT_PRIORITY_GEAR_TYPES,
+    _STAT_PRIORITY_MAX_ENTRIES,
+    _STAT_PRIORITY_ROLES,
+    _default_stat_priority_profiles,
+    _merge_stat_priority_profiles,
+    _normalize_stat_name,
+    _pick_priority_substats,
+)
+from armory_engine.transfer import (
+    _build_material_node,
+    _build_material_tree,
+    _build_recipe_output_index,
+    _build_transfer_source_index,
+    _compute_tree_kinah,
+    _find_transfer_path,
+    _flatten_material_tree,
+    _item_grade,
+    _item_type_word,
+    _ordered_tier_chain,
+    _parse_gold_cost,
+    _resolve_material_name,
+    _transfer_source_name,
+)
 
 try:
     # Shares one log file with the host app when run through it; standalone
@@ -32,6 +157,142 @@ try:
 except ImportError:
     def _tr(language, key, **kwargs):
         return key.format(**kwargs) if kwargs else key
+
+
+# ── Design tokens: core/theme.py owns every colour in this file ──────────
+#
+# Before the Armory tokenization wave (2026-09-18) this module carried its
+# own palette -- 201 colour literals, 96 setStyleSheet calls and a
+# hand-written 1,205-line "Abyss" stylesheet -- so the Armory stayed navy
+# while the host app switched themes.  Now every colour comes from
+# core.theme (a TOKEN for anything the theme decides, a DATA table for
+# anything the data decides -- MASTER §4-3/§4-4) and the stylesheet is
+# rendered per theme from ItemDatabase/styles.template.qss (see
+# _load_qss_text / apply_theme at the end of this file).
+#
+# The import is optional, like core.app_logger's above, because this file
+# still has to run two other ways -- `python app.py` (module docstring) and
+# the standalone AION2_ItemDatabase build:
+#   1. plain import: the host app has the repo root on sys.path;
+#   2. retry with the repo root, which a checkout has one level up (this is
+#      what makes `python ItemDatabase/app.py` themed rather than grey);
+#   3. give up -- `_theme is None`, tokens fall back to the Abyss values
+#      below, data colours degrade to one readable grey.  Step 3 is the
+#      only place left in this file that spells a colour.
+try:
+    from core import theme as _theme
+except ImportError:  # step 2
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    try:
+        from core import theme as _theme
+    except ImportError:  # step 3
+        _theme = None
+        logger.warning("core.theme is unimportable — the Armory renders plain Abyss")
+
+#: MASTER §2 Abyss values, for step 3 only.  ``core/theme.py`` is the owner
+#: of all of these; this table is a last-resort mirror, not a second
+#: source, and nothing reads it once ``_theme`` has imported.
+_FALLBACK_TOKENS = {
+    "bg_window": "#0b1120", "bg_surface": "#0f172a", "bg_elevated": "#151e33",
+    "bg_overlay": "#1c2740", "bg_input": "#0b1120",
+    "border": "#26324a", "border_strong": "#3b4863",
+    "fg": "#e5e7eb", "fg_secondary": "#c3cadb", "fg_muted": "#94a3b8",
+    "fg_on_accent": "#0b1120", "accent": "#22d3ee", "accent_hover": "#67e8f9",
+    "accent_soft": "rgba(34, 211, 238, 0.14)", "secondary": "#a78bfa",
+    "secondary_soft": "rgba(167, 139, 250, 0.16)",
+    "ok": "#4ade80", "warn": "#fbbf24", "danger": "#f87171",
+    # The scale tokens the sheet also asks for (MASTER §1).  Strings, so
+    # that {{text_md}}px renders the same way through either renderer.
+    "text_xs": "11", "text_sm": "12", "text_base": "13", "text_md": "14",
+    "text_lg": "16", "text_xl": "20", "text_2xl": "26",
+    "font_weight_semibold": "600", "font_weight_bold": "700",
+}
+
+
+class _MutedTable(dict):
+    """Stand-in for a data table when ``core.theme`` is unimportable.
+
+    Every key resolves to the muted foreground, so a rarity-coloured label
+    degrades to a readable grey instead of raising -- and ``in`` is False
+    for every key, so the call sites that only colour a *known* grade skip
+    colouring entirely rather than painting everything the same grey.
+    """
+
+    def __missing__(self, key):
+        return _FALLBACK_TOKENS["fg_muted"]
+
+
+def _c(name: str) -> str:
+    """One MASTER §2 semantic token of the ACTIVE theme, as a colour string.
+
+    ``_c("accent")`` / ``_c("bg.window")`` -- both spellings, like
+    :func:`core.theme.qcolor`.  Read at call time, never cached: the theme
+    changes under a live window (see :func:`apply_theme`).
+    """
+    key = name.replace(".", "_").replace("-", "_")
+    if _theme is None:
+        return _FALLBACK_TOKENS[key]
+    return getattr(_theme.current_tokens(), key)
+
+
+def _qc(name: str, alpha: int | None = None) -> "QColor":
+    """:func:`_c` as a :class:`QColor`, for the painters.
+
+    ``alpha`` is 0-255 (Qt's spelling, not QSS's) and REPLACES the token's
+    own alpha -- a painter that used to build a raw slate triplet at alpha
+    110 meant "the muted grey, this faint".
+    """
+    if _theme is None:
+        color = QColor(_FALLBACK_TOKENS[name.replace(".", "_").replace("-", "_")])
+    else:
+        color = _theme.qcolor(_theme.current_tokens(), name)
+    if alpha is not None:
+        color.setAlpha(alpha)
+    return color
+
+
+def _alpha(color: str, alpha: float) -> str:
+    """``color`` at ``alpha``, as an ``rgba(...)`` QSS/rich-text value."""
+    if _theme is not None:
+        return _theme.with_alpha(color, alpha)
+    c = QColor(color)
+    return f"rgba({c.red()}, {c.green()}, {c.blue()}, {alpha})"
+
+
+def _dc(kind: str, key: str) -> str:
+    """A MASTER §4-4 data colour: what the DATA decides, not the theme."""
+    if _theme is None:
+        return _FALLBACK_TOKENS["fg_muted"]
+    return _theme.data_color(kind, key)
+
+
+def _set_data_color(widget, kind: str, key: str | None):
+    """Colour ``widget`` from a data table *through the stylesheet*.
+
+    MASTER §4-4 tolerates a colour the data picked; it does not require
+    pushing it through ``setStyleSheet``, which is what this file used to do
+    93 times -- and an inline sheet on a widget replaces the whole cascade
+    for it, which is why half those call sites carry a comment about some
+    rule "not reaching" them.  A dynamic property plus one
+    ``*[dataColor="kind:key"]`` rule per table entry keeps the colour in the
+    sheet (so it re-renders with the theme) and off the widget.
+
+    Passing ``key=None`` clears it.
+    """
+    value = f"{kind}:{key}" if key else ""
+    if widget.property("dataColor") == value:
+        return
+    widget.setProperty("dataColor", value)
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
+
+#: MASTER §4-4 tables, bound to plain module names because ~30 call sites in
+#: this file index them directly (``GRADE_COLORS[grade]``, ``grade in
+#: GRADE_COLORS``).  core/theme.py is the owner; drift is impossible because
+#: there is no copy.
+GRADE_COLORS = _theme.GRADE_COLORS if _theme is not None else _MutedTable()
+GEAR_TYPE_COLORS = _theme.GEAR_TYPE_COLORS if _theme is not None else _MutedTable()
 
 # Module-level rather than threaded through every one of this file's ~10
 # dialog/window classes as a constructor parameter -- this whole module is a
@@ -135,7 +396,7 @@ from PySide6.QtWidgets import (
 # Build-switcher dropdowns, the Skill Planner/Genius Insight settings
 # combos) -- only the current/keyboard-selected row was ever highlighted
 # (via the existing "QComboBox QAbstractItemView { selection-background-
-# color: ... }" rule in styles.qss), never whichever row the mouse was
+# color: ... }" rule in the sheet), never whichever row the mouse was
 # actually over. A QSS "::item:hover" rule alone did NOT fix it (confirmed
 # by the same user report after that attempt), and mouse tracking on the
 # popup view turned out to already be on by default (verified directly) --
@@ -170,7 +431,7 @@ class _ComboHoverDelegate(QStyledItemDelegate):
         super().paint(painter, option, index)
         if option.state & QStyle.State_MouseOver:
             painter.save()
-            painter.fillRect(option.rect, QColor(34, 211, 238, 46))
+            painter.fillRect(option.rect, _qc("accent", 46))
             painter.restore()
 
 
@@ -220,8 +481,68 @@ SHOP_ITEMS_PATH = _BUNDLE_DIR / "data" / "shop_items.json"
 # between TemplateItemPickerDialog's sidebar and ItemDatabaseWindow's own
 # Shop filter dropdown so the two can never drift apart.
 REAL_SHOP_TYPES = ("Merchant NPC", "Trade Shop", "Black Cloud Merchants", "Shugo Festival")
-ICON_CACHE_DIR = BASE_DIR / "data" / "icons"
-DETAIL_CACHE_DIR = BASE_DIR / "data" / "details"
+
+
+def _cache_root() -> Path:
+    """Where the HTTP caches (icons, item details) are written.
+
+    Frozen: the per-user cache directory (%LOCALAPPDATA%\\Aion2 TM\\Cache on
+    Windows, $XDG_CACHE_HOME/aion2-tm on Linux, ~/Library/Caches on macOS).
+    The old location -- next to the executable -- is unwritable for any
+    system-wide install (/opt, /usr/lib, Program Files) and is exactly what
+    an AUR package or an AppImage must never touch. From source, keep
+    ItemDatabase/data/ so a dev run reuses the cache it already has.
+
+    Standalone `python ItemDatabase/app.py` (no host app on sys.path) keeps
+    the old behaviour too, since utils.paths is then unimportable.
+    """
+    if not getattr(sys, "frozen", False):
+        return BASE_DIR / "data"
+    try:
+        from utils.paths import ensure_dir, user_cache_dir
+    except ImportError:
+        return BASE_DIR / "data"
+    return ensure_dir(user_cache_dir() / "armory")
+
+
+def _migrate_legacy_cache(new_root: Path) -> None:
+    """One-off move of a pre-XDG cache sitting next to the executable.
+
+    Per subdirectory, and only when the new location does not have it yet, so
+    a live cache is never overwritten, a partial move self-heals on the next
+    launch, and a second launch is a no-op. Never runs from source (the
+    legacy and new roots are then the same path).
+
+    Path.replace() is os.rename: same-volume only. The frozen Windows case is
+    exactly the cross-volume one -- the app installed on a data drive, the cache
+    going to %LOCALAPPDATA% on the system drive -- where rename raises EXDEV /
+    ERROR_NOT_SAME_DEVICE. shutil.move() copies and unlinks in that case, so
+    the fast path stays a rename and the slow path still works. A failure is
+    logged at warning (a silently orphaned ~278 MB of icons, re-downloaded
+    from scratch, is worth a line someone can actually see).
+    """
+    legacy = BASE_DIR / "data"
+    if legacy == new_root or not legacy.is_dir():
+        return
+    for name in ("icons", "details"):
+        source, target = legacy / name, new_root / name
+        if not source.is_dir() or target.exists():
+            continue
+        try:
+            try:
+                source.replace(target)
+            except OSError:
+                # Different volumes (or a Windows share): copy + unlink.
+                shutil.move(str(source), str(target))
+            logger.info("Moved cached %s to %s", name, target)
+        except OSError as exc:
+            logger.warning("Could not migrate the cached %s to %s: %s", name, target, exc)
+
+
+CACHE_ROOT = _cache_root()
+_migrate_legacy_cache(CACHE_ROOT)
+ICON_CACHE_DIR = CACHE_ROOT / "icons"
+DETAIL_CACHE_DIR = CACHE_ROOT / "details"
 DETAILS_API_URL = "https://shugo.gg/api/items/batch-details"
 ICON_SIZE = 32
 VISIBLE_ROW_PADDING = 20
@@ -330,14 +651,6 @@ PANTHEON_STATS_ROLE = Qt.UserRole + 2
 # still show it.
 WING_DESCRIPTION_ROLE = Qt.UserRole + 3
 
-GRADE_COLORS = {
-    "Common": "#94a3b8",
-    "Rare": "#4ade80",
-    "Unique": "#facc15",
-    "Epic": "#f59e0b",
-    "Legend": "#38bdf8",
-}
-
 # Skill Points available at the current level-45 cap (User-Wunsch,
 # 2026-08-27) -- researched externally, not derivable from our own item/
 # recipe data since Empyrean Trace/Monolith is a pure map-collectible system
@@ -393,16 +706,19 @@ def _active_skill_spec_cap(effective_level: int) -> int:
     return 0
 
 
-_ACTIVE_SPEC_AVAILABLE_COLOR = "rgba(94, 234, 212, 0.35)"  # muted turquoise -- unlocked, not yet picked
-# (User-corrected, 2026-09-02: the earlier solid "#5eead4" read as if every
-# unlocked option was already active. "30% Tuerkis, 70% schwarz, 50%
-# Transparenz" -- let Qt's own alpha compositing do the darkening against
-# the panel's real background instead of pre-mixing a flat hex, so it
-# still reads correctly regardless of the exact background shade.)
-_ACTIVE_SPEC_CHOSEN_COLOR = "#0d9488"  # dark turquoise -- actively picked
-
-
-_ARCANA_WISH_COLOR = "#c084fc"
+# The two active-skill specialization states and the Arcana wish colour
+# live in core/theme.py now (SPEC_STATE_COLORS, read through _dc(); the
+# wish takes the `secondary` token).  Kept as comments because the reasons
+# are user decisions, not defaults:
+#   available -- "30% Tuerkis, 70% schwarz, 50% Transparenz" (User-
+#     corrected, 2026-09-02: the earlier solid #5eead4 read as if every
+#     unlocked option was already active).  Still translucent on purpose,
+#     so Qt's own compositing darkens it against whatever background the
+#     panel actually has;
+#   chosen -- solid dark turquoise;
+#   wish -- "eine weitere farbige Zahl ... testweise mal lila" (2026-08-28),
+#     i.e. a second accent distinct from the blue bonus number, which is
+#     exactly what `secondary` is.
 
 
 def _format_skill_level_html(manual_level: int, bonus_level: int = 0, wish_level: int = 0) -> str:
@@ -422,38 +738,25 @@ def _format_skill_level_html(manual_level: int, bonus_level: int = 0, wish_level
     Supersedes the earlier convention where manual+bonus were summed into
     one number and only the generic 10/20-level cap decided white vs. blue,
     which wrongly colored manually-overinvested points blue too."""
-    html = f"<span style='color:white; font-weight:700;'>{manual_level}</span>"
+    html = f"<span style='color:{_c('fg')}; font-weight:700;'>{manual_level}</span>"
     if bonus_level > 0:
-        html += f" <span style='color:#22d3ee; font-weight:700;'>(+{bonus_level})</span>"
+        html += f" <span style='color:{_c('accent')}; font-weight:700;'>(+{bonus_level})</span>"
     if wish_level > 0:
-        html += f" <span style='color:{_ARCANA_WISH_COLOR}; font-weight:700;'>(+{wish_level})</span>"
+        html += f" <span style='color:{_c('secondary')}; font-weight:700;'>(+{wish_level})</span>"
     return html
 
-# Enchant-level label accent per app Layout theme (User-Wunsch, 2026-08-26:
-# make the enchant badge follow the app's Layout theme instead of one fixed
-# color). Sourced from the per-theme accent pair ("a"/"b") already vetted in
-# the Build Planner browser mockup (scratchpad build_planner_preview.html),
-# picking whichever of the two per theme doesn't collide with a GRADE_COLORS
-# value (Abyss's/Frostbite's own "a" and cats[0] both land on the exact same
-# sky-blue as Legend -- avoided here the same way Epic-amber was avoided for
-# the badge color originally).
-ENCHANT_ACCENT_BY_THEME = {
-    "abyss": "#06b6d4",
-    "inferno": "#ef4444",
-    "emerald": "#2dd4bf",
-    "frostbite": "#6366f1",
-    "obsidian": "#e2e8f0",
-    "void": "#a78bfa",
-}
+# ENCHANT_ACCENT_BY_THEME is gone (2026-09-18).  It was a six-entry table
+# of per-theme accents, hand-picked so none collided with a GRADE_COLORS
+# value -- i.e. it was this app's private copy of "the current theme's
+# accent".  The enchant badge now takes {{accent}} straight from the
+# stylesheet (#SlotEnchantLabel), which is the same intent with one owner
+# and no drift.  The names of the six themes come from core.theme.THEMES.
 
 # Real ascending rarity order, confirmed by the user — "Legend" scales
 # BELOW "Unique" despite the name (matches its weaker enchant-bonus curve
 # in estimate_enchant_bonus too).
 RARITY_ORDER = ["Common", "Rare", "Legend", "Unique", "Epic"]
 RARITY_RANK = {g: i for i, g in enumerate(RARITY_ORDER)}
-
-GEAR_TYPE_COLORS = {"PvP": "#fb7185", "PvE": "#4ade80", "Neutral": "#94a3b8"}
-
 
 def _gear_type(item: dict) -> str:
     """PvP/PvE/Dungeon(neutral) gear is trivially identifiable from the
@@ -651,38 +954,28 @@ def _rarity_background(grade: str | None) -> QPixmap | None:
     pix = _rarity_bg_cache[grade]
     return pix if not pix.isNull() else None
 
-# Same 4-stop diagonal gradients as cont_ToDo_app's 6 Layout themes — copied
-# on purpose so this semi-isolated sub-app looks consistent without
-# importing from ui/main_window.py (User-Wunsch, 2026-08-26: "Die Layouts
-# wirken sich aktuell noch nicht auf den Buildplanner aus").
-LAYOUT_THEMES = {
-    "abyss": ["#0f172a", "#111827", "#121212", "#2e0f28"],
-    "inferno": ["#140f0f", "#1f1111", "#281212", "#3b0f0f"],
-    "emerald": ["#07130f", "#0b1f17", "#10261f", "#132d26"],
-    "frostbite": ["#0b1120", "#111827", "#172554", "#1e3a8a"],
-    "obsidian": ["#111111", "#171717", "#1f1f1f", "#262626"],
-    "void": ["#120c1c", "#1b1028", "#231236", "#2f1547"],
-}
-
-
 class GradientBackground(QWidget):
+    """The Item Database window's ground.  Flat, despite the name.
+
+    It used to paint a 4-stop diagonal gradient from LAYOUT_THEMES, a
+    24-hex copy of the host app's own per-theme gradient table.  Both are
+    gone: MASTER's visual thesis is "zéro dégradé décoratif", the host
+    dropped its copy in the 2026-09-18 wiring wave, and a window ground is
+    exactly what the `bg.window` token is for.  The class name stays so the
+    two attribute lookups that reach it (`hasattr(self, "background")`)
+    keep working.
+    """
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.theme = "abyss"
 
     def set_theme(self, theme: str):
-        self.theme = theme if theme in LAYOUT_THEMES else "abyss"
+        """Kept for the host seam (ItemDatabaseWindow.set_theme).  The
+        ground is a token now, so a theme switch only needs a repaint."""
         self.update()
 
     def paintEvent(self, event):
-        painter = QPainter(self)
-        colors = LAYOUT_THEMES.get(self.theme, LAYOUT_THEMES["abyss"])
-        gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor(colors[0]))
-        gradient.setColorAt(0.35, QColor(colors[1]))
-        gradient.setColorAt(0.75, QColor(colors[2]))
-        gradient.setColorAt(1.0, QColor(colors[3]))
-        painter.fillRect(self.rect(), gradient)
+        QPainter(self).fillRect(self.rect(), _qc("bg.window"))
 
 
 class IconCache(QObject):
@@ -741,10 +1034,10 @@ class IconCache(QObject):
             )
             painter.drawPixmap(0, 0, scaled_bg)
         else:
-            painter.fillRect(0, 0, size, size, QColor(71, 85, 105))
+            painter.fillRect(0, 0, size, size, _qc("border.strong"))
         painter.setClipping(False)
 
-        pen = QPen(QColor(border_color), 1.2) if border_color else QPen(QColor(148, 163, 184, 110), 1.0)
+        pen = QPen(QColor(border_color), 1.2) if border_color else QPen(_qc("fg.muted", 110), 1.0)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
         painter.drawRoundedRect(QRectF(0.5, 0.5, size - 1, size - 1), radius, radius)
@@ -1000,272 +1293,6 @@ def _format_number(value: float, decimals: int = 0) -> str:
     return str(int(round(value)))
 
 
-# Real per-item substat ids that don't match the id this file otherwise
-# uses for the SAME real stat (confirmed 2026-08-30 via an audit of every
-# distinct stat id across ~2200 cached item detail responses against
-# _STAT_ID_DISPLAY_NAME/_MAIN_STAT_ROWS etc. -- User-Wunsch: "prüfen, ob
-# alle Werte des gesamten Gears in die Stats mit einfließen"). Without
-# this, gear rolling any of these ids was silently summed under the raw
-# id and never shown anywhere or counted toward the row it clearly means
-# (e.g. real gear uses "BackAttackDamage", but the "Back Attack" row
-# expects "BackAttack" -- same stat, so any gear piece rolling it was
-# invisible). Normalized here, at gear-collection time, rather than
-# renaming the established row ids themselves, since those same ids are
-# also targeted by Genius/Daevanion/Arcana/Attribute mappings elsewhere.
-_GEAR_STAT_ID_ALIASES = {
-    "Accuracy": "AccuracyBonus",
-    "Evasion": "EvasionBonus",
-    "Perfect": "PerfectChance",
-    "Defense": "DefenseBonus",
-    "FixingDamage": "AttackBonus",
-    "WeaponDamage": "MaxAttack",
-    "CriticalAddDamage": "CriticalAttack",
-    "BackAttackDamage": "BackAttack",
-    "FrontAttackDamage": "FrontAttack",
-    "BackAttackCritical": "BackAttackCriticalHit",
-    "FrontAttackCritical": "FrontAttackCriticalHit",
-    "BackAttackDefense": "BackDefense",
-    "FrontAttackDefense": "FrontDefense",
-    "BackAttackCriticalResist": "BackAttackCriticalHitResist",
-    "FrontAttackCriticalResist": "FrontAttackCriticalHitResist",
-    "DecreaseBackAttack": "BackAttackDamageTolerance",
-    "DecreaseFrontAttack": "FrontAttackDamageTolerance",
-    "DecreaseWeaponDamage": "WeaponDamageTolerance",
-    "DecreaseDamage": "DamageTolerance",
-    "DecreaseCriticalDamage": "CriticalDamageTolerance",
-    "IgnoreIronWall": "EndurancePenetration",
-    "IgnoreRestoration": "RegenerationPenetration",
-    "PvEAddDamage": "PvEAttack",
-    "PvEDamageDefense": "PvEDefense",
-    "BossNpcAddDamage": "BossAttack",
-    # Real Bracelets ("Ludra's Bracelet", "Abyssal Bracelet", etc.) can
-    # roll a raw Empyrean Lord stat directly as a substat -- completely
-    # independent of Arcana cards (User-reported, 2026-08-30). Aliased
-    # straight to the same "XxxLordPoints" id Arcana card contributions
-    # use, so both sources land in the same total/tooltip automatically;
-    # see _arcana_lord_stat_totals_detailed for how the derived %-stats
-    # (Combat Speed etc.) then combine both sources' points.
-    "Time": "TimeLordPoints", "Space": "SpaceLordPoints", "Justice": "JusticeLordPoints",
-    "Freedom": "FreedomLordPoints", "Illusion": "IllusionLordPoints", "Life": "LifeLordPoints",
-    "Destiny": "DestinyLordPoints", "Wisdom": "WisdomLordPoints", "Death": "DeathLordPoints",
-    "Destruction": "DestructionLordPoints",
-}
-
-# The one main stat that scales with enchant — identified by id, not by
-# whether the item happens to display it as a range or a flat number
-# (e.g. Guard shows a flat "Attack: 136", Greatsword/Staff show a range).
-_SCALING_STAT_ID = "WeaponFixingDamage"
-
-# Accessories use a completely different (and much simpler) rate than
-# weapons/guards for the same scaling stat — confirmed universal across
-# every grade sampled.
-_ACCESSORY_CATEGORIES = {"Necklace", "Earrings", "Ring", "Bracelet", "Brooch", "Amulet"}
-_ACCESSORY_RATE_PER_LEVEL = 5.0
-
-# (k, p) for bonus = k * level**p, fit to real data pulled from 12 actual
-# characters' actually-equipped gear via the API (101 samples total, see
-# project notes) — one real anchor point plus the confirmed frozen value at
-# the grade's own maxEnchantLevel:
-#   Legend: lvl1->+10, lvl5->+50                      (exactly linear)
-#   Unique: lvl6->+65, lvl10->+125, lvl12->+165, cap lvl15->+225
-#   Heroic (Epic): CONFIRMED exactly linear, +17.5/level (350/20 = 17.5,
-#     verified against a real +20 screenshot — always whole-number bonuses
-#     in-game, never fractional; one outlier sub-cap sample we scraped
-#     ("Ludra's Grimoire", a Spellbook, showing +125 at level 10 instead of
-#     the expected +175) contradicted this and is treated as bad/anomalous
-#     data — likely a scrape glitch — rather than overriding the confirmed
-#     linear rate.
-# Common/Rare: no samples found (no low-level max-enchanted gear exists in
-# practice) — falls back to the Legend shape as a rough placeholder.
-_WEAPON_CURVE_PARAMS = {
-    "Legend": (10.0, 1.0),
-    "Unique": (5.733, 1.355),
-}
-_HEROIC_RATE_PER_LEVEL = 17.5
-_DEFAULT_WEAPON_CURVE = (10.0, 1.0)
-
-# Clash Rune (id 310900001, PvE) / Devotion Rune (id 310900002, PvP) --
-# real per-enchant-level growth from "Kanon's Aion 2 Bible" CH2 (2026-08-
-# 29 research), NOT the generic estimate_enchant_bonus/estimate_armor_
-# bonus curve below (neither knows "Rune" as a category, and shugo.gg's
-# own enchant simulator keeps every one of this item's stat values frozen
-# across all 10 levels -- confirmed live, so its numbers can't be trusted
-# for Runes either). Level-0 base values (Combat Speed 1%, Penetration
-# 100, Multi-hit Chance 1%, +the PvE/PvP Damage Boost/Tolerance 0.5%) come
-# from the item's own real mainStats via the normal per-slot loop in
-# _compute_stat_totals_detailed -- this only adds the DELTA above that
-# base for a given enchant level, User-Wunsch 2026-09-04: "die Runen
-# reinbringen, so genau wie moeglich - die Successchance koennen wir
-# rauslassen" (enchant success % intentionally not modeled, real numbers
-# don't exist anywhere).
-#
-# Combat Speed/Multi-hit Chance don't scale linearly from level 0 -- they
-# stay at their base value until a threshold level, then gain +1%/level
-# from there on. The guide gives the threshold levels (+6 / +9) but never
-# a single concrete "value AT level N" example to pin down whether the
-# threshold level itself already shows the first bump or the level after
-# it does -- this file assumes the FIRST bump lands ON the threshold
-# level (e.g. Combat Speed: level 5 = 1%, level 6 = 2%, level 7 = 3%...).
-# Multi-hit Chance's own +9 threshold is additionally flagged UNCONFIRMED
-# by the guide itself ("Never seen one, need confirmation") -- treat its
-# numbers as the best available estimate, not a verified fact.
-_RUNE_PVE_ITEM_ID = 310900001  # Clash Rune
-_RUNE_PVP_ITEM_ID = 310900002  # Devotion Rune
-_RUNE_COMBAT_SPEED_THRESHOLD = 6
-_RUNE_MULTI_HIT_THRESHOLD = 9
-
-
-def _rune_enchant_bonus(item_id: int, level: int) -> dict[str, float]:
-    if level <= 0:
-        return {}
-    bonus = {
-        "CombatSpeed": max(0, level - _RUNE_COMBAT_SPEED_THRESHOLD + 1) * 1.0,
-        "DefensePierce": level * 50.0,
-        "AdditionalHitRate": max(0, level - _RUNE_MULTI_HIT_THRESHOLD + 1) * 1.0,
-    }
-    if item_id == _RUNE_PVE_ITEM_ID:
-        bonus["PvEAmplifyDamage"] = level * 0.5
-        bonus["PvEDecreaseDamage"] = level * 0.5
-    elif item_id == _RUNE_PVP_ITEM_ID:
-        bonus["PvPAmplifyDamage"] = level * 0.5
-        bonus["PvPDecreaseDamage"] = level * 0.5
-    return bonus
-
-
-def estimate_enchant_bonus(
-    level: int, grade_name: str = "", normal_max_level: int = 0, category_name: str = "",
-) -> float:
-    """Estimated bonus ADDED ALONGSIDE (never into) a weapon/armor's ranged
-    main stat (e.g. Attack) at a given enchant level — the base min~max
-    range itself is always shown completely unchanged, exactly like the
-    in-game '396 ~ 545 (+350)' display: only the '(+N)' part is new.
-
-    Only the one main stat that has this id scales with enchant at all —
-    verified via the API against real, actually-equipped items: Accuracy/
-    Critical Hit/Block/etc. never changed at any enchant level.
-
-    Accessories (Ring, Necklace, ...) scale at a flat, grade-independent
-    rate; weapons/guards follow a grade-dependent curve — both fit to real
-    data (see the constants above).
-
-    The bonus FREEZES at the item's own maxEnchantLevel (confirmed: this
-    varies by grade — Legend/Unique cap at 15, Epic/Heroic at 20) — past
-    that point (Exceed range) it stops growing entirely; instead two new
-    separate bonus lines appear (see estimate_exceed_bonus)."""
-    effective_level = min(level, normal_max_level) if normal_max_level else level
-    if effective_level <= 0:
-        return 0.0
-    if category_name in _ACCESSORY_CATEGORIES:
-        return _ACCESSORY_RATE_PER_LEVEL * effective_level
-    if grade_name == "Heroic":
-        # Confirmed exactly linear at +17.5/level — a real, precise rate,
-        # so odd levels land on a decimal internally (e.g. level 1 -> 17.5);
-        # _format_number() rounds this to a whole number for display, since
-        # in-game bonus displays are always whole numbers.
-        return _HEROIC_RATE_PER_LEVEL * effective_level
-    k, p = _WEAPON_CURVE_PARAMS.get(grade_name, _DEFAULT_WEAPON_CURVE)
-    return k * (effective_level ** p)
-
-
-def estimate_exceed_bonus(level: int, normal_max_level: int, category_name: str = "") -> dict:
-    """Past the item's normal max enchant level (the Exceed range), new
-    separate stat lines appear on top of the (now frozen) ranged main stat
-    bonus. Confirmed via ~40 real Exceed-range samples (3/4/5 Exceed steps,
-    both Unique and Epic grade — rate is identical across grades, only
-    category changes it):
-      - Weapons/Guards: flat 'Attack' +30/step, 'Attack increase' +1%/step.
-      - Accessories: flat 'Attack' +20/step, a separate 'Defense' +40/step,
-        'Attack increase' +1%/step (all three lines shown together)."""
-    if not normal_max_level or level <= normal_max_level:
-        return {"attack": 0.0, "attack_pct": 0.0, "defense": 0.0}
-    steps = level - normal_max_level
-    if category_name in _ACCESSORY_CATEGORIES:
-        return {"attack": 20.0 * steps, "attack_pct": 1.0 * steps, "defense": 40.0 * steps}
-    return {"attack": 30.0 * steps, "attack_pct": 1.0 * steps, "defense": 0.0}
-
-
-# Armor (body pieces) scales TWO main stats simultaneously — Defense AND HP
-# — unlike weapons/accessories, which only scale one. Confirmed via 16 real
-# samples across all 7 armor slots (Helm/Top/Pauldrons/Gloves/Legs/Shoes/
-# Cloak) at both Unique and Epic/Heroic grade, all internally consistent:
-#   Unique: Defense cap 450 @15 (=30/level), HP cap 300 @15 (=20/level)
-#   Heroic (Epic): Defense cap 700 @20 (=35/level), HP cap 400 @20 (=20/level)
-# HP rate is grade-independent (20/level both grades); Defense rate is not.
-# Belt is its OWN special case — own maxEnchantLevel of 10 (not 15/20), and
-# BOTH grades gave the identical capped values (Defense 300 / HP 500 @10),
-# i.e. Belt's rate is grade-independent entirely: 30/level Defense,
-# 50/level HP.
-_ARMOR_CATEGORIES = {"Helm", "Top", "Pauldrons", "Gloves", "Legs", "Shoes", "Cloak"}
-_BELT_CATEGORY = "Belt"
-_DEFENSE_STAT_ID = "ArmorDefense"
-_HP_STAT_ID = "HPMax"
-
-_ARMOR_DEFENSE_RATE = {"Unique": 30.0, "Heroic": 35.0}
-_DEFAULT_ARMOR_DEFENSE_RATE = 30.0
-_ARMOR_HP_RATE_PER_LEVEL = 20.0
-
-_BELT_DEFENSE_RATE_PER_LEVEL = 30.0
-_BELT_HP_RATE_PER_LEVEL = 50.0
-
-
-def estimate_armor_bonus(
-    level: int, grade_name: str = "", normal_max_level: int = 0, category_name: str = "",
-) -> tuple[float, float]:
-    """Returns (defense_bonus, hp_bonus) for an armor piece — see the
-    constants above for the data this is calibrated against."""
-    effective_level = min(level, normal_max_level) if normal_max_level else level
-    if effective_level <= 0:
-        return 0.0, 0.0
-    if category_name == _BELT_CATEGORY:
-        return (
-            round(_BELT_DEFENSE_RATE_PER_LEVEL * effective_level),
-            round(_BELT_HP_RATE_PER_LEVEL * effective_level),
-        )
-    def_rate = _ARMOR_DEFENSE_RATE.get(grade_name, _DEFAULT_ARMOR_DEFENSE_RATE)
-    return round(def_rate * effective_level), round(_ARMOR_HP_RATE_PER_LEVEL * effective_level)
-
-
-def estimate_armor_exceed_bonus(level: int, normal_max_level: int) -> dict:
-    """Exceed range for armor: both Defense and HP get +80/step (confirmed
-    identical across Unique and Epic grade), plus a +1%/step 'increase' on
-    each — four new lines total, vs. weapons/accessories' two or three."""
-    if not normal_max_level or level <= normal_max_level:
-        return {"defense": 0.0, "defense_pct": 0.0, "hp": 0.0, "hp_pct": 0.0}
-    steps = level - normal_max_level
-    return {"defense": 80.0 * steps, "defense_pct": 1.0 * steps, "hp": 80.0 * steps, "hp_pct": 1.0 * steps}
-
-
-# The GearScore push from enchanting is its OWN real rate — confirmed via
-# shugo.gg's live character/equipment/item endpoint (a real enchant-level
-# simulator: TW NCSoft's own API, proxied by shugo.gg, returns a per-item
-# 'levelValue' for a given characterId/slotPos/enchantLevel combo) against
-# 4 independent real equipped items pulled from real TW characters
-# ("Levis"/"Skyvie", [HIT] legion, server 1009) swept across enchant 0/5/
-# 10/15/20/25: a Heroic/Epic Staff (weapon), a Unique Guard (weapon-like),
-# an Epic/Heroic armor Shoulder piece, and an Epic Necklace (accessory).
-# All four gave IDENTICALLY +1.0 levelValue per normal enchant level and
-# +5.0 per Exceed step (the DELTA between consecutive sweep points) —
-# completely independent of grade or category, and clearly NOT the same
-# rate as the Attack/Defense/HP stat bonuses (e.g. a Heroic weapon's
-# Attack bonus is +17.5/level, its GearScore push only +1/level).
-# NOTE: every real sample's levelValue also carried a constant per-
-# instance offset even at enchant 0 (13-24, varying by item) — almost
-# certainly from that specific character's socketed magic/god stones,
-# which our planner doesn't model at all (no UI/data for them) — so only
-# the confirmed RATE is used here; push is 0 at enchant 0, matching
-# shugo.gg's own static item-catalog API (always levelValue=0 unenchanted).
-_GEARSCORE_NORMAL_RATE = 1.0
-_GEARSCORE_EXCEED_RATE = 5.0
-
-
-def _gearscore_push(enchant_level: int, normal_max_level: int) -> float:
-    if enchant_level <= 0:
-        return 0.0
-    normal_steps = min(enchant_level, normal_max_level) if normal_max_level else enchant_level
-    exceed_steps = max(0, enchant_level - normal_max_level) if normal_max_level else 0
-    return _GEARSCORE_NORMAL_RATE * normal_steps + _GEARSCORE_EXCEED_RATE * exceed_steps
-
-
 def _clear_layout(layout):
     """Remove and delete every item (widget or nested layout) from layout.
 
@@ -1387,7 +1414,7 @@ class _TickedSlider(QSlider):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        pen = QPen(QColor(148, 163, 184, 200))
+        pen = QPen(_qc("fg.muted", 200))
         pen.setWidth(1)
         painter.setPen(pen)
 
@@ -1497,7 +1524,7 @@ class _RoleColorDelegate(QStyledItemDelegate):
             option.palette.setColor(QPalette.HighlightedText, color)
 
 
-# Mirrors styles.qss's "#DetailInfo { font-size: 13px; }" -- used when
+# Mirrors the sheet's "#DetailInfo { font-size: {{text_base}}px; }" -- used when
 # measuring #DetailInfo-styled label text via QFontMetrics BEFORE the
 # widget has actually been polished into the app's stylesheet (a freshly
 # constructed QLabel's own .font() still reports Qt's default font at that
@@ -1510,7 +1537,6 @@ _DETAIL_INFO_FONT_PIXEL_SIZE = 13
 # "eine Schriftart nutzen, die nicht so blass ist wie die aktuelle") --
 # the original #7d8cab read as too pale/low-contrast against the dark
 # navy background.
-_DETAIL_CAPTION_COLOR = "#a9b7d1"
 
 
 class ItemDetailWidget(QWidget):
@@ -1559,7 +1585,7 @@ class ItemDetailWidget(QWidget):
         self._icon_glow = QGraphicsDropShadowEffect()
         self._icon_glow.setBlurRadius(0)
         self._icon_glow.setOffset(0, 0)
-        self._icon_glow.setColor(QColor("#475569"))
+        self._icon_glow.setColor(_qc("border.strong"))
         self.icon_label.setGraphicsEffect(self._icon_glow)
 
         self.name_label = QLabel()
@@ -1885,7 +1911,6 @@ class ItemDetailWidget(QWidget):
         self._sub_stat_count = 0
         self._philosopher_stone_active = False
         self.icon_label.setPixmap(QPixmap())
-        self.icon_label.setStyleSheet("")
         self._icon_glow.setBlurRadius(0)
         self.name_label.setText("")
         self.header_label.setText("")
@@ -1930,7 +1955,7 @@ class ItemDetailWidget(QWidget):
             # -- browse-only Item Database popup only; matches the app's
             # own GRADE_COLORS instead of the Build Planner's plain grey
             # subtitle.
-            grade_color = GRADE_COLORS.get(detail.get("grade"), "#94a3b8")
+            grade_color = _dc("item_grade", detail.get("grade"))
             self.header_label.setText(
                 f"{html.escape(detail.get('name', ''))}<br>"
                 f"<span style='color:{grade_color}; font-weight:700; font-size:13px;'>"
@@ -1953,8 +1978,8 @@ class ItemDetailWidget(QWidget):
             def meta_cell(label: str, value: str) -> str:
                 return (
                     "<td style='padding-right:26px;'>"
-                    f"<span style='color:{_DETAIL_CAPTION_COLOR};'>{html.escape(label)}</span> "
-                    f"<b style='color:#e6ecf5;'>{html.escape(value)}</b></td>"
+                    f"<span style='color:{_c('fg.secondary')};'>{html.escape(label)}</span> "
+                    f"<b style='color:{_c('fg')};'>{html.escape(value)}</b></td>"
                 )
 
             # Real bug found + fixed (User-reported, 2026-09-11, screenshot:
@@ -1979,8 +2004,8 @@ class ItemDetailWidget(QWidget):
                 "<table cellpadding='0' cellspacing='0' style='margin-top:2px;'><tr>"
                 + "".join(cells) + "</tr>"
                 f"<tr><td colspan='{max(len(cells), 1)}' style='padding-top:4px;'>"
-                f"<span style='color:{_DETAIL_CAPTION_COLOR};'>{html.escape(_t('arm_source_label'))}</span> "
-                f"<b style='color:#e6ecf5;'>{html.escape(source_value)}</b></td></tr></table>"
+                f"<span style='color:{_c('fg.secondary')};'>{html.escape(_t('arm_source_label'))}</span> "
+                f"<b style='color:{_c('fg')};'>{html.escape(source_value)}</b></td></tr></table>"
             )
         else:
             yes_no = _t("arm_yes") if detail.get("tradable") else _t("arm_no")
@@ -2029,7 +2054,7 @@ class ItemDetailWidget(QWidget):
         # gradeName, which calls Epic-tier gear "Heroic" instead — needed
         # for the enchant-rate formulas below, but wrong for color lookup.
         catalog_grade = detail.get("grade") or grade_name
-        glow_color = GRADE_COLORS.get(catalog_grade, "#475569")
+        glow_color = GRADE_COLORS.get(catalog_grade) or _c("border.strong")
         self._icon_glow.setColor(QColor(glow_color))
         self._icon_glow.setBlurRadius(30)
         recolored_icon = self.icon_cache.pixmap(self._image_url, 140, grade=catalog_grade)
@@ -2140,10 +2165,10 @@ class ItemDetailWidget(QWidget):
                     continue
                 cells.append(
                     "<td style='padding:3px 6px;'>"
-                    "<table cellpadding='0' cellspacing='0' style='background-color:rgba(30,41,59,0.65); "
-                    "border:1px solid rgba(100,116,139,0.35); border-radius:8px;'><tr><td style='padding:5px 14px;'>"
-                    f"<span style='font-size:9px; color:{_DETAIL_CAPTION_COLOR}; letter-spacing:1px;'>{html.escape(label.strip().upper())}</span><br>"
-                    f"<span style='font-size:13px; font-weight:700; color:#e6ecf5;'>{value.strip()}</span>"
+                    f"<table cellpadding='0' cellspacing='0' style='background-color:{_c('bg.elevated')}; "
+                    f"border:1px solid {_c('border')}; border-radius:8px;'><tr><td style='padding:5px 14px;'>"
+                    f"<span style='font-size:9px; color:{_c('fg.secondary')}; letter-spacing:1px;'>{html.escape(label.strip().upper())}</span><br>"
+                    f"<span style='font-size:13px; font-weight:700; color:{_c('fg')};'>{value.strip()}</span>"
                     "</td></tr></table></td>"
                 )
             return "<table cellpadding='0' cellspacing='0'><tr>" + "".join(cells) + "</tr></table>"
@@ -2161,9 +2186,9 @@ class ItemDetailWidget(QWidget):
                     # only popup anyway (see below), so this is always just
                     # the flat catalog GearScore.
                     self.gearscore_badge_label.setText(
-                        f"<div align='right'><span style='color:#22d3ee; font-size:26px; font-weight:800;'>"
+                        f"<div align='right'><span style='color:{_c('accent')}; font-size:26px; font-weight:800;'>"
                         f"{_format_number(item_level)}</span></div>"
-                        f"<div align='right'><span style='color:{_DETAIL_CAPTION_COLOR}; font-size:9px; "
+                        f"<div align='right'><span style='color:{_c('fg.secondary')}; font-size:9px; "
                         "letter-spacing:1.5px;'>GEARSCORE</span></div>"
                     )
                     self.gearscore_badge_label.setVisible(True)
@@ -2179,7 +2204,7 @@ class ItemDetailWidget(QWidget):
             else:
                 lines.append(stat_chip_row_html(main_stat_lines))
 
-            orange = "color:#f59e0b;"
+            orange = f"color:{_c('warn')};"
             if is_armor:
                 if exceed["defense"] or exceed["hp"] or exceed["defense_pct"] or exceed["hp_pct"]:
                     if exceed["defense"]:
@@ -2290,7 +2315,7 @@ class ItemDetailWidget(QWidget):
                 if not descriptions:
                     continue
                 lines.append(
-                    f"<span style='color:#38bdf8;'>({degree})</span> {html.escape(', '.join(descriptions))}"
+                    f"<span style='color:{_c('accent')};'>({degree})</span> {html.escape(', '.join(descriptions))}"
                 )
 
         self.main_stats_label.setText("<br>".join(lines))
@@ -2477,7 +2502,7 @@ class ItemDetailWidget(QWidget):
                 # Item Database popup; the Build Planner's narrower compact
                 # column keeps the original #DetailInfo styling.
                 possible_substats_html = (
-                    f"<span style='font-size:12.5px; color:#aab4c8;'>{possible_substats_html}</span>"
+                    f"<span style='font-size:12.5px; color:{_c('fg.secondary')};'>{possible_substats_html}</span>"
                 )
             self.substats_header_label.setText(possible_substats_html)
             buckets = {"offensive": [], "defensive": [], "pvp": []}
@@ -2486,7 +2511,7 @@ class ItemDetailWidget(QWidget):
                     continue
                 buckets[_classify_stat(s.get("id", ""))].append((i, s))
 
-            def add_accordion_section(target_layout: QVBoxLayout, key: str, badge_text: str, color: str, entries: list):
+            def add_accordion_section(target_layout: QVBoxLayout, key: str, badge_text: str, bucket: str, entries: list):
                 # Default: stat buckets start open (unchanged from before),
                 # skill buckets start collapsed (they're the longest lists
                 # and the reason this panel needed an accordion at all) —
@@ -2499,11 +2524,8 @@ class ItemDetailWidget(QWidget):
                 header_btn.setCheckable(True)
                 header_btn.setChecked(is_open)
                 header_btn.setCursor(Qt.PointingHandCursor)
-                header_btn.setStyleSheet(
-                    f"QToolButton {{ background-color: rgba({color},0.18); color: rgb({color}); "
-                    "padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; "
-                    "border: none; text-align: left; }"
-                )
+                header_btn.setObjectName("SubstatSectionHeader")
+                header_btn.setProperty("bucket", bucket)
                 header_btn.setText(f"{'▾' if is_open else '▸'} {badge_text} ({len(entries)})")
                 target_layout.addWidget(header_btn)
 
@@ -2527,16 +2549,19 @@ class ItemDetailWidget(QWidget):
             # spend; the Build Planner's narrower compact column keeps 2.
             grid_columns = 2 if self._selectable else 3
 
+            # The bucket IS the accent (see #SubstatSectionHeader[bucket=…]
+            # in the template): offensive/defensive/pvp/skills are our own
+            # categories, so they take tokens, not a data table.
             bucket_meta = [
-                ("offensive", _t("arm_badge_offensive"), "56,189,248"),
-                ("defensive", _t("arm_badge_defensive"), "74,222,128"),
-                ("pvp", _t("arm_badge_pvp"), "244,114,182"),
+                ("offensive", _t("arm_badge_offensive")),
+                ("defensive", _t("arm_badge_defensive")),
+                ("pvp", _t("arm_badge_pvp")),
             ]
-            for key, badge_text, color in bucket_meta:
+            for key, badge_text in bucket_meta:
                 entries = buckets[key]
                 if not entries:
                     continue
-                grid = add_accordion_section(self.substats_layout, key, badge_text, color, entries)
+                grid = add_accordion_section(self.substats_layout, key, badge_text, key, entries)
                 for pos, (i, stat) in enumerate(entries):
                     row_btn = make_substat_row(i, sub_stat_line(stat))
                     grid_row, grid_col = divmod(pos, grid_columns)
@@ -2558,7 +2583,7 @@ class ItemDetailWidget(QWidget):
                     # selection doesn't need two near-empty tabs to click
                     # between.
                     skill_target_layout = self.substats_layout if self._only_show_selected else self.skills_tab_layout
-                    grid = add_accordion_section(skill_target_layout, skill_key, skill_badge_text, "250,204,21", visible_skills)
+                    grid = add_accordion_section(skill_target_layout, skill_key, skill_badge_text, "skills", visible_skills)
                     for pos, (idx, skill) in enumerate(visible_skills):
                         row_btn = make_substat_row(idx, skill.get("name", ""))
                         grid_row, grid_col = divmod(pos, grid_columns)
@@ -2935,10 +2960,7 @@ ARCANA_THEME_ORDER = ["Vigor", "Magic", "Frenzy", "Purity", "Punishment", "Prote
 # whichever pill happens to be picked, so Vigor/Magic (and, once enabled,
 # Frenzy/Purity and Punishment/Protection/Indomitability) read as
 # visually distinct Sets at a glance.
-_ARCANA_THEME_COLORS = {
-    "Vigor": "#facc15", "Magic": "#22d3ee", "Frenzy": "#f97316", "Purity": "#a78bfa",
-    "Punishment": "#ef4444", "Protection": "#4ade80", "Indomitability": "#f472b6",
-}
+_ARCANA_THEME_COLORS = _theme.ARCANA_THEME_COLORS if _theme is not None else _MutedTable()
 
 # The real 2/2/3-theme Season Set groupings (User-Wunsch, 2026-09-13: prep
 # work for the Arcana seasons that release after this one -- "[Vigor/Magic]
@@ -2960,420 +2982,6 @@ _ARCANA_SEASON_GROUPS: list[tuple[str, str, list[str]]] = [
 # the other two stay visible with a 🔒 lock but can't be clicked while
 # this is False. Flip to True only once a later season is confirmed live.
 _ARCANA_FUTURE_SEASONS_ENABLED = False
-
-# ---- Arcana Planner (2026-08-29) -------------------------------------------
-# One equip slot per Lord card TYPE (not a generic duplicates-allowed pool --
-# corrected by the user after an initial wrong assumption: "da bei Magic und
-# Vigor keine Waage existiert, sind es nur 5 Karten, somit betraegt die
-# gesamt Anzahl der Setkarten nur 5, nicht 6"). Each slot's real in-game
-# card can be leveled up independently of its base grade -- each level-up
-# always grants +1 to exactly ONE random skill from the card's pool (never
-# player-chosen -- User, 2026-08-29: "Der Spieler kann nicht waehlen,
-# welcher Wert gelevelt wird ... nur immer wieder neue Karten farmen und
-# leveln") -- and grade caps the max level reachable (Rare=3, Legend=4,
-# Unique=5, User-confirmed). The Calculator deliberately does NOT simulate
-# that randomness -- "Wir machen das aber nicht im Kalkulator, wir gehen
-# von den perfekten Werten aus": it shows the PERFECT/best-case reference
-# (every level-up landing on the one skill you care about, on a maxed
-# Unique card) so a player can judge how close their own randomly-rolled
-# real cards are to that ceiling -- not a literal "buy this and get
-# exactly this" recommendation. Same perfect-case logic applies to the
-# card's own Empyrean Lord stat effect, which also gains +1 per level
-# (User: "Bei Magic und Vigor geht der Hauptwert ... auch nur +1"), so a
-# maxed Unique card's Lord effect is shown at its max level's value too.
-# Applies to ONE skill chosen from that type's class-specific pool
-# (grade-independent -- see _load_arcana_class_skills), constrained by the
-# type's fixed skill category: Chalice can target either an Active or a
-# Passive skill ("Mastery"), Parchment/Compass/Scales only Active, Bell/
-# Mirror only Passive. Common grade doesn't exist for any Lord card.
-_ARCANA_LORD_TYPES = ["Chalice", "Parchment", "Compass", "Bell", "Mirror", "Scales"]
-_ARCANA_LORD_CATEGORY = {
-    "Chalice": "both", "Parchment": "active", "Compass": "active",
-    "Bell": "passive", "Mirror": "passive", "Scales": "active",
-}
-_ARCANA_GRADE_MAX_LEVEL = {"Rare": 3, "Legend": 4, "Unique": 5}
-# The Calculator always reasons about the perfect/best case -- a maxed
-# Unique card -- so this is simply the Unique entry above. This is the
-# CARD's overall level (how many shared extra-points its leveling
-# provides in total -- see _ARCANA_CARD_EXTRA_BUDGET below, same number),
-# distinct from _ARCANA_PER_SKILL_CAP (the max any ONE skill on that card
-# can individually reach).
-_ARCANA_MAX_CARD_LEVEL = _ARCANA_GRADE_MAX_LEVEL["Unique"]
-
-# "Season 1" assumption (User-Wunsch, 2026-08-29, explicitly UNVERIFIED --
-# "die Wahrscheinlichkeit ist sehr hoch, dass nur Vigor und Magic
-# existieren"): only these two themes are treated as currently obtainable.
-# The other 5 (Frenzy/Purity/Punishment/Protection/Indomitability) stay out
-# of the planner's candidate pool for now -- same forward-compat intent as
-# the Daevanion Board's _s/_a split, but here it's one flat set rather than
-# two named variants since the user wants more seasons/slots addable later
-# without a redesign (see _arcana_usable_lord_types below).
-_ARCANA_ACTIVE_THEMES = {"Vigor", "Magic"}
-
-
-def _arcana_usable_lord_types(theme_map: dict, active_themes: set[str]) -> list[str]:
-    """Which Lord card types actually exist in at least one of the given
-    themes -- e.g. Scales has no Vigor/Magic entry at all, so it's excluded
-    from the Season-1 candidate pool entirely, dropping the real usable
-    total from 6 to 5. Data-driven (reads theme_map, already scanned from
-    arcana_info.json) rather than a hardcoded count, so a later season
-    adding Scales -- or a wholly new theme -- just changes the result here,
-    no separate constant to update."""
-    return [
-        ct for ct in _ARCANA_LORD_TYPES
-        if any(ct in theme_map.get(theme, {}) for theme in active_themes)
-    ]
-
-
-_ARCANA_SKILL_SLOTS_PER_CARD = 4
-# A real card rolls _ARCANA_SKILL_SLOTS_PER_CARD (4) of its type's ~5-6
-# possible skills; the instant one is rolled it already sits at
-# _ARCANA_SKILL_BASELINE (1), not 0 (User, 2026-08-29: "bei diesen Skills
-# ist das Startlevel nicht '0' sondern 1" / "kann eine Karte, wenn sie +0
-# ist, folgende Werte haben: Rushing Smash +1, Spinning Strike +1,
-# Impactful Crush +1, Dark Crush +1"). Leveling the card then spends a
-# SHARED pool of _ARCANA_CARD_EXTRA_BUDGET (5, for Unique) extra points,
-# one at a time, each landing on ONE random already-rolled skill (never
-# player-chosen) -- but no single skill can exceed _ARCANA_PER_SKILL_CAP
-# (4) regardless of how many hits land on it (User: "das Limit ist +4 auf
-# den Skills und das maximale Level, das eine Arcana erhalten kann, ist
-# +5, also 5 Level auf die vorhandenen Skills verteilen"). Verified
-# against the user's own worked examples: Parchment showing Onslaught +4
-# (needs 3 hits beyond baseline) and Spinning Strike +3 (needs 2 hits) =
-# exactly 5 hits, the full shared budget, with the card's other 2
-# (unlisted, uninteresting) slots staying at baseline; Chalice showing
-# Dark Crush +4 (3 hits, AT the per-skill cap) + Rushing Smash +2 (1 hit)
-# = 4 of 5 hits used, the 5th would be wasted since Dark Crush is already
-# capped. Both examples are inconsistent with either "no shared budget,
-# every skill independently to +5" (Parchment's 2 slots alone would need
-# 5 hits for just +4/+3, leaving nothing baseline-related unaccounted)
-# or "one skill per card" (both cards clearly show 2+ skills at once).
-_ARCANA_SKILL_BASELINE = 1
-_ARCANA_CARD_EXTRA_BUDGET = _ARCANA_MAX_CARD_LEVEL
-_ARCANA_PER_SKILL_CAP = 4
-_ARCANA_SKILL_SLOTS_PER_CARD = 4
-_ARCANA_DEFAULT_GRADE = "Unique"
-
-
-def _arcana_card_slot_list(card_data: dict | None) -> list[dict | None]:
-    """Exactly _ARCANA_SKILL_SLOTS_PER_CARD (4) positional entries, each
-    either None (empty) or {"skill_id": ..., "level": ...} -- the shape
-    manual per-slot editing needs (User-Wunsch, 2026-08-29: "Jede der 4
-    Skill-Zeilen einzeln anklickbar", needs a stable index per slot).
-    Migrates the older {"skill_ids": {sid: level}} shape on the fly (still
-    what's stored in any profile saved before this existed, and still what
-    the Calculator's Apply writes) -- a dict has no way to represent "slot
-    2 is specifically empty while slot 3 has X", only "whatever order
-    happened to get assigned"."""
-    if not card_data:
-        return [None] * _ARCANA_SKILL_SLOTS_PER_CARD
-    slots = card_data.get("slots")
-    if slots is None:
-        old = card_data.get("skill_ids") or {}
-        slots = [{"skill_id": sid, "level": lvl} for sid, lvl in old.items()]
-    slots = list(slots[:_ARCANA_SKILL_SLOTS_PER_CARD])
-    while len(slots) < _ARCANA_SKILL_SLOTS_PER_CARD:
-        slots.append(None)
-    return slots
-
-
-def _arcana_card_grade(card_data: dict | None) -> str:
-    if not card_data:
-        return _ARCANA_DEFAULT_GRADE
-    return card_data.get("grade", _ARCANA_DEFAULT_GRADE)
-
-
-def _arcana_card_level(card_data: dict | None) -> int:
-    """The card's overall Level (0 to its grade's max, see
-    _ARCANA_GRADE_MAX_LEVEL) -- User-Wunsch, 2026-08-30: derive it from the
-    already-assigned skill slots instead of a separate input ("wir
-    berechnen das Level der Karten anhand der vergebenen Punkte. ... fuegt
-    man eine Karte mit +3 und einem +4 hinzu ist sie +5"). Every point a
-    slot sits above baseline (_ARCANA_SKILL_BASELINE) came out of the same
-    shared per-card budget, so summing those points back up gives the
-    exact Level that was spent to reach this slot assignment -- same math
-    already used for the live wish-ceiling (see ArcanaSkillSlotDialog)."""
-    slots = _arcana_card_slot_list(card_data)
-    spent = sum(
-        max(0, slot.get("level", _ARCANA_SKILL_BASELINE) - _ARCANA_SKILL_BASELINE)
-        for slot in slots if slot
-    )
-    grade = _arcana_card_grade(card_data)
-    return min(spent, _ARCANA_GRADE_MAX_LEVEL.get(grade, _ARCANA_MAX_CARD_LEVEL))
-
-
-def _arcana_eligible_skills_for_type(
-    ct: str, wishes: dict[str, int], class_skill_pools: dict[str, list[dict]], skill_type_by_id: dict[str, str],
-) -> list[str]:
-    """Wished skills this Lord type could ever roll (in its pool, matching
-    its fixed Active/Passive/both category)."""
-    category = _ARCANA_LORD_CATEGORY.get(ct)
-    pool_ids = {s["id"] for s in class_skill_pools.get(ct, [])}
-    return [
-        sid for sid in wishes
-        if sid in pool_ids and (category == "both" or skill_type_by_id.get(sid) == category)
-    ]
-
-
-def _arcana_full_pool_for_type(ct: str, class_skill_pools: dict[str, list[dict]]) -> list[str]:
-    """Every real skill id this Lord type's pool can roll, wished or not --
-    used to fill a card's 4 skill slots with something sensible once real
-    wishes run out (User-Wunsch, 2026-08-29: "Immer alle 5 verteilen" /
-    "kannst bei der Verteilung der restlichen Punkte auch gerne die
-    Prioliste der Skills nehmen"), instead of leaving slots/budget
-    stranded just because nothing was explicitly wished for them."""
-    return [s["id"] for s in class_skill_pools.get(ct, [])]
-
-
-def _arcana_best_card_contribution(
-    eligible: list[str], full_pool: list[str], priority_rank: dict[str, int],
-    wishes: dict[str, int], covered: dict[str, int],
-) -> dict[str, int]:
-    """What ONE card of this type contributes in the perfect/best case,
-    given what's ALREADY covered by other assigned cards so far. Two
-    phases:
-
-    1. Choose up to _ARCANA_SKILL_SLOTS_PER_CARD (4) of the card's real
-       skill slots: eligible (wished) skills with remaining unmet need
-       first (an exchange argument shows no reason to pick a skill with
-       less need over one with more, so no need to try every possible
-       4-of-N subset), ranked by need then Priority List position as a
-       tiebreak; if fewer than 4 wished skills have real need, the
-       remaining slots are filled from the type's FULL pool ranked by
-       Priority List position, then pool order as a last resort (User,
-       2026-08-29: "kannst bei der Verteilung der restlichen Punkte auch
-       gerne die Prioliste der Skills nehmen" / "wenn dort nur 4 Skills
-       angegeben sind, nimm den erst besten") -- so a card's slots are
-       never left conceptually "empty" just because nothing was wished.
-    2. Spend the shared _ARCANA_CARD_EXTRA_BUDGET one point at a time,
-       never past _ARCANA_PER_SKILL_CAP: real wish-need first, then once
-       every chosen skill's own wish is met, keep spending the REST of
-       the budget too (User: "Immer alle 5 verteilen") on whichever
-       chosen skill ranks highest on the Priority List, falling back to
-       pool order -- a real card's leveling doesn't stop just because
-       your specific wish was already satisfied.
-
-    Returns ({skill_id: added_value}, need_based_ids) for the chosen
-    skills (empty only if the type's pool has nothing at all matching its
-    category) -- need_based_ids is the subset of the RESULT that was
-    actually chosen because of real remaining wish need (phase 1 above),
-    as opposed to pure filler (phase 1's "fewer than 4 wished skills"
-    fallback). _arcana_compute_combinations' diversification only
-    excludes need_based_ids when searching for a second combination (see
-    its own docstring) -- a filler pick landing on a skill that ANOTHER
-    type already fully covered via real need is incidental (that type
-    just had unused slots left over), not a genuine second path to that
-    skill, and excluding it too was blocking real alternatives that
-    should have been findable (User-reported, 2026-09-13: "hier gibt es
-    doch sicher noch andere Kombinationen" -- confirmed via direct
-    inspection that a single wished skill fully covered by one type still
-    incidentally showed up as a 1-point filler pick on a second type,
-    which then got excluded right along with the real assignment)."""
-    def remaining_need(sid: str, value: int) -> int:
-        return max(0, wishes.get(sid, 0) - covered.get(sid, 0) - value)
-
-    def choice_key(sid: str) -> tuple:
-        need = max(0, wishes.get(sid, 0) - covered.get(sid, 0))
-        return (-need, priority_rank.get(sid, float("inf")), sid)
-
-    need_chosen = sorted(
-        (sid for sid in eligible if wishes.get(sid, 0) - covered.get(sid, 0) > 0),
-        key=choice_key,
-    )[:_ARCANA_SKILL_SLOTS_PER_CARD]
-    chosen = list(need_chosen)
-    if len(chosen) < _ARCANA_SKILL_SLOTS_PER_CARD:
-        filler = sorted(
-            (sid for sid in full_pool if sid not in chosen),
-            key=lambda sid: (priority_rank.get(sid, float("inf")), sid),
-        )
-        chosen += filler[: _ARCANA_SKILL_SLOTS_PER_CARD - len(chosen)]
-    if not chosen:
-        return {}, set()
-
-    values = {sid: _ARCANA_SKILL_BASELINE for sid in chosen}
-    budget = _ARCANA_CARD_EXTRA_BUDGET
-    while budget > 0:
-        candidates = [sid for sid in chosen if values[sid] < _ARCANA_PER_SKILL_CAP]
-        if not candidates:
-            break
-        best_sid = min(
-            candidates,
-            key=lambda sid: (-remaining_need(sid, values[sid]), priority_rank.get(sid, float("inf")), sid),
-        )
-        values[best_sid] += 1
-        budget -= 1
-    return values, set(need_chosen)
-
-
-def _arcana_best_combination(
-    usable_types: list[str], type_to_theme: dict[str, str],
-    eligible_by_type: dict[str, list[str]], full_pool_by_type: dict[str, list[str]],
-    priority_rank: dict[str, int], wishes: dict[str, int],
-) -> tuple[dict[str, int], list[dict]]:
-    """Each of the 5 usable Lord types is now a real, fixed card (its
-    theme chosen up front via ArcanaThemeChoiceDialog, not searched) --
-    so unlike the earlier count-budget model, there's no more "which
-    theme"/"skip this type" decision left to explore. Each type's card
-    independently contributes _arcana_best_card_contribution's perfect-
-    case values (sequentially, in usable_types order, so a later type's
-    "remaining need" already reflects what earlier types covered)."""
-    covered: dict[str, int] = {}
-    path: list[dict] = []
-    for ct in usable_types:
-        theme = type_to_theme.get(ct)
-        if not theme:
-            continue
-        contribution, need_based_ids = _arcana_best_card_contribution(
-            eligible_by_type.get(ct, []), full_pool_by_type.get(ct, []), priority_rank, wishes, covered,
-        )
-        if not contribution:
-            continue
-        for sid, value in contribution.items():
-            covered[sid] = covered.get(sid, 0) + value
-        path.append({"type": ct, "theme": theme, "skill_ids": contribution, "need_based_ids": need_based_ids})
-    return covered, path
-
-
-def _arcana_compute_combinations(
-    usable_types: list[str], type_to_theme: dict[str, str],
-    class_skill_pools: dict[str, list[dict]], wishes: dict[str, int],
-    skill_type_by_id: dict[str, str], priority_rank: dict[str, int] | None = None,
-    max_results: int = 3,
-) -> list[dict]:
-    """Up to max_results distinct combinations, best first: the single
-    result from _arcana_best_combination, then that same sequential fill
-    repeated with the previous result's (type, skill) pairs excluded from
-    that type's eligible AND full pool each time, forcing a structurally
-    different combination whenever a type's real pool has more viable
-    wished skills than its 4 slots (or a skill is shared across more than
-    one type's pool) -- the only remaining source of alternatives now
-    that each type's theme is fixed rather than searched. Pruning
-    full_pool_by_type too (not just eligible_by_type) matters: otherwise
-    a skill excluded as a WISH target could still silently reappear as
-    plain FILLER on the very same card (filler selection draws from the
-    whole pool), quietly re-covering the same wish and making the
-    "different" combination not actually different.
-
-    Only excludes need_based_ids (see _arcana_best_card_contribution),
-    not every skill_id a type touched -- a skill that ended up on a
-    SECOND type purely as incidental filler (that type had unused slots
-    left over after its own real wishes, and this skill happened to rank
-    high in the fallback priority-list order) never actually contributed
-    to satisfying the wish there, so excluding it too was blocking a real
-    second combination that should have been findable by simply routing
-    that wish through the other type instead (User-reported, 2026-09-13:
-    "hier gibt es doch sicher noch andere Kombinationen" -- confirmed via
-    direct inspection: a single wished skill, fully covered by one type
-    alone, still incidentally showed up as a 1-point filler pick on a
-    second type in the same result, and that filler pick alone was enough
-    to make every subsequent solve attempt collapse to 0% coverage)."""
-    if not wishes:
-        return []
-
-    eligible_by_type = {
-        ct: _arcana_eligible_skills_for_type(ct, wishes, class_skill_pools, skill_type_by_id)
-        for ct in usable_types
-    }
-    full_pool_by_type = {ct: _arcana_full_pool_for_type(ct, class_skill_pools) for ct in usable_types}
-    priority_rank = priority_rank or {}
-
-    results = []
-    excluded: set[tuple] = set()
-    for _ in range(max_results):
-        pruned_eligible = {
-            ct: [sid for sid in eligible if (ct, sid) not in excluded]
-            for ct, eligible in eligible_by_type.items()
-        }
-        pruned_full_pool = {
-            ct: [sid for sid in pool if (ct, sid) not in excluded]
-            for ct, pool in full_pool_by_type.items()
-        }
-        covered, path = _arcana_best_combination(
-            usable_types, type_to_theme, pruned_eligible, pruned_full_pool, priority_rank, wishes,
-        )
-        if not path:
-            break
-        results.append({"assignments": path, "covered": covered})
-        for a in path:
-            for sid in a["need_based_ids"]:
-                excluded.add((a["type"], sid))
-    return results
-
-
-def _arcana_result_coverage_percent(result: dict, wishes: dict[str, int]) -> float:
-    """What percentage of the total wishlist this combination covers,
-    clamped per skill at its own wish (overshoot on one skill doesn't
-    offset a shortfall on another) -- used to filter out combinations
-    that aren't a useful alternative (User-Wunsch, 2026-08-29: "nur
-    Kombinationen anzeigen, die besser als 50% sind")."""
-    total_wish = sum(wishes.values())
-    if total_wish <= 0:
-        return 0.0
-    covered = result.get("covered", {})
-    total_useful = sum(min(covered.get(sid, 0), need) for sid, need in wishes.items())
-    return total_useful / total_wish * 100.0
-
-
-def _arcana_eligible_types(
-    skill_id: str, category: str | None, usable_types: list[str], class_skill_pools: dict[str, list[dict]],
-) -> list[str]:
-    """Which usable Lord types could ever target this skill -- in its
-    pool AND matching its Active/Passive category (Chalice's "both"
-    always matches)."""
-    return [
-        ct for ct in usable_types
-        if any(s["id"] == skill_id for s in class_skill_pools.get(ct, []))
-        and (_ARCANA_LORD_CATEGORY.get(ct) == "both" or _ARCANA_LORD_CATEGORY.get(ct) == category)
-    ]
-
-
-def _arcana_max_ceiling(
-    skill_id: str, category: str | None, usable_types: list[str], class_skill_pools: dict[str, list[dict]],
-) -> int:
-    """The absolute most this skill could ever gain from Arcana THIS
-    season assuming perfect leveling, ignoring every other wish -- one
-    maxed Unique card can push any ONE skill up to _ARCANA_PER_SKILL_CAP
-    (4), per eligible Lord type, since a type can go to whichever theme
-    still has budget when the real split is chosen later (User-Wunsch,
-    2026-08-29: "wenn ein Skill bereits +4 ist, kann der Rest maximal
-    noch +3 werden" -- this is the standalone half of that; the OTHER
-    half, how much competing wishes actually leave once slots are shared,
-    is what _arcana_compute_combinations/_arcana_uncovered_reason resolve
-    for a specific split+wishlist instead of a live, always-on number)."""
-    eligible = _arcana_eligible_types(skill_id, category, usable_types, class_skill_pools)
-    return len(eligible) * _ARCANA_PER_SKILL_CAP
-
-
-def _arcana_uncovered_reason(
-    skill_id: str, wish: int, covered: int, usable_types: list[str],
-    class_skill_pools: dict[str, list[dict]], skill_type_by_id: dict[str, str],
-) -> tuple[str, dict]:
-    """Why a wished skill didn't fully reach its target in a given result
-    (User-Wunsch, 2026-08-29: "einen Grund zeigen, warum gewisse Skills
-    nicht gepusht werden koennen") -- returns a translation key + kwargs
-    for _t(), one of three tiers:
-
-    1. No eligible Lord type at all -- structural, can never be covered
-       regardless of slots (skill isn't in any usable card's pool, or
-       none match its Active/Passive category).
-    2. Eligible types exist, but even dedicating every one of them to
-       ONLY this skill can't reach the wish -- a hard ceiling from this
-       season's real card pool, not specific to this one combination
-       (theme choice no longer matters here: every usable type is always
-       a real card regardless of which theme it's set to).
-    3. Eligible types exist and COULD in principle reach the wish, just
-       not in this particular combination -- those slots went to other
-       wishes instead in this solve."""
-    category = skill_type_by_id.get(skill_id)
-    eligible_types = _arcana_eligible_types(skill_id, category, usable_types, class_skill_pools)
-    if not eligible_types:
-        return "arm_arcana_reason_no_card", {}
-
-    max_possible = len(eligible_types) * _ARCANA_PER_SKILL_CAP
-    if max_possible < wish:
-        return "arm_arcana_reason_not_enough_slots", {"max": max_possible}
-
-    return "arm_arcana_reason_competing_wishes", {}
 
 
 # Real Empyrean Lord stat effects — each Lord's value scales two stats at
@@ -3413,26 +3021,25 @@ ARCANA_THEME_CATEGORY = {
     "Vigor": "pve", "Punishment": "pve", "Frenzy": "offense",
     "Magic": "defence", "Purity": "defence", "Protection": "cure", "Indomitability": "pvp",
 }
-ARCANA_CATEGORY_COLORS = {
-    "pve": "#4ade80", "pvp": "#fb7185", "offense": "#f59e0b", "defence": "#38bdf8", "cure": "#a855f7",
-}
+ARCANA_CATEGORY_COLORS = _theme.ARCANA_CATEGORY_COLORS if _theme is not None else _MutedTable()
 # Fallback gradient per category (stop, color) -- used by _ArcanaSetBanner's
 # paintEvent only for a Set that has no real background photo yet (see
 # _arcana_set_background_path). Custom-painted directly on the widget
 # rather than via QSS, both to layer cleanly with the photo+overlay and
 # because a real Qt quirk was found here (Round 20): any ancestor with its
 # OWN locally-set stylesheet (the Information tab's
-# scroll.viewport().setStyleSheet("background: transparent;") from
+# scroll.viewport().setObjectName("TransparentPane") from
 # Round 14) silently blocks background-color from cascading through
 # attribute/class QSS selectors, even though border/color/text still
 # cascade fine.
-ARCANA_CATEGORY_GRADIENT_STOPS = {
-    "pve": ((0.0, "#14532d"), (1.0, "#4ade80")),
-    "pvp": ((0.0, "#4c0519"), (1.0, "#fb7185")),
-    "offense": ((0.0, "#78350f"), (1.0, "#f59e0b")),
-    "defence": ((0.0, "#0c4a6e"), (1.0, "#38bdf8")),
-    "cure": ((0.0, "#4c1d95"), (1.0, "#a855f7")),
-}
+def _arcana_category_gradient(category: str) -> tuple[tuple[float, str], ...]:
+    """The two stops of a category's fallback banner gradient.
+
+    Both ends are data colours owned by core/theme.py
+    (``arcana_category_deep`` → ``arcana_category``); this function is what
+    the five-entry literal table used to be.
+    """
+    return ((0.0, _dc("arcana_category_deep", category)), (1.0, _dc("arcana_category", category)))
 # Browser-mockup-approved per-image crop (zoom relative to "cover", anchor_x/
 # anchor_y in 0-1, same semantics as CSS background-size/background-position
 # -- see project_arcana_planner.md Runde 21). Only Sets with a real photo
@@ -4039,7 +3646,6 @@ class ItemPickerPopup(QWidget):
             row_layout.setSpacing(4)
             row_layout.setAlignment(Qt.AlignHCenter)
 
-            grade_color = GRADE_COLORS.get(item.get("grade"), "#94a3b8")
 
             # Gold star = this item is on the EQ Priority list (User-Wunsch,
             # 2026-08-29), same visual convention as the Skill Planner's
@@ -4080,13 +3686,14 @@ class ItemPickerPopup(QWidget):
             # one line via character count is just as readable here (full
             # name is still in the tooltip) and much cheaper to lay out.
             name_label = QLabel(_short_skill_name(full_name, 16))
-            name_label.setStyleSheet(f"color: {grade_color}; font-weight: 600; font-size: 11px;")
+            name_label.setObjectName("GradeTileName")
+            _set_data_color(name_label, "item_grade", item.get("grade"))
             name_label.setAlignment(Qt.AlignCenter)
             name_label.setToolTip(full_name)
             row_layout.addWidget(name_label)
 
             level_label = QLabel("")
-            level_label.setStyleSheet("color: #94a3b8; font-size: 10px;")
+            level_label.setObjectName("TileMetaLabel")
             level_label.setAlignment(Qt.AlignCenter)
             row_layout.addWidget(level_label)
 
@@ -5000,7 +4607,6 @@ class TemplateItemPickerDialog(QDialog):
             row_layout.setSpacing(6)
             row_layout.setAlignment(Qt.AlignHCenter)
 
-            grade_color = GRADE_COLORS.get(item.get("grade"), "#94a3b8")
 
             icon_label = QLabel()
             icon_label.setFixedSize(44, 44)
@@ -5017,7 +4623,8 @@ class TemplateItemPickerDialog(QDialog):
 
             full_name = item.get("name", "")
             name_label = QLabel(_short_skill_name(full_name, 16))
-            name_label.setStyleSheet(f"color: {grade_color}; font-weight: 600; font-size: 11px;")
+            name_label.setObjectName("GradeTileName")
+            _set_data_color(name_label, "item_grade", item.get("grade"))
             name_label.setAlignment(Qt.AlignCenter)
             name_label.setToolTip(full_name)
             row_layout.addWidget(name_label)
@@ -5241,7 +4848,7 @@ class _ArcanaCardButton(QPushButton):
                 btn.setObjectName("ArcanaGradePill")
                 btn.setCheckable(True)
                 btn.setCursor(Qt.PointingHandCursor)
-                btn.setStyleSheet(f"color: {GRADE_COLORS[grade]};")
+                _set_data_color(btn, "item_grade", grade)
                 btn.clicked.connect(lambda _c=False, g=grade: self.grade_changed.emit(g))
                 grade_group.addButton(btn)
                 self.grade_buttons[grade] = btn
@@ -5302,16 +4909,14 @@ class _ArcanaCardButton(QPushButton):
         for frame in self.slot_frames:
             frame.setEnabled(enabled)
         for grade, btn in self.grade_buttons.items():
+            # The dim disabled colour is the stylesheet's job again.  It
+            # could not be, while the per-grade colour was an inline sheet:
+            # an inline sheet is the deepest sheet Qt knows, so it beat
+            # "#ArcanaGradePill:disabled" outright and the dim state had to
+            # be pushed from here.  The grade colour is now a [dataColor]
+            # rule at specificity 110, which ":disabled" (110, and later in
+            # the file) wins -- so enabling is all this has to do.
             btn.setEnabled(enabled)
-            # A disabled QPushButton's OWN inline per-grade color
-            # (setStyleSheet in __init__) otherwise wins over the global
-            # "#ArcanaGradePill:disabled { color: ... }" QSS rule entirely
-            # -- same local-stylesheet-blocks-cascade quirk already
-            # documented elsewhere this session (Round 20) -- so the dim
-            # color has to be applied here directly instead of relying on
-            # the QSS pseudo-state alone.
-            color = GRADE_COLORS[grade] if enabled else "#475569"
-            btn.setStyleSheet(f"color: {color};")
 
     def set_skill_slots(self, slots: list[dict | None], id_to_skill: dict[str, dict]):
         """Fills the 4 fixed skill-slot boxes (with_skill_slots=True only)
@@ -5330,7 +4935,7 @@ class _ArcanaCardButton(QPushButton):
             sid = entry["skill_id"]
             level = entry.get("level", _ARCANA_SKILL_BASELINE)
             skill = id_to_skill.get(sid, {})
-            name_color = _SKILL_TYPE_COLORS.get(skill.get("type", ""), "#94a3b8")
+            name_color = _dc("skill_type", skill.get("type", ""))
             # Raised from 16 (User-Wunsch, 2026-08-29, after the wider
             # cards from the previous round: "jetzt bitte die volle Laenge
             # fuer den Text nutzen ... Attack Preparation ist der Text
@@ -5346,7 +4951,7 @@ class _ArcanaCardButton(QPushButton):
             # aussehen") -- keeps the "+N" lined up on the right regardless
             # of name length, instead of trailing right after it.
             name_label.setText(f'<span style="color:{name_color};">{name}</span>')
-            value_label.setText(f'<span style="color:#facc15;font-weight:700;">+{level}</span>')
+            value_label.setText(f'<span style="color:{_c("warn")};font-weight:700;">+{level}</span>')
 
     def set_default_state(self, icon_file: str | None):
         self.entry = None
@@ -5384,21 +4989,21 @@ class _ArcanaCardButton(QPushButton):
             # Informationen catalog browser has no such context, so it
             # keeps showing just the Lord name with no value there.
             value_html = (
-                f' <span style="color:#e5e7eb;font-weight:700;">{lord_points}</span>'
+                f' <span style="color:{_c("fg")};font-weight:700;">{lord_points}</span>'
                 if lord_points is not None else ""
             )
             self.info_label.setText(
-                f'<span style="color:#facc15;font-weight:700;">{entry["lord"]}</span>{value_html}<br>'
-                f'<span style="font-size:10px;color:#64748b;">{effect}</span>'
+                f'<span style="color:{_c("warn")};font-weight:700;">{entry["lord"]}</span>{value_html}<br>'
+                f'<span style="font-size:10px;color:{_c("fg.muted")};">{effect}</span>'
             )
         else:
             self.info_label.setText(
-                f'<span style="color:#facc15;font-weight:700;">{entry.get("mainStat", "")}</span><br>'
-                f'<span style="font-size:10px;color:#64748b;">{_t("arm_random_substats_suffix")}</span>'
+                f'<span style="color:{_c("warn")};font-weight:700;">{entry.get("mainStat", "")}</span><br>'
+                f'<span style="font-size:10px;color:{_c("fg.muted")};">{_t("arm_random_substats_suffix")}</span>'
             )
         self.hint_label.setText("")
         dots = " ".join(
-            f'<span style="color:{GRADE_COLORS.get(g, "#94a3b8")};">&#9679;</span>'
+            f'<span style="color:{_dc("item_grade", g)};">&#9679;</span>'
             for g in ("Common", "Rare", "Legend", "Unique") if g in entry["grades"]
         )
         self.grade_label.setText(dots)
@@ -5541,20 +5146,20 @@ class _ArcanaSetBanner(QPushButton):
             painter.drawPixmap(QRectF(x, y, sw, sh), scaled, QRectF(scaled.rect()))
         else:
             grad = QLinearGradient(0, 0, rect.width(), rect.height())
-            for stop, color in ARCANA_CATEGORY_GRADIENT_STOPS[self._category]:
+            for stop, color in _arcana_category_gradient(self._category):
                 grad.setColorAt(stop, QColor(color))
             painter.fillRect(rect, grad)
 
         # Dark fade-from-left overlay (Variant A from the browser mockup --
         # gradual, even fade -- User: "das finde ich an sich schon gut").
         overlay = QLinearGradient(0, 0, rect.width(), 0)
-        overlay.setColorAt(0.0, QColor(6, 10, 18, 235))
-        overlay.setColorAt(0.42, QColor(6, 10, 18, 140))
-        overlay.setColorAt(0.75, QColor(6, 10, 18, 20))
+        overlay.setColorAt(0.0, _qc("bg.window", 235))
+        overlay.setColorAt(0.42, _qc("bg.window", 140))
+        overlay.setColorAt(0.75, _qc("bg.window", 20))
         painter.fillRect(rect, overlay)
         painter.setClipping(False)
 
-        border_color = QColor(255, 255, 255, 255 if self.isChecked() else 20)
+        border_color = _qc("fg", 255 if self.isChecked() else 20)
         painter.setPen(QPen(border_color, 2))
         painter.setBrush(Qt.NoBrush)
         painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
@@ -5562,7 +5167,7 @@ class _ArcanaSetBanner(QPushButton):
         spark_font = self.font()
         spark_font.setPointSize(11)
         painter.setFont(spark_font)
-        painter.setPen(QColor("#22d3ee"))
+        painter.setPen(_qc("accent"))
         painter.drawText(
             QRectF(18, 10, rect.width() - 30, 16), Qt.AlignLeft | Qt.AlignVCenter, "✦"
         )
@@ -5571,7 +5176,7 @@ class _ArcanaSetBanner(QPushButton):
         name_font.setBold(True)
         name_font.setPointSize(12)
         painter.setFont(name_font)
-        painter.setPen(QColor("#fdfdfd"))
+        painter.setPen(_qc("fg"))
         painter.drawText(
             rect.adjusted(18, 0, -10, -10), Qt.AlignLeft | Qt.AlignBottom, self._set_name
         )
@@ -5705,10 +5310,7 @@ _DMG_STAT_BACK_DAMAGE_BOOST = "AmplifyBackAttack"       # Back/Rear Attack Damag
 # in _GENIUS_DMG_EXTRA/_GENIUS_TOL_EXTRA is resolved to the board's own name
 # by _genius_pool_for_line() below, never used directly.
 _GENIUS_BOARDS = ["Cogni", "Fera", "Natura", "Varian", "Special"]
-_GENIUS_BOARD_COLORS = {
-    "Cogni": "#3ba7f2", "Fera": "#ef4444", "Natura": "#22c55e",
-    "Varian": "#f2b90c", "Special": "#2dd4bf",
-}
+_GENIUS_BOARD_COLORS = _theme.GENIUS_BOARD_COLORS if _theme is not None else _MutedTable()
 
 # Shared by all four "general board" pool shapes (1/4/7, 2/5/8, 3/9, 6).
 # NOTE: "Accuracy Bonus" on the 2/5/8 shape was reconstructed from a
@@ -6581,7 +6183,7 @@ def _passive_skill_description_with_level(skill_id: str, description: str, effec
     -- confirmed yes, this fixes it for the skills with real per-level
     data).
 
-    Substitutes by SPAN POSITION (the Nth <span style="color: #FCC78B">
+    Substitutes by SPAN POSITION (the Nth highlight span
     ...</span> run gets the Nth scaling value), not by searching for the
     literal Lv.1 text -- a real, User-caught bug (2026-09-02, "Healing
     Boost springt bei geraden/ungeraden Leveln auf 5% zurück", reproduced
@@ -6684,7 +6286,7 @@ def _passive_skill_description_with_level(skill_id: str, description: str, effec
 
     description = _HIGHLIGHT_SPAN_RE.sub(_sub, description)
     level_note = (
-        f"<span style='color:#22d3ee; font-weight:700;'>{_t('arm_level_prefix', level=effective_level)}</span><br>"
+        f"<span style='color:{_c('accent')}; font-weight:700;'>{_t('arm_level_prefix', level=effective_level)}</span><br>"
     )
     return level_note + description
 
@@ -7041,7 +6643,7 @@ _RECIPE_GRADE_MAP = {
 # by "transferring" an existing item's stats via a Transfer Stone -- gamers4.life
 # has no dedicated field for this, so it's detected from the ingredient list
 # itself (confirmed against the full 1490-recipe dataset: 304 recipes use one).
-_METHOD_COLORS = {"Transfer": "#f59e0b", "Herstellung": "#4ade80"}
+_METHOD_COLORS = _theme.CRAFT_METHOD_COLORS if _theme is not None else _MutedTable()
 # "Herstellung"/"Transfer" stay the stable internal method identifiers
 # (matches recipe["method"], used for comparisons/dict lookups) -- only the
 # DISPLAYED text is translated, via this label lookup.
@@ -7051,139 +6653,6 @@ _METHOD_LABEL_KEYS = {"Herstellung": "arm_method_direct", "Transfer": "arm_metho
 def _recipe_method(inputs: list[dict]) -> str:
     return "Transfer" if any("Transfer Stone" in (i.get("name") or "") for i in inputs) else "Herstellung"
 
-
-def _item_type_word(name: str) -> str:
-    """Last real word of an item name, ignoring a trailing "(Bound)"/"(...)"
-    tag -- used to check that an upgrade recipe's single-qty source item is
-    actually the same equipment slot as its output (see
-    _transfer_source_name)."""
-    name = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
-    parts = name.split()
-    return parts[-1] if parts else ""
-
-
-def _item_grade(name: str | None, item_id: int | None, items_by_id: dict, output_index: dict) -> str | None:
-    item = items_by_id.get(item_id) if item_id else None
-    if item and item.get("grade"):
-        return item["grade"]
-    recipe = output_index.get(name) if name else None
-    return recipe.get("grade") if recipe else None
-
-
-def _transfer_source_name(recipe: dict, items_by_id: dict, output_index: dict) -> str | None:
-    """A recipe is an "upgrade hop" (Transfer-Stone or Kinah-only alike) if
-    exactly one input is consumed at qty 1, isn't the stone or a pure Kinah
-    row, shares its item-type word with the output (e.g. both end in
-    "Boots"), AND -- confirmed by the user -- is the SAME grade tier as the
-    output (a real Transfer/Splendent upgrade never jumps e.g. "Legend"
-    (blue) straight to "Unique" (gold) in one hop; that's a normal
-    Herstellung recipe instead, not a chain link). The word check alone is
-    needed because a good chunk of ordinary multi-material recipes also
-    happen to consume exactly one other craftable item at qty 1 as a plain
-    catalyst (e.g. "Wrathful Mind" x1 into a completely unrelated "Celestial
-    Dragon Lord Ring"); the grade check on top catches the rarer case where
-    the shared word is coincidental AND the two items happen to be
-    different tiers. Verified against the full dataset: with just the word
-    check, 288 of the real 304 Transfer-Stone recipes match (the rest have
-    >1 qty-1 input) plus 482 further Kinah-only upgrade hops are found this
-    way; every single one of those is already same-grade (706x Unique-
-    Unique, 36x Legend-Legend, 26x Rare-Rare), so the grade check costs
-    zero real matches and only guards against a hop the game doesn't
-    actually have. Shared module-level (not just CraftingCalculatorWindow)
-    so the Build Planner's Schnellauswahl can derive the same tier chains."""
-    candidates = [
-        i for i in recipe["inputs"]
-        if (i.get("qty") or 1) == 1 and i.get("name")
-        and "Transfer Stone" not in i["name"] and "Kina" not in i["name"]
-    ]
-    if len(candidates) != 1:
-        return None
-    candidate = candidates[0]
-    candidate_name = candidate["name"]
-    output_name = recipe["outputs"][0].get("name") or ""
-    if _item_type_word(candidate_name) != _item_type_word(output_name):
-        return None
-    candidate_grade = _item_grade(candidate_name, candidate.get("id"), items_by_id, output_index)
-    output_grade = recipe.get("grade")
-    if candidate_grade and output_grade and candidate_grade != output_grade:
-        return None
-    return candidate_name
-
-
-def _build_transfer_source_index(recipes: list[dict], items_by_id: dict, output_index: dict) -> dict[str, list[dict]]:
-    """Upgrade-chain recipes indexed by their "source" item -- built from
-    ALL recipes, not just method=="Transfer" ones, because a real chain hop
-    is often a pure-Kinah upgrade with no Transfer Stone at all (e.g.
-    "Celestial Dragon Lord Boots" -> "Splendent Celestial Dragon Lord
-    Boots" for 15,000,000 Kina, no stone) -- restricting to Transfer Stone
-    recipes alone silently broke real chains one hop before their end."""
-    index: dict[str, list[dict]] = {}
-    for r in recipes:
-        source = _transfer_source_name(r, items_by_id, output_index)
-        if source:
-            index.setdefault(source, []).append(r)
-    return index
-
-
-def _find_transfer_path(start_name: str, target_name: str, transfer_source_index: dict) -> list[dict] | None:
-    """BFS over upgrade-hop recipes from start_name to target_name -- real
-    chains can span multiple tiers (verified 3-hop example: Splendent
-    White -> Wise -> Splendent Wise -> Celestial Dragon Lord Boots)."""
-    if start_name == target_name:
-        return []
-    queue = deque([(start_name, [])])
-    visited = {start_name}
-    while queue:
-        current, path = queue.popleft()
-        if len(path) >= 12:
-            continue
-        for recipe in transfer_source_index.get(current, []):
-            output_name = recipe["outputs"][0].get("name")
-            if output_name in visited:
-                continue
-            new_path = path + [recipe]
-            if output_name == target_name:
-                return new_path
-            visited.add(output_name)
-            queue.append((output_name, new_path))
-    return None
-
-
-def _ordered_tier_chain(root_name: str, type_word: str, transfer_source_index: dict) -> list[str]:
-    """BFS from root_name, returning tier-prefix names (root_name itself,
-    then every reachable output, each with its trailing type_word stripped)
-    in visitation order -- a real, natural tier progression order since
-    each hop is exactly one upgrade step. Used to populate the Build
-    Planner's Schnellauswahl tier dropdown (see project_todo.md: verified
-    against real data that the tier-prefix sequence is identical across
-    equipment slot types for the same race, e.g. Ring/Boots/Necklace/
-    Dagger/Greatsword all reach the same 9 prefixes for "True Dragon Lord")."""
-    def strip_word(name: str) -> str:
-        return name[: -(len(type_word) + 1)] if name.endswith(" " + type_word) else name
-
-    order = [strip_word(root_name)]
-    queue = deque([root_name])
-    visited = {root_name}
-    while queue:
-        current = queue.popleft()
-        for recipe in transfer_source_index.get(current, []):
-            output_name = recipe["outputs"][0].get("name")
-            if output_name in visited:
-                continue
-            visited.add(output_name)
-            order.append(strip_word(output_name))
-            queue.append(output_name)
-    return order
-
-
-def _parse_gold_cost(raw) -> int:
-    """Raw values are comma-formatted strings like "4,000" (or already 0)."""
-    if raw is None:
-        return 0
-    try:
-        return int(str(raw).replace(",", "").strip())
-    except ValueError:
-        return 0
 
 # Recipes that only consume a base item + pure PvP currency (Abyss Points,
 # Platinum Medal of Merit) with no real crafting material — these are PvP
@@ -7231,106 +6700,13 @@ def _load_recipes() -> list[dict]:
     return recipes
 
 
-def _build_recipe_output_index(recipes: list[dict]) -> dict[str, dict]:
-    """Maps a craftable item's name to the recipe that makes it — lets a
-    recipe's own ingredient list be checked for "is this itself craftable"
-    without a separate hand-built table. Real multi-tier upgrade chains
-    (e.g. Base -> Fine -> Pure -> Artisan's Orichalcum Longsword) fall out
-    of this automatically rather than needing to be curated by hand.
-
-    Indexes EVERY output name, not just outputs[0] -- some recipes have a
-    second output for a bonus-chance "Splendent" variant (e.g. recipe
-    111014001 outputs both "Artisan's Orichalcum Longsword" [guaranteed]
-    and "Artisan's Splendent Orichalcum Longsword" [bonus chance]). Only
-    indexing the first output meant looking up that second name -- which is
-    exactly what a parent recipe's own ingredient list references -- found
-    nothing, silently truncating the chain one tier early."""
-    index: dict[str, dict] = {}
-    for r in recipes:
-        for output in r["outputs"]:
-            index.setdefault(output["name"], r)
-    return index
-
-
-def _resolve_material_name(name: str | None, item_id: int | None, items_by_id: dict) -> str | None:
-    """A handful of recipe inputs carry no name in the scraped data (the
-    scraper's own gap, not a missing item) even though the id resolves fine
-    in the item catalog -- fall back to that instead of showing "None"."""
-    if name:
-        return name
-    item = items_by_id.get(item_id) if item_id else None
-    return item.get("name") if item else None
-
-
-def _build_material_node(
-    name: str | None, item_id: int | None, qty: int, output_index: dict, items_by_id: dict, depth: int = 0,
-) -> dict:
-    """One node of the quantity-aware material tree used by the Crafting
-    Simulator's Baum/Liste views. qty is "how many of this material are
-    needed per ONE unit of its parent" -- NOT yet scaled by how many of the
-    parent are actually needed; that scaling happens at render/flatten time
-    (multiplying down the tree), so the same tree is reusable across
-    different Anzahl values without rebuilding it. depth caps at 20 as a
-    cheap guard against a data cycle."""
-    name = _resolve_material_name(name, item_id, items_by_id)
-    node = {"name": name, "id": item_id, "qty": qty, "mastery": None, "goldCost": 0, "children": None}
-    if depth >= 20 or not name:
-        return node
-    recipe = output_index.get(name)
-    if recipe is None:
-        return node
-    node["mastery"] = recipe.get("masteryLevel")
-    node["goldCost"] = recipe.get("goldCost", 0)
-    node["children"] = [
-        _build_material_node(m.get("name"), m.get("id"), m.get("qty") or 1, output_index, items_by_id, depth + 1)
-        for m in recipe.get("inputs", [])
-    ]
-    return node
-
-
-def _build_material_tree(recipe: dict, output_index: dict, items_by_id: dict) -> dict:
-    """Root node for a selected recipe -- mirrors _build_material_node's
-    shape, just seeded directly from the chosen recipe instead of a
-    name lookup."""
-    output = recipe["outputs"][0]
-    return {
-        "name": output["name"], "id": output.get("id"), "qty": 1,
-        "mastery": recipe.get("masteryLevel"), "goldCost": recipe.get("goldCost", 0),
-        "children": [
-            _build_material_node(m.get("name"), m.get("id"), m.get("qty") or 1, output_index, items_by_id, 1)
-            for m in recipe.get("inputs", [])
-        ],
-    }
-
-
-def _flatten_material_tree(node: dict, needed_qty: int, totals: dict[str, dict]):
-    """Recursively sums every leaf material across the whole tree, regardless
-    of how deep it sits -- the "Liste" (shopping-list) view's data source."""
-    if not node.get("children"):
-        entry = totals.setdefault(node["name"], {"qty": 0, "id": node.get("id")})
-        entry["qty"] += needed_qty
-        return
-    for child in node["children"]:
-        _flatten_material_tree(child, needed_qty * (child.get("qty") or 1), totals)
-
-
-def _compute_tree_kinah(node: dict, needed_qty: int) -> int:
-    """Kinah fee paid per craft attempt at every tier that's actually
-    crafted (raw/gathered leaf materials have no fee here)."""
-    if not node.get("children"):
-        return 0
-    total = (node.get("goldCost") or 0) * needed_qty
-    for child in node["children"]:
-        total += _compute_tree_kinah(child, needed_qty * (child.get("qty") or 1))
-    return total
-
-
 _UNRESOLVED_TOKEN_RE = re.compile(r"\{[a-zA-Z_]+(?::[A-Za-z0-9_]+)+\}")
 
 
-def _make_plus_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
+def _make_plus_icon(size: int = 22, color: str = "") -> QIcon:
     """Draws a plus sign — the full-width '＋' character rendered too faint/
     small to recognize in this button's font, so draw it instead."""
+    color = color or _c("fg")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7344,9 +6720,10 @@ def _make_plus_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_minus_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
+def _make_minus_icon(size: int = 22, color: str = "") -> QIcon:
     """Draws a minus sign -- same reasoning as _make_plus_icon (used for the
     per-skill level -/+ counter, see _build_skill_description_card)."""
+    color = color or _c("fg")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7359,8 +6736,9 @@ def _make_minus_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_edit_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
+def _make_edit_icon(size: int = 22, color: str = "") -> QIcon:
     """Draws a small pencil glyph for the 'rename build' action."""
+    color = color or _c("fg")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7382,10 +6760,11 @@ def _make_edit_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_duplicate_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
+def _make_duplicate_icon(size: int = 22, color: str = "") -> QIcon:
     """Draws two overlapping squares (back outlined, front filled) -- the
     classic 'copy/duplicate' glyph, for the 'duplicate this Set' action
     (User-Wunsch, 2026-08-28)."""
+    color = color or _c("fg")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7400,11 +6779,12 @@ def _make_duplicate_icon(size: int = 22, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_delete_icon(size: int = 22, color: str = "#f87171") -> QIcon:
+def _make_delete_icon(size: int = 22, color: str = "") -> QIcon:
     """Draws a small trash-can glyph for the "delete this build" action
     (User-Wunsch, 2026-09-02: no way existed to delete a Build/Set/Genius
     profile at all before this -- red by default since it's a destructive
     action, unlike the neutral-colored add/duplicate/rename/save icons)."""
+    color = color or _c("danger")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7414,7 +6794,7 @@ def _make_delete_icon(size: int = 22, color: str = "#f87171") -> QIcon:
     painter.drawRoundedRect(QRectF(size * 0.24, size * 0.30, size * 0.52, size * 0.58), size * 0.05, size * 0.05)
     painter.drawRoundedRect(QRectF(size * 0.16, size * 0.20, size * 0.68, size * 0.10), size * 0.04, size * 0.04)
     painter.drawRoundedRect(QRectF(size * 0.38, size * 0.10, size * 0.24, size * 0.12), size * 0.04, size * 0.04)
-    painter.setPen(QPen(QColor("#0f172a"), size * 0.05))
+    painter.setPen(QPen(_qc("bg.surface"), size * 0.05))
     painter.drawLine(QPointF(size * 0.40, size * 0.42), QPointF(size * 0.40, size * 0.76))
     painter.drawLine(QPointF(size * 0.50, size * 0.42), QPointF(size * 0.50, size * 0.76))
     painter.drawLine(QPointF(size * 0.60, size * 0.42), QPointF(size * 0.60, size * 0.76))
@@ -7422,11 +6802,12 @@ def _make_delete_icon(size: int = 22, color: str = "#f87171") -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_gear_icon(size: int = 20, color: str = "#e5e7eb") -> QIcon:
+def _make_gear_icon(size: int = 20, color: str = "") -> QIcon:
     """Draws a small cog glyph for the "Eigenschaften-Priorität bearbeiten"
     button next to "Eigenschaften" (User-Wunsch: "Ein Zahnrad (similar zu
     Timer)") -- drawn like this file's other toolbar icons instead of
     relying on the "⚙" glyph, which renders inconsistently across fonts."""
+    color = color or _c("fg")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7451,8 +6832,9 @@ def _make_gear_icon(size: int = 20, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_back_icon(size: int = 18, color: str = "#e5e7eb") -> QIcon:
+def _make_back_icon(size: int = 18, color: str = "") -> QIcon:
     """Draws a left-pointing chevron for the 'back to Stat Info' button."""
+    color = color or _c("fg")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7469,8 +6851,9 @@ def _make_back_icon(size: int = 18, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_close_icon(size: int = 18, color: str = "#e5e7eb") -> QIcon:
+def _make_close_icon(size: int = 18, color: str = "") -> QIcon:
     """Draws an X glyph for the 'clear equipped slot' button."""
+    color = color or _c("fg")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7487,8 +6870,9 @@ def _make_close_icon(size: int = 18, color: str = "#e5e7eb") -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_check_icon(size: int = 20, color: str = "#facc15") -> QPixmap:
+def _make_check_icon(size: int = 20, color: str = "") -> QPixmap:
     """Draws a checkmark for the 'angehakt' marker on a skill card."""
+    color = color or _c("warn")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7510,9 +6894,10 @@ def _make_check_icon(size: int = 20, color: str = "#facc15") -> QPixmap:
     return pixmap
 
 
-def _make_star_icon(size: int = 18, color: str = "#facc15") -> QPixmap:
+def _make_star_icon(size: int = 18, color: str = "") -> QPixmap:
     """Draws a filled 5-point star -- marks a skill that's on the Priority
     List, on its Skill Description card (User-Wunsch, 2026-08-27)."""
+    color = color or _c("warn")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7534,9 +6919,10 @@ def _make_star_icon(size: int = 18, color: str = "#facc15") -> QPixmap:
 
 
 
-def _make_compare_icon(size: int = 20, color: str = "#e5e7eb") -> QIcon:
+def _make_compare_icon(size: int = 20, color: str = "") -> QIcon:
     """Draws two opposing arrows ('vs'/swap glyph) for the 'Build Vergleich'
     tab button."""
+    color = color or _c("fg")
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
@@ -7578,21 +6964,20 @@ def _short_skill_name(name: str, max_len: int = 12) -> str:
     return name[: max_len - 1].rstrip() + "…"
 
 
-_SKILL_TYPE_COLORS = {"active": "#22d3ee", "passive": "#a855f7", "stigma": "#facc15"}
+_SKILL_TYPE_COLORS = _theme.SKILL_TYPE_COLORS if _theme is not None else _MutedTable()
 
 
-def _rgba_str(hex_color: str, alpha: float) -> str:
-    c = QColor(hex_color)
-    return f"rgba({c.red()}, {c.green()}, {c.blue()}, {alpha})"
+def _make_type_badge(text: str, kind: str, key: str) -> QLabel:
+    """A "what kind of thing is this" pill — skill type, damage type.
 
-
-def _make_type_badge(text: str, color: str) -> QLabel:
+    Takes the data-colour COORDINATES rather than a colour: the fill,
+    border and text are three alphas of one data colour, and the
+    #SkillTypeBadge[dataColor=…] rules in the template hold all three (they
+    used to be an f-string of _rgba_str() calls here).
+    """
     badge = QLabel(text)
-    badge.setStyleSheet(
-        f"background-color: {_rgba_str(color, 0.16)}; color: {color}; "
-        f"border: 1px solid {_rgba_str(color, 0.5)}; border-radius: 8px; "
-        f"padding: 2px 10px; font-size: 11px; font-weight: 700;"
-    )
+    badge.setObjectName("SkillTypeBadge")
+    _set_data_color(badge, kind, key)
     return badge
 
 
@@ -7650,7 +7035,7 @@ def _format_skill_stats(skill: dict, cooldown_reduction_ms: float = 0.0) -> str:
         reduced = max(0.0, cooldown - cooldown_reduction_ms)
         text = f"<b>Abklingzeit:</b> {reduced / 1000:.0f}s"
         if cooldown_reduction_ms:
-            text += f" <span style='color:#4ade80;'>(-{cooldown_reduction_ms / 1000:.0f}s)</span>"
+            text += f" <span style='color:{_c('ok')};'>(-{cooldown_reduction_ms / 1000:.0f}s)</span>"
         lines.append(text)
 
     rng = skill.get("range") or {}
@@ -8093,8 +7478,8 @@ class ClassSelectDialog(QDialog):
 
         title = QLabel("Choose Your Class")
         title.setObjectName("DetailHeader")
+        title.setProperty("variant", "large")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 22px;")
         layout.addWidget(title)
 
         subtitle = QLabel("Start planning your Build")
@@ -8116,11 +7501,11 @@ class ClassSelectDialog(QDialog):
             btn_layout.setAlignment(Qt.AlignCenter)
 
             icon_label = QLabel(emoji)
+            icon_label.setObjectName("ClassPickerEmoji")
             icon_label.setAlignment(Qt.AlignCenter)
-            icon_label.setStyleSheet("font-size: 48px; background: transparent;")
             name_label = QLabel(class_name)
+            name_label.setObjectName("ClassPickerName")
             name_label.setAlignment(Qt.AlignCenter)
-            name_label.setStyleSheet("font-weight: 700; font-size: 14px; background: transparent;")
 
             btn_layout.addWidget(icon_label)
             btn_layout.addWidget(name_label)
@@ -8156,8 +7541,8 @@ class CreateCharacterDialog(QDialog):
 
         title = QLabel("Create Character")
         title.setObjectName("DetailHeader")
+        title.setProperty("variant", "medium")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 20px;")
         layout.addWidget(title)
 
         subtitle = QLabel("Create Build")
@@ -8552,7 +7937,10 @@ _STAT_ICON_ABBREVIATIONS = {
     "lords_time": "TIM", "lords_wisdom": "WIS",
 }
 
-_STAT_ICON_ROW_COLORS = ["#22d3ee", "#a855f7", "#facc15"]
+#: The stat-badge rings cycle three accents by ROW, so neighbouring rows
+#: stay tellable apart -- our own decoration, so tokens rather than a data
+#: table.  Read at call time: the theme moves.
+_STAT_ICON_ROW_TOKENS = ["accent", "secondary", "warn"]
 
 
 def _make_stat_badge_icon(abbrev: str, color: str, size: int = 44) -> QPixmap:
@@ -8578,14 +7966,6 @@ def _make_stat_badge_icon(abbrev: str, color: str, size: int = 44) -> QPixmap:
     painter.drawText(pixmap.rect(), Qt.AlignCenter, abbrev)
     painter.end()
     return pixmap
-
-
-def _parse_stat_value(raw) -> float:
-    try:
-        return float(str(raw).replace("%", "").strip())
-    except (ValueError, TypeError):
-        return 0.0
-
 
 
 
@@ -8785,7 +8165,7 @@ class ArcanaSkillSlotDialog(QDialog):
             if icon:
                 list_item.setIcon(icon)
             list_item.setData(Qt.UserRole, skill)
-            color = _SKILL_TYPE_COLORS.get(skill.get("type", ""), "#e5e7eb")
+            color = _SKILL_TYPE_COLORS.get(skill.get("type", "")) or _c("fg")
             list_item.setForeground(QColor(color))
             if self._selected_skill and skill.get("id") == self._selected_skill.get("id"):
                 list_item.setSelected(True)
@@ -8811,13 +8191,13 @@ class ArcanaSkillSlotDialog(QDialog):
             col.setContentsMargins(6, 8, 6, 4)
             col.setSpacing(4)
             label = QLabel(skill_type.upper())
-            color = _SKILL_TYPE_COLORS.get(skill_type, "#94a3b8")
-            label.setStyleSheet(f"color: {color}; font-weight: 700; font-size: 11px;")
+            label.setObjectName("SkillTypeLabel")
+            _set_data_color(label, "skill_type", skill_type)
             col.addWidget(label)
             divider = QFrame()
+            divider.setObjectName("SkillListDivider")
             divider.setFrameShape(QFrame.HLine)
             divider.setFixedHeight(1)
-            divider.setStyleSheet("background-color: rgba(148, 163, 184, 0.25); border: none;")
             col.addWidget(divider)
             header_item.setSizeHint(QSize(widget.sizeHint().width(), 32))
             self.list_widget.addItem(header_item)
@@ -9102,7 +8482,7 @@ class CraftingItemPickerDialog(QDialog):
         self.table.setSelectionBehavior(QTableView.SelectRows)
         self.table.setEditTriggers(QTableView.NoEditTriggers)
         # 28px icon + the app-wide QTableView::item padding (6px/10px, see
-        # styles.qss) needs at least 48px of column width, or the icon
+        # styles.template.qss) needs at least 48px of column width, or the icon
         # renders cramped/off-center against the cell edges.
         self.table.setColumnWidth(0, 52)
         self.table.setIconSize(QSize(28, 28))
@@ -9188,7 +8568,7 @@ class CraftingItemPickerDialog(QDialog):
             btn.setObjectName("SkillFilterButton")
             btn.setCheckable(True)
             btn.setChecked(self._state_rarity == grade)
-            btn.setStyleSheet(f"color: {GRADE_COLORS[grade]};")
+            _set_data_color(btn, "item_grade", grade)
             btn.clicked.connect(lambda checked=False, g=grade: self._on_rarity_selected(g))
             group.addButton(btn)
             self.rarity_row.addWidget(btn)
@@ -9221,7 +8601,7 @@ class CraftingItemPickerDialog(QDialog):
             btn.setObjectName("SkillFilterButton")
             btn.setCheckable(True)
             btn.setChecked(self._state_method == method)
-            btn.setStyleSheet(f"color: {_METHOD_COLORS[method]};")
+            _set_data_color(btn, "craft_method", method)
             btn.clicked.connect(lambda checked=False, m=method: self._on_method_selected(m))
             group.addButton(btn)
             self.method_row.addWidget(btn)
@@ -9441,7 +8821,7 @@ class _MaterialTreeNodeWidget(QWidget):
         item = items_by_id.get(node.get("id")) if node.get("id") else None
         grade = item.get("grade") if item else None
         if grade in GRADE_COLORS:
-            name_label.setStyleSheet(f"color: {GRADE_COLORS[grade]};")
+            _set_data_color(name_label, "item_grade", grade)
         header.addWidget(name_label)
 
         if has_children and not is_root:
@@ -9691,6 +9071,7 @@ class CraftingCalculatorWindow(QMainWindow):
         self.sim_name_label.setObjectName("DetailHeader")
         name_col.addWidget(self.sim_name_label)
         self.sim_grade_label = QLabel()
+        self.sim_grade_label.setObjectName("SimGradeLabel")
         name_col.addWidget(self.sim_grade_label)
         header_row.addLayout(name_col, 1)
 
@@ -9756,7 +9137,7 @@ class CraftingCalculatorWindow(QMainWindow):
         # background under Fusion (light grey), which no outer QSS rule
         # reaches -- same real bug found+fixed for the main app's Settings
         # page, applies here too since it's a separate widget instance.
-        tree_scroll.viewport().setStyleSheet("background: transparent;")
+        tree_scroll.viewport().setObjectName("TransparentPane")
         self.sim_view_stack.addWidget(tree_scroll)
 
         list_page = QWidget()
@@ -9822,12 +9203,9 @@ class CraftingCalculatorWindow(QMainWindow):
             for label, item_name, recipe in entries:
                 item_id = recipe["outputs"][0].get("id")
                 grade = self._item_grade(item_name, item_id)
-                color = GRADE_COLORS.get(grade, "#e5e7eb")
                 row = QLabel(f"{label}: {item_name}")
-                row.setStyleSheet(
-                    f"QLabel {{ color: {color}; padding: 4px 20px; background: transparent; }}"
-                    "QLabel:hover { background-color: rgba(34, 211, 238, 0.12); }"
-                )
+                row.setObjectName("CraftMenuRow")
+                _set_data_color(row, "item_grade", grade)
                 row.setCursor(Qt.PointingHandCursor)
 
                 def on_row_press(event, r=recipe, m=menu):
@@ -9948,7 +9326,7 @@ class CraftingCalculatorWindow(QMainWindow):
         self.sim_name_label.setText(output.get("name") or "?")
         grade = recipe.get("grade")
         self.sim_grade_label.setText(grade or "")
-        self.sim_grade_label.setStyleSheet(f"color: {GRADE_COLORS.get(grade, '#94a3b8')}; font-weight: 700;")
+        _set_data_color(self.sim_grade_label, "item_grade", grade)
 
         starred = any(t["outputs"][0].get("name") == output.get("name") for t in self._saved_targets)
         self.sim_star_btn.blockSignals(True)
@@ -10312,14 +9690,14 @@ class CraftingCalculatorWindow(QMainWindow):
             name_label = QLabel(name)
             grade = self._item_grade(name, data.get("id"))
             if grade in GRADE_COLORS:
-                name_label.setStyleSheet(f"color: {GRADE_COLORS[grade]};")
+                _set_data_color(name_label, "item_grade", grade)
             row.addWidget(name_label, 1)
             qty_label = QLabel(f"×{data['qty']:,}")
             # Only a material needed on both sides gets a color at all -- and
             # only its quantity number, not a border around the whole column
             # (user explicitly disliked the box-border "cheaper" highlight).
             if name in cheaper_names:
-                qty_label.setStyleSheet("color: #4ade80; font-weight: 700;")
+                qty_label.setObjectName("MaterialQtyHighlight")
             row.addWidget(qty_label)
             layout.addWidget(row_widget)
 
@@ -10606,56 +9984,6 @@ _GEAR_TYPE_TO_QUICK_SELECT_TAGS = {
     "Neutral": {"Expedition", "Sanctuary"},
 }
 
-# Dungeon gear (Neutral gear type, User-Wunsch 2026-08-26: "zusätzlich zu dem
-# gecrafteten Gear kommt in die Auswahl das Equipment aus den Dungeons") is
-# NOT one clean tier ladder like RACE_TIER_ROOT's crafted line -- it's ~174
-# independent named sets (e.g. "Abyssal Helm"/"Abyssal Ring"/... share the
-# root "Abyssal"). Their real drop location isn't in the raw catalog at all;
-# the closest signal is each item's detail "sources" list. Which tags
-# actually produce real, level-45, >=3-slot sets is entirely a property of
-# the current data (compute_dungeon_sets.py checks all ~21 tags found in the
-# catalog and keeps whichever aren't empty -- e.g. Attendance/Subscribe/
-# Ascension never do, they're login/cash-shop rewards, not gear), so this is
-# read straight from data/dungeon_sets.json's own keys at runtime rather
-# than a hardcoded list that would drift out of sync with it.
-_dungeon_sets_cache: dict[str, dict[str, str]] | None = None
-_DUNGEON_SETS_PATH = Path(__file__).parent / "data" / "dungeon_sets.json"
-
-
-def _build_dungeon_sets(items_by_id: dict, detail_cache: "ItemDetailCache") -> dict[str, dict[str, str]]:
-    """Returns {source_tag: {root_name: grade}}, one entry per source tag
-    compute_dungeon_sets.py found at least one real set for -- the grade
-    lets the Rarität filter narrow the Dungeon-Set dropdown too (User-
-    Wunsch, 2026-08-26: "Ich weiß ja, dass in der Liste auch blaue Sets
-    dabei sind, nicht nur goldene" -- Legend/blue and Unique/gold both
-    appear, confirmed real: e.g. Expedition alone is 13 Unique/6 Legend/3
-    Epic at level 45).
-
-    Loads the precomputed data/dungeon_sets.json (see compute_dungeon_sets.py
-    -- same offline-maintenance-script convention as fetch_item_details.py,
-    run whenever the catalog is refreshed) instead of scanning live: an
-    earlier live version of this (grouping ~3000 items and reading each
-    one's detail file via ItemDetailCache.request()) measured ~17s on a
-    cold cache -- far too slow for a dialog that should open instantly.
-    Falls back to an empty result if the precomputed file is missing
-    (e.g. a dev checkout that hasn't run the script yet), rather than ever
-    falling back to the slow live scan again."""
-    global _dungeon_sets_cache
-    if _dungeon_sets_cache is not None:
-        return _dungeon_sets_cache
-
-    result: dict[str, dict[str, str]] = {}
-    if _DUNGEON_SETS_PATH.exists():
-        try:
-            result = json.loads(_DUNGEON_SETS_PATH.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            logger.warning("Failed to load %s -- Dungeon-Quelle dropdown will be empty", _DUNGEON_SETS_PATH)
-    else:
-        logger.warning("%s not found -- run compute_dungeon_sets.py. Dungeon-Quelle dropdown will be empty.", _DUNGEON_SETS_PATH)
-
-    _dungeon_sets_cache = result
-    return result
-
 # Per-slot labels for the "Manuelle Auswahl" accordion panel under each group
 # -- SLOT_LAYOUT's own labels give both ring/earring slots the identical
 # "Ringe"/"Ohrringe" text (fine for the paperdoll, ambiguous as two separate
@@ -10780,16 +10108,12 @@ _STAT_PRIORITY_CATEGORY_ORDER_OVERRIDE: dict[str, list[str]] = {
     ],
 }
 
-# Eigenschaften-Priorität profiles are keyed [gear_type][role][category] ->
-# an ordered list of up to _STAT_PRIORITY_MAX_ENTRIES stat names (User-
-# Wunsch: "Filter PvP und PvE drin... Rollen Angreifer, Verteidiger und
-# Support... Prioliste bis zu 7 Werte... als Profile, die man setzen kann").
-_STAT_PRIORITY_GEAR_TYPES = ("PvE", "PvP")
-_STAT_PRIORITY_ROLES = ("Angreifer", "Verteidiger", "Support")
 # User-Wunsch: "Angreifer 'Orange', Verteidiger 'Blau' und Support 'Grün' ...
 # bei Auswahl des Reiters eine entsprechende Farbkombi" -- objectName per
-# role so styles.qss can give each Rolle button its own :checked accent
-# color (see #RoleButtonAngreifer/Verteidiger/Support there), used by both
+# role so the sheet can give each Rolle button its own :checked accent
+# colour (see #RoleButtonAngreifer/Verteidiger/Support in
+# styles.template.qss, where the three accents are now core.theme's
+# ROLE_COLORS data table rather than three hexes), used by both
 # QuickStatSelectDialog and StatPriorityEditorDialog's Rolle buttons.
 _ROLE_BUTTON_OBJECT_NAMES = {
     "Angreifer": "RoleButtonAngreifer",
@@ -10804,87 +10128,6 @@ _ROLE_LABEL_KEYS = {
     "Verteidiger": "arm_role_defender",
     "Support": "arm_role_support",
 }
-_STAT_PRIORITY_MAX_ENTRIES = 7
-
-# Starting point for every one of the 6 (Gear-Typ x Rolle) profiles, all
-# identical until the player edits them via the gear-icon editor -- only
-# PvE/Angreifer has real guide backing today (project_gear_stat_guide.md,
-# 2026-08-24, offered as a "recommendation, please double-check"); the
-# other 5 profiles reuse it as a reasonable starting point rather than
-# shipping empty (an empty list would leave every substat slot unfilled).
-# Names/casing must match the real catalog exactly (not the guide's own
-# prose wording, e.g. "Attack increase"/"Move Speed", not "Attack Increase"/
-# "Movement Speed") -- the editor's dropdown restore (QComboBox.findData) is
-# an exact-string lookup, unlike the case-insensitive matching
-# _pick_priority_substats uses for the real auto-pick, so a wording
-# mismatch here silently resets to "— empty —" in the editor even though
-# auto-pick itself would have matched fine.
-_DEFAULT_STAT_PRIORITY_BY_CATEGORY: dict[str, list[str]] = {
-    "weapon": ["Weapon Damage Boost", "Combat Speed", "Damage Boost", "Might", "Precision", "Attack", "Multi-hit Chance"],
-    # Per-piece armor priorities straight from the guide's detailed
-    # per-slot breakdown (User-Wunsch, 2026-08-27: "Jedes Rüstungsteil hat
-    # eine eigene Prio Liste"). "Passive Skills" (every guide line's last
-    # entry) isn't a literal matchable name -- whatever ranks remain after
-    # these already get filled from the player's own Passive Skill Priority
-    # List automatically (see _apply_quick_substats), no explicit entry
-    # needed, same reasoning as Jewelry/Ring below.
-    "helmet": ["Attack increase", "Smite", "Attack", "Endurance", "Incoming Heal"],
-    "shoulder": ["Critical Damage Boost", "Attack", "Endurance", "Defense increase", "Accuracy", "Critical Hit"],
-    "torso": ["Damage Boost", "Attack", "Endurance", "Defense increase", "Accuracy", "Critical Hit"],
-    "gloves": ["Combat Speed", "Attack", "Perfect Chance", "Defense increase", "Accuracy", "Critical Hit"],
-    "pants": ["Damage Tolerance", "Attack increase", "Attack", "Perfect Chance", "Endurance"],
-    "boots": ["Move Speed", "Attack", "Perfect Chance", "Defense increase", "Accuracy", "Critical Hit"],
-    # Guide: "Earrings & Necklace: Attack > Accuracy > Critical Hit >
-    # Passive Skills" -- the trailing "Passive Skills" isn't a literal
-    # matchable name (no fixed one is universal/class-agnostic), so it's
-    # left off here; whatever substat slots remain after these 3 already
-    # get filled from the player's own Passive Skill Priority List
-    # automatically (see _apply_quick_substats), no explicit entry needed.
-    "jewelry": ["Attack", "Accuracy", "Critical Hit"],
-    # Guide: "Rings: Active Skill 1-6 (in slot order) > Attack" -- only the
-    # "Attack" fallback is a universal name safe to bake in; the 6 Active
-    # skill ranks ahead of it are class-/player-specific (same reasoning as
-    # Bracelet below) and must be set by hand via the editor, which already
-    # lists the player's own Active Skill Priority List first in this tab's
-    # dropdown for convenience (see StatPriorityEditorDialog).
-    "ring": ["Attack"],
-    # Left empty on purpose (User-Wunsch, 2026-08-27): only the fixed,
-    # non-random story-reward Bracelet ever rolled Attack/Critical Hit/HP,
-    # and its stats can't be changed anyway. Every actually customizable
-    # Bracelet (Abyssal and above) only rolls the 10 Deity stats instead
-    # (see compute_stat_priority_options.py) -- no real guide backing
-    # exists yet for ranking those against each other, so this stays empty
-    # rather than pointing at values no Bracelet can ever roll.
-    "bracelet": [],
-}
-
-
-def _default_stat_priority_profiles() -> dict[str, dict[str, dict[str, list[str]]]]:
-    return {
-        gear_type: {
-            role: {cat: list(names) for cat, names in _DEFAULT_STAT_PRIORITY_BY_CATEGORY.items()}
-            for role in _STAT_PRIORITY_ROLES
-        }
-        for gear_type in _STAT_PRIORITY_GEAR_TYPES
-    }
-
-
-def _merge_stat_priority_profiles(saved: dict | None) -> dict[str, dict[str, dict[str, list[str]]]]:
-    """Merges a persisted profiles dict onto the defaults -- keeps a saved
-    profile missing a not-yet-existing gear_type/role/category (e.g. an
-    older profile from before this feature) filled in rather than blank."""
-    result = _default_stat_priority_profiles()
-    for gear_type, roles in (saved or {}).items():
-        if gear_type not in result:
-            continue
-        for role, categories in (roles or {}).items():
-            if role not in result[gear_type]:
-                continue
-            for category, names in (categories or {}).items():
-                if category in result[gear_type][role] and isinstance(names, list):
-                    result[gear_type][role][category] = [str(n) for n in names][:_STAT_PRIORITY_MAX_ENTRIES]
-    return result
-
 
 # Precomputed real subStat names per category (compute_stat_priority_
 # options.py) -- shown as the editor's "Verfügbare Werte" reference list so
@@ -10908,44 +10151,6 @@ def _load_stat_priority_options() -> dict[str, list[str]]:
         logger.warning("%s not found -- run compute_stat_priority_options.py", _STAT_PRIORITY_OPTIONS_PATH)
     _stat_priority_options_cache = result
     return result
-
-
-# Known real-data wording that differs from the guide's own term -- matching
-# is otherwise case-insensitive exact-name, which already covers e.g. the
-# guide's "Defense Increase" vs. the catalog's "Defense increase".
-_STAT_NAME_ALIASES = {"movement speed": "move speed"}
-
-
-def _normalize_stat_name(name: str) -> str:
-    key = (name or "").strip().lower()
-    return _STAT_NAME_ALIASES.get(key, key)
-
-
-def _pick_priority_substats(sub_stats: list[dict], count: int, priority_names: list[str]) -> set[int]:
-    """Picks up to `count` indices into sub_stats, walking priority_names
-    (the current Gear-Typ/Rolle/Kategorie profile's ordered stat-name list)
-    top to bottom and taking the first still-unused match for each name --
-    falls through the WHOLE list (not just the first few entries) so a
-    slot whose top preferences aren't among its real options still gets its
-    substat slots filled from lower-priority ones rather than being left
-    empty (explicit user instruction: even the last-ranked entry should
-    still be used if a slot has that many substat slots to fill)."""
-    if count <= 0 or not sub_stats or not priority_names:
-        return set()
-    normalized = [_normalize_stat_name(s.get("name") or "") for s in sub_stats]
-    chosen: list[int] = []
-    used: set[int] = set()
-    for wanted_name in priority_names:
-        if len(chosen) >= count:
-            break
-        wanted = _normalize_stat_name(wanted_name)
-        for i, name in enumerate(normalized):
-            if i in used or name != wanted:
-                continue
-            chosen.append(i)
-            used.add(i)
-            break
-    return set(chosen[:count])
 
 
 def _build_quick_slot_group_rows(
@@ -11227,7 +10432,7 @@ class QuickGearSelectDialog(QDialog):
             btn = QPushButton(grade)
             btn.setObjectName("SkillFilterButton")
             btn.setCheckable(True)
-            btn.setStyleSheet(f"color: {GRADE_COLORS[grade]};")
+            _set_data_color(btn, "item_grade", grade)
             btn.clicked.connect(lambda checked=False, g=grade: self._on_tier_grade_filter_changed(g))
             tier_grade_group.addButton(btn)
             grade_filter_row.addWidget(btn)
@@ -11251,43 +10456,33 @@ class QuickGearSelectDialog(QDialog):
         tier_label.setObjectName("EquipSectionLabel")
         outer.addWidget(tier_label)
         self.tier_combo = _DownwardComboBox()
-        # Distinct objectName so styles.qss can scope out the global
-        # "QComboBox QAbstractItemView { color: ... }" rule just for this
-        # dropdown -- that rule forces one uniform text color on every
-        # combo's popup, which silently overrode the per-item Qt.
-        # ForegroundRole grade colors set in _rebuild_tier_combo (User-
-        # Wunsch: "Bitte in der Liste einmal die Raritäten für die
-        # Schriftfarbe verwenden" -- confirmed via screenshot the colors
-        # weren't actually showing before this fix).
         self.tier_combo.setObjectName("ItemSetCombo")
-        # Instance-level stylesheet directly on the popup view, not a QSS
-        # selector rule -- the app-wide "QComboBox QAbstractItemView {
-        # color: ... }" rule forces one uniform text color on every combo's
-        # popup, and an #ItemSetCombo-scoped QSS override for just this
-        # dropdown did NOT take effect in the full app despite working in
-        # isolation (confirmed via screenshot comparison), likely a
-        # selector-matching quirk of Qt's special-cased combo-popup style
-        # propagation. Setting it directly on the view instance sidesteps
-        # that entirely and reliably lets each item's own Qt.ForegroundRole
-        # grade color show through (User-Wunsch: "die Raritäten für die
-        # Schriftfarbe verwenden").
+        # The objectName goes on the popup VIEW, not on the combo, and the
+        # rule is #TierComboPopup in styles.template.qss.  History, because
+        # this spot has burned twice:
         #
-        # Real bug found + fixed (User-reported, 2026-09-12, screenshot: the
-        # now-12-tier list looked cramped/overlapping) -- setting a
-        # stylesheet directly on this view replaces the WHOLE cascade for
-        # it, so the app-wide "QComboBox QAbstractItemView::item { padding:
-        # 4px 8px; }" rule every other combo's popup gets never reaches
-        # this one -- items fell back to Qt's bare, much tighter default.
-        # Restated here (a bit more generous, since 12 rows now share this
-        # popup instead of the old 4) so it's self-contained instead of
-        # relying on inheritance that doesn't actually reach it.
-        self.tier_combo.view().setStyleSheet(
-            "background-color: #0f172a;"
-            "border: 1px solid rgba(100, 116, 139, 0.45);"
-            "selection-background-color: rgba(34, 211, 238, 0.25);"
-            "padding: 4px;"
-            "QAbstractItemView::item { padding: 6px 10px; }"
-        )
+        #   * the sheet used to declare "QComboBox QAbstractItemView {
+        #     color: ... }", one uniform text colour for every combo popup,
+        #     which silently flattened the per-item Qt.ForegroundRole grade
+        #     colours set in _rebuild_tier_combo (User-Wunsch: "Bitte in der
+        #     Liste einmal die Raritäten für die Schriftfarbe verwenden").
+        #     That declaration is gone sheet-wide (2026-08-29) and is now
+        #     forbidden by test (MASTER §4-8), measured in pixels;
+        #   * an "#ItemSetCombo QAbstractItemView" override -- scoping via
+        #     the COMBO's objectName, i.e. matching the popup as a
+        #     DESCENDANT -- did not take effect, so the fix at the time was
+        #     an instance-level setStyleSheet on the view.  That, in turn,
+        #     replaced the whole cascade for this one popup and lost the
+        #     ::item padding every other popup gets (User-reported,
+        #     2026-09-12: the 12-tier list looked cramped).
+        #
+        # Naming the view itself avoids both: it is an id match ON the
+        # widget rather than a descendant match THROUGH the combo, and it
+        # leaves the generic rules in place underneath -- so if Qt's
+        # special-cased popup propagation ever failed to match even this,
+        # the popup degrades to "styled like every other combo popup",
+        # not to Qt's bare default.
+        self.tier_combo.view().setObjectName("TierComboPopup")
         self.tier_combo.setItemDelegate(_RoleColorDelegate(self.tier_combo))
         self.tier_combo.currentIndexChanged.connect(self._on_tier_selected)
         outer.addWidget(self.tier_combo)
@@ -12164,10 +11359,19 @@ DAEVANION_ADVANCED_PATH = _BUNDLE_DIR / "data" / "daevanion_boards_a.json"
 _DAEVANION_DEV_MODE = False
 
 _DAEVANION_GRID_SIZE = 15
-_DAEVANION_GRADE_HEX = {
-    "start": "#22d3ee", "common": GRADE_COLORS["Common"], "rare": GRADE_COLORS["Rare"],
-    "legend": GRADE_COLORS["Legend"], "unique": GRADE_COLORS["Unique"],
+#: A board node's grade key → the item grade whose colour it borrows.  The
+#: board's own "start" node is not an item grade at all: it is the one node
+#: you always have, so it takes the theme's accent.
+_DAEVANION_GRADE_TO_ITEM_GRADE = {
+    "common": "Common", "rare": "Rare", "legend": "Legend", "unique": "Unique",
 }
+
+
+def _daevanion_grade_color(grade: str) -> str:
+    """Colour of a board node of ``grade`` (MASTER §4-4 data colour)."""
+    if grade == "start":
+        return _c("accent")
+    return _dc("item_grade", _DAEVANION_GRADE_TO_ITEM_GRADE.get(grade, "Common"))
 _DAEVANION_GRADE_LABEL = {"start": "Start", "common": "Common", "rare": "Rare", "legend": "Legend", "unique": "Unique"}
 
 # Real per-grade node-frame art (see fetch_daevanion_node_sprites.py) --
@@ -12248,111 +11452,6 @@ def _daevanion_variant(variant: str) -> dict:
             "node_by_id": node_by_id,
         }
     return _daevanion_variant_cache[variant]
-
-
-def _daevanion_neighbors(r: int, c: int) -> list[tuple[int, int]]:
-    return [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
-
-
-def _daevanion_is_reachable(node: dict, grid: dict, active: set) -> bool:
-    """A node with no real stat/skill value can never bridge two others --
-    only nodes with a real value connect to each other (User-Wunsch,
-    2026-08-28: "Es können zum verbinden nur Felder genutzt werden, die
-    Werte beinhalten")."""
-    if node["id"] in active:
-        return True
-    for rc in _daevanion_neighbors(node["r"], node["c"]):
-        nb = grid.get(rc)
-        if nb and nb["g"] != "empty" and nb["id"] in active:
-            return True
-    return False
-
-
-def _daevanion_total_cost(grid: dict) -> int:
-    return sum(n["cost"] for n in grid.values())
-
-
-def _daevanion_spent_cost(active: set, node_by_id: dict) -> int:
-    return sum(node_by_id[nid]["cost"] for nid in active if nid in node_by_id)
-
-
-_DAEVANION_MP_NAMES = {"mpmax", "Max MP"}  # "a" data uses the lowercase questlog code, "s" data the plain name
-
-
-def _daevanion_node_mp_count(node: dict) -> int:
-    return 1 if any(e.get("t") == "s" and e.get("n") in _DAEVANION_MP_NAMES for e in node.get("e") or []) else 0
-
-
-def _daevanion_shortest_from_tree(grid: dict, tree: set, node_by_id: dict):
-    """Multi-source Dijkstra from every node already in `tree` (distance
-    (0, 0)) -- distance is (points, mpNodeCount), Python tuples already
-    compare lexicographically: cheapest point cost wins outright, ties
-    broken toward fewer Max MP nodes crossed (User-Wunsch, 2026-08-28).
-    "empty" cells are skipped entirely, never traversable."""
-    inf = (float("inf"), float("inf"))
-    dist = {n["id"]: ((0, 0) if n["id"] in tree else inf) for n in grid.values()}
-    prev: dict[str, str] = {}
-    visited: set[str] = set()
-    while len(visited) < len(dist):
-        best_id, best_d = None, inf
-        for nid, d in dist.items():
-            if nid not in visited and d < best_d:
-                best_d, best_id = d, nid
-        if best_id is None:
-            break
-        visited.add(best_id)
-        n = node_by_id[best_id]
-        for rc in _daevanion_neighbors(n["r"], n["c"]):
-            nb = grid.get(rc)
-            if not nb or nb["g"] == "empty" or nb["id"] in visited:
-                continue
-            in_tree = nb["id"] in tree
-            nd = (best_d[0] + (0 if in_tree else nb["cost"]), best_d[1] + (0 if in_tree else _daevanion_node_mp_count(nb)))
-            if nd < dist[nb["id"]]:
-                dist[nb["id"]] = nd
-                prev[nb["id"]] = best_id
-    return dist, prev
-
-
-def _daevanion_path_nodes_to_add(prev: dict, target_id: str, tree: set) -> list[str]:
-    chain = []
-    cur = target_id
-    while cur is not None:
-        chain.append(cur)
-        if cur in tree:
-            break
-        cur = prev.get(cur)
-    return chain
-
-
-def _daevanion_compute_auto_route(grid: dict, node_by_id: dict, wanted_ids: set, start_id: str) -> dict:
-    """Greedy Steiner-tree heuristic (identical to the approved browser
-    mockup): repeatedly connects whichever wanted node is currently
-    cheapest to reach from the tree built so far, until every wanted node
-    is connected or the board's point cap runs out."""
-    tree = {start_id}
-    cap = _daevanion_total_cost(grid)
-    spent = 0
-    remaining = set(wanted_ids) - {start_id}
-    included: set[str] = set()
-    skipped: set[str] = set()
-    while remaining:
-        dist, prev = _daevanion_shortest_from_tree(grid, tree, node_by_id)
-        best_id, best_d = None, (float("inf"), float("inf"))
-        for nid in remaining:
-            d = dist.get(nid, (float("inf"), float("inf")))
-            if d < best_d:
-                best_d, best_id = d, nid
-        if best_id is None or best_d[0] == float("inf") or spent + best_d[0] > cap:
-            skipped |= remaining
-            break
-        for nid in _daevanion_path_nodes_to_add(prev, best_id, tree):
-            if nid not in tree:
-                tree.add(nid)
-                spent += node_by_id[nid]["cost"]
-        included.add(best_id)
-        remaining.discard(best_id)
-    return {"tree": tree, "included": included, "skipped": skipped, "spent": spent, "cap": cap}
 
 
 def _daevanion_stat_key(raw: str) -> str:
@@ -12654,10 +11753,10 @@ class DaevanionBoardCanvas(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#0b1220"))
+        painter.fillRect(self.rect(), _qc("bg.window"))
 
         # Connective lines between two active orthogonal neighbors.
-        painter.setPen(QPen(QColor(34, 211, 238, 90), max(1.2, 2 * self._zoom)))
+        painter.setPen(QPen(_qc("accent", 90), max(1.2, 2 * self._zoom)))
         for nid in self._active:
             n = self._id_to_node.get(nid)
             if not n:
@@ -12678,8 +11777,7 @@ class DaevanionBoardCanvas(QWidget):
             grade = n["g"]
 
             if grade != "empty":
-                hex_color = _DAEVANION_GRADE_HEX.get(grade, _DAEVANION_GRADE_HEX["common"])
-                color = QColor(hex_color)
+                color = QColor(_daevanion_grade_color(grade))
                 # Real per-grade frame art (see fetch_daevanion_node_sprites.py)
                 # -- "enabled" look once active, "disabled" (locked) look
                 # otherwise; falls back to the old drawn rounded-rect if the
@@ -12691,20 +11789,20 @@ class DaevanionBoardCanvas(QWidget):
                     painter.drawPixmap(rect.toRect(), sprite)
                     painter.setOpacity(1.0)
                     if reachable:
-                        painter.setPen(QPen(QColor("#4ade80"), 1.4))
+                        painter.setPen(QPen(_qc("ok"), 1.4))
                         painter.setBrush(Qt.NoBrush)
                         painter.drawRoundedRect(rect, 8, 8)
                 elif is_active:
                     fill = QColor(color)
                     fill.setAlphaF(0.9 if grade == "start" else 0.85)
-                    painter.setPen(QPen(QColor("#22d3ee"), 1.5))
+                    painter.setPen(QPen(_qc("accent"), 1.5))
                     painter.setBrush(fill)
                     painter.drawRoundedRect(rect, 8, 8)
                 else:
                     fill = QColor(color)
                     fill.setAlphaF(0.16 if reachable else 0.06)
                     painter.setBrush(fill)
-                    painter.setPen(QPen(QColor("#4ade80") if reachable else QColor(148, 163, 184, 46), 1.4))
+                    painter.setPen(QPen(_qc("ok") if reachable else _qc("fg.muted", 46), 1.4))
                     painter.drawRoundedRect(rect, 8, 8)
 
                 icon = self._node_icons.get(n["id"])
@@ -12723,12 +11821,12 @@ class DaevanionBoardCanvas(QWidget):
                     painter.drawEllipse(rect.center(), 4 * self._zoom, 4 * self._zoom)
 
             if n["id"] in self._highlighted:
-                painter.setPen(QPen(QColor("#fbbf24"), 2.2))
+                painter.setPen(QPen(_qc("warn"), 2.2))
                 painter.setBrush(Qt.NoBrush)
                 painter.drawRoundedRect(rect.adjusted(-2, -2, 2, 2), 9, 9)
 
             if self._hovered_rc == (r, c):
-                painter.setPen(QPen(QColor("#f8fafc"), 2))
+                painter.setPen(QPen(_qc("accent.hover"), 2))
                 painter.setBrush(Qt.NoBrush)
                 painter.drawRoundedRect(rect.adjusted(-1.5, -1.5, 1.5, 1.5), 9, 9)
 
@@ -12772,14 +11870,14 @@ class _TranslucentCardTooltip(QWidget):
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(48)
         shadow.setOffset(0, 16)
-        shadow.setColor(QColor(0, 0, 0, 150))
+        shadow.setColor(_qc("bg.window", 150))
         self.setGraphicsEffect(shadow)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(QColor(148, 163, 184, 90), 1))
-        painter.setBrush(QColor(15, 22, 38, 235))
+        painter.setPen(QPen(_qc("fg.muted", 90), 1))
+        painter.setBrush(_qc("bg.surface", 235))
         painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 13, 13)
         painter.end()
 
@@ -12800,6 +11898,12 @@ class _TranslucentCardTooltip(QWidget):
         self.show()
 
 
+#: The five states #TooltipStatusPill has a rule for (template).  An
+#: unknown key reads as "locked", same as the (colour, alpha) table that
+#: used to live in DaevanionNodeTooltip.
+_NODE_STATUS_KEYS = frozenset({"start", "active", "available", "locked", "no_points"})
+
+
 class DaevanionNodeTooltip(_TranslucentCardTooltip):
     """Node detail card -- replaces the native QToolTip (User-Wunsch,
     2026-08-28: "Den Tooltip aus der Browservorschau fand ich noch
@@ -12807,14 +11911,6 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
     status line as a colored pill, matching the browser mockup's
     node-tooltip design -- a plain QToolTip's rich-text subset has no
     per-row backgrounds/pills to work with."""
-
-    _STATUS_COLORS = {
-        "start": ("#22d3ee", 0.15),
-        "active": ("#22d3ee", 0.15),
-        "available": ("#4ade80", 0.14),
-        "locked": ("#94a3b8", 0.12),
-        "no_points": ("#fca5a5", 0.14),
-    }
 
     def __init__(self, parent=None):
         super().__init__(240, parent)
@@ -12824,29 +11920,28 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         outer.setSpacing(10)
 
         self._grade_label = QLabel()
+        self._grade_label.setObjectName("TooltipGradePill")
         outer.addWidget(self._grade_label, 0, Qt.AlignLeft)
 
         self._title_label = QLabel()
+        self._title_label.setObjectName("TooltipTitle")
         self._title_label.setWordWrap(True)
-        self._title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #f1f5f9; background: transparent; border: none;")
         outer.addWidget(self._title_label)
 
         self._meta_label = QLabel()
+        self._meta_label.setObjectName("TooltipMeta")
         self._meta_label.setWordWrap(True)
-        self._meta_label.setStyleSheet(
-            "font-size: 12px; color: #94a3b8; background: transparent;"
-            "border: none; border-top: 1px solid rgba(148, 163, 184, 60); padding-top: 8px;"
-        )
         outer.addWidget(self._meta_label)
 
         self._effects_container = QWidget()
-        self._effects_container.setStyleSheet("background: transparent;")
+        self._effects_container.setObjectName("TransparentPane")
         self._effects_layout = QVBoxLayout(self._effects_container)
         self._effects_layout.setContentsMargins(0, 0, 0, 0)
         self._effects_layout.setSpacing(6)
         outer.addWidget(self._effects_container)
 
         self._status_label = QLabel()
+        self._status_label.setObjectName("TooltipStatusPill")
         self._status_label.setAlignment(Qt.AlignCenter)
         self._status_label.setWordWrap(True)
         outer.addWidget(self._status_label)
@@ -12855,7 +11950,7 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         self,
         name: str,
         grade_label: str,
-        grade_hex: str,
+        grade_key: str,
         cost: int,
         level: int,
         effect_rows: list[tuple[str, str]],
@@ -12863,11 +11958,7 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         status_text: str,
     ):
         self._grade_label.setText(grade_label.upper())
-        self._grade_label.setStyleSheet(
-            "font-size: 10.5px; font-weight: 700; letter-spacing: 1px;"
-            "padding: 2px 8px; border-radius: 9px;"
-            f"background: {_rgba_str(grade_hex, 0.2)}; color: {grade_hex}; border: none;"
-        )
+        _set_data_color(self._grade_label, "item_grade", grade_key)
         self._title_label.setText(name)
         self._meta_label.setText(f"Cost: {cost} pt{'s' if cost != 1 else ''} · Required level: {level}")
 
@@ -12879,26 +11970,27 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         _clear_layout(self._effects_layout)
         for label, value in effect_rows:
             row = QFrame()
-            row.setStyleSheet(
-                "background: rgba(15, 23, 42, 150); border: 1px solid rgba(148, 163, 184, 50); border-radius: 8px;"
-            )
+            row.setObjectName("TooltipEffectRow")
             row_layout = QHBoxLayout(row)
             row_layout.setContentsMargins(10, 8, 10, 8)
             lbl = QLabel(label)
-            lbl.setStyleSheet("font-size: 12px; color: #cbd5e1; background: transparent; border: none;")
+            lbl.setObjectName("TooltipEffectLabel")
             lbl.setWordWrap(True)
             val = QLabel(value)
-            val.setStyleSheet("font-size: 12px; font-weight: 700; color: #22d3ee; background: transparent; border: none;")
+            val.setObjectName("TooltipEffectValue")
             row_layout.addWidget(lbl, 1)
             row_layout.addWidget(val, 0)
             self._effects_layout.addWidget(row)
 
-        color, alpha = self._STATUS_COLORS.get(status_key, self._STATUS_COLORS["locked"])
         self._status_label.setText(status_text)
-        self._status_label.setStyleSheet(
-            "font-size: 12px; font-weight: 600; border-radius: 8px; padding: 8px 10px; border: none;"
-            f"background: {_rgba_str(color, alpha)}; color: {color};"
+        # Five states, five token pairs, all in the template
+        # (#TooltipStatusPill[status=…]).  An unknown key reads as locked,
+        # same as the (colour, alpha) table this replaced.
+        self._status_label.setProperty(
+            "status", status_key if status_key in _NODE_STATUS_KEYS else "locked"
         )
+        self._status_label.style().unpolish(self._status_label)
+        self._status_label.style().polish(self._status_label)
 
         self.adjustSize()
 
@@ -12918,26 +12010,24 @@ class SkillInfoTooltip(_TranslucentCardTooltip):
         outer.setSpacing(10)
 
         self._type_label = QLabel()
+        self._type_label.setObjectName("TooltipTypePill")
         outer.addWidget(self._type_label, 0, Qt.AlignLeft)
 
         self._title_label = QLabel()
+        self._title_label.setObjectName("TooltipTitle")
         self._title_label.setWordWrap(True)
-        self._title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #f1f5f9; background: transparent; border: none;")
         outer.addWidget(self._title_label)
 
         self._desc_label = QLabel()
+        self._desc_label.setObjectName("TooltipDesc")
         self._desc_label.setWordWrap(True)
         self._desc_label.setTextFormat(Qt.RichText)
-        self._desc_label.setStyleSheet("font-size: 12px; color: #cbd5e1; background: transparent; border: none;")
         outer.addWidget(self._desc_label)
 
         self._stats_label = QLabel()
+        self._stats_label.setObjectName("TooltipStats")
         self._stats_label.setWordWrap(True)
         self._stats_label.setTextFormat(Qt.RichText)
-        self._stats_label.setStyleSheet(
-            "font-size: 12px; color: #94a3b8; background: transparent;"
-            "border: none; border-top: 1px solid rgba(148, 163, 184, 60); padding-top: 8px;"
-        )
         outer.addWidget(self._stats_label)
 
         # Specialization level breakpoints (User-Wunsch, 2026-08-29: "beim
@@ -12947,23 +12037,15 @@ class SkillInfoTooltip(_TranslucentCardTooltip):
         # panel already renders (_on_skill_description_card_clicked), just
         # not previously shown here in the Priority List's picker tooltip.
         self._specs_label = QLabel()
+        self._specs_label.setObjectName("TooltipStats")
         self._specs_label.setWordWrap(True)
         self._specs_label.setTextFormat(Qt.RichText)
-        self._specs_label.setStyleSheet(
-            "font-size: 12px; color: #94a3b8; background: transparent;"
-            "border: none; border-top: 1px solid rgba(148, 163, 184, 60); padding-top: 8px;"
-        )
         outer.addWidget(self._specs_label)
 
     def set_skill(self, skill: dict):
         skill_type = skill.get("type", "")
-        color = _SKILL_TYPE_COLORS.get(skill_type, "#94a3b8")
         self._type_label.setText(skill_type.upper())
-        self._type_label.setStyleSheet(
-            "font-size: 10.5px; font-weight: 700; letter-spacing: 1px;"
-            "padding: 2px 8px; border-radius: 9px;"
-            f"background: {_rgba_str(color, 0.2)}; color: {color}; border: none;"
-        )
+        _set_data_color(self._type_label, "skill_type", skill_type)
         self._title_label.setText(skill.get("name", ""))
 
         desc, _est = _render_skill_description(skill.get("description", ""), skill.get("levels"), 1, skill_id=skill.get("id"))
@@ -13018,45 +12100,44 @@ class ArcanaCardTooltip(_TranslucentCardTooltip):
         outer.setSpacing(8)
 
         self._title_label = QLabel()
+        self._title_label.setObjectName("TooltipTitle")
         self._title_label.setWordWrap(True)
-        self._title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #f1f5f9; background: transparent; border: none;")
         outer.addWidget(self._title_label)
 
         self._lord_label = QLabel()
+        self._lord_label.setObjectName("TooltipLordLine")
         self._lord_label.setWordWrap(True)
         self._lord_label.setTextFormat(Qt.RichText)
-        self._lord_label.setStyleSheet(
-            "font-size: 11px; background: transparent;"
-            "border: none; border-bottom: 1px solid rgba(148, 163, 184, 60); padding-bottom: 8px;"
-        )
         outer.addWidget(self._lord_label)
 
         columns = QHBoxLayout()
         columns.setSpacing(14)
         # Header colored per type (User-Wunsch, 2026-08-29: "jetzt noch
-        # farbig fuer aktiv und passiv jeweils") -- same Active/Passive
-        # colors used everywhere else in the app (_SKILL_TYPE_COLORS).
+        # farbig fuer aktiv und passiv jeweils") -- the same Active/Passive
+        # colours used everywhere else in the app, reached by data KEY
+        # ("active"/"passive") rather than by value: the colour itself lives
+        # in core.theme.SKILL_TYPE_COLORS and is applied by the
+        # [dataColor="skill_type:…"] rules.
         self._active_container, self._active_layout = self._build_category_column(
-            "arm_active", _SKILL_TYPE_COLORS["active"]
+            "arm_active", "active"
         )
         self._passive_container, self._passive_layout = self._build_category_column(
-            "arm_passive", _SKILL_TYPE_COLORS["passive"]
+            "arm_passive", "passive"
         )
         columns.addWidget(self._active_container, 1)
         columns.addWidget(self._passive_container, 1)
         outer.addLayout(columns)
 
     @staticmethod
-    def _build_category_column(title_key: str, color: str) -> tuple[QWidget, QVBoxLayout]:
+    def _build_category_column(title_key: str, skill_type: str) -> tuple[QWidget, QVBoxLayout]:
         container = QWidget()
-        container.setStyleSheet("background: transparent;")
+        container.setObjectName("TransparentPane")
         col = QVBoxLayout(container)
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(4)
         head = QLabel(_t(title_key))
-        head.setStyleSheet(
-            f"font-size: 10px; font-weight: 700; letter-spacing: 1px; color: {color}; background: transparent; border: none;"
-        )
+        head.setObjectName("TooltipColumnHead")
+        _set_data_color(head, "skill_type", skill_type)
         col.addWidget(head)
         rows_layout = QVBoxLayout()
         rows_layout.setSpacing(3)
@@ -13087,9 +12168,9 @@ class ArcanaCardTooltip(_TranslucentCardTooltip):
         if lord:
             effect = ARCANA_LORD_EFFECTS.get(lord, "")
             self._lord_label.setText(
-                f'<span style="color:#facc15;font-weight:700;">{lord}</span> '
-                f'<span style="color:#22d3ee;font-weight:700;">+{_ARCANA_CARD_EXTRA_BUDGET}</span><br>'
-                f'<span style="color:#64748b;">{effect}</span>'
+                f'<span style="color:{_c("warn")};font-weight:700;">{lord}</span> '
+                f'<span style="color:{_c("accent")};font-weight:700;">+{_ARCANA_CARD_EXTRA_BUDGET}</span><br>'
+                f'<span style="color:{_c("fg.muted")};">{effect}</span>'
             )
         else:
             self._lord_label.setText("")
@@ -13115,8 +12196,8 @@ class ArcanaCardTooltip(_TranslucentCardTooltip):
                 f"+{assigned_values[sid]}" if is_assigned
                 else f"+{_ARCANA_SKILL_BASELINE}–{_ARCANA_PER_SKILL_CAP}"
             )
-            name_color = "#f1f5f9" if is_assigned else "#94a3b8"
-            value_color = "#22d3ee" if is_assigned else "#64748b"
+            name_color = _c("fg") if is_assigned else _c("fg.muted")
+            value_color = _c("accent") if is_assigned else _c("fg.muted")
             full_name = skill.get("name", "")
             # Truncated by character count, not word-wrapped (User-Wunsch,
             # 2026-08-29, after a live screenshot: "hier scheinen leere
@@ -13141,7 +12222,7 @@ class ArcanaCardTooltip(_TranslucentCardTooltip):
             )
             row.setTextFormat(Qt.RichText)
             row.setWordWrap(False)
-            row.setStyleSheet("font-size: 11px; background: transparent; border: none;")
+            row.setObjectName("TooltipSkillRow")
             target.addWidget(row)
 
         self.adjustSize()
@@ -13166,20 +12247,18 @@ class ArcanaSetBonusTooltip(_TranslucentCardTooltip):
         outer.setSpacing(6)
 
         self._title_label = QLabel()
+        self._title_label.setObjectName("ArcanaSetBonusTitle")
         self._title_label.setWordWrap(True)
-        self._title_label.setStyleSheet(
-            "font-size: 13px; font-weight: 700; color: #22d3ee; background: transparent; border: none;"
-        )
         outer.addWidget(self._title_label)
 
         self._2pc_label = QLabel()
+        self._2pc_label.setObjectName("ArcanaSetBonusLine")
         self._2pc_label.setWordWrap(True)
-        self._2pc_label.setStyleSheet("font-size: 12px; color: #e5e7eb; background: transparent; border: none;")
         outer.addWidget(self._2pc_label)
 
         self._4pc_label = QLabel()
+        self._4pc_label.setObjectName("ArcanaSetBonusLine")
         self._4pc_label.setWordWrap(True)
-        self._4pc_label.setStyleSheet("font-size: 12px; color: #e5e7eb; background: transparent; border: none;")
         outer.addWidget(self._4pc_label)
 
     def set_bonus(self, theme: str):
@@ -13189,10 +12268,7 @@ class ArcanaSetBonusTooltip(_TranslucentCardTooltip):
         # 2026-09-13, confirmed via mockup) instead of one fixed cyan for
         # every Set -- same _ARCANA_THEME_COLORS the Choose Card Sets
         # dialog's pills/column headers use.
-        color = _ARCANA_THEME_COLORS.get(theme, "#22d3ee")
-        self._title_label.setStyleSheet(
-            f"font-size: 13px; font-weight: 700; color: {color}; background: transparent; border: none;"
-        )
+        _set_data_color(self._title_label, "arcana_theme", theme if theme in _ARCANA_THEME_COLORS else None)
         self._2pc_label.setText(_t("arm_set_bonus_2pc", text=info.get("2pc", "")))
         self._4pc_label.setText(_t("arm_set_bonus_4pc", text=info.get("4pc", "")))
         self.adjustSize()
@@ -13211,13 +12287,10 @@ class _ArcanaSetInfoDot(QLabel):
         super().__init__("i", parent)
         self._theme = theme
         self._tooltip = tooltip
-        color = _ARCANA_THEME_COLORS.get(theme, "#94a3b8")
+        self.setObjectName("ArcanaSetInfoDot")
+        _set_data_color(self, "arcana_theme", theme if theme in _ARCANA_THEME_COLORS else None)
         self.setFixedSize(14, 14)
         self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet(
-            f"border: 1.5px solid {color}; border-radius: 7px; color: {color}; "
-            "font-size: 9px; font-weight: 800; background: transparent;"
-        )
 
     def enterEvent(self, event):
         super().enterEvent(event)
@@ -13262,12 +12335,10 @@ class _ArcanaResultCardIcon(QLabel):
         self._lord = lord
         self._pool = pool
         self._assigned_values = assigned_values
+        self.setObjectName("ArcanaCardTypeTile")
+        self.setProperty("assigned", "true" if assigned_values else "false")
         self.setFixedSize(56, 56)
         self.setAlignment(Qt.AlignCenter)
-        border = "rgba(34, 211, 238, 0.7)" if assigned_values else "rgba(100, 116, 139, 0.5)"
-        self.setStyleSheet(
-            f"background: rgba(15, 23, 42, 0.75); border: 2px solid {border}; border-radius: 8px;"
-        )
 
     def enterEvent(self, event):
         super().enterEvent(event)
@@ -13333,16 +12404,9 @@ class _ArcanaThemeOption(QFrame):
     def __init__(self, theme: str, lord: str | None, group: QButtonGroup, parent=None):
         super().__init__(parent)
         self.setObjectName("ArcanaThemeOption")
-        self._color = _ARCANA_THEME_COLORS.get(theme, "#facc15")
-        self._base_style = (
-            "QFrame#ArcanaThemeOption { background: transparent; border: 1px solid transparent; border-radius: 8px; }"
-            "QFrame#ArcanaThemeOption:hover { background: rgba(148, 163, 184, 0.10); }"
-        )
-        self._selected_style = (
-            f"QFrame#ArcanaThemeOption {{ background: {_rgba_str(self._color, 0.10)}; "
-            f"border: 1px solid {_rgba_str(self._color, 0.35)}; border-radius: 8px; }}"
-        )
-        self.setStyleSheet(self._base_style)
+        self._theme_key = theme if theme in _ARCANA_THEME_COLORS else None
+        _set_data_color(self, "arcana_theme", self._theme_key)
+        self.setProperty("selected", "false")
         self.setFixedWidth(self._FIXED_WIDTH)
 
         row = QHBoxLayout(self)
@@ -13350,12 +12414,8 @@ class _ArcanaThemeOption(QFrame):
         row.setSpacing(8)
 
         self.radio = QRadioButton()
-        self.radio.setStyleSheet(
-            "QRadioButton::indicator { width: 14px; height: 14px; border-radius: 7px; "
-            "border: 2px solid #64748b; background: transparent; }"
-            f"QRadioButton::indicator:checked {{ border-color: {self._color}; background: {self._color}; }}"
-            "QRadioButton::indicator:disabled { border-color: #334155; }"
-        )
+        self.radio.setObjectName("ArcanaThemeRadio")
+        _set_data_color(self.radio, "arcana_theme", self._theme_key)
         self.radio.setEnabled(bool(lord))
         # QRadioButton's default horizontal size policy is Minimum, not
         # Fixed -- with no stretch anywhere else in this row, IT (not the
@@ -13373,7 +12433,8 @@ class _ArcanaThemeOption(QFrame):
         text_col = QVBoxLayout()
         text_col.setSpacing(0)
         self._lord_label = QLabel(f"{lord} +{_ARCANA_CARD_EXTRA_BUDGET}" if lord else "—")
-        self._lord_label.setStyleSheet("font-size: 12.5px; font-weight: 600; background: transparent; border: none;")
+        self._lord_label.setObjectName("ArcanaThemeOptionLord")
+        _set_data_color(self._lord_label, "arcana_theme", self._theme_key)
         text_col.addWidget(self._lord_label)
         row.addLayout(text_col)
         row.addStretch(1)
@@ -13387,11 +12448,13 @@ class _ArcanaThemeOption(QFrame):
         self.radio.toggled.connect(self._on_toggled)
 
     def _on_toggled(self, checked: bool):
-        self.setStyleSheet(self._selected_style if checked else self._base_style)
-        color = self._color if checked else "#e2e8f0"
-        self._lord_label.setStyleSheet(
-            f"font-size: 12.5px; font-weight: 600; color: {color}; background: transparent; border: none;"
-        )
+        # Both the row's wash and the lord label's colour are
+        # [selected="true"][dataColor=…] rules now, so "selected" is the
+        # only thing this has to say.
+        for widget in (self, self._lord_label):
+            widget.setProperty("selected", "true" if checked else "false")
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
 
     def mousePressEvent(self, event):
         if self.radio.isEnabled():
@@ -13416,13 +12479,6 @@ class ArcanaThemeChoiceDialog(QDialog):
     only in the shipped app via _ARCANA_FUTURE_SEASONS_ENABLED; the other
     2 groups stay visible with a 🔒 so this can be flipped on later with
     no further UI work once a new season actually goes live."""
-
-    _SEASON_BTN_STYLE = (
-        "QPushButton { background: #0f1b2e; border: 1px solid rgba(100, 116, 139, 0.35); border-radius: 9px; "
-        "padding: 9px 8px; font-size: 12px; font-weight: 600; color: #e2e8f0; }"
-        "QPushButton:checked { background: rgba(34, 211, 238, 0.10); border-color: #22d3ee; color: #22d3ee; }"
-        "QPushButton:disabled { color: #64748b; }"
-    )
 
     def __init__(self, theme_map: dict, arcana_class_skills: dict, class_key: str, parent=None):
         super().__init__(parent)
@@ -13457,11 +12513,11 @@ class ArcanaThemeChoiceDialog(QDialog):
         layout.setSpacing(10)
         hint = QLabel(_t("arm_arcana_theme_hint"))
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #94a3b8; font-size: 12px;")
+        hint.setObjectName("ArcanaThemeHint")
         layout.addWidget(hint)
 
         season_label = QLabel(_t("arm_arcana_season_set_label"))
-        season_label.setStyleSheet("font-weight: 700; font-size: 11px; letter-spacing: 1px; color: #64748b;")
+        season_label.setObjectName("ArcanaSeasonLabel")
         layout.addWidget(season_label)
 
         season_row = QHBoxLayout()
@@ -13476,7 +12532,7 @@ class ArcanaThemeChoiceDialog(QDialog):
             if not enabled:
                 btn.setToolTip(_t("arm_arcana_season_locked_tooltip"))
             btn.setChecked(idx == self._active_group_idx)
-            btn.setStyleSheet(self._SEASON_BTN_STYLE)
+            btn.setObjectName("ArcanaSeasonButton")
             btn.clicked.connect(lambda _c=False, i=idx: self._on_season_changed(i))
             self._season_group.addButton(btn)
             season_row.addWidget(btn, 1)
@@ -13524,8 +12580,8 @@ class ArcanaThemeChoiceDialog(QDialog):
             head_row.setContentsMargins(0, 0, 0, 0)
             head_row.setSpacing(5)
             head = QLabel(theme.upper())
-            color = _ARCANA_THEME_COLORS.get(theme, "#64748b")
-            head.setStyleSheet(f"font-weight: 700; font-size: 11px; letter-spacing: 1px; color: {color};")
+            head.setObjectName("ArcanaThemeColumnHead")
+            _set_data_color(head, "arcana_theme", theme if theme in _ARCANA_THEME_COLORS else None)
             head_row.addWidget(head)
             head_row.addWidget(_ArcanaSetInfoDot(theme, self._bonus_tooltip))
             head_row.addStretch(1)
@@ -13533,7 +12589,7 @@ class ArcanaThemeChoiceDialog(QDialog):
 
         for row_idx, ct in enumerate(usable_types, start=1):
             type_label = QLabel(ct)
-            type_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+            type_label.setObjectName("ArcanaCardTypeName")
             self._grid.addWidget(type_label, row_idx, 0, Qt.AlignLeft | Qt.AlignVCenter)
             group = QButtonGroup(self)
             self._options[ct] = {}
@@ -13798,7 +12854,7 @@ class ArcanaResultsDialog(QDialog):
                     covered = result["covered"].get(sid, 0)
                     name = skill_names.get(sid, sid)
                     fully_covered = covered >= need
-                    color = "#4ade80" if fully_covered else "#f87171"
+                    color = _c("ok") if fully_covered else _c("danger")
                     # Capped at the wish itself -- any amount beyond it is
                     # now explicitly accounted for in the leftover note
                     # below instead, so it isn't shown twice in two
@@ -13818,7 +12874,7 @@ class ArcanaResultsDialog(QDialog):
                             sid, need, covered, usable_types, class_skill_pools, skill_type_by_id,
                         )
                         reason = QLabel(_t(reason_key, **reason_kwargs))
-                        reason.setStyleSheet("color: #94a3b8; font-size: 11px;")
+                        reason.setObjectName("ArcanaReasonLabel")
                         reason.setWordWrap(True)
                         body.addWidget(reason)
 
@@ -13890,11 +12946,11 @@ class ArcanaResultsDialog(QDialog):
                     ))
                 if leftover_lines:
                     leftover_header = QLabel(_t("arm_arcana_leftover_header"))
-                    leftover_header.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: 700; margin-top: 4px;")
+                    leftover_header.setObjectName("ArcanaLeftoverHeader")
                     body.addWidget(leftover_header)
                     for line in leftover_lines:
                         leftover_label = QLabel(line)
-                        leftover_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
+                        leftover_label.setObjectName("ArcanaReasonLabel")
                         leftover_label.setWordWrap(True)
                         body.addWidget(leftover_label)
 
@@ -14349,7 +13405,7 @@ class LoadoutWindow(QMainWindow):
         remaining_bonus = remaining - remaining_base
         self.skillpoints_value_lbl.setText(
             f"<span style='color:white; font-weight:700;'>{remaining_base}</span> "
-            f"<span style='color:#22d3ee; font-weight:700;'>(+{remaining_bonus})</span>"
+            f"<span style='color:{_c('accent')}; font-weight:700;'>(+{remaining_bonus})</span>"
         )
         can_spend = remaining > 0
         for plus_btn in self._skill_level_plus_buttons.values():
@@ -14373,7 +13429,7 @@ class LoadoutWindow(QMainWindow):
             self.stigma_points_value_lbl.setText("<span style='color:white; font-weight:700;'>0</span>")
         else:
             self.stigma_points_value_lbl.setText(
-                f"<span style='color:#f87171; font-weight:700;'>-{spent}</span>"
+                f"<span style='color:{_c('danger')}; font-weight:700;'>-{spent}</span>"
             )
 
     def _build_skill_description_tab(self) -> QWidget:
@@ -14499,7 +13555,7 @@ class LoadoutWindow(QMainWindow):
         cards_scroll = QScrollArea()
         cards_scroll.setWidgetResizable(True)
         cards_scroll.setWidget(cards_container)
-        cards_scroll.viewport().setStyleSheet("background: transparent;")
+        cards_scroll.viewport().setObjectName("TransparentPane")
         left_outer.addWidget(cards_scroll, 1)
 
         outer.addWidget(left_container, 3)
@@ -14613,7 +13669,7 @@ class LoadoutWindow(QMainWindow):
             row_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             row_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             row_scroll.setWidget(row_container)
-            row_scroll.viewport().setStyleSheet("background: transparent;")
+            row_scroll.viewport().setObjectName("TransparentPane")
             outer.addWidget(row_scroll)
 
         outer.addStretch(1)
@@ -15116,8 +14172,8 @@ class LoadoutWindow(QMainWindow):
 
         skill_type = skill.get("type", "")
         type_label = QLabel(skill_type.upper())
-        color = _SKILL_TYPE_COLORS.get(skill_type, "#94a3b8")
-        type_label.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 700; letter-spacing: 1px;")
+        type_label.setObjectName("SkillCardTypeLabel")
+        _set_data_color(type_label, "skill_type", skill_type)
         text_col.addWidget(type_label)
         top_row.addLayout(text_col, 1)
 
@@ -15210,14 +14266,14 @@ class LoadoutWindow(QMainWindow):
 
             if ceiling <= 0:
                 no_card_label = QLabel(_t("arm_arcana_reason_no_card"))
-                no_card_label.setStyleSheet("color: #64748b; font-size: 10px;")
+                no_card_label.setObjectName("ArcanaMaxHint")
                 no_card_label.setWordWrap(True)
                 no_card_label.setAlignment(Qt.AlignCenter)
                 wish_row.addWidget(no_card_label, 1)
             else:
                 wish_minus_btn = QPushButton()
                 wish_minus_btn.setObjectName("ArcanaWishStepBtn")
-                wish_minus_btn.setIcon(_make_minus_icon(12, _ARCANA_WISH_COLOR))
+                wish_minus_btn.setIcon(_make_minus_icon(12, _c("secondary")))
                 wish_minus_btn.setIconSize(QSize(11, 11))
                 wish_minus_btn.setFixedSize(20, 20)
                 wish_minus_btn.setCursor(Qt.PointingHandCursor)
@@ -15226,12 +14282,12 @@ class LoadoutWindow(QMainWindow):
                 wish_row.addWidget(wish_minus_btn)
 
                 max_hint_label = QLabel(_t("arm_arcana_max_hint", max=ceiling))
-                max_hint_label.setStyleSheet("color: #64748b; font-size: 10px;")
+                max_hint_label.setObjectName("ArcanaMaxHint")
                 wish_row.addWidget(max_hint_label)
 
                 wish_plus_btn = QPushButton()
                 wish_plus_btn.setObjectName("ArcanaWishStepBtn")
-                wish_plus_btn.setIcon(_make_plus_icon(12, _ARCANA_WISH_COLOR))
+                wish_plus_btn.setIcon(_make_plus_icon(12, _c("secondary")))
                 wish_plus_btn.setIconSize(QSize(11, 11))
                 wish_plus_btn.setFixedSize(20, 20)
                 wish_plus_btn.setCursor(Qt.PointingHandCursor)
@@ -15590,13 +14646,12 @@ class LoadoutWindow(QMainWindow):
         skill_type = skill.get("type", "")
         if skill_type:
             self.skill_desc_badges_row.addWidget(
-                _make_type_badge(skill_type.capitalize(), _SKILL_TYPE_COLORS.get(skill_type, "#94a3b8"))
+                _make_type_badge(skill_type.capitalize(), "skill_type", skill_type)
             )
         damage_type = skill.get("damageType", "")
         if damage_type in ("physic", "magic"):
             label = "Physical" if damage_type == "physic" else "Magic"
-            color = "#f87171" if damage_type == "physic" else "#60a5fa"
-            self.skill_desc_badges_row.addWidget(_make_type_badge(label, color))
+            self.skill_desc_badges_row.addWidget(_make_type_badge(label, "damage_type", damage_type))
 
         self._refresh_open_skill_description_panel(skill)
 
@@ -15719,7 +14774,7 @@ class LoadoutWindow(QMainWindow):
         # 2026-09-02: "schreiben wir dies unterhalb des Skills als
         # Zusatzinfo, damit weiss der User direkt bescheid").
         if skill_id in _SKILL_NO_LEVEL_SCALING_DATA:
-            rendered += f"<br><br><span style='color:#f59e0b; font-style:italic;'>{_t('arm_no_level_scaling_data')}</span>"
+            rendered += f"<br><br><span style='color:{_c('warn')}; font-style:italic;'>{_t('arm_no_level_scaling_data')}</span>"
         self.skill_desc_text_label.setText(rendered)
         return effective_level
 
@@ -15782,7 +14837,7 @@ class LoadoutWindow(QMainWindow):
                     if not available or not spec_id:
                         lines.append(label)
                         continue
-                    color = _ACTIVE_SPEC_CHOSEN_COLOR if spec_id in chosen else _ACTIVE_SPEC_AVAILABLE_COLOR
+                    color = _dc("spec_state", "chosen" if spec_id in chosen else "available")
                     weight = "700" if spec_id in chosen else "500"
                     lines.append(
                         f"<a href='{spec_id}' style='color:{color}; font-weight:{weight}; text-decoration:none;'>{label}</a>"
@@ -15793,7 +14848,7 @@ class LoadoutWindow(QMainWindow):
                     note = spec.get("specialized", "").strip()
                     text = f"Lv {lvl}: {note}" if note else f"Lv {lvl}"
                     if isinstance(lvl, int) and effective_level >= lvl:
-                        text = f"<span style='color:#f59e0b;'>{text}</span>"
+                        text = f"<span style='color:{_c('warn')};'>{text}</span>"
                     lines.append(text)
             self.skill_desc_specs_label.setText("<br>".join(lines))
         self.skill_desc_specs_header.setVisible(bool(specs))
@@ -15916,7 +14971,7 @@ class LoadoutWindow(QMainWindow):
         # board-specific -- confirmed across multiple zoom levels.
         canvas_scroll.setFixedSize(760, 760)
         canvas_scroll.setAlignment(Qt.AlignCenter)
-        canvas_scroll.viewport().setStyleSheet("background: transparent;")
+        canvas_scroll.viewport().setObjectName("TransparentPane")
         self._daevanion_canvas = DaevanionBoardCanvas()
         self._daevanion_canvas.nodeClicked.connect(self._daevanion_on_node_clicked)
         self._daevanion_canvas.nodeHovered.connect(self._daevanion_on_node_hovered)
@@ -16230,16 +15285,20 @@ class LoadoutWindow(QMainWindow):
 
     _DAEVANION_GRADE_RANK = {"unique": 3, "legend": 2, "rare": 1, "common": 0, "start": -1, "empty": -1}
 
-    def _daevanion_entry_accent_color(self, grades: set[str]) -> str | None:
-        """Highest-tier grade among an entry's nodes gets its board color as
+    def _daevanion_entry_accent_grade(self, grades: set[str]) -> str | None:
+        """Highest-tier grade among an entry's nodes gets its own rarity as
         a text accent in the sidebar (User-Wunsch, 2026-08-28: "die goldenen
         oder epic nodes farbig markieren ... falls andere Statnodes mit blau
         oder gruen existieren, diese farbig markieren") -- Common-only
-        entries stay the default label color, nothing to call out there."""
+        entries stay the default label color, nothing to call out there.
+
+        Returns the ITEM-GRADE key (what _set_data_color wants), not a
+        colour: the colour itself belongs to the stylesheet now.
+        """
         best = max(grades, default="common", key=lambda g: self._DAEVANION_GRADE_RANK.get(g, -1))
         if self._DAEVANION_GRADE_RANK.get(best, -1) <= 0:
             return None
-        return _DAEVANION_GRADE_HEX.get(best)
+        return _DAEVANION_GRADE_TO_ITEM_GRADE.get(best)
 
     def _daevanion_highlighted_ids(self, board: dict, grid: dict) -> set[str]:
         checked = self._daevanion_filter_set()
@@ -16279,9 +15338,10 @@ class LoadoutWindow(QMainWindow):
                 active_count = len(entry["ids"] & active)
                 cb = QCheckBox(f"{entry['label']} ({active_count}/{len(entry['ids'])})")
                 cb.setChecked(full_key in checked)
-                accent = self._daevanion_entry_accent_color(entry.get("grades", set()))
-                if accent:
-                    cb.setStyleSheet(f"color: {accent}; font-weight: 600;")
+                grade = self._daevanion_entry_accent_grade(entry.get("grades", set()))
+                if grade:
+                    cb.setObjectName("DaevanionFilterCheck")
+                    _set_data_color(cb, "item_grade", grade)
                 cb.toggled.connect(lambda on, fk=full_key: self._daevanion_on_filter_toggled(fk, on))
                 body_layout.addWidget(cb)
             self._daevanion_sidebar_layout.addWidget(section)
@@ -16368,7 +15428,7 @@ class LoadoutWindow(QMainWindow):
 
         grade_label = _DAEVANION_GRADE_LABEL.get(node["g"], node["g"])
         name = node.get("name") or grade_label
-        grade_hex = _DAEVANION_GRADE_HEX.get(node["g"], "#94a3b8")
+        grade_key = _DAEVANION_GRADE_TO_ITEM_GRADE.get(node["g"], "")
         effect_rows = _daevanion_effect_lines(node, class_skills_by_id)
 
         if node["g"] == "start":
@@ -16383,7 +15443,7 @@ class LoadoutWindow(QMainWindow):
             status_key, status_text = "available", _t("arm_daevanion_status_available")
 
         self._daevanion_tooltip.set_node(
-            name, grade_label, grade_hex, node["cost"], node["lvl"], effect_rows, status_key, status_text
+            name, grade_label, grade_key, node["cost"], node["lvl"], effect_rows, status_key, status_text
         )
         self._daevanion_tooltip.show_at(QCursor.pos())
 
@@ -16531,7 +15591,7 @@ class LoadoutWindow(QMainWindow):
             row_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             row_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             row_scroll.setWidget(row_container)
-            row_scroll.viewport().setStyleSheet("background: transparent;")
+            row_scroll.viewport().setObjectName("TransparentPane")
             section_layout.addWidget(row_scroll)
 
             grid.addWidget(section_box, idx // columns, idx % columns)
@@ -16549,7 +15609,7 @@ class LoadoutWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(page)
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("TransparentPane")
         container_layout.addWidget(scroll, 1)
         return container
 
@@ -17554,7 +16614,7 @@ class LoadoutWindow(QMainWindow):
                     name_lbl = QLabel(label)
                     name_lbl.setObjectName("GeniusOwnedName")
                     if group_key != is_boost_group:
-                        name_lbl.setStyleSheet("color: #e5e7eb;")
+                        name_lbl.setProperty("variant", "plain")
                     value_lbl = QLabel(value)
                     value_lbl.setObjectName("GeniusOwnedValue")
                     tile_layout.addWidget(name_lbl, 1)
@@ -17586,12 +16646,10 @@ class LoadoutWindow(QMainWindow):
             # silently missing.
             active_board = self._genius_active_board
             for board, (pet_name, rows) in _GENIUS_OWNED_PETS_EXAMPLE.items():
-                color = _GENIUS_BOARD_COLORS.get(board, "#8b96ac")
-
                 header = QLabel(_t("arm_genius_pet_per_board_title", board=board))
                 header.setObjectName("GeniusPetTitle")
-                weight = "700" if board == active_board else "600"
-                header.setStyleSheet(f"color: {color}; font-weight: {weight};")
+                header.setProperty("active", "true" if board == active_board else "false")
+                _set_data_color(header, "genius_board", board if board in _GENIUS_BOARD_COLORS else None)
                 layout.addWidget(header)
 
                 grid = QGridLayout()
@@ -17612,8 +16670,9 @@ class LoadoutWindow(QMainWindow):
                     value_lbl = QLabel(value)
                     value_lbl.setObjectName("GeniusOwnedValue")
                     if is_last:
-                        name_lbl.setStyleSheet(f"color: {color};")
-                        value_lbl.setStyleSheet(f"color: {color};")
+                        board_key = board if board in _GENIUS_BOARD_COLORS else None
+                        _set_data_color(name_lbl, "genius_board", board_key)
+                        _set_data_color(value_lbl, "genius_board", board_key)
                     tile_layout.addWidget(name_lbl, 1)
                     tile_layout.addWidget(value_lbl)
                     grid.addWidget(tile, row_i, col_i)
@@ -18316,7 +17375,7 @@ class LoadoutWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("TransparentPane")
         scroll.setWidget(content)
         return scroll
 
@@ -18350,7 +17409,7 @@ class LoadoutWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("TransparentPane")
 
         content = QWidget()
         outer = QVBoxLayout(content)
@@ -18510,7 +17569,7 @@ class LoadoutWindow(QMainWindow):
         # one's title stuck in its original language on a language switch.
         title = QLabel(_t("arm_arcana_types"))
         title.setObjectName("EquipSectionLabel")
-        title.setStyleSheet("font-size: 10px;")
+        title.setProperty("variant", "compact")
         if not hasattr(self, "_lord_bar_titles"):
             self._lord_bar_titles: list[QLabel] = []
         self._lord_bar_titles.append(title)
@@ -18518,11 +17577,11 @@ class LoadoutWindow(QMainWindow):
 
         text = QLabel()
         text.setObjectName("DetailInfo")
+        text.setProperty("variant", "compact")
         text.setWordWrap(True)
         text.setTextFormat(Qt.RichText)
-        text.setStyleSheet("font-size: 11px;")
         parts = [
-            f'<span style="color:#facc15;font-weight:700;">{lord}</span> &rarr; {effect}'
+            f'<span style="color:{_c("warn")};font-weight:700;">{lord}</span> &rarr; {effect}'
             for lord, effect in ARCANA_LORD_EFFECTS.items()
         ]
         text.setText(" &nbsp;·&nbsp; ".join(parts))
@@ -18571,7 +17630,7 @@ class LoadoutWindow(QMainWindow):
         stat_info_scroll.setWidgetResizable(True)
         stat_info_scroll.setFrameShape(QFrame.NoFrame)
         stat_info_scroll.setWidget(stat_info_page)
-        stat_info_scroll.viewport().setStyleSheet("background: transparent;")
+        stat_info_scroll.viewport().setObjectName("TransparentPane")
         self.equip_center_stack.addWidget(stat_info_scroll)
 
         equip_item_page = QWidget()
@@ -18592,6 +17651,7 @@ class LoadoutWindow(QMainWindow):
         header_row.addWidget(equip_back_btn)
 
         self.equip_item_icon_label = QLabel()
+        self.equip_item_icon_label.setObjectName("EquipItemIconLabel")
         self.equip_item_icon_label.setFixedSize(36, 36)
         self.equip_item_icon_label.setAlignment(Qt.AlignCenter)
         header_row.addWidget(self.equip_item_icon_label)
@@ -18622,7 +17682,7 @@ class LoadoutWindow(QMainWindow):
         equip_detail_scroll.setWidgetResizable(True)
         equip_detail_scroll.setFrameShape(QFrame.NoFrame)
         equip_detail_scroll.setWidget(self.equip_detail_widget)
-        equip_detail_scroll.viewport().setStyleSheet("background: transparent;")
+        equip_detail_scroll.viewport().setObjectName("TransparentPane")
         page_layout.addWidget(equip_detail_scroll, 1)
         self.icon_cache.icon_ready.connect(self.equip_detail_widget.on_icon_ready)
         self.detail_cache.detail_ready.connect(self.equip_detail_widget.on_detail_ready)
@@ -18649,23 +17709,22 @@ class LoadoutWindow(QMainWindow):
             label, _ = self._slot_info(slot_id)
             self.equip_item_combo_btn.setText(_t("arm_choose_x", label=label))
             self.equip_item_icon_label.setPixmap(QPixmap())
-            self.equip_item_icon_label.setStyleSheet("")
+            self.equip_item_icon_label.setProperty("variant", "empty")
+            _set_data_color(self.equip_item_icon_label, "item_grade", None)
             self.equip_detail_widget.clear()
             return
 
         self.equip_item_combo_btn.setText(item.get("name", ""))
         image_url = item.get("image", "")
         grade = item.get("grade", "")
-        glow_color = GRADE_COLORS.get(grade, "#475569")
         cached_icon = self.icon_cache.pixmap(image_url, 32, grade=grade)
         if cached_icon:
             self.equip_item_icon_label.setPixmap(cached_icon)
         else:
             self.equip_item_icon_label.setPixmap(QPixmap())
             self.icon_cache.request(image_url)
-        self.equip_item_icon_label.setStyleSheet(
-            f"background-color: rgba(15, 23, 42, 0.75); border: 2px solid {glow_color}; border-radius: 8px;"
-        )
+        self.equip_item_icon_label.setProperty("variant", "")
+        _set_data_color(self.equip_item_icon_label, "item_grade", grade)
 
         self.equip_detail_widget.load_item(
             item.get("id"), item.get("name", ""), image_url,
@@ -18729,7 +17788,7 @@ class LoadoutWindow(QMainWindow):
         icon_grid.setSpacing(10)
         self._icon_stat_labels: dict[str, tuple[QLabel, str]] = {}
         for row_idx, row_stats in enumerate(_STAT_ICON_ROWS):
-            color = _STAT_ICON_ROW_COLORS[row_idx % len(_STAT_ICON_ROW_COLORS)]
+            color = _c(_STAT_ICON_ROW_TOKENS[row_idx % len(_STAT_ICON_ROW_TOKENS)])
             for col_idx, (name, icon_key, value_stat_id) in enumerate(row_stats):
                 cell = QWidget()
                 cell_layout = QVBoxLayout(cell)
@@ -18975,82 +18034,26 @@ class LoadoutWindow(QMainWindow):
         (by_slot[stat_id][slot_id] = contribution) so the Stat Info
         tooltip can show exactly which equipped piece a value came from
         (User-Wunsch, 2026-08-30: "auf die 3000+ attack hovern und sehen,
-        woher diese attack stammen ... 50 atk Waffe / 100 atk Guard")."""
-        totals: dict[str, float] = {}
-        by_slot: dict[str, dict[str, float]] = {}
+        woher diese attack stammen ... 50 atk Waffe / 100 atk Guard").
 
-        def add(slot_id: str, stat_id: str | None, value: float):
-            if not stat_id or not value:
-                return
-            # Real gear can use a different id than this file's own
-            # convention for the same stat (see _GEAR_STAT_ID_ALIASES) --
-            # normalize before it ever reaches totals/by_slot.
-            stat_id = _GEAR_STAT_ID_ALIASES.get(stat_id, stat_id)
-            totals[stat_id] = totals.get(stat_id, 0.0) + value
-            slot_totals = by_slot.setdefault(stat_id, {})
-            slot_totals[slot_id] = slot_totals.get(slot_id, 0.0) + value
-
-        for slot_id, item in equipped.items():
-            detail = self.detail_cache.get(item.get("id"))
-            if not detail:
-                continue
-            for stat in detail.get("mainStats") or []:
-                add(slot_id, stat.get("id"), _parse_stat_value(stat.get("value")))
-            sub_stats = detail.get("subStats") or []
-            for i in substats.get(slot_id, set()):
-                if i < len(sub_stats):
-                    add(slot_id, sub_stats[i].get("id"), _parse_stat_value(sub_stats[i].get("value")))
-
-            # Enchant bonus — same estimate formulas the item's own detail
-            # panel uses for its "(+N)" line, so Stat Info stays consistent
-            # with what that panel shows instead of ignoring the slider.
-            level = enchant.get(slot_id, 0)
-            if level:
-                grade_name = detail.get("gradeName") or detail.get("grade") or ""
-                category_name = detail.get("categoryName") or ""
-                normal_max = int(detail.get("maxEnchantLevel") or 0)
-                if category_name == "Rune":
-                    # Own real per-level curve -- see _rune_enchant_bonus's
-                    # docstring for why the generic estimators below don't
-                    # apply to this category at all.
-                    for stat_id, value in _rune_enchant_bonus(item.get("id"), level).items():
-                        add(slot_id, stat_id, value)
-                    continue
-                is_armor = category_name in _ARMOR_CATEGORIES or category_name == _BELT_CATEGORY
-                if is_armor:
-                    def_bonus, hp_bonus = estimate_armor_bonus(level, grade_name, normal_max, category_name)
-                    add(slot_id, _DEFENSE_STAT_ID, def_bonus)
-                    add(slot_id, _HP_STAT_ID, hp_bonus)
-                    exceed = estimate_armor_exceed_bonus(level, normal_max)
-                    add(slot_id, _DEFENSE_STAT_ID, exceed["defense"])
-                    add(slot_id, _HP_STAT_ID, exceed["hp"])
-                    if exceed["defense_pct"]:
-                        add(slot_id, "DefenseRatio", exceed["defense_pct"])
-                else:
-                    bonus = estimate_enchant_bonus(level, grade_name, normal_max, category_name)
-                    add(slot_id, _SCALING_STAT_ID, bonus)
-                    exceed = estimate_exceed_bonus(level, normal_max, category_name)
-                    add(slot_id, _SCALING_STAT_ID, exceed["attack"])
-                    if exceed["attack_pct"]:
-                        add(slot_id, "DamageRatio", exceed["attack_pct"])
-                    if exceed["defense"]:
-                        add(slot_id, _DEFENSE_STAT_ID, exceed["defense"])
-        return totals, by_slot
+        The body moved to armory_engine.stats.compute_stat_totals_detailed
+        (audit B-armory.md §3.1/§4.2 Stage 1).  It was already pure but for
+        a single ``self.detail_cache.get`` call, which the engine now takes
+        as a DetailProvider -- a protocol ItemDetailCache already satisfies
+        structurally -- so passing that cache is the whole adaptation.
+        Kept as a method because it is the seam the live Stat Info panel
+        AND Build Compare both call.
+        """
+        return compute_stat_totals_detailed(equipped, substats, enchant, self.detail_cache)
 
     def _compute_gearscore(self, equipped: dict, enchant: dict) -> float:
-        """Shared with the Build Vergleich tab -- see _compute_stat_totals."""
-        total = 0.0
-        for slot_id, item in equipped.items():
-            detail = self.detail_cache.get(item.get("id"))
-            if not detail or not detail.get("level"):
-                continue
-            total += detail["level"]
-            level = enchant.get(slot_id, 0)
-            if not level:
-                continue
-            normal_max = int(detail.get("maxEnchantLevel") or 0)
-            total += _gearscore_push(level, normal_max)
-        return total
+        """Shared with the Build Vergleich tab -- see _compute_stat_totals.
+
+        Same wrapper shape as _compute_stat_totals_detailed above: the sum
+        lives in armory_engine.stats.compute_gearscore, this passes the
+        detail cache as its DetailProvider.
+        """
+        return compute_gearscore(equipped, enchant, self.detail_cache)
 
     def _refresh_stat_info(self):
         # MUST run before passive_totals below -- _skill_bonus (gear/
@@ -19200,12 +18203,12 @@ class LoadoutWindow(QMainWindow):
                 html_parts: list[str] = []
                 if source_lines:
                     html_parts.append(
-                        f"<b style='color:#38bdf8;'>{_t('arm_stat_tooltip_source')}</b><br>"
+                        f"<b style='color:{_c('accent')};'>{_t('arm_stat_tooltip_source')}</b><br>"
                         + "<br>".join(source_lines)
                     )
                 if effect_lines:
                     html_parts.append(
-                        f"<b style='color:#f59e0b;'>{_t('arm_stat_tooltip_effect')}</b><br>"
+                        f"<b style='color:{_c('warn')};'>{_t('arm_stat_tooltip_effect')}</b><br>"
                         + "<br>".join(effect_lines)
                     )
                 value_label.setToolTip("<br><br>".join(html_parts))
@@ -19354,7 +18357,7 @@ class LoadoutWindow(QMainWindow):
             lines.append(f"{_t('arm_skill_source_wish')}: +{wish}")
         if not lines:
             return ""
-        return f"<b style='color:#2dd4bf;'>{_t('arm_skill_level_source_title')}</b><br>" + "<br>".join(lines)
+        return f"<b style='color:{_c('accent')};'>{_t('arm_skill_level_source_title')}</b><br>" + "<br>".join(lines)
 
     # ── Left/right equipment columns (Weapon+Armor left, Accessory right) ──
 
@@ -19399,7 +18402,6 @@ class LoadoutWindow(QMainWindow):
                 enchant_label.setObjectName("SlotEnchantLabel")
                 enchant_label.setFixedWidth(SLOT_BUTTON_SIZE)
                 enchant_label.setAlignment(Qt.AlignCenter)
-                enchant_label.setStyleSheet(f"color: {ENCHANT_ACCENT_BY_THEME[self._theme]};")
                 self._slot_enchant_labels[slot_id] = enchant_label
 
                 cell = QWidget()
@@ -19449,7 +18451,7 @@ class LoadoutWindow(QMainWindow):
         # padding still read as too small/easy to miss here -- User-Wunsch:
         # "einen längeren Button ... Schriftgröße anpassen" -- a dedicated,
         # bigger-font/bigger-padding style scoped to just this one button,
-        # same pattern as #RoleButtonAngreifer/etc. in styles.qss.
+        # same pattern as #RoleButtonAngreifer/etc. in styles.template.qss.
         gear_row = QHBoxLayout()
         gear_row.addStretch()
         self.equip_priority_btn = QPushButton(_t("arm_eq_priority_tab"))
@@ -19528,22 +18530,16 @@ class LoadoutWindow(QMainWindow):
         label.setText(f"+{level}" if level else "")
 
     def set_theme(self, theme: str):
-        """Follows the app's Layout theme (User-Wunsch, 2026-08-26) -- the
-        enchant labels' accent color and the window's own background color
-        switch with it instead of staying fixed to Abyss."""
-        self._theme = theme if theme in ENCHANT_ACCENT_BY_THEME else "abyss"
-        accent = ENCHANT_ACCENT_BY_THEME[self._theme]
-        for label in self._slot_enchant_labels.values():
-            label.setStyleSheet(f"color: {accent};")
+        """Follows the app's Layout theme (User-Wunsch, 2026-08-26).
 
-        # LoadoutBackground is a flat panel color (not the diagonal gradient
-        # the main table window/ItemDatabaseWindow uses) -- kept flat here,
-        # just swapped to each theme's own base tone (its gradient's first
-        # stop, e.g. Abyss's own "#0f172a" this already used before).
-        central = self.centralWidget()
-        if central is not None:
-            bg_color = LAYOUT_THEMES.get(self._theme, LAYOUT_THEMES["abyss"])[0]
-            central.setStyleSheet(f"#LoadoutBackground {{ background-color: {bg_color}; }}")
+        Nothing to push any more: the enchant badges take {{accent}} and
+        this window's ground takes {{bg.surface}} from the rendered sheet
+        (#SlotEnchantLabel / #LoadoutBackground).  Re-rendering and
+        re-applying that sheet is module-level apply_theme()'s job, which
+        is what the host calls; this only records the name so a window
+        built later starts on the right theme.
+        """
+        self._theme = theme
 
     def update_language(self, language: str):
         """Forwarded by ItemDatabaseWindow.update_language() (see there).
@@ -20529,13 +19525,13 @@ class LoadoutWindow(QMainWindow):
         for _ in range(2):
             lvl_label = QLabel(_t("arm_compare_level_col"))
             lvl_label.setObjectName("DetailInfo")
+            lvl_label.setProperty("variant", "dim")
             lvl_label.setAlignment(Qt.AlignCenter)
-            lvl_label.setStyleSheet("font-size: 11px; color: #64748b;")
             subheader_layout.addWidget(lvl_label, 1)
             dmg_label = QLabel(_t("arm_compare_est_dmg"))
             dmg_label.setObjectName("DetailInfo")
+            dmg_label.setProperty("variant", "dim")
             dmg_label.setAlignment(Qt.AlignCenter)
-            dmg_label.setStyleSheet("font-size: 11px; color: #64748b;")
             subheader_layout.addWidget(dmg_label, 2)
         self.compare_skill_subheader_row.setVisible(False)
         table_outer.addWidget(self.compare_skill_subheader_row)
@@ -20561,7 +19557,7 @@ class LoadoutWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setObjectName("TransparentPane")
         self.compare_rows_container = QWidget()
         self.compare_rows_layout = QVBoxLayout(self.compare_rows_container)
         self.compare_rows_layout.setContentsMargins(16, 0, 16, 12)
@@ -20653,7 +19649,7 @@ class LoadoutWindow(QMainWindow):
         delta = gs_b - gs_a
         if delta:
             sign = "+" if delta > 0 else ""
-            color = "#4ade80" if delta > 0 else "#f87171"
+            color = _c("ok") if delta > 0 else _c("danger")
             self.compare_gs_b_label.setText(
                 f"{_format_number(gs_b)} <span style='color:{color}; font-size:12px;'>({sign}{_format_number(delta)})</span>"
             )
@@ -20693,7 +19689,35 @@ class LoadoutWindow(QMainWindow):
         Build's own state instead of self._equipped/live session state --
         shared by Build Compare's stat-category tabs AND Skill Compare's
         damage estimate (which additionally needs the resolved skill_bonus
-        dict back, for its own per-skill effective-level calc)."""
+        dict back, for its own per-skill effective-level calc).
+
+        STAYED A METHOD, deliberately (Stage 1, audit B-armory.md §4.2).
+        Its sibling _compute_stat_totals_detailed became a thin wrapper over
+        armory_engine.stats because it read exactly ONE thing off self.  This
+        one reaches into eight further pieces of LoadoutWindow sub-state, and
+        none of them is a plain value -- each is a method over a different
+        persisted sub-tree:
+
+          self._compute_stat_totals            -> engine (already extracted)
+          self._linked_genius_build_name_for   -> state["linked_genius_build"] + genius_builds_data
+          self._genius_stat_totals_for         -> genius_builds_data[class][name] board
+          self._attribute_derived_stat_totals  -> attribute tables + the totals so far
+          self._arcana_lord_stat_totals        -> Lord-point totals + arcana_info.json
+          self._wings_stat_totals_for          -> wings_items.json caches
+          self._compute_equipped_skill_bonus_for -> skills_all.json + gear sub-skill slots
+          self._linked_skill_build_name_for    -> state["linked_skill_build"] + skill_builds_data
+          self._compute_arcana_card_skill_bonus_for -> skill_builds_data[...]["arcana_cards"]
+          self._passive_skill_stat_totals_for  -> passive skill effect tables
+
+        Extracting it means extracting the whole SIX-source merge (audit §1's
+        "de-facto stat model"), which is a wave of its own: each of those
+        sources has its own loader and its own label tables, and the honest
+        interface for it is the persisted build-state dict (audit §3.2 item
+        3), not ten more parameters.  Splitting it half-way would leave two
+        merges that have to agree -- the exact failure this method was
+        written to fix in the first place (the 2026-09-03 gear-only-totals
+        bug, see _open_build_compare's comment).  So it stays whole, here,
+        until the Genius/Arcana/Daevanion/wings totals move together."""
         equipped, substats, enchant = state["equipped"], state["substats"], state["enchant"]
         totals = self._compute_stat_totals(equipped, substats, enchant)
         genius_build_name = self._linked_genius_build_name_for(state)
@@ -20786,16 +19810,13 @@ class LoadoutWindow(QMainWindow):
         # nothing to show (User-screenshot, 2026-09-04: several 0%/0
         # deltas still painted red/green).
         if fmt(val_a) != fmt(val_b):
-            better_color, worse_color = "#4ade80", "#f87171"
-            if val_a > val_b:
-                label_a.setStyleSheet(f"color: {better_color}; font-weight: 700;")
-                label_b.setStyleSheet(f"color: {worse_color}; font-weight: 700;")
-            else:
-                label_a.setStyleSheet(f"color: {worse_color}; font-weight: 700;")
-                label_b.setStyleSheet(f"color: {better_color}; font-weight: 700;")
+            better, worse = "CompareValueBetter", "CompareValueWorse"
+            label_a.setObjectName(better if val_a > val_b else worse)
+            label_b.setObjectName(worse if val_a > val_b else better)
             delta = val_b - val_a
             sign = "+" if delta > 0 else ""
-            delta_color = "#4ade80" if delta > 0 else "#f87171"
+            # Rich text, so the token has to come through theme, not QSS.
+            delta_color = _c("ok") if delta > 0 else _c("danger")
             label_b.setText(
                 f"{fmt(val_b)}{suffix} "
                 f"<span style='color:{delta_color}; font-size:11px;'>({sign}{fmt(delta)}{suffix})</span>"
@@ -21372,7 +20393,6 @@ class LoadoutWindow(QMainWindow):
         super().closeEvent(event)
 
 
-_LORD_VALUES_HIGHLIGHT_COLOR = "#22d3ee"  # matches the app-wide accent (styles.qss)
 
 
 class _LordValuesHighlightDelegate(QStyledItemDelegate):
@@ -21422,7 +20442,7 @@ class _LordValuesHighlightDelegate(QStyledItemDelegate):
             # construction) -- compare only the first word so "Illusion"
             # never accidentally matches inside some longer unrelated word.
             if part.split(" ", 1)[0] in active_labels:
-                parts.append(f'<span style="color:{_LORD_VALUES_HIGHLIGHT_COLOR}; font-weight:600;">{escaped}</span>')
+                parts.append(f'<span style="color:{_c("accent")}; font-weight:600;">{escaped}</span>')
             else:
                 parts.append(escaped)
 
@@ -21735,7 +20755,7 @@ class ItemDatabaseWindow(QMainWindow):
             btn = QPushButton(grade)
             btn.setObjectName("SkillFilterButton")
             btn.setCheckable(True)
-            btn.setStyleSheet(f"color: {GRADE_COLORS[grade]};")
+            _set_data_color(btn, "item_grade", grade)
             btn.clicked.connect(lambda checked=False, g=grade: self._on_grade_changed(g))
             grade_group.addButton(btn)
             grade_row.addWidget(btn)
@@ -22036,7 +21056,7 @@ class ItemDatabaseWindow(QMainWindow):
             # no longer has a parent, it also no longer inherits this
             # window's stylesheet automatically — apply it explicitly.
             self._loadout_window = LoadoutWindow(self._raw_items, self.icon_cache, self.detail_cache, None)
-            self._loadout_window.setStyleSheet(_load_qss_text())
+            _style_window(self._loadout_window)
             self._loadout_window.set_theme(self._theme)
             if self._pending_loadout_state:
                 self._loadout_window.apply_persisted_state(self._pending_loadout_state)
@@ -22077,15 +21097,20 @@ class ItemDatabaseWindow(QMainWindow):
 
     def set_theme(self, theme: str):
         """Forwarded by the host app (MainWindow) whenever the Layout theme
-        changes, and once right after this window is created -- applied
-        immediately if LoadoutWindow already exists; otherwise just kept
-        until open_loadout_window() actually creates it (same pattern as
-        set_pending_loadout_state)."""
+        changes, and once right after this window is created.
+
+        The window-level work is module-level :func:`apply_theme`'s now --
+        every open Armory window needs the re-rendered sheet, not just this
+        one -- so this method is the seam the host already calls and the
+        function is the one it should call (both are wired; the seam
+        forwards).  ``self._theme`` is still recorded for a LoadoutWindow
+        that does not exist yet, same pattern as
+        set_pending_loadout_state.
+        """
         self._theme = theme
-        if hasattr(self, "background"):
-            self.background.set_theme(theme)
         if self._loadout_window is not None:
             self._loadout_window.set_theme(theme)
+        apply_theme(theme)
 
     def update_language(self, language: str):
         """Forwarded by the host app (MainWindow.apply_language()) whenever
@@ -22179,7 +21204,7 @@ class ItemDatabaseWindow(QMainWindow):
                 self._raw_items, self.icon_cache, self.detail_cache, None,
                 get_loadout_window=self.ensure_loadout_window,
             )
-            self._crafting_window.setStyleSheet(_load_qss_text())
+            _style_window(self._crafting_window)
         self._crafting_window.show()
         self._crafting_window.raise_()
         self._crafting_window.activateWindow()
@@ -22823,8 +21848,9 @@ class ItemDatabaseWindow(QMainWindow):
 
 
 def _bundled_resource(name: str) -> Path:
-    """styles.qss is bundled *inside* the exe (PyInstaller _MEIPASS), unlike
-    data/ which lives next to the exe so the cache persists across runs.
+    """styles.template.qss is bundled *inside* the exe (PyInstaller
+    _MEIPASS), unlike data/ which lives next to the exe so the cache
+    persists across runs.
 
     Real bug found via a packaged-build screenshot (User, 2026-08-27: "was
     farbig angezeigt wird, ist das Icon eines Items - der Rest Grau mit
@@ -22835,24 +21861,161 @@ def _bundled_resource(name: str) -> Path:
     existed there and _load_qss_text() silently applied an empty
     stylesheet, leaving every widget on Qt's bare default style. Reusing
     _BUNDLE_DIR here (already correct -- items_all.json/icons load fine
-    through it) instead of recomputing an independent, wrong path."""
+    through it) instead of recomputing an independent, wrong path.
+
+    The same trap now applies to the TEMPLATE (the sheet is rendered, not
+    read, since 2026-09-18) and to the dropdown-arrow PNG the sheet's one
+    url() points at -- both are named in the spec datas, both come through
+    here."""
     return _BUNDLE_DIR / name
 
 
+#: Same two placeholder forms core.theme's renderer accepts, for the
+#: stand-in below.  Kept in sync by
+#: tests/test_armory_theme.py::test_the_fallback_renderer_reads_the_same_template.
+_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)(?:\|([0-9.]+))?\s*\}\}")
+
+
+def _render_qss(template: str, asset_path: str) -> str:
+    """``core.theme.render_qss``, or a stand-in when there is no core.theme.
+
+    The stand-in exists so step 3 of the import above still produces a
+    styled window rather than Fusion grey: it understands the same two
+    placeholder forms and resolves data colours the way :func:`_dc` does.
+    """
+    if _theme is not None:
+        return _theme.render_qss(template, _theme.current(), asset_path)
+
+    def one(match):
+        name, alpha = match.group(1), match.group(2)
+        value = _dc(*name.split(".", 2)[1:]) if name.startswith("data.") else _c(name)
+        return _alpha(value, float(alpha)) if alpha else value
+
+    return _PLACEHOLDER_RE.sub(one, template).replace("ASSET_PATH", asset_path)
+
+
 def _load_qss_text() -> str:
-    qss_path = _bundled_resource("styles.qss")
-    if qss_path.exists():
-        text = qss_path.read_text(encoding="utf-8")
-        logger.debug("Stylesheet loaded: %s (%d bytes)", qss_path, len(text))
-        # QSS url() needs an absolute path to resolve correctly both when
-        # run from source and from inside the PyInstaller-bundled exe (its
-        # _MEIPASS extraction dir differs run to run) -- forward slashes
-        # since Qt's stylesheet parser doesn't accept Windows backslashes.
-        arrow_path = str(_bundled_resource("assets/ui/dropdown_arrow.png")).replace("\\", "/")
-        text = text.replace("__DROPDOWN_ARROW_URL__", arrow_path)
-        return text
-    logger.warning("Stylesheet not found: %s", qss_path)
-    return ""
+    """This module's stylesheet, rendered for the theme now on screen.
+
+    Was: read ``styles.qss`` -- 1,205 hand-written lines of Abyss -- and
+    substitute one image path into it.  That file is a ``{{token}}``
+    template now (``styles.template.qss``), so "load" means "render", and
+    the theme it renders for is ``core.theme.current()``: the host records
+    the active theme there before it forwards the switch (see
+    ``MainWindow.load_styles``), so no window in here ever has to be told
+    *which* theme is on -- only that it changed (:func:`apply_theme`).
+
+    ``ASSET_PATH`` is the marker core.theme substitutes for the directory
+    holding this module's own assets.  It has to be absolute: a QSS
+    ``url()`` resolves against the process's cwd, and the frozen build's
+    _MEIPASS differs run to run.  Forward slashes because Qt's stylesheet
+    parser does not accept Windows backslashes.
+    """
+    template_path = _bundled_resource("styles.template.qss")
+    if not template_path.exists():
+        logger.warning("Stylesheet template not found: %s", template_path)
+        return ""
+    asset_path = str(_BUNDLE_DIR).replace("\\", "/")
+    try:
+        rendered = _render_qss(template_path.read_text(encoding="utf-8"), asset_path)
+    except (OSError, KeyError) as error:
+        # A KeyError here is a typo in the template -- loud in the log, but
+        # never a crash on the way to opening a window.
+        logger.warning("Stylesheet template did not render (%s): %s", template_path, error)
+        return ""
+    logger.debug("Stylesheet rendered: %s (%d bytes, theme=%s)",
+                 template_path, len(rendered), _theme.current() if _theme else "fallback")
+    return rendered
+
+
+#: Every window this module has handed the sheet to.  Weak, so a closed and
+#: dropped window cannot keep a widget tree alive for the process's life --
+#: and so apply_theme() walks only what is still open.
+_STYLED_WINDOWS: "weakref.WeakSet" = weakref.WeakSet()
+
+
+def _style_window(window) -> None:
+    """Hand ``window`` this module's sheet, and remember it.
+
+    The Armory's top-levels are parentless on purpose (an owned top-level
+    shares the owner's taskbar entry on Windows), which puts them outside
+    both Qt's parent-child stylesheet cascade and the host application
+    sheet's ``QWidget[aion2="true"]`` scope.  So each one carries its own
+    copy of this sheet, and each one has to be handed a new copy when the
+    theme changes.
+    """
+    window.setStyleSheet(_load_qss_text())
+    _STYLED_WINDOWS.add(window)
+
+
+def apply_theme(theme_name: str = "") -> int:
+    """Re-render this sheet and re-apply it to every open Armory window.
+
+    Called by the host on a theme switch -- one line in
+    ``MainWindow.apply_theme``:
+
+        if self._item_database_module is not None:
+            self._item_database_module.apply_theme(theme_name)
+
+    ``theme_name`` is recorded through ``core.theme.set_current`` when it is
+    given, which is what makes this callable on its own (a test, or the
+    standalone ``main()``).  The host has already recorded the same name by
+    the time it calls -- ``MainWindow.load_styles`` does it before
+    forwarding -- so the write is idempotent, and the host stays the
+    authority on which theme is active.
+
+    Two steps, both needed: re-SET the sheet, because a re-render is a new
+    string and these windows own their sheets individually; then repolish,
+    because Qt does not re-evaluate property-based rules
+    (``[dataColor=…]``, ``[variant=…]``, ``[status=…]``) against widgets
+    that have already computed their style.
+
+    BOTH STEPS ARE SKIPPED FOR A WINDOW THAT ALREADY WEARS THIS SHEET
+    (review G, m7).  The repolish walks ``findChildren(QWidget)`` -- the
+    Build Planner alone is thousands of widgets -- and the host calls this
+    on every profile load, which almost always means "the same theme
+    again".  ``MainWindow.apply_theme`` grew an ``unchanged`` early return
+    and ``load_styles`` an ``_APPLIED_STYLE_KEY`` guard for exactly this
+    cost; the Armory path was re-introducing it.
+
+    The guard is per window and compares the RENDERED SHEET, not the theme
+    name, on purpose.  A name comparison against ``_theme.current()`` cannot
+    work here: the host records the new theme through
+    ``MainWindow.load_styles`` *before* it forwards the switch, so by the
+    time this runs ``_theme.current()`` is already the target and a
+    name-based early return would skip the real switch too.  A module-level
+    "last applied name" would work but can drift out of step with a window
+    ``_style_window`` handed a sheet in between.  The sheet itself is the
+    thing that has to be right, is already in hand, and a string compare of
+    it is nothing next to what it saves.
+
+    Returns how many windows now wear this theme's sheet -- the ones it
+    restyled plus the ones that already matched -- so a caller can log it
+    and so "every open window is on this theme" stays the postcondition.
+    """
+    if theme_name and _theme is not None:
+        _theme.set_current(theme_name)
+    styles = _load_qss_text()
+    restyled = 0
+    unchanged = 0
+    for window in list(_STYLED_WINDOWS):
+        try:
+            if styles and window.styleSheet() == styles:
+                unchanged += 1
+                continue
+            window.setStyleSheet(styles)
+            for widget in [window] + window.findChildren(QWidget):
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+            window.update()
+        except RuntimeError:
+            # A live Python wrapper over a deleted C++ widget.  Nothing to
+            # restyle, and nothing wrong: the WeakSet drops it next cycle.
+            continue
+        restyled += 1
+    logger.debug("Armory restyled %d window(s) (%d already current) for theme %s",
+                 restyled, unchanged, _theme.current() if _theme else "fallback")
+    return restyled + unchanged
 
 
 def create_window(parent=None, language: str = "en") -> ItemDatabaseWindow:
@@ -22861,13 +22024,19 @@ def create_window(parent=None, language: str = "en") -> ItemDatabaseWindow:
     inside a host application without overriding its global theme."""
     set_armory_language(language)
     window = ItemDatabaseWindow(parent)
-    window.setStyleSheet(_load_qss_text())
+    _style_window(window)
     return window
 
 
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")  # native Windows style only partially honors QSS subcontrols (see main.py)
+    if _theme is not None:
+        # Standalone: nothing else has built a palette, so the widgets the
+        # sheet does not cover (native dialogs, sub-controls) would be
+        # painted from Fusion's OS-derived default -- black-on-dark text in
+        # a light-mode session (User-reported for the host app, 2026-08-29).
+        app.setPalette(_theme.build_palette(_theme.current()))
     window = create_window()
     window.show()
     sys.exit(app.exec())

@@ -1,0 +1,38 @@
+# Colour-literal / inline-stylesheet debt in ItemDatabase/, as measured by
+# tests/test_no_hex_literals_in_ui.py's own scanner.
+#
+# 2026-09-18, second measurement: the Armory tokenization wave landed, so
+# this stopped being a freeze and became a floor near zero.  Before / after:
+#
+#     hex   201 -> 18      qcolor  23 -> 0
+#     rgb    20 ->  2      setstylesheet  96 -> 2
+#
+# What is left, and why each one is not debt:
+#
+#   hex 18 + rgb 2  -- 19 of the 20 are ONE table, app.py's
+#       `_FALLBACK_TOKENS`: the MASTER §2 Abyss values, reachable only when
+#       `core.theme` cannot be imported at all (the standalone
+#       AION2_ItemDatabase build, or `python ItemDatabase/app.py` from a
+#       checkout with no repo root on sys.path).  core/theme.py owns those
+#       values; that table is a last-resort mirror so the window still
+#       renders instead of falling back to Fusion grey.  The 20th is
+#       `_HIGHLIGHT_SPAN_RE`, which matches the *upstream API's* own
+#       `<span style="color: #FCC78B">` highlight markup -- a wire-format
+#       constant, not a colour this app chose.
+#
+#   setstylesheet 2 -- delivery, not styling: _style_window() hands a
+#       freshly rendered sheet to a new Armory window, and apply_theme()
+#       hands it to every open one when the theme changes.  Both are
+#       needed because the Armory's top-levels are parentless and
+#       therefore own their sheets individually (see
+#       tests/test_app_sheet_isolation.py for why they must).
+#
+# The numbers are this scanner's, not a hand count: `#` comments are
+# stripped first, so they differ slightly from a raw grep.  The gate fails
+# if they move in EITHER direction -- up means new debt, down means this
+# floor is stale.
+
+hex = 18
+qcolor = 0
+rgb = 2
+setstylesheet = 2

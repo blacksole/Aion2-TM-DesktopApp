@@ -2,7 +2,9 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QWidget, QInputDialog,
 )
-from ui.custom_timer_dialog import CustomTimerDialog
+from ui.custom_timer_dialog import DEFAULT_TIMER_COLOR, CustomTimerDialog
+from ui.widgets.empty_state import EmptyStateWidget
+from ui.widgets import icons
 
 
 class CustomTimerManagerDialog(QDialog):
@@ -62,6 +64,12 @@ class CustomTimerManagerDialog(QDialog):
         self._custom_ct_layout.setContentsMargins(0, 0, 0, 0)
         self._custom_ct_layout.setSpacing(8)
         layout.addWidget(self._custom_ct_container)
+
+        # UX audit 2026-09-18, M2: with no timers configured this section
+        # showed nothing at all but the "＋" button in its header.
+        self._ct_empty_state = EmptyStateWidget()
+        layout.addWidget(self._ct_empty_state)
+
         self._rebuild_custom_timer_rows()
 
         # ── Buttons ───────────────────────────────────────────────────────
@@ -108,7 +116,10 @@ class CustomTimerManagerDialog(QDialog):
         rl.setSpacing(8)
         dot = QLabel("●")
         dot.setFixedWidth(16)
-        dot.setStyleSheet("color: #22d3ee; font-size: 14px;")
+        # A category marker, not a timer colour: the accent, from the
+        # template (#ctCategoryDot), instead of the old literal cyan --
+        # which was Abyss's accent hardcoded, so it stayed cyan on Inferno.
+        dot.setObjectName("ctCategoryDot")
         name_lbl = QLabel(cat_name)
         name_lbl.setObjectName("settingsLabel")
         rename_btn = QPushButton(self._tr(self._language, "ct_manager_rename_button"))
@@ -123,9 +134,11 @@ class CustomTimerManagerDialog(QDialog):
             for cfg in self._custom_timer_configs
         )
         if len(self._timer_categories) > 1 and not has_timers:
-            del_btn = QPushButton("✕")
+            del_btn = QPushButton()
             del_btn.setObjectName("secondaryButton")
             del_btn.setFixedWidth(36)
+            del_btn.setToolTip(self._tr(self._language, "ct_manager_delete_category_tooltip"))
+            icons.set_icon(del_btn, "x", 16)
             del_btn.clicked.connect(lambda checked=False, cn=cat_name: self._remove_category(cn))
             rl.addWidget(del_btn)
         return row
@@ -193,7 +206,7 @@ class CustomTimerManagerDialog(QDialog):
         cfg = self._custom_timer_configs[idx]
         dlg = CustomTimerDialog(
             name=cfg.get("name", ""),
-            color=cfg.get("color", "#22d3ee"),
+            color=cfg.get("color") or DEFAULT_TIMER_COLOR,
             timer_mode=cfg.get("timer_mode", "hourly"),
             reset_time=cfg.get("reset_time", "09:00"),
             reset_day=cfg.get("reset_day", "Mo"),
@@ -240,6 +253,27 @@ class CustomTimerManagerDialog(QDialog):
             self._custom_ct_layout.addWidget(row)
 
         self._add_ct_btn.setVisible(len(self._custom_timer_configs) < 8)
+        self._update_ct_empty_state()
+
+    def _update_ct_empty_state(self):
+        """Placeholder for the Timers section, gone as soon as one timer
+        exists. Falls back to a neutral title while the translation keys
+        are still missing -- core.translations.tr returns the raw key
+        itself for an unknown one, which would show as "empty_timers_title".
+        """
+        if self._custom_timer_configs:
+            self._ct_empty_state.setVisible(False)
+            return
+
+        title = self._tr(self._language, "empty_timers_title")
+        hint = self._tr(self._language, "empty_timers_hint")
+        if title == "empty_timers_title":
+            title = self._tr(self._language, "ct_manager_timer_section_title")
+        if hint == "empty_timers_hint":
+            hint = ""
+        self._ct_empty_state.set_icon("timer")
+        self._ct_empty_state.set_content(title, hint)
+        self._ct_empty_state.setVisible(True)
 
     def _build_custom_timer_row(self, idx: int, cfg: dict) -> QFrame:
         row = QFrame()
@@ -250,7 +284,10 @@ class CustomTimerManagerDialog(QDialog):
 
         color_dot = QLabel("●")
         color_dot.setFixedWidth(18)
-        color_dot.setStyleSheet(f"color: {cfg['color']}; font-size: 18px;")
+        # This dot IS the timer's own colour -- data, so it stays in code
+        # (MASTER §4-4); the size comes from #ctTimerColorDot.
+        color_dot.setObjectName("ctTimerColorDot")
+        color_dot.setStyleSheet(f"color: {cfg.get('color') or DEFAULT_TIMER_COLOR};")
 
         name_lbl = QLabel(cfg["name"])
         name_lbl.setObjectName("settingsLabel")
@@ -267,9 +304,11 @@ class CustomTimerManagerDialog(QDialog):
         edit_btn.setFixedWidth(110)
         edit_btn.clicked.connect(lambda checked=False, i=idx: self._edit_custom_timer(i))
 
-        remove_btn = QPushButton("✕")
+        remove_btn = QPushButton()
         remove_btn.setObjectName("secondaryButton")
         remove_btn.setFixedWidth(36)
+        remove_btn.setToolTip(self._tr(self._language, "ct_manager_remove_button"))
+        icons.set_icon(remove_btn, "trash", 16)
         remove_btn.clicked.connect(lambda checked=False, i=idx: self._remove_custom_timer(i))
 
         toggle_btn = QPushButton()
