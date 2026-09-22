@@ -73,6 +73,8 @@ NEW_KEYS = (
     "armory_card_skills_title",
     "armory_card_skills_value",
     "armory_card_open_build",
+    "armory_card_open_daevanion",
+    "armory_card_open_skills",
     "armory_card_open_items",
     "armory_card_open_crafting",
     "armory_empty_title",
@@ -172,7 +174,7 @@ def test_summary_of_the_real_profile_section():
     assert summary.enchant_min is None and summary.enchant_max is None
 
     assert summary.gear_types == ("Neutral", "PvE")
-    assert summary.daevanion_nodes == 2          # s:11 + s:81, one node each
+    assert summary.daevanion_nodes == 0          # s:11 + s:81 each hold only their free start node
     assert summary.skill_build_name == "TestPvP"
     assert summary.skill_count == 6              # 4 active + 2 passive, stigma [null]
     assert summary.genius_build_name == "Default"
@@ -212,6 +214,8 @@ def _synthetic_state() -> dict:
                 }
             }
         },
+        # s:11 has 2 player-picked nodes plus its free start node ("1"),
+        # s:81 has only its free start node ("4"), a:11 was never touched.
         "daevanion_active": {"s:11": ["1", "2", "3"], "s:81": ["4"], "a:11": []},
         "genius_builds_data": {"Raid": {}},
         "current_genius_build_name": "Raid",
@@ -229,7 +233,7 @@ def test_summary_of_a_full_synthetic_state():
     assert summary.total_slots == len(ARMORY_EQUIP_SLOTS)
     assert (summary.enchant_min, summary.enchant_max) == (12, 15)  # 0 and True ignored
     assert summary.gear_types == ("PvE", "PvP")
-    assert summary.daevanion_nodes == 4
+    assert summary.daevanion_nodes == 2  # start nodes excluded: (3-1) + (1-1) + (0-1 clamped to 0)
     assert summary.skill_build_name == "Cleave"
     assert summary.skill_count == 4               # None and "" do not count
     assert summary.genius_build_name == "Raid"
@@ -319,7 +323,7 @@ def test_the_slots_line_is_hidden_when_the_build_was_never_found(page):
     # What IS known still shows.
     assert not page.build_card.isHidden()
     assert page.daevanion_card.value_label.text() == tr(
-        "en", "armory_card_daevanion_value", count=4
+        "en", "armory_card_daevanion_value", count=2
     )
 
 
@@ -441,7 +445,7 @@ def test_page_shows_the_cards_when_the_state_is_populated(page):
         tr("en", "armory_card_enchant", min=12, max=15),
         "PvE · PvP",
     ]
-    assert page.daevanion_card.value_label.text() == tr("en", "armory_card_daevanion_value", count=4)
+    assert page.daevanion_card.value_label.text() == tr("en", "armory_card_daevanion_value", count=2)
     assert page.skill_card.value_label.text() == tr("en", "armory_card_skills_value", count=4)
     assert page.build_card.cta_button.text() == tr("en", "armory_card_open_build")
 
@@ -466,8 +470,8 @@ def test_every_card_piece_carries_its_objectname(page):
 
 CTA_CASES = (
     ("build_card", "open_build_planner_requested"),
-    ("daevanion_card", "open_build_planner_requested"),
-    ("skill_card", "open_build_planner_requested"),
+    ("daevanion_card", "open_daevanion_requested"),
+    ("skill_card", "open_skill_planner_requested"),
     ("items_card", "open_item_database_requested"),
     ("crafting_card", "open_crafting_calculator_requested"),
 )
@@ -521,7 +525,7 @@ def test_a_language_switch_retranslates_every_text(page):
     assert page.subtitle_label.text() == tr("de", "armory_subtitle")
     assert page.build_card.title_label.text() == tr("de", "armory_card_build_title")
     assert page.build_card.cta_button.text() == tr("de", "armory_card_open_build")
-    assert page.daevanion_card.value_label.text() == tr("de", "armory_card_daevanion_value", count=4)
+    assert page.daevanion_card.value_label.text() == tr("de", "armory_card_daevanion_value", count=2)
     assert page.items_card.cta_button.text() == tr("de", "armory_card_open_items")
 
     page.update_language("ru", tr)

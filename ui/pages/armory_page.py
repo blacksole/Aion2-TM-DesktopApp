@@ -240,11 +240,17 @@ def summarize_build_planner(state: dict | None) -> ArmorySummary:
         if skill_id
     )
 
+    # Every per-board entry here always carries its board's "start" node
+    # (LoadoutWindow._daevanion_active_set seeds it lazily and
+    # _daevanion_on_node_clicked refuses to toggle it, see app.py) --
+    # that node is free/always-on in-game, not something the player chose,
+    # so it must not inflate this card's "N nodes active" count (User-
+    # reported, 2026-09-22: showed "1 nodes active" on a fresh board no
+    # node had ever been clicked on). One real node id -> zero counted
+    # nodes stays 0 via max(), never negative.
     daevanion_nodes = sum(
-        1
+        max(0, sum(1 for node in _as_list(nodes) if node) - 1)
         for nodes in _as_dict(state.get("daevanion_active")).values()
-        for node in _as_list(nodes)
-        if node
     )
 
     pantheon = _as_dict(state.get("pantheon_slots"))
@@ -574,6 +580,8 @@ class ArmoryPage(QWidget):
     open_item_database_requested = Signal()
     open_crafting_calculator_requested = Signal()
     open_build_planner_requested = Signal()
+    open_daevanion_requested = Signal()
+    open_skill_planner_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -655,12 +663,13 @@ class ArmoryPage(QWidget):
         layout.addWidget(self._scroll, 1)
 
         # Daevanion and Skill Planner both live inside the Build Planner
-        # window and it exposes no per-tab entry point
-        # (MainWindow.open_build_planner_window takes no argument), so all
-        # three summary cards open it plainly.
+        # window as their own tab, so their cards get their own signals
+        # (same one-purpose-per-card pattern as items_card/crafting_card
+        # below) -- MainWindow.open_build_planner_window(tab=...) jumps
+        # straight to the right tab instead of always landing on Equipment.
         self.build_card.clicked.connect(self.open_build_planner_requested)
-        self.daevanion_card.clicked.connect(self.open_build_planner_requested)
-        self.skill_card.clicked.connect(self.open_build_planner_requested)
+        self.daevanion_card.clicked.connect(self.open_daevanion_requested)
+        self.skill_card.clicked.connect(self.open_skill_planner_requested)
         self.items_card.clicked.connect(self.open_item_database_requested)
         self.crafting_card.clicked.connect(self.open_crafting_calculator_requested)
 
@@ -779,13 +788,13 @@ class ArmoryPage(QWidget):
         self.daevanion_card.set_title(t("armory_card_daevanion_title"))
         self.daevanion_card.set_value(t("armory_card_daevanion_value", count=summary.daevanion_nodes))
         self.daevanion_card.set_hints([])
-        self.daevanion_card.set_cta(t("armory_card_open_build"))
+        self.daevanion_card.set_cta(t("armory_card_open_daevanion"))
 
         # ── Skill Planner ──
         self.skill_card.set_title(t("armory_card_skills_title"))
         self.skill_card.set_value(t("armory_card_skills_value", count=summary.skill_count))
         self.skill_card.set_hints([summary.skill_build_name] if summary.skill_build_name else [])
-        self.skill_card.set_cta(t("armory_card_open_build"))
+        self.skill_card.set_cta(t("armory_card_open_skills"))
 
         # ── Launchers (unchanged role, one-line description) ──
         self.items_card.set_title(t("armory_roadmap_items_title"))

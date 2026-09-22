@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtGui import (
     QIcon, QPainter, QPainterPath, QPen, QBrush, QFontDatabase,
 )
-from PySide6.QtCore import Signal, QTime, QDate, QSize, Qt, QRectF
+from PySide6.QtCore import Signal, QTime, QDate, QSize, Qt, QRectF, QEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QStackedWidget, QComboBox, QTimeEdit, QDateEdit, QButtonGroup, QGridLayout,
@@ -139,6 +139,115 @@ class _ScreenAwareComboBox(QComboBox):
             above = self.mapToGlobal(self.rect().topLeft())
             y = max(available.top(), above.y() - popup_geo.height())
         popup.move(x, y)
+
+
+class _CurrentPageStackedWidget(QStackedWidget):
+    """QStackedWidget that only reserves space for its CURRENT page.
+
+    Plain QStackedWidget's sizeHint()/minimumSizeHint() default to the
+    LARGEST of all its pages (so the window doesn't jump when switching
+    tabs) -- but this stack sits inside a QScrollArea, not a fixed-size
+    window, so that "protect against resizing" behaviour instead means
+    the shortest pages always show a scrollbar sized for the tallest one,
+    even though nothing on screen needs scrolling (User-reported,
+    2026-09-22: mystery scrollbar on the near-empty Appearance/Language
+    pages). Overriding sizeHint()/minimumSizeHint() to report only
+    currentWidget()'s is necessary but NOT sufficient: measured live
+    (docs/audit-2026-09-18 era debugging session), QScrollArea's own
+    updateScrollBars() does not reliably re-shrink an already-larger
+    widget just because updateGeometry()/resize() ran -- General,
+    Appearance and Language (the three pages with a word-wrapped QLabel)
+    stayed stuck at General's own height even though sizeHint() was
+    provably returning the right, smaller number on every call; Timers
+    and Profiles (no word-wrap) happened to shrink fine on the same
+    codepath. setFixedHeight() is the forceful fix -- an explicit
+    min==max constraint QScrollArea cannot "expandedTo" its way around.
+
+    A word-wrapped label's sizeHint() genuinely keeps growing across
+    several early layout passes the first time a page with one is shown
+    at all in the whole app session (546x561 -> ... -> 546x673 for
+    General here) -- almost certainly first-use custom-font metric
+    warmup, not something specific to this stack. Two earlier versions of
+    this fix got this wrong in opposite ways, both measured live
+    (User-reported, 2026-09-22):
+
+    1. Reporting the CURRENT page's sizeHint()/minimumSizeHint()
+       unconditionally, from the very first query, hands QScrollArea a
+       small-but-still-growing number before a nested row's OWN
+       title/description QVBoxLayout has seen the title's real, settled
+       sizeHint -- QScrollArea's un-forced resize squeezes the page down
+       early, freezing that nested layout's position for the description
+       label at the wrong, premature offset (the two labels render on
+       top of each other).
+    2. Polling sizeHint() on a plain timer and declaring it "settled"
+       once two consecutive ticks agree is not reliable either: General
+       plateaus at an intermediate 561 for two whole ticks before a LATER
+       pass grows it further to its true 673 -- a false "stable" reading
+       that then gets locked in via setFixedHeight() forever (same
+       overlap, just from the opposite direction: too confident, not too
+       eager).
+
+    The fix that actually holds: react to the page's OWN real Resize
+    events instead of guessing when it is done. QStackedLayout calls
+    setGeometry() on the current widget every time ITS layout completes a
+    pass, which fires a genuine QEvent.Resize on it -- install an event
+    filter on the current page and treat every one of ITS resizes as "my
+    sizeHint may have changed too", re-syncing setFixedHeight() from
+    THAT real completion signal instead of an arbitrary timer tick. This
+    can never squeeze a page early (nothing runs before the page's own
+    first real layout pass already happened) and can never lock in a
+    false plateau (every further genuine layout pass -- however many it
+    takes -- re-triggers the filter and corrects it again). Confirmed by
+    feeding a plain, unfixed QStackedWidget through the same startup
+    sequence: no override at all, no overlap -- because plain
+    QStackedWidget's old "largest of all pages" height happens to always
+    be tall enough that nothing is ever squeezed while still settling;
+    this class now gets the same non-squeezing safety for free, since it
+    only ever calls setFixedHeight() in response to a resize the page
+    widget has ALREADY finished applying."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._watched_widget: QWidget | None = None
+        self.currentChanged.connect(self._on_current_changed)
+
+    def showEvent(self, event):
+        """Qt does not reliably emit currentChanged for the page that was
+        already current when the very first widget got added (no explicit
+        setCurrentIndex() call ever happened for it) -- without this, the
+        first-ever page (General) would never get watched at all."""
+        super().showEvent(event)
+        self._on_current_changed(self.currentIndex())
+
+    def _on_current_changed(self, _index: int):
+        if self._watched_widget is not None:
+            self._watched_widget.removeEventFilter(self)
+            self._watched_widget = None
+        widget = self.currentWidget()
+        if widget is None:
+            return
+        self._watched_widget = widget
+        widget.installEventFilter(self)
+        self._sync_height(widget)
+
+    def eventFilter(self, watched, event):
+        if watched is self._watched_widget and event.type() in (
+            QEvent.Type.Resize, QEvent.Type.LayoutRequest,
+        ):
+            self._sync_height(watched)
+        return super().eventFilter(watched, event)
+
+    def _sync_height(self, widget):
+        self.setFixedHeight(widget.sizeHint().height())
+        self.updateGeometry()
+
+    def sizeHint(self):
+        widget = self.currentWidget()
+        return widget.sizeHint() if widget is not None else super().sizeHint()
+
+    def minimumSizeHint(self):
+        widget = self.currentWidget()
+        return widget.minimumSizeHint() if widget is not None else super().minimumSizeHint()
 
 
 class _FlowingSettingsPanel(QFrame):
@@ -339,7 +448,7 @@ class SettingsPage(QWidget):
 
         sidebar_layout.addStretch()
 
-        self.content_stack = QStackedWidget()
+        self.content_stack = _CurrentPageStackedWidget()
         self.content_stack.setObjectName("settingsContentStack")
 
         self.general_page = self._create_general_page()

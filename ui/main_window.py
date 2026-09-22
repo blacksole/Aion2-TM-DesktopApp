@@ -1237,10 +1237,28 @@ class MainWindow(QMainWindow):
         window.raise_()
         window.activateWindow()
 
+    # LoadoutWindow.main_tabs index order (see ItemDatabase/app.py's
+    # main_tabs.addTab calls in LoadoutWindow.__init__): Equipment=0,
+    # Daevanion Board=1, Arcana=2, Skill Planner=3, Pantheon=4, Genius
+    # Insight=5. Named here so the Armory dashboard's per-card launchers
+    # below don't repeat bare index numbers.
+    _DAEVANION_BOARD_TAB = 1
+    _SKILL_PLANNER_TAB = 3
+
     def open_build_planner_window(self):
         logger.debug("Opening Build Planner window")
         window = self._ensure_item_database_window()
         window.open_loadout_window()
+
+    def open_daevanion_board_window(self):
+        logger.debug("Opening Build Planner window (Daevanion Board tab)")
+        window = self._ensure_item_database_window()
+        window.open_loadout_window(tab=self._DAEVANION_BOARD_TAB)
+
+    def open_skill_planner_window(self):
+        logger.debug("Opening Build Planner window (Skill Planner tab)")
+        window = self._ensure_item_database_window()
+        window.open_loadout_window(tab=self._SKILL_PLANNER_TAB)
 
     def open_crafting_calculator_window(self):
         logger.debug("Opening Crafting Calculator window")
@@ -1587,6 +1605,8 @@ class MainWindow(QMainWindow):
         self.armory_page.open_item_database_requested.connect(self.open_item_database_window)
         self.armory_page.open_crafting_calculator_requested.connect(self.open_crafting_calculator_window)
         self.armory_page.open_build_planner_requested.connect(self.open_build_planner_window)
+        self.armory_page.open_daevanion_requested.connect(self.open_daevanion_board_window)
+        self.armory_page.open_skill_planner_requested.connect(self.open_skill_planner_window)
 
         if hasattr(self.settings_page, "theme_changed"):
             self.settings_page.theme_changed.connect(

@@ -21070,7 +21070,7 @@ class ItemDatabaseWindow(QMainWindow):
         fall back to editing the persisted state dict directly."""
         return self._loadout_window
 
-    def open_loadout_window(self):
+    def open_loadout_window(self, tab: int | None = None):
         """Public entry point so a host app can jump straight to the Build
         Planner (the loadout/equip window) without showing the full item
         table first — this window's already-loaded item data and caches
@@ -21079,11 +21079,21 @@ class ItemDatabaseWindow(QMainWindow):
         Opens straight into the Build Planner now — no CreateCharacterDialog
         gate ('Create Build'/'Create Character') beforehand; name/class/race
         can be set any time via the class combo in Skill Planner or the
-        gear-icon settings popup. Both dialogs remain defined but unused."""
+        gear-icon settings popup. Both dialogs remain defined but unused.
+
+        ``tab``, when given, is the main_tabs index to land on (e.g. the
+        Armory dashboard's Daevanion/Skill Planner cards use this to jump
+        straight to their own tab instead of always opening on Equipment
+        -- see LoadoutWindow.__init__'s main_tabs.addTab calls for the
+        current index order). None leaves main_tabs wherever it already
+        was, so the plain 'Open Build Planner' card doesn't force a tab
+        switch."""
         self.ensure_loadout_window()
         self._loadout_window.show()
         self._loadout_window.raise_()
         self._loadout_window.activateWindow()
+        if tab is not None:
+            self._loadout_window.main_tabs.setCurrentIndex(tab)
 
     def set_pending_loadout_state(self, state: dict | None):
         """Called by the host app (MainWindow) right after this window is
