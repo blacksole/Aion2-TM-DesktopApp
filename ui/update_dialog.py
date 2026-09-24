@@ -13,6 +13,7 @@ from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextBrowser, QFrame, QScrollArea, QWidget, QButtonGroup,
+    QSizePolicy,
 )
 
 from core.app_logger import get_logger
@@ -365,8 +366,32 @@ def _parse_local_changelog() -> list[dict]:
             continue
         tag = lines[0].strip()
         body = "\n".join(lines[1:]).strip()
-        entries.append({"tag": tag, "body": body})
+        # "Release Date: YYYY-MM-DD" (the format the 0.x/1.x entries already
+        # use) is the local fallback date for a version that never became
+        # its own GitHub Release (User-reported, 2026-09-24: v2.0.6/v2.0.4
+        # showed no date at all).  Taken out of the body so the notes don't
+        # repeat what the rail and header already show.
+        release_date = ""
+        date_match = _RELEASE_DATE_RE.search(body)
+        if date_match:
+            release_date = date_match.group(1)
+            body = _RELEASE_DATE_RE.sub("", body, count=1).strip()
+        entries.append({"tag": tag, "body": body, "release_date": release_date})
     return entries
+
+
+# "Release Date: 2026-09-17" on a line of its own.
+_RELEASE_DATE_RE = re.compile(r"(?mi)^\s*Release Date:\s*(\d{4}-\d{2}-\d{2})\s*$\n?")
+
+# A hotfix is marked by a line that says only "Hotfix" (usually bold, see
+# the 2.0.5 entry) -- NOT by the word turning up somewhere in the notes.
+# The old substring check badged 2.0.6, whose notes merely mention that
+# "Hotfix releases are marked with a badge" (User-reported, 2026-09-24).
+_HOTFIX_MARK_RE = re.compile(r"(?mi)^\s*[*_]*\s*hotfix\s*[*_]*\s*$")
+
+
+def _is_hotfix(body: str) -> bool:
+    return bool(_HOTFIX_MARK_RE.search(body or ""))
 
 
 class _ChangelogFetcher(QThread):
@@ -411,7 +436,10 @@ class _ChangelogFetcher(QThread):
             {
                 "tag": e["tag"],
                 "body": e["body"],
-                "published_at": published_dates.get(e["tag"], ""),
+                # GitHub's real publish time wins; CHANGELOG.md's own
+                # "Release Date:" covers versions that were never published
+                # there (and the whole list when offline).
+                "published_at": published_dates.get(e["tag"], "") or e.get("release_date", ""),
             }
             for e in local_entries
         ]
@@ -614,7 +642,7 @@ class ChangelogHistoryDialog(QDialog):
 
     def _add_entry(self, entry: dict):
             tag, body = entry["tag"], entry["body"]
-            is_hotfix = "hotfix" in body.lower()
+            is_hotfix = _is_hotfix(body)
             date_str = _format_release_date(entry.get("published_at", ""), self._language)
             is_first = not self._sections
 
@@ -648,21 +676,40 @@ class ChangelogHistoryDialog(QDialog):
             version_lbl = QLabel(f"v{tag}")
             version_lbl.setObjectName("changelogVersionBtnTitle")
             version_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-            btn_top_row.addWidget(version_lbl)
-            if is_hotfix:
-                small_tag = QLabel(tr(self._language, "changelog_hotfix_badge").upper())
-                small_tag.setObjectName("changelogHotfixBadge")
-                small_tag.setAttribute(Qt.WA_TransparentForMouseEvents)
-                btn_top_row.addWidget(small_tag)
+            # Fixed vertically, centred in the row (User-reported,
+            # 2026-09-24): without a date line underneath, the button's
+            # spare height used to be handed to this row, stretching the
+            # title and the HOTFIX badge to 38px -- the badge looked like a
+            # different, bigger control on 2.0.6 than on 2.0.5.
+            version_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            btn_top_row.addWidget(version_lbl, 0, Qt.AlignVCenter)
+            # The badge exists in EVERY row, hidden-but-sized where there is
+            # no hotfix: the top row is then always exactly as tall as it is
+            # with a badge, so every date line sits at the same y in every
+            # button (measured before: 6px lower on 2.0.5 than elsewhere).
+            small_tag = QLabel(tr(self._language, "changelog_hotfix_badge").upper())
+            small_tag.setObjectName("changelogHotfixBadge")
+            small_tag.setAttribute(Qt.WA_TransparentForMouseEvents)
+            badge_policy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            badge_policy.setRetainSizeWhenHidden(True)
+            small_tag.setSizePolicy(badge_policy)
+            small_tag.setVisible(is_hotfix)
+            btn_top_row.addWidget(small_tag, 0, Qt.AlignVCenter)
             btn_top_row.addStretch(1)
             btn_inner.addLayout(btn_top_row)
-            if date_str:
-                btn_date_lbl = QLabel(date_str)
-                btn_date_lbl.setObjectName("changelogVersionBtnDate")
-                btn_date_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-                btn_inner.addWidget(btn_date_lbl)
+            # The date line is ALWAYS there, even empty (tobia, 2026-09-24:
+            # "die Groesse wie mit dem Datum ist richtig") -- a version
+            # without a date keeps the same two-line layout instead of
+            # collapsing into a different, one-line button.
+            btn_date_lbl = QLabel(date_str or "\u00a0")
+            btn_date_lbl.setObjectName("changelogVersionBtnDate")
+            btn_date_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            btn_date_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            btn_inner.addWidget(btn_date_lbl)
+            btn_inner.addStretch(1)
             self._rail_group.addButton(btn)
             self._rail_col.addWidget(btn)
+            self._equalize_rail_buttons(btn)
 
             header_row = QHBoxLayout()
             header_row.setSpacing(8)
@@ -721,6 +768,27 @@ class ChangelogHistoryDialog(QDialog):
 
             btn.clicked.connect(lambda _c=False, s=section, b=btn: self._jump_to(s, b))
             self._sections.append((btn, section))
+
+    def _equalize_rail_buttons(self, new_btn: QPushButton):
+        """Every version button gets the height of the tallest one.
+
+        A HOTFIX badge makes its row a few px taller than a bare version
+        number; with the old fixed 58px that squeezed the date underneath
+        (14px instead of 17px, measured).  Sizing all buttons to the tallest
+        content keeps the whole rail one height and nothing gets squeezed
+        (tobia, 2026-09-24: the layout WITH date is the reference)."""
+        buttons = [btn for btn, _section in self._sections] + [new_btn]
+        height = 58
+        for btn in buttons:
+            for child in btn.findChildren(QLabel):
+                child.ensurePolished()
+            btn.ensurePolished()
+            layout = btn.layout()
+            if layout is not None:
+                layout.invalidate()
+                height = max(height, layout.sizeHint().height())
+        for btn in buttons:
+            btn.setMinimumHeight(height)
 
     def _jump_to(self, section: QWidget, btn: QPushButton):
         self._suppress_scroll_sync = True

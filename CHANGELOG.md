@@ -1,5 +1,7 @@
 # Version 2.0.8
 
+Release Date: 2026-09-22
+
 ## ✨ New Features
 
 - **The app now runs natively on Linux** (from source for now — a packaged Linux build is still on the roadmap). Profiles, sounds, notifications, the system tray and "reveal in file manager" all use the right OS conventions automatically; see the README's new "Run on Linux" section for setup.
@@ -21,6 +23,8 @@
 
 # Version 2.0.7
 
+Release Date: 2026-09-17
+
 ## ✨ New Features
 
 - **Season-scheduled tasks and shopping entries now actually reset once the Season timer's end date passes**, the same way Daily/Weekly entries already did — previously "Season" was just a filter label with no automatic reset behind it.
@@ -32,6 +36,10 @@
 ---
 
 # Version 2.0.6
+
+Release Date: 2026-09-17
+
+**Hotfix**
 
 ## ✨ New Features
 
@@ -47,6 +55,8 @@
 
 # Version 2.0.5
 
+Release Date: 2026-09-14
+
 **Hotfix**
 
 ## 🐛 Bug Fixes
@@ -57,6 +67,8 @@
 
 # Version 2.0.4
 
+Release Date: 2026-09-14
+
 ## 🐛 Bug Fixes
 
 - **Build Planner: an already-open Property Priority editor could show stale skill names** after reordering the Priority List or switching to a different Arcana/Skill Planner build — it now refreshes live instead of only picking up the change the next time it's reopened.
@@ -66,6 +78,8 @@
 ---
 
 # Version 2.0.3
+
+Release Date: 2026-09-14
 
 ## ✨ New Features
 
@@ -84,6 +98,8 @@
 ---
 
 # Version 2.0.2
+
+Release Date: 2026-09-13
 
 ## ✨ New Features
 
@@ -104,6 +120,8 @@
 
 # Version 2.0.1
 
+Release Date: 2026-09-12
+
 ## ✨ New Features
 
 - **Cloak/Cape is now a real equipment slot in the Build Planner.** Previously the only genuine armor category with no way to equip it at all — it now shows up on the paperdoll, contributes to GearScore and stat totals like every other armor piece, and has its own tab in Quick Select and the Property Priority editor.
@@ -118,6 +136,8 @@
 ---
 
 # Version 2.0.0
+
+Release Date: 2026-09-12
 
 ## ✨ New Features
 
