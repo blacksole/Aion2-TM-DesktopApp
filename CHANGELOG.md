@@ -1,3 +1,19 @@
+# Version 2.0.9
+
+Release Date: 2026-09-24
+
+## ✨ New Features
+
+- **Named template sets**: Tasks and Shopping templates now live in named, switchable sets instead of one flat list — build separate sets (e.g. per character or per playstyle) and switch between them from a dropdown right in the tab, without opening the template dialog. Add, duplicate, rename and delete sets independently for Shopping and Tasks. Existing templates are migrated automatically, nothing is lost.
+
+## 🐛 Bug Fixes
+
+- **The "Update History" window in Settings showed no release date for some versions, and the HOTFIX badge appeared in the wrong size compared to versions with a date.** The date was only ever pulled from the GitHub release list, so any version that was tagged and built but never separately published there (like 2.0.6 or 2.0.4) silently showed no date — and offline, no version showed one. Dates now also fall back to the app's own bundled changelog, so every version always shows one, and the hotfix badge is now always the same fixed size regardless of whether a date is present.
+- **Hovering over Daevanion skill board nodes could throw a native Windows paint error (`UpdateLayeredWindowIndirect`) and, once it happened, the tooltip stopped updating for every node afterward** — orange/skill nodes eventually stopped showing their tooltip at all. The tooltip's drop-shadow effect was quietly expanding the window's paint area past its actual visible bounds, which triggered the error; the shadow is now hand-drawn fully inside the tooltip's own boundary, so the paint area always matches the window and the error can no longer happen.
+- **The date-picker popup (used for Season/event dates in Settings) clipped the day numbers with the app's condensed font and didn't respect the current color theme.** It's now its own properly-sized popup window that sizes itself to the actual font metrics and follows the active theme like the rest of the app.
+
+---
+
 # Version 2.0.8
 
 Release Date: 2026-09-22

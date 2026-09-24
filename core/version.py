@@ -1,5 +1,5 @@
 APP_NAME = "Aion 2 Companion"
-APP_VERSION = "2.0.8"
+APP_VERSION = "2.0.9"
 
 GITHUB_USER = "blacksole"
 GITHUB_REPO = "Aion2-TM-DesktopApp"
