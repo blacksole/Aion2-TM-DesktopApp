@@ -225,6 +225,7 @@ QWidget[aion2="true"] #profileInput:focus,
 QWidget[aion2="true"] #profileSwitchButton:focus,
 QWidget[aion2="true"] #settingsCombo:focus,
 QWidget[aion2="true"] #settingsComboBox:focus,
+QWidget[aion2="true"] #settingsTimerCombo:focus,
 QWidget[aion2="true"] #settingsTimeEdit:focus,
 QWidget[aion2="true"] #settingsTimeInput:focus,
 QWidget[aion2="true"] #smallIconButton:focus,
@@ -486,7 +487,12 @@ QWidget[aion2="true"] #SkillFilterButton:checked {
     background-color: {{accent_soft}};
     color: {{fg}};
     border: {{border_width}}px solid {{accent}};
-    font-weight: {{font_weight_bold}};
+    /* No font-weight here.  MASTER §3 carries "active" on three signals --
+       accent.soft fill, accent border, fg text -- and deliberately not on
+       weight: QPushButton computes its sizeHint from the *widget* font, so
+       a QSS-only bold paints text wider than the width Qt reserved and the
+       label clips on both edges ("Priority" -> "rioritˌ" in the §3 gallery,
+       tighter pills first because they carry space_2/space_3 padding). */
 }
 
 QWidget[aion2="true"] #topTabButton {
@@ -788,6 +794,7 @@ QWidget[aion2="true"] QComboBox#priorityInput {
 
 QWidget[aion2="true"] #priorityInput,
 QWidget[aion2="true"] #settingsCombo,
+QWidget[aion2="true"] #settingsTimerCombo,
 QWidget[aion2="true"] #ItemSetCombo,
 QWidget[aion2="true"] #BuildSwitcherCombo,
 QWidget[aion2="true"] #GeniusLineCombo {
@@ -802,8 +809,21 @@ QWidget[aion2="true"] #GeniusLineCombo {
 }
 
 QWidget[aion2="true"] #priorityInput:hover,
-QWidget[aion2="true"] #settingsCombo:hover {
+QWidget[aion2="true"] #settingsCombo:hover,
+QWidget[aion2="true"] #settingsTimerCombo:hover {
     border-color: {{accent}};
+}
+
+/* Advanced Timer's Start/Anchor/Interval combos (Shugo/Rift) -- same base
+   as #settingsCombo above, but these show timer values (start minute,
+   interval), which MASTER's type table assigns font.mono, same as the
+   Reset Timer section's QTimeEdit/QDateEdit fields (#settingsTimeInput)
+   right above them on the same page. Plain #settingsCombo stays body-font
+   (it also serves Build/Item-Set/Stat-name dropdowns, which are text, not
+   timer values) -- User-reported, 2026-09-23: the two number styles sitting
+   in different fonts on the same settings page read as visually broken. */
+QWidget[aion2="true"] #settingsTimerCombo {
+    font-family: {{font_mono}};
 }
 
 QWidget[aion2="true"] #priorityInput:disabled {
@@ -846,6 +866,7 @@ QWidget[aion2="true"] #priorityInput QAbstractItemView {
    a runtime cache). */
 QWidget[aion2="true"] #priorityInput::down-arrow,
 QWidget[aion2="true"] #settingsCombo::down-arrow,
+QWidget[aion2="true"] #settingsTimerCombo::down-arrow,
 QWidget[aion2="true"] #FlowZoomCombo::down-arrow,
 QWidget[aion2="true"] #FlowSymbolCombo::down-arrow {
     image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down.svg);
@@ -872,6 +893,7 @@ QWidget[aion2="true"] #FlowSymbolCombo::down-arrow {
    *parses*, and Qt's idea of what it means is not CSS's. */
 QWidget[aion2="true"] #priorityInput::down-arrow:hover,
 QWidget[aion2="true"] #settingsCombo::down-arrow:hover,
+QWidget[aion2="true"] #settingsTimerCombo::down-arrow:hover,
 QWidget[aion2="true"] #FlowZoomCombo::down-arrow:hover,
 QWidget[aion2="true"] #FlowSymbolCombo::down-arrow:hover {
     image: url(ASSET_PATH/assets/icons/lucide/tinted/{{name}}/chevron-down-accent.svg);
@@ -1741,6 +1763,54 @@ QWidget[aion2="true"] QTableView::item:selected,
 QWidget[aion2="true"] QTreeView::item:selected,
 QWidget[aion2="true"] QListView::item:selected {
     background-color: {{accent_soft}};
+}
+
+/* The QDateEdit popup calendar (Settings -> Timers -> Season End).
+
+   It is a separate Qt::Popup top-level with no widget parent, so it never
+   carries aion2="true" and the scoped rules above cannot reach it.  Both
+   blocks below are deliberately unscoped and allow-listed; there is exactly
+   one QCalendarWidget in the app and the Armory has none (grepped), so
+   nothing of ours can leak into its windows.
+
+   History, so the next person does not retry it: this used to be a
+   min-width/min-height floor plus item padding, trying to stop the day
+   numbers eliding to "...".  Neither works.  The grid's columns are
+   `Stretch` -- they divide the calendar's width among themselves and ignore
+   any per-section size -- so the only lever is the calendar's own minimum
+   width, which has to be computed from the font metrics.  QSS cannot
+   measure a font, so the sizing lives in ui/widgets/calendar_popup.py and
+   only colour stays here.  Measured before the fix: every column 18px wide
+   regardless of font size, so "30" stopped fitting at ~12pt (DPI scaling
+   alone reaches that) while single-digit days kept rendering. */
+QCalendarWidget {
+    background-color: {{bg_overlay}};
+    color: {{fg}};
+    /* `border.strong`, not `border`: a popup floats over a card, and the
+       two surfaces below it differ by only 1.08-1.13:1 (measured across the
+       six themes), so the edge is what separates them, not the fill.
+       MASTER §1 also defines `shadow.popup` for exactly this case; it is
+       applied as a QGraphicsDropShadowEffect in
+       ui/widgets/calendar_popup.py, because Qt cannot draw a CSS shadow on
+       a Qt::Popup. */
+    border: {{border_width}}px solid {{border_strong}};
+    border-radius: {{radius_md}}px;
+}
+
+/* No `color` on the day grid.  MASTER §4-8: a QSS `color` on an item view
+   overrides the per-item setForeground(), which is how the weekend and the
+   neighbouring months are greyed (ui/widgets/calendar_popup.py writes them
+   as QTextCharFormat).  With `color` here, the first week row rendered at
+   full `fg` while the identical format further down appeared to work --
+   the paint order made it look like a stray row rather than a flattened
+   column of formats.  Selection colours are safe: they are separate
+   properties Qt reads for the highlight only. */
+QCalendarWidget QWidget {
+    background-color: {{bg_overlay}};
+    selection-background-color: {{accent}};
+    selection-color: {{fg_on_accent}};
+    border: none;
+    outline: none;
 }
 
 QWidget[aion2="true"] #StatRowCell,

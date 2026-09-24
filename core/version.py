@@ -1,4 +1,4 @@
-APP_NAME = "Aion2 Taskmanager"
+APP_NAME = "Aion 2 Companion"
 APP_VERSION = "2.0.8"
 
 GITHUB_USER = "blacksole"

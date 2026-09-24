@@ -253,6 +253,13 @@ _ALLOWED_SETSTYLESHEET = {
     "ui/overlay/overlay_window.py": 1,       # Countdown Start/Stop fill (per-timer data)
     "ui/main_window.py": 2,                  # the app-wide sheet + the Armory's own sheet
     "core/theme.py": 1,                      # theme.apply(): the app-wide sheet
+    # The QDateEdit popup: the calendar and the `qt_datetimedit_calendar`
+    # container Qt wraps it in.  Neither can be reached from the app sheet
+    # -- the container is a parentless Qt::Popup, so the scoped prefix never
+    # matches it, and a widget's own stylesheet REPLACES the app sheet for
+    # that widget rather than merging, so the rules have to be restated
+    # where they are set.  Every value still comes from core.theme.
+    "ui/widgets/calendar_popup.py": 2,
 }
 
 

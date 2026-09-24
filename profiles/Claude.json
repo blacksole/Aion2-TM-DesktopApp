@@ -7,7 +7,9 @@
         "weekly_reset_day": "Mo",
         "weekly_reset_time": "09:00",
         "season_reset_datetime": "2026-11-04 09:00",
+        "season_enabled": false,
         "show_events": true,
+        "reduce_motion": false,
         "shugo_enabled": true,
         "shugo_start_minute": 15,
         "shugo_interval_text": "30min",
@@ -27,8 +29,9 @@
             "Custom Timer"
         ],
         "custom_timers": [],
-        "last_daily_reset_date": "2026-09-14",
+        "last_daily_reset_date": "2026-09-22",
         "last_weekly_reset_date": "2026-09-14",
+        "last_season_reset_datetime": null,
         "missed_daily_activities": [
             {
                 "card_id": "eb4bdc37-eb95-4a72-97a7-447efb282bee",
@@ -49,7 +52,8 @@
             "skill_priority": false,
             "gear_priority": false
         },
-        "overlay_char_filter": ""
+        "overlay_char_filter": "",
+        "todo_char_filter": ""
     },
     "tasks": {
         "tasks": [
@@ -1945,5 +1949,6 @@
             "Statue4": "",
             "Colossus1": ""
         }
-    }
+    },
+    "schema_version": 1
 }

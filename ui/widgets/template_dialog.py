@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from core.persistence import LEGACY_STANDARD_SET_NAME, migrate_standard_templates
 from ui.widgets.shopping_card import format_currency_price
 from ui.widgets import icons
 from PySide6.QtCore import Qt, QEvent, QObject, QSize
@@ -13,8 +14,10 @@ from PySide6.QtWidgets import (
     QDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -147,21 +150,44 @@ class TemplateDialog(QDialog):
         # is_general flag on regular templates (that one auto-adds to
         # EVERY character already; this only fires once, at creation --
         # see MainWindow._apply_standard_templates).
-        standard_templates = standard_templates or {}
+        #
+        # Shape as of the "Mehrere benennbare/umbenennbare Standard-
+        # Template-Sets" Planner task (freigegeben 2026-09-23):
+        # {"tasks": {"SetName": [...], ...}, "shopping": {"SetName": [...]}}
+        # -- multiple NAMED sets per kind instead of one un-named pack,
+        # so a user can e.g. keep a "Daily Grind" Tasks set and a
+        # "Weekly Crafting" Tasks set side by side. Tasks and Shopping stay
+        # fully independent collections of sets, same as they were already
+        # independent single lists (User-Wunsch, 2026-09-23: no assumption
+        # that a same-named Tasks/Shopping set pair means anything).
+        # Assignment to a character happens by NAME PICK at apply time --
+        # no Main/Twink tag is ever stored on the character itself (tobia,
+        # 2026-09-23, explicit clarification).
+        standard_templates = migrate_standard_templates(standard_templates)
         self.standard_templates = {
-            "tasks": [dict(t) for t in standard_templates.get("tasks", [])],
-            "shopping": [dict(t) for t in standard_templates.get("shopping", [])],
+            "tasks": {name: [dict(t) for t in entries]
+                      for name, entries in standard_templates["tasks"].items()},
+            "shopping": {name: [dict(t) for t in entries]
+                         for name, entries in standard_templates["shopping"].items()},
         }
-        # The language-matched Default profile's OWN Standard Templates --
-        # read-only reference for "⟳ Sync" (User-Wunsch, 2026-09-10), never
-        # written back to. MainWindow resolves which Default file this is
-        # (same language-fallback logic as _preferred_default()) since only
-        # it knows the profiles directory / frozen-app path.
-        default_standard_templates = default_standard_templates or {}
-        self._default_standard_templates = {
-            "tasks": list(default_standard_templates.get("tasks", [])),
-            "shopping": list(default_standard_templates.get("shopping", [])),
-        }
+        # Which named set each tab's "standards" view is currently showing
+        # -- lazily created on first "standards" view (see _current_set_name
+        # / _ensure_std_set) rather than up front, so a profile with zero
+        # Standard Template Sets doesn't spuriously grow an empty "Default"
+        # set just from opening this dialog.
+        self._shop_std_set: str | None = next(iter(self.standard_templates["shopping"]), None)
+        self._task_std_set: str | None = next(iter(self.standard_templates["tasks"]), None)
+        # The language-matched Default profile's OWN Standard Template Sets
+        # -- read-only reference for "⟳ Sync" (User-Wunsch, 2026-09-10),
+        # never written back to. MainWindow resolves which Default file this
+        # is (same language-fallback logic as _preferred_default()) since
+        # only it knows the profiles directory / frozen-app path. Same
+        # named-set shape as self.standard_templates; Sync now matches the
+        # CURRENTLY SELECTED set in THIS profile against the SAME-NAMED set
+        # in the Default profile (User-Wunsch, 2026-09-23: Sync needs to
+        # know which of the now-multiple sets it's comparing against).
+        default_standard_templates = migrate_standard_templates(default_standard_templates)
+        self._default_standard_templates = default_standard_templates
         self.flow_maps = flow_maps
         self._selected_shop_index: int | None = None
         self._selected_task_index: int | None = None
@@ -263,6 +289,10 @@ class TemplateDialog(QDialog):
         header.addWidget(self._shop_add_btn)
         vl.addLayout(header)
 
+        self._shop_set_row = self._make_set_switcher_row("shopping")
+        vl.addLayout(self._shop_set_row)
+        self._refresh_set_row("shopping")
+
         # UX audit 2026-09-18, M1: sitting inside the header row, this
         # legend got squeezed between the source tabs and the "Add" button
         # and rendered clipped ("☑ = quest appears automatically in the
@@ -347,6 +377,10 @@ class TemplateDialog(QDialog):
         header.addWidget(self._task_add_btn)
         vl.addLayout(header)
 
+        self._task_set_row = self._make_set_switcher_row("tasks")
+        vl.addLayout(self._task_set_row)
+        self._refresh_set_row("tasks")
+
         # Own row under the controls -- see the Shopping tab's twin comment
         # (UX audit 2026-09-18, M1: clipped by the Add Task button).
         self._task_info_label.setWordWrap(True)
@@ -411,6 +445,248 @@ class TemplateDialog(QDialog):
                             seen.add(char_name)
         return chars
 
+    # ── Standard Template Set switcher (shared by Shopping + Tasks) ────────────
+    # Same combo + icon-button-row pattern as Equip Sets/Skill Builds in the
+    # Build Planner (ItemDatabase/app.py::_rebuild_equip_build_tabs) --
+    # Planner task "Mehrere benennbare/umbenennbare Standard-Template-Sets"
+    # asked for exactly that visual reuse. Shopping and Tasks each keep
+    # their OWN independent named sets (self._shop_std_set /
+    # self._task_std_set track which one each tab is showing), same
+    # independence the two tabs already had as separate flat lists before
+    # this change.
+
+    def _set_kind_state(self, kind: str):
+        """(sets dict, current-name attr name, view-mode attr, combo attr)
+        for `kind` -- keeps every set-management method kind-agnostic
+        instead of duplicating it once per Shopping/Tasks."""
+        if kind == "shopping":
+            return self.standard_templates["shopping"], "_shop_std_set", self._shop_view_mode
+        return self.standard_templates["tasks"], "_task_std_set", self._task_view_mode
+
+    def _current_set_name(self, kind: str) -> str | None:
+        sets, attr, _ = self._set_kind_state(kind)
+        name = getattr(self, attr)
+        if name not in sets:
+            name = next(iter(sets), None)
+            setattr(self, attr, name)
+        return name
+
+    def _current_set_list(self, kind: str) -> list[dict]:
+        """The live list for `kind`'s currently selected set -- creating
+        the set on first write would be surprising, so this returns a
+        throwaway empty list (never stored) when there is no set yet;
+        callers that ADD an entry go through _ensure_set_for_add instead."""
+        sets, _, _ = self._set_kind_state(kind)
+        name = self._current_set_name(kind)
+        return sets.get(name, [])
+
+    def _ensure_set_for_add(self, kind: str) -> str:
+        """The set name new entries should be added to -- creates one
+        named set (LEGACY_STANDARD_SET_NAME) the first time a user adds a
+        Standard Template entry to a profile that has none yet, so the
+        "+Add" button on the Standards view always has somewhere to put
+        the new entry without forcing an explicit "create a set first"
+        step for the common single-set case."""
+        sets, attr, _ = self._set_kind_state(kind)
+        name = self._current_set_name(kind)
+        if name is None:
+            name = LEGACY_STANDARD_SET_NAME
+            sets[name] = []
+            setattr(self, attr, name)
+        return name
+
+    def _make_set_switcher_row(self, kind: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(6)
+
+        combo = QComboBox()
+        combo.setObjectName("BuildSwitcherCombo")
+        combo.setMinimumWidth(160)
+        combo.currentTextChanged.connect(lambda name, k=kind: self._on_switch_set(k, name))
+        row.addWidget(combo)
+
+        add_btn = QPushButton()
+        icons.set_icon(add_btn, "plus", 16, clear_text=False)
+        add_btn.setToolTip(self._t("standards_set_add"))
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.clicked.connect(lambda _c=False, k=kind: self._on_add_set(k))
+        row.addWidget(add_btn)
+
+        duplicate_btn = QPushButton()
+        icons.set_icon(duplicate_btn, "copy", 16, clear_text=False)
+        duplicate_btn.setToolTip(self._t("standards_set_duplicate"))
+        duplicate_btn.setCursor(Qt.PointingHandCursor)
+        duplicate_btn.clicked.connect(lambda _c=False, k=kind: self._on_duplicate_set(k))
+        row.addWidget(duplicate_btn)
+
+        rename_btn = QPushButton()
+        icons.set_icon(rename_btn, "pencil", 16, clear_text=False)
+        rename_btn.setToolTip(self._t("standards_set_rename"))
+        rename_btn.setCursor(Qt.PointingHandCursor)
+        rename_btn.clicked.connect(lambda _c=False, k=kind: self._on_rename_set(k))
+        row.addWidget(rename_btn)
+
+        delete_btn = QPushButton()
+        icons.set_icon(delete_btn, "trash", 16, clear_text=False)
+        delete_btn.setToolTip(self._t("standards_set_delete"))
+        delete_btn.setCursor(Qt.PointingHandCursor)
+        delete_btn.clicked.connect(lambda _c=False, k=kind: self._on_delete_set(k))
+        row.addWidget(delete_btn)
+
+        row.addStretch()
+
+        if kind == "shopping":
+            self._shop_set_combo = combo
+            self._shop_set_add_btn = add_btn
+            self._shop_set_duplicate_btn = duplicate_btn
+            self._shop_set_rename_btn = rename_btn
+            self._shop_set_delete_btn = delete_btn
+        else:
+            self._task_set_combo = combo
+            self._task_set_add_btn = add_btn
+            self._task_set_duplicate_btn = duplicate_btn
+            self._task_set_rename_btn = rename_btn
+            self._task_set_delete_btn = delete_btn
+        # NOT self._refresh_set_row(kind) here -- the caller hasn't stored
+        # this row on self._shop_set_row/_task_set_row yet (it does that
+        # with THIS method's return value), and _refresh_set_row needs
+        # that attribute through _set_row_widgets(). Callers refresh right
+        # after assigning the row.
+        return row
+
+    def _set_row_widgets(self, kind: str):
+        if kind == "shopping":
+            return (self._shop_set_row, self._shop_set_combo, self._shop_set_add_btn,
+                    self._shop_set_duplicate_btn, self._shop_set_rename_btn, self._shop_set_delete_btn)
+        return (self._task_set_row, self._task_set_combo, self._task_set_add_btn,
+                self._task_set_duplicate_btn, self._task_set_rename_btn, self._task_set_delete_btn)
+
+    def _refresh_set_row(self, kind: str):
+        """Repopulates `kind`'s set combo and shows/hides the whole row --
+        only relevant on the "standards" view, exactly like the Equip Sets
+        switcher only exists inside its own page."""
+        sets, _, view_mode = self._set_kind_state(kind)
+        row_layout, combo, add_btn, dup_btn, rename_btn, del_btn = self._set_row_widgets(kind)
+        is_std = view_mode == "standards"
+        for i in range(row_layout.count()):
+            w = row_layout.itemAt(i).widget()
+            if w is not None:
+                w.setVisible(is_std)
+        if not is_std:
+            return
+        current = self._current_set_name(kind)
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItems(list(sets.keys()))
+        if current is not None:
+            combo.setCurrentText(current)
+        combo.blockSignals(False)
+        has_sets = bool(sets)
+        combo.setEnabled(has_sets)
+        # Duplicate/rename/delete need an existing set to act on; a
+        # brand-new profile with zero sets only offers "+".
+        for btn in (dup_btn, rename_btn, del_btn):
+            btn.setEnabled(has_sets)
+
+    def _on_switch_set(self, kind: str, name: str):
+        if not name:
+            return
+        _, attr, _ = self._set_kind_state(kind)
+        if getattr(self, attr) == name:
+            return
+        setattr(self, attr, name)
+        if kind == "shopping":
+            self._selected_shop_index = None
+            self._update_shop_add_btn()
+            self._update_shop_sync_btn()
+            self._rebuild_shop_list()
+        else:
+            self._selected_task_index = None
+            self._update_task_add_btn()
+            self._update_task_sync_btn()
+            self._rebuild_task_list()
+
+    def _on_add_set(self, kind: str):
+        sets, attr, _ = self._set_kind_state(kind)
+        name, ok = QInputDialog.getText(self, self._t("standards_set_add_title"), self._t("standards_set_name_colon"))
+        name = name.strip()
+        if not ok or not name or name in sets:
+            return
+        sets[name] = []
+        setattr(self, attr, name)
+        self._refresh_set_row(kind)
+        if kind == "shopping":
+            self._rebuild_shop_list()
+            self._update_shop_sync_btn()
+        else:
+            self._rebuild_task_list()
+            self._update_task_sync_btn()
+
+    def _on_duplicate_set(self, kind: str):
+        sets, attr, _ = self._set_kind_state(kind)
+        source_name = self._current_set_name(kind)
+        if source_name is None:
+            return
+        default_name = self._t("standards_set_duplicate_default_name", name=source_name)
+        name, ok = QInputDialog.getText(self, self._t("standards_set_duplicate_title"),
+                                        self._t("standards_set_name_colon"), text=default_name)
+        name = name.strip()
+        if not ok or not name or name in sets:
+            return
+        sets[name] = [dict(t) for t in sets[source_name]]
+        setattr(self, attr, name)
+        self._refresh_set_row(kind)
+        if kind == "shopping":
+            self._rebuild_shop_list()
+        else:
+            self._rebuild_task_list()
+
+    def _on_rename_set(self, kind: str):
+        sets, attr, _ = self._set_kind_state(kind)
+        old_name = self._current_set_name(kind)
+        if old_name is None:
+            return
+        new_name, ok = QInputDialog.getText(self, self._t("standards_set_rename_title"),
+                                            self._t("standards_set_name_colon"), text=old_name)
+        new_name = new_name.strip()
+        if not ok or not new_name or new_name == old_name or new_name in sets:
+            return
+        # dict preserves insertion order in Python 3.7+, so building a new
+        # dict in the same order (renaming in place) keeps the combo's
+        # item order stable instead of moving the renamed set to the end.
+        sets[new_name] = sets.pop(old_name)
+        renamed = {}
+        for key, value in sets.items():
+            renamed[new_name if key == new_name else key] = value
+        sets.clear()
+        sets.update(renamed)
+        setattr(self, attr, new_name)
+        self._refresh_set_row(kind)
+
+    def _on_delete_set(self, kind: str):
+        sets, attr, _ = self._set_kind_state(kind)
+        name = self._current_set_name(kind)
+        if name is None:
+            return
+        reply = QMessageBox.question(
+            self, self._t("standards_set_delete_confirm_title"),
+            self._t("standards_set_delete_confirm_text", name=name),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        sets.pop(name, None)
+        setattr(self, attr, next(iter(sets), None))
+        self._refresh_set_row(kind)
+        if kind == "shopping":
+            self._selected_shop_index = None
+            self._update_shop_add_btn()
+            self._rebuild_shop_list()
+        else:
+            self._selected_task_index = None
+            self._update_task_add_btn()
+            self._rebuild_task_list()
+
     # ── Shopping list rendering ───────────────────────────────────────────────
 
     def _set_shop_view_mode(self, mode: str):
@@ -429,10 +705,11 @@ class TemplateDialog(QDialog):
         if is_std:
             self._update_shop_sync_btn()
         self._update_shop_add_btn()
+        self._refresh_set_row("shopping")
         self._rebuild_shop_list()
 
     def _current_shop_list(self) -> list[dict]:
-        return self.standard_templates["shopping"] if self._shop_view_mode == "standards" else self.templates
+        return self._current_set_list("shopping") if self._shop_view_mode == "standards" else self.templates
 
     def _rebuild_shop_list(self):
         while self._shop_list_layout.count() > 1:
@@ -553,10 +830,11 @@ class TemplateDialog(QDialog):
         if is_std:
             self._update_task_sync_btn()
         self._update_task_add_btn()
+        self._refresh_set_row("tasks")
         self._rebuild_task_list()
 
     def _current_task_list(self) -> list[dict]:
-        return self.standard_templates["tasks"] if self._task_view_mode == "standards" else self.task_templates
+        return self._current_set_list("tasks") if self._task_view_mode == "standards" else self.task_templates
 
     def _rebuild_task_list(self):
         while self._task_list_layout.count() > 1:
@@ -905,32 +1183,38 @@ class TemplateDialog(QDialog):
         any real, picker-added entry) -- a no-op if this
         template was never added to Standard Templates in the first place.
         Keeps the Standard entry's own "id"/"source_id" intact across the
-        overwrite so it stays findable next time."""
+        overwrite so it stays findable next time.
+
+        Named-Set aware: the match could be sitting in ANY of the kind's
+        sets, not just the one currently shown, so this scans every set --
+        an edited real template must stay in sync everywhere it was ever
+        added, not just in the set the user happens to be looking at."""
         tid = updated.get("id")
         if not tid:
             return
-        for i, std in enumerate(self.standard_templates.get(kind, [])):
-            if std.get("source_id") == tid:
-                data = dict(updated)
-                data["id"] = std.get("id", data.get("id"))
-                data["source_id"] = tid
-                self.standard_templates[kind][i] = data
-                break
+        for std_list in self.standard_templates.get(kind, {}).values():
+            for i, std in enumerate(std_list):
+                if std.get("source_id") == tid:
+                    data = dict(updated)
+                    data["id"] = std.get("id", data.get("id"))
+                    data["source_id"] = tid
+                    std_list[i] = data
+                    break
 
     def _remove_from_standard_templates(self, kind: str, tid: str):
         """Companion to _sync_standard_template above -- removes a Standard
         Template entry when its SOURCE template is deleted from the normal
         Shopping/Tasks list (User-reported, 2026-09-09: "Falls Templates aus
         der normalen Templates Liste entfernt werden, sollten diese auch aus
-        den Standards entfernt werden"). Same "source_id" matching, same
-        reasoning -- a no-op if this template was never added to Standard
-        Templates."""
+        den Standards entfernt werden"). Same "source_id" matching, scanned
+        across every set of this kind (see _sync_standard_template) -- a
+        no-op if this template was never added to any Standard Template Set."""
         if not tid:
             return
-        self.standard_templates[kind] = [
-            std for std in self.standard_templates.get(kind, [])
-            if std.get("source_id") != tid
-        ]
+        for name, std_list in self.standard_templates.get(kind, {}).items():
+            self.standard_templates[kind][name] = [
+                std for std in std_list if std.get("source_id") != tid
+            ]
 
     def _delete_task_template(self, index: int):
         if 0 <= index < len(self.task_templates):
@@ -958,6 +1242,11 @@ class TemplateDialog(QDialog):
     # _add_standard_entry the same way. Reuses _TemplateEditDialog for the
     # edit form and _StandardTemplatePickerDialog for "+Add" (same picker
     # popup, unaffected by the "manage" dialog itself going away).
+    #
+    # Every method below acts on the CURRENTLY SELECTED named set for its
+    # kind (see _current_set_name/_current_set_list/_ensure_set_for_add
+    # above) -- Planner task "Mehrere benennbare/umbenennbare Standard-
+    # Template-Sets".
 
     def get_standard_templates(self) -> dict:
         return self.standard_templates
@@ -965,7 +1254,9 @@ class TemplateDialog(QDialog):
     def _add_standard_entry(self, kind: str):
         is_shop = kind == "shopping"
         available = self.templates if is_shop else self.task_templates
-        already = {t.get("title", "").strip().lower() for t in self.standard_templates.get(kind, []) if t.get("title")}
+        set_name = self._ensure_set_for_add(kind)
+        target = self.standard_templates[kind][set_name]
+        already = {t.get("title", "").strip().lower() for t in target if t.get("title")}
         pickable = [t for t in available if t.get("title", "").strip().lower() not in already]
         dlg = _StandardTemplatePickerDialog(pickable, parent=self, language=self._language, tr_func=self._tr)
         if not dlg.exec():
@@ -983,7 +1274,8 @@ class TemplateDialog(QDialog):
             item["is_general"] = False
             if is_shop:
                 item.setdefault("amount", "1")
-            self.standard_templates.setdefault(kind, []).append(item)
+            target.append(item)
+        self._refresh_set_row(kind)
         if is_shop:
             self._rebuild_shop_list()
         else:
@@ -991,7 +1283,7 @@ class TemplateDialog(QDialog):
 
     def _edit_standard_entry(self, kind: str, index: int):
         is_shop = kind == "shopping"
-        items = self.standard_templates.get(kind, [])
+        items = self._current_set_list(kind)
         if not (0 <= index < len(items)):
             return
         dlg = _TemplateEditDialog(
@@ -1013,7 +1305,7 @@ class TemplateDialog(QDialog):
                 self._rebuild_task_list()
 
     def _delete_standard_entry(self, kind: str, index: int):
-        items = self.standard_templates.get(kind, [])
+        items = self._current_set_list(kind)
         if 0 <= index < len(items):
             items.pop(index)
             if kind == "shopping":
@@ -1022,13 +1314,25 @@ class TemplateDialog(QDialog):
                 self._rebuild_task_list()
 
     def _default_new_entries(self, kind: str) -> list[dict]:
-        """Entries in the language-matched Default profile's Standard
-        Templates that this profile doesn't have yet, matched by title
-        (case-insensitive) -- ids never match across different profiles
-        (established this session), so title is the only reliable key."""
-        existing = {t.get("title", "").strip().lower() for t in self.standard_templates.get(kind, []) if t.get("title")}
+        """Entries in the SAME-NAMED set of the language-matched Default
+        profile's Standard Template Sets that THIS profile's currently
+        selected set doesn't have yet, matched by title (case-insensitive)
+        -- ids never match across different profiles (established this
+        session), so title is the only reliable key.
+
+        Named-Set aware (User-Wunsch, 2026-09-23: Sync needs to know which
+        of the now-multiple sets it's comparing against) -- Sync compares
+        the CURRENTLY SELECTED set here against the identically-named set
+        over in the Default profile; if this profile has no set of that
+        name selected yet (empty profile, first set), there's nothing to
+        sync against and this returns empty rather than guessing a target."""
+        set_name = self._current_set_name(kind)
+        if set_name is None:
+            return []
+        existing = {t.get("title", "").strip().lower() for t in self._current_set_list(kind) if t.get("title")}
+        default_set = self._default_standard_templates.get(kind, {}).get(set_name, [])
         return [
-            t for t in self._default_standard_templates.get(kind, [])
+            t for t in default_set
             if t.get("title", "").strip().lower() not in existing
         ]
 
@@ -1049,10 +1353,12 @@ class TemplateDialog(QDialog):
         entry is based on doesn't exist in THIS profile's own Shopping/Tasks
         catalog either (different profile, so ids never carried over), a
         copy of it is added there too, so the new Standard entry has a real
-        source to link back to via source_id -- same as every other entry."""
+        source to link back to via source_id -- same as every other entry.
+        Targets the CURRENTLY SELECTED named set (see _default_new_entries)."""
         new_entries = self._default_new_entries(kind)
         if not new_entries:
             return
+        set_name = self._ensure_set_for_add(kind)
         dlg = _StandardSyncDialog(new_entries, parent=self, language=self._language, tr_func=self._tr)
         if not dlg.exec():
             return
@@ -1065,6 +1371,7 @@ class TemplateDialog(QDialog):
             (t.get("title", "").strip().lower(), t.get("location", "").strip().lower()): t
             for t in catalog
         }
+        target = self.standard_templates[kind][set_name]
         for entry in picked:
             key = (entry.get("title", "").strip().lower(), entry.get("location", "").strip().lower())
             match = catalog_by_key.get(key)
@@ -1087,7 +1394,8 @@ class TemplateDialog(QDialog):
             std_item["id"] = str(uuid4())
             std_item["source_id"] = match.get("id", "")
             std_item["is_general"] = False
-            self.standard_templates.setdefault(kind, []).append(std_item)
+            target.append(std_item)
+        self._refresh_set_row(kind)
         if is_shop:
             self._rebuild_shop_list()
             self._update_shop_sync_btn()

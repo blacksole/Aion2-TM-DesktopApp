@@ -462,7 +462,10 @@ class MainWindow(QMainWindow):
 
         self.item_templates: list = []
         self.task_templates: list = []
-        self.standard_templates: dict = {"tasks": [], "shopping": []}
+        # Named Standard Template Sets -- {"tasks": {"SetName": [...]},
+        # "shopping": {"SetName": [...]}}. See core.persistence.
+        # migrate_standard_templates for the shape's history/migration.
+        self.standard_templates: dict = {"tasks": {}, "shopping": {}}
 
         self.flow_maps: dict = {}
         self.active_flow_map_name: str = "Map 1"
@@ -2372,7 +2375,7 @@ class MainWindow(QMainWindow):
         if self.minimize_to_tray is True and self._tray_ready():
             event.ignore()
             self.hide()
-            self._notify("Aion2 TM", tr(self.language, "tray_running"), 3000)
+            self._notify("Aion 2 Companion", tr(self.language, "tray_running"), 3000)
             return
 
         if self.minimize_to_tray is None and self._tray_ready():
@@ -2391,7 +2394,7 @@ class MainWindow(QMainWindow):
                 self._save_app_config()
                 event.ignore()
                 self.hide()
-                self._notify("Aion2 TM", tr(self.language, "tray_running"), 3000)
+                self._notify("Aion 2 Companion", tr(self.language, "tray_running"), 3000)
             else:
                 self.minimize_to_tray = False
                 self._save_app_config()
@@ -2881,7 +2884,15 @@ class MainWindow(QMainWindow):
 
             self.item_templates = data.get("item_templates", [])
             self.task_templates = data.get("task_templates", [])
-            self.standard_templates = data.get("standard_templates", {"tasks": [], "shopping": []})
+            # Named Standard Template Sets (Planner: "Mehrere benennbare/
+            # umbenennbare Standard-Template-Sets", freigegeben 2026-09-23)
+            # -- migrate_standard_templates handles both an old profile's
+            # flat list (wrapped into one set) and an already-migrated
+            # named-dict profile (passed through unchanged) the same way,
+            # so every load -- regardless of when the profile was last
+            # saved -- ends up in the current {"tasks": {name: [...]}} shape.
+            from core.persistence import migrate_standard_templates
+            self.standard_templates = migrate_standard_templates(data.get("standard_templates"))
             self.tasks_page.update_templates(self.item_templates)
             self.tasks_page.update_task_templates(self.task_templates)
             self.tasks_page.update_standard_templates(self.standard_templates)
@@ -3296,26 +3307,32 @@ class MainWindow(QMainWindow):
         return backup_dir
 
     def _load_default_standard_templates(self) -> dict:
-        """The language-matched Default profile's OWN Standard Templates --
-        read-only reference for TemplateDialog's "⟳ Sync" (User-Wunsch,
-        2026-09-10: let an existing profile pull in Standard Template
-        entries a later update added to Default). Reads from profile_dir/
-        Backup/ (this version's pristine bundled copy, refreshed every
-        launch) rather than the user's own live Default.json -- that live
-        file could itself be the user's heavily-customized profile, which
-        would make Sync compare it against itself and always find nothing
-        new. Tolerant of a missing/unreadable file since this is a non-
-        critical convenience feature, not core profile data."""
+        """The language-matched Default profile's OWN Standard Template
+        Sets -- read-only reference for TemplateDialog's "⟳ Sync" (User-
+        Wunsch, 2026-09-10: let an existing profile pull in Standard
+        Template entries a later update added to Default). Reads from
+        profile_dir/Backup/ (this version's pristine bundled copy, refreshed
+        every launch) rather than the user's own live Default.json -- that
+        live file could itself be the user's heavily-customized profile,
+        which would make Sync compare it against itself and always find
+        nothing new. Tolerant of a missing/unreadable file since this is a
+        non-critical convenience feature, not core profile data.
+
+        Named-Set shape (Planner: "Mehrere benennbare/umbenennbare
+        Standard-Template-Sets") via migrate_standard_templates, same as
+        the profile's own standard_templates -- so TemplateDialog can
+        compare the two using identical set names."""
+        from core.persistence import migrate_standard_templates
         stem = self._LANG_DEFAULT_STEMS.get(self.language, "Default")
         path = self.profile_dir / "Backup" / f"{stem}.json"
         if not path.exists():
-            return {"tasks": [], "shopping": []}
+            return {"tasks": {}, "shopping": {}}
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError):
-            return {"tasks": [], "shopping": []}
-        return data.get("standard_templates", {"tasks": [], "shopping": []})
+            return {"tasks": {}, "shopping": {}}
+        return migrate_standard_templates(data.get("standard_templates"))
 
     def _restore_default_profiles(self):
         """"Restore Default profile" button in Settings (User-Wunsch, 2026-
@@ -4137,6 +4154,30 @@ class MainWindow(QMainWindow):
         )
         dlg.exec()
 
+    def _pick_standard_set(self, kind: str, title_key: str, label_key: str) -> str | None:
+        """Lets the user pick WHICH named Standard Template Set of `kind`
+        to use, when there is more than one to choose from (Planner:
+        "Mehrere benennbare/umbenennbare Standard-Template-Sets" -- User-
+        Wunsch, 2026-09-23: assignment happens by free selection at
+        APPLICATION time, no Main/Twink tag stored on the character).
+
+        Zero-friction for the common case: 0 sets -> None (nothing to
+        apply), exactly 1 set -> that one set, no dialog at all (matches
+        the old single-starter-pack behaviour exactly). Only 2+ sets ever
+        show the picker."""
+        sets = self.standard_templates.get(kind, {})
+        names = list(sets.keys())
+        if not names:
+            return None
+        if len(names) == 1:
+            return names[0]
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getItem(
+            self, tr(self.language, title_key), tr(self.language, label_key),
+            names, 0, False,
+        )
+        return name if ok else None
+
     def _add_character(self, name: str) -> tuple[bool, str]:
         """Creates a real Flow Map "character"-icon node as a direct child
         of the ACTIVE flow map's root -- characters have no separate
@@ -4192,8 +4233,20 @@ class MainWindow(QMainWindow):
         button, which replaced the old CSV Import/Export at the same spot,
         per the user's own earlier decision), independent of the existing
         is_general flag (that one auto-adds to EVERY character's live
-        list already; this one only fires once, at character creation)."""
-        for tmpl in self.standard_templates.get("tasks", []):
+        list already; this one only fires once, at character creation).
+
+        Named-Set aware (Planner: "Mehrere benennbare/umbenennbare
+        Standard-Template-Sets", freigegeben 2026-09-23): Tasks and
+        Shopping pick their OWN set independently -- there is no
+        assumption that a shared name between the two means anything, and
+        no Main/Twink tag is stored on the character; the set is chosen
+        fresh, right here, at application time (0 sets -> skipped, exactly
+        1 -> auto-picked, 2+ -> the user is asked which one)."""
+        task_set = self._pick_standard_set("tasks", "standards_pick_set_title_tasks", "standards_pick_set_label")
+        shop_set = self._pick_standard_set("shopping", "standards_pick_set_title_shopping", "standards_pick_set_label")
+        task_templates = self.standard_templates.get("tasks", {}).get(task_set, []) if task_set else []
+        shop_templates = self.standard_templates.get("shopping", {}).get(shop_set, []) if shop_set else []
+        for tmpl in task_templates:
             card = TaskCard(
                 tmpl.get("title", ""),
                 tmpl.get("description", ""),
@@ -4206,7 +4259,7 @@ class MainWindow(QMainWindow):
             )
             self._wire_card(card)
             self.task_lists.setdefault("tasks", []).append(card)
-        for tmpl in self.standard_templates.get("shopping", []):
+        for tmpl in shop_templates:
             card = ShoppingCard(
                 priority=tmpl.get("priority", "middle"),
                 amount=str(tmpl.get("amount", "1")),
@@ -4220,12 +4273,12 @@ class MainWindow(QMainWindow):
             )
             self._wire_card(card)
             self.task_lists.setdefault("shopping", []).append(card)
-        if self.standard_templates.get("tasks") or self.standard_templates.get("shopping"):
+        if task_templates or shop_templates:
             self.refresh()
             if self.auto_save:
                 self.save_profile(silent=True)
 
-    def _apply_standard_templates_to_existing(self, character: str):
+    def _apply_standard_templates_to_existing(self, character: str, set_name: str = ""):
         """"+Add" on the Standards tab of the Tasks/Shopping toolbar (User-
         Wunsch, 2026-09-09: "Falls Templates bereits zugewiesen sind, sollen
         alle templates aus dem Standard hinzugefügt werden, die nicht
@@ -4236,9 +4289,23 @@ class MainWindow(QMainWindow):
         this call's active tab) are skipped instead of duplicated. Also
         resolves the "nothing happens" report from picking one entry in the
         dropdown -- there is no picker requirement here at all, every
-        not-yet-assigned Standard Template just gets added at once."""
+        not-yet-assigned Standard Template just gets added at once.
+
+        Named-Set aware: `set_name` now comes straight from
+        TasksPage.standard_apply_requested, i.e. whatever its OWN
+        std_set_combo has selected (Planner Nachtrag 2026-09-23: tobia's
+        screenshot showed that combo was missing from this main tab view
+        entirely -- added right there, next to the Standards tab toggle).
+        Falls back to _pick_standard_set's zero-friction rule (0 sets ->
+        skipped, exactly 1 -> auto-picked, 2+ -> asks) only if the page
+        didn't send one -- e.g. a stale connection during a hot-reload."""
         kind = self.active_tab
         if kind not in ("tasks", "shopping"):
+            return
+        if not set_name or set_name not in self.standard_templates.get(kind, {}):
+            title_key = "standards_pick_set_title_tasks" if kind == "tasks" else "standards_pick_set_title_shopping"
+            set_name = self._pick_standard_set(kind, title_key, "standards_pick_set_label")
+        if not set_name:
             return
         existing_titles = {
             c.title.strip().lower()
@@ -4246,7 +4313,7 @@ class MainWindow(QMainWindow):
             if getattr(c, "character", "") == character
         }
         added_any = False
-        for tmpl in self.standard_templates.get(kind, []):
+        for tmpl in self.standard_templates.get(kind, {}).get(set_name, []):
             title = tmpl.get("title", "").strip()
             if not title or title.lower() in existing_titles:
                 continue

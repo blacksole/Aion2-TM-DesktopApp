@@ -11861,24 +11861,68 @@ class _TranslucentCardTooltip(QWidget):
     (User-Wunsch, 2026-08-28, re: the skill tooltip: "gerne ähnlicher
     Aufbau des Tooltips wie beim Daeva Board")."""
 
+    # Manual shadow parameters (replaces QGraphicsDropShadowEffect -- see
+    # __init__'s comment for why) -- same visual values the old effect used
+    # (blurRadius 48, offset (0, 16)), just painted by hand instead.
+    _SHADOW_BLUR = 48
+    _SHADOW_OFFSET = QPoint(0, 16)
+
     def __init__(self, width: int, parent=None):
         super().__init__(parent, Qt.ToolTip | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setFixedWidth(width)
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(48)
-        shadow.setOffset(0, 16)
-        shadow.setColor(_qc("bg.window", 150))
-        self.setGraphicsEffect(shadow)
+        # ROOT CAUSE FOUND (2026-09-23, @koordinator root-cause analysis +
+        # @developer verification by hand-computing Qt's own bounding-rect
+        # formula): the previous QGraphicsDropShadowEffect(blur=48,
+        # offset=(0,16)) makes Qt paint into a bounding rect EXPANDED by
+        # the blur radius on all sides plus the offset -- for this
+        # widget's real size (240x230 observed) that expanded rect comes
+        # out to EXACTLY 336x326 at offset (-48,-32), which is the exact
+        # dirty=(336x326 -48,-32) Windows rejected against
+        # size=(240x230) in "UpdateLayeredWindowIndirect failed ...
+        # (Falscher Parameter.)". So this failed on EVERY paint of this
+        # WA_TranslucentBackground top-level, regardless of adjustSize()/
+        # resize() timing -- confirmed by tobia's live test: fixing the
+        # widget's height (previous fix attempt) did NOT make the error
+        # go away, and made things WORSE (broke previously-working nodes
+        # too), because it changed which paints happened to still line up
+        # by accident without addressing the actual mismatch source.
+        # Fix: drop the graphics effect entirely and paint the shadow by
+        # hand in paintEvent(), fully WITHIN the widget's own existing
+        # bounds (no size/margin change at all -- QPainter already clips
+        # to the widget's real rect automatically, so nothing ever wants
+        # to paint outside size=(w,h) again, and the dirty rect Qt hands
+        # to Windows can never mismatch the widget's real size).
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
+        card_rect = self.rect()
+        # Hand-rolled soft shadow, entirely within the widget's own rect
+        # (QPainter clips to it automatically) -- several progressively
+        # larger, more transparent rounded rects behind the card, offset
+        # the same way the old QGraphicsDropShadowEffect was configured
+        # (see __init__ for why that effect had to go). The shadow now
+        # bleeds INTO the card's own margin area instead of outside the
+        # widget -- a minor cosmetic trade-off for a tooltip this small,
+        # in exchange for the widget never asking Qt/Windows to paint
+        # outside its own real size again.
+        shadow_color = _qc("bg.window", 150)
+        steps = 10
+        for i in range(steps, 0, -1):
+            grow = int(self._SHADOW_BLUR * i / steps)
+            alpha = max(1, int(shadow_color.alpha() * (1 - i / steps) * 0.5))
+            c = QColor(shadow_color)
+            c.setAlpha(alpha)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(c)
+            shadow_rect = card_rect.translated(self._SHADOW_OFFSET).adjusted(-grow, -grow, grow, grow)
+            painter.drawRoundedRect(shadow_rect, 13 + grow, 13 + grow)
         painter.setPen(QPen(_qc("fg.muted", 90), 1))
         painter.setBrush(_qc("bg.surface", 235))
-        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 13, 13)
+        painter.drawRoundedRect(card_rect.adjusted(0, 0, -1, -1), 13, 13)
         painter.end()
 
     def show_at(self, global_pos: QPoint):
@@ -11957,6 +12001,10 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         status_key: str,
         status_text: str,
     ):
+        logger.debug(
+            "DAEVANION DEBUG DaevanionNodeTooltip.set_node called with name=%r grade_key=%r cost=%r level=%r status_key=%r",
+            name, grade_key, cost, level, status_key,
+        )
         self._grade_label.setText(grade_label.upper())
         _set_data_color(self._grade_label, "item_grade", grade_key)
         self._title_label.setText(name)
@@ -11993,6 +12041,25 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         self._status_label.style().polish(self._status_label)
 
         self.adjustSize()
+        # Explicit repaint after the setText() calls above (Windows-
+        # Compositing-Bug: mehrere Nodes durchgehen zeigte weiterhin nur
+        # den Inhalt des ZUERST gehoverten Nodes, obwohl die Position via
+        # show_at() korrekt der Maus folgte -- User-reported 2026-09-23,
+        # per Screenshot). adjustSize() allein genügt hier NICHT: dieses
+        # Fenster ist ein WA_TranslucentBackground-Top-Level mit
+        # Qt.ToolTip-Flag, das schon sichtbar ist, wenn set_node() erneut
+        # aufgerufen wird (zwei aufeinanderfolgende Hovers rufen
+        # set_node()+show_at() OHNE ein hide() dazwischen -- siehe
+        # _daevanion_on_node_hovered). Windows' DWM-Compositing cached für
+        # ein bereits sichtbares, transparentes Popup-Fenster offenbar den
+        # zuletzt gerenderten Frame und übernimmt neue Kind-Widget-Texte
+        # nicht zuverlässig von selbst, auch wenn setText() intern schon
+        # ein scheduled update() der Labels auslöst -- ein explizites
+        # repaint() auf dem TOP-LEVEL-Fenster selbst erzwingt den
+        # synchronen Neuzeichnen-Durchlauf, den die einzelnen
+        # QLabel.update()-Aufrufe alleine offenbar nicht zuverlässig
+        # durchsetzen konnten.
+        self.repaint()
 
 
 class SkillInfoTooltip(_TranslucentCardTooltip):
@@ -15413,6 +15480,30 @@ class LoadoutWindow(QMainWindow):
         self._daevanion_show_tooltip(node)
 
     def _daevanion_show_tooltip(self, node: dict):
+        logger.debug(
+            "DAEVANION DEBUG _daevanion_show_tooltip called with node id=%r name=%r grade=%r r=%r c=%r effects=%r",
+            node.get("id"), node.get("name"), node.get("g"), node.get("r"), node.get("c"), node.get("e"),
+        )
+        try:
+            self._daevanion_show_tooltip_impl(node)
+        except Exception:
+            # User-reported, 2026-09-23 (third round): the tooltip freezes
+            # on the first-hovered node's content ONLY for "common"/white
+            # nodes, with zero flicker -- exactly what an UNCAUGHT
+            # exception raised partway through this Qt slot would look
+            # like from the outside (Qt slots swallow exceptions, printing
+            # a traceback to stderr that nobody sees in a frozen/no-console
+            # build, then simply abort the call -- leaving the tooltip in
+            # whatever state the LAST successful call left it in, forever,
+            # on every subsequent hover that hits the same code path).
+            # Logging here turns that silent abort into a visible,
+            # diagnosable traceback instead of two more rounds of guessing.
+            logger.exception(
+                "DAEVANION DEBUG _daevanion_show_tooltip_impl raised for node id=%r name=%r grade=%r",
+                node.get("id"), node.get("name"), node.get("g"),
+            )
+
+    def _daevanion_show_tooltip_impl(self, node: dict):
         board = self._daevanion_current_board()
         if not board:
             return
@@ -15442,8 +15533,31 @@ class LoadoutWindow(QMainWindow):
         else:
             status_key, status_text = "available", _t("arm_daevanion_status_available")
 
+        # Force a real hide/show cycle when the tooltip is already visible,
+        # NOT just a repaint (User-reported, 2026-09-23, second round: the
+        # repaint() fix in DaevanionNodeTooltip.set_node() DID visibly fix
+        # something -- the grid's own hover BORDER updates correctly on
+        # every node change now -- but the tooltip's own CONTENT stayed
+        # constant, frozen on the very first node hovered this session, on
+        # every subsequent hover, with zero flicker/delay/intermittent
+        # correctness. That "not even once correct again" constancy,
+        # despite an explicit repaint() call executing every time, points
+        # to Windows' DWM literally reusing a cached composited surface for
+        # this specific kind of window (WA_TranslucentBackground top-level,
+        # Qt.ToolTip flag, layered/per-pixel-alpha) rather than a Qt-side
+        # dirty-region problem repaint() could fix -- Qt's own backing
+        # store WAS updated (repaint() is synchronous), but the OS
+        # compositor's layered-window surface apparently wasn't told to
+        # refresh unless the window transitions hidden->visible again.
+        # hide() here forces exactly that transition on every hover.
+        if self._daevanion_tooltip.isVisible():
+            self._daevanion_tooltip.hide()
         self._daevanion_tooltip.set_node(
             name, grade_label, grade_key, node["cost"], node["lvl"], effect_rows, status_key, status_text
+        )
+        logger.debug(
+            "DAEVANION DEBUG _daevanion_show_tooltip about to show_at; grade=%r grade_label=%r grade_key=%r name=%r tooltip_id=%r",
+            node.get("g"), grade_label, grade_key, name, id(self._daevanion_tooltip),
         )
         self._daevanion_tooltip.show_at(QCursor.pos())
 

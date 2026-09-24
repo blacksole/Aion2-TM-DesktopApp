@@ -172,6 +172,56 @@ def snapshot_corrupt(path) -> Path | None:
         return None
 
 
+#: Key a legacy flat Standard Templates list migrates into (see
+#: ``migrate_standard_templates`` below). A plain literal, not a translated
+#: UI string -- this is a JSON *dict key*, not something ever shown as-is,
+#: and keeping it language-independent means a profile opened under a
+#: different app language still finds its own migrated set.
+LEGACY_STANDARD_SET_NAME = "Default"
+
+
+def migrate_standard_templates(raw) -> dict:
+    """Normalize a profile's ``standard_templates`` into the named-set shape.
+
+    Old shape (<= 2.0.x, one un-named starter pack per profile)::
+
+        {"tasks": [...], "shopping": [...]}
+
+    New shape (multiple named, renamable Standard Template Sets -- Planner
+    task "Mehrere benennbare/umbenennbare Standard-Template-Sets",
+    freigegeben 2026-09-23)::
+
+        {"tasks": {"SetName": [...], ...}, "shopping": {"SetName": [...], ...}}
+
+    Defensive per-kind, not a one-shot destructive script: a profile saved
+    by a NEWER version already in the dict shape must pass through
+    unchanged (round-trips through this function every load), while an
+    older flat list wraps into one set named ``LEGACY_STANDARD_SET_NAME`` so
+    nothing the user built under the old "single starter pack" model is
+    lost. Tolerant of a missing/malformed ``raw`` (returns an empty-but-
+    valid two-kind skeleton) since callers (MainWindow, the Default-profile
+    Sync source) both already treat this as non-critical convenience data.
+    """
+    result: dict = {"tasks": {}, "shopping": {}}
+    if not isinstance(raw, dict):
+        return result
+    for kind in ("tasks", "shopping"):
+        value = raw.get(kind)
+        if isinstance(value, dict):
+            # Already named sets -- keep only well-shaped entries (a set's
+            # value must be a list of dict template entries) rather than
+            # trusting arbitrary on-disk content blindly.
+            result[kind] = {
+                str(name): list(entries)
+                for name, entries in value.items()
+                if isinstance(entries, list)
+            }
+        elif isinstance(value, list) and value:
+            # Legacy flat list -- becomes this profile's one starter set.
+            result[kind] = {LEGACY_STANDARD_SET_NAME: list(value)}
+    return result
+
+
 def stamp_schema(data: dict) -> dict:
     """Set the schema version on `data` (idempotent) and return it."""
     data["schema_version"] = SCHEMA_VERSION

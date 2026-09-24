@@ -46,7 +46,7 @@ from PySide6.QtWidgets import (  # noqa: E402  (after the offscreen pin)
 
 from core import fonts  # noqa: E402
 from core import theme as theme_module  # noqa: E402
-from core.theme import THEMES, build_qss  # noqa: E402
+from core.theme import THEMES, build_palette, build_qss  # noqa: E402
 
 
 def _label(text: str, object_name: str = "") -> QLabel:
@@ -214,6 +214,15 @@ def render(out_dir: Path) -> list[Path]:
 
     written: list[Path] = []
     for theme in THEMES:
+        # MASTER §4-1: the app applies BOTH the sheet and the palette
+        # (main.py / MainWindow.apply_theme).  Grabbing with the sheet alone
+        # left every pixel the QSS does not explicitly paint on Fusion's
+        # default light grey -- the gallery's own ground came out #efefef,
+        # so translucent tokens (`accent.soft` pills) composited over grey
+        # and read as washed-out light chips instead of the dark-ground
+        # wash the app really draws.  A preview that does not apply the
+        # palette is not previewing what ships.
+        app.setPalette(build_palette(theme))
         gallery = build_gallery()
         gallery.setStyleSheet(build_qss(theme, asset_path=ROOT.as_posix()))
         gallery.adjustSize()

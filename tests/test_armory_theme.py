@@ -41,7 +41,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QDeadlineTimer, QEventLoop
-from PySide6.QtGui import QBrush, QColor, QImage, QStandardItem
+from PySide6.QtGui import QBrush, QColor, QCursor, QImage, QStandardItem
 from PySide6.QtWidgets import QWidget
 
 from core import theme
@@ -730,6 +730,53 @@ def test_the_daevanion_status_pill_is_styled(qapp, armory_module, windows):
                 f"status={state}: no {token} pixels on the pill"
             )
     finally:
+        tooltip.deleteLater()
+        _settle(qapp, 80)
+
+
+def test_daevanion_tooltip_content_updates_across_consecutive_hovers(qapp, armory_module, windows):
+    """User-reported, 2026-09-23 (Screenshots): sweeping the mouse across
+    several Daevanion nodes kept showing only the FIRST hovered node's
+    content, even though the tooltip's on-screen POSITION correctly
+    followed the mouse the whole time.
+
+    That split (position right, content stuck) points straight at
+    DaevanionBoardCanvas.mouseMoveEvent -> _daevanion_on_node_hovered ->
+    _daevanion_show_tooltip, which calls set_node() + show_at() on the
+    SAME already-visible tooltip instance for every new node -- there is
+    no hide() between hovers. show_at() always calls move()+show(), which
+    Qt/Windows always processes; set_node()'s setText() calls only
+    scheduled the child QLabels for an update AT SOME POINT, on an
+    already-visible, WA_TranslucentBackground top-level (Qt.ToolTip flag)
+    window -- exactly the situation where Windows' DWM compositing can
+    reuse an already-composited frame for the popup and never actually
+    repaint the new label text into it, since nothing forced a synchronous
+    redraw. Grabbing the widget's pixels (not just reading .text()) is the
+    point: .text() reflects what setText() was TOLD, not what actually got
+    painted onto that composited surface -- a stale-content bug like this
+    would otherwise slip through checks that only assert on the Qt object
+    model."""
+    tooltip = armory_module.DaevanionNodeTooltip()
+    try:
+        tooltip.set_node("First Node", "Legend", "Legend", 3, 10, [], "available", "OK")
+        tooltip.show_at(QCursor.pos())
+        _settle(qapp, 80)
+        first_image = tooltip._title_label.grab().toImage()
+
+        tooltip.set_node("Second Node", "Legend", "Legend", 3, 10, [], "available", "OK")
+        tooltip.show_at(QCursor.pos())
+        _settle(qapp, 80)
+
+        assert tooltip._title_label.text() == "Second Node"
+        second_image = tooltip._title_label.grab().toImage()
+        assert second_image != first_image, (
+            "the title label's PAINTED pixels are unchanged across two "
+            "consecutive hovers, even though .text() reports the new node "
+            "-- the widget was told about the new content but never "
+            "actually repainted it (the reported bug)"
+        )
+    finally:
+        tooltip.hide()
         tooltip.deleteLater()
         _settle(qapp, 80)
 

@@ -8,10 +8,12 @@ from pathlib import Path
 import pytest
 
 from core.persistence import (
+    LEGACY_STANDARD_SET_NAME,
     SCHEMA_VERSION,
     atomic_write_json,
     backup_path,
     load_json_with_fallback,
+    migrate_standard_templates,
     schema_version_of,
     stamp_schema,
 )
@@ -215,3 +217,68 @@ def test_write_then_load_roundtrip_survives_a_corruption(tmp_path):
     assert status == "bak"
     assert data["tasks"] == ["one"]
     assert schema_version_of(data) == SCHEMA_VERSION
+
+
+# --------------------------------------------------------------------------
+# migrate_standard_templates -- flat-list Standard Templates -> named sets
+# (Planner: "Mehrere benennbare/umbenennbare Standard-Template-Sets")
+# --------------------------------------------------------------------------
+
+def test_legacy_flat_lists_become_one_named_default_set():
+    old_shape = {
+        "tasks": [{"title": "Daily Quest"}],
+        "shopping": [{"title": "Manastone"}],
+    }
+
+    migrated = migrate_standard_templates(old_shape)
+
+    assert migrated == {
+        "tasks": {LEGACY_STANDARD_SET_NAME: [{"title": "Daily Quest"}]},
+        "shopping": {LEGACY_STANDARD_SET_NAME: [{"title": "Manastone"}]},
+    }
+
+
+def test_already_named_dict_shape_passes_through_unchanged():
+    new_shape = {
+        "tasks": {"Weekday": [{"title": "A"}], "Weekend": [{"title": "B"}]},
+        "shopping": {"Weekday": [{"title": "C"}]},
+    }
+
+    migrated = migrate_standard_templates(new_shape)
+
+    assert migrated == new_shape
+    # Independent copies, not the same list objects -- a caller mutating
+    # the migrated result must never reach back into the caller's own dict.
+    assert migrated["tasks"]["Weekday"] is not new_shape["tasks"]["Weekday"]
+
+
+def test_empty_or_missing_lists_migrate_to_an_empty_named_dict():
+    assert migrate_standard_templates({"tasks": [], "shopping": []}) == {
+        "tasks": {}, "shopping": {},
+    }
+    assert migrate_standard_templates({}) == {"tasks": {}, "shopping": {}}
+
+
+def test_missing_or_malformed_raw_returns_an_empty_skeleton():
+    assert migrate_standard_templates(None) == {"tasks": {}, "shopping": {}}
+    assert migrate_standard_templates([]) == {"tasks": {}, "shopping": {}}
+    assert migrate_standard_templates("nonsense") == {"tasks": {}, "shopping": {}}
+
+
+def test_malformed_set_entries_are_dropped_not_crashed_on():
+    # A set's value must be a list -- a stray non-list value under a set
+    # name (hand-edited/corrupted profile) is dropped rather than raising.
+    raw = {"tasks": {"Good": [{"title": "A"}], "Bad": "not a list"}, "shopping": {}}
+
+    migrated = migrate_standard_templates(raw)
+
+    assert migrated == {"tasks": {"Good": [{"title": "A"}]}, "shopping": {}}
+
+
+def test_migration_is_idempotent():
+    old_shape = {"tasks": [{"title": "X"}], "shopping": []}
+
+    once = migrate_standard_templates(old_shape)
+    twice = migrate_standard_templates(once)
+
+    assert once == twice

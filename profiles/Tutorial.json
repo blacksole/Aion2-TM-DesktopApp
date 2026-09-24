@@ -1,13 +1,15 @@
 {
     "profile_name": "Tutorial",
-    "theme": "inferno",
+    "theme": "emerald",
     "language": "en",
     "settings": {
         "daily_reset_time": "09:00",
         "weekly_reset_day": "Mo",
         "weekly_reset_time": "09:00",
-        "season_reset_datetime": "2026-11-04 09:00",
+        "season_reset_datetime": "2026-11-09 09:00",
+        "season_enabled": false,
         "show_events": true,
+        "reduce_motion": false,
         "shugo_enabled": true,
         "shugo_start_minute": 15,
         "shugo_interval_text": "30min",
@@ -27,8 +29,9 @@
             "Custom Timer"
         ],
         "custom_timers": [],
-        "last_daily_reset_date": "2026-09-09",
-        "last_weekly_reset_date": "2026-09-07",
+        "last_daily_reset_date": "2026-09-23",
+        "last_weekly_reset_date": "2026-09-21",
+        "last_season_reset_datetime": null,
         "missed_daily_activities": [
             {
                 "card_id": "6d775c52-d1a2-4932-b794-f48ac14387a3",
@@ -39,6 +42,16 @@
                 "card_id": "b9f085c9-0f31-4506-840b-e17aa1269c91",
                 "title": "Nightmare",
                 "character": ""
+            },
+            {
+                "card_id": "33b95fff-3ad8-4728-b04d-131849718847",
+                "title": "Task for A",
+                "character": "CharA"
+            },
+            {
+                "card_id": "92fb822c-5106-4b8e-9652-b121a6862076",
+                "title": "Task for B",
+                "character": "CharB"
             }
         ],
         "overlay_visible_sections": {
@@ -49,7 +62,8 @@
             "skill_priority": false,
             "gear_priority": false
         },
-        "overlay_char_filter": "CharA"
+        "overlay_char_filter": "CharA",
+        "todo_char_filter": ""
     },
     "tasks": {
         "tasks": [
@@ -190,8 +204,8 @@
                     "icon": "character",
                     "status": "locked",
                     "completed": false,
-                    "x": 0,
-                    "y": 0,
+                    "x": 3780.0,
+                    "y": 4206.0,
                     "children": [],
                     "character_items": []
                 },
@@ -202,8 +216,8 @@
                     "icon": "character",
                     "status": "locked",
                     "completed": false,
-                    "x": 0,
-                    "y": 0,
+                    "x": 4310.0,
+                    "y": 4206.0,
                     "children": [],
                     "character_items": []
                 }
@@ -796,262 +810,1337 @@
         }
     ],
     "standard_templates": {
-        "tasks": [
-            {
-                "title": "Sanctum (2800gs+)",
-                "location": "Raid",
-                "schedule": "weekly",
-                "priority": "high",
-                "is_general": true,
-                "id": "d0000101-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Daily Commands",
-                "location": "Journal",
-                "schedule": "daily",
-                "priority": "high",
-                "is_general": true,
-                "id": "d0000102-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Ascension Trial",
-                "location": "Direct Entry",
-                "schedule": "weekly",
-                "priority": "high",
-                "is_general": true,
-                "id": "d0000103-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Nightmare",
-                "location": "Direct Entry",
-                "schedule": "daily",
-                "priority": "high",
-                "is_general": true,
-                "id": "d0000104-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Monsterfarm 30min",
-                "location": "",
-                "schedule": "daily",
-                "priority": "middle",
-                "is_general": false,
-                "id": "cb3f8c83-3ee4-41eb-a128-d6ef4d1aaa20"
-            },
-            {
-                "title": "Secret Dungeons (all)",
-                "location": "",
-                "schedule": "season",
-                "priority": "middle",
-                "is_general": false,
-                "id": "76306781-cad0-4ac1-acd6-061160a04044"
-            },
-            {
-                "title": "Daily Dungeon",
-                "location": "Wind Breeze Store",
-                "schedule": "weekly",
-                "priority": "middle",
-                "is_general": false,
-                "id": "6a504c77-9b46-4f14-b3ab-e1267beff69a"
-            },
-            {
-                "title": "Duty Daily Command",
-                "location": "Journal",
-                "schedule": "daily",
-                "priority": "low",
-                "is_general": false,
-                "id": "73d6ae62-d9d6-429d-89c1-145c27d7eaff"
-            },
-            {
-                "title": "Expedition: Conquest",
-                "location": "",
-                "schedule": "daily",
-                "priority": "middle",
-                "is_general": false,
-                "id": "b205346d-f3ce-4ec8-97b4-daa9c71f3bbb"
-            },
-            {
-                "title": "Transcendence",
-                "location": "",
-                "schedule": "daily",
-                "priority": "middle",
-                "is_general": false,
-                "id": "e6935153-f5a7-4511-aa37-9dc8b485a3a5"
-            },
-            {
-                "title": "Battlefield",
-                "location": "",
-                "schedule": "weekly",
-                "priority": "middle",
-                "is_general": false,
-                "id": "dcd6ee87-0ddf-4850-8d82-6224552ce8f6"
-            },
-            {
-                "title": "Craft: Odyle Energy",
-                "location": "Morph Method",
-                "schedule": "weekly",
-                "priority": "middle",
-                "is_general": false,
-                "id": "5923ca56-749e-4edb-bca9-dc56745ea80b"
-            },
-            {
-                "title": "Spacetime Rift",
-                "location": "",
-                "schedule": "daily",
-                "priority": "middle",
-                "is_general": false,
-                "id": "298b9b1b-b7e2-4351-9e33-aa55fac16474"
-            }
-        ],
-        "shopping": [
-            {
-                "title": "Odyle",
-                "location": "Windbreeze Store",
-                "schedule": "weekly",
-                "priority": "high",
-                "is_general": false,
-                "price": "100",
-                "currency": "kinah",
-                "id": "d0000005-e5f6-7890-abcd-ef1234567800",
-                "amount": "1"
-            },
-            {
-                "title": "Resurrection Stone",
-                "location": "Windbreeze Store",
-                "schedule": "weekly",
-                "priority": "high",
-                "is_general": false,
-                "price": "0",
-                "currency": "kinah",
-                "id": "d0000006-e5f6-7890-abcd-ef1234567800",
-                "amount": "1"
-            },
-            {
-                "title": "Entry Tickets: Daily Dungeon",
-                "location": "Windbreeze Store",
-                "schedule": "daily",
-                "priority": "middle",
-                "is_general": false,
-                "price": "100",
-                "currency": "kinah",
-                "id": "d0000007-e5f6-7890-abcd-ef1234567800",
-                "amount": "1"
-            },
-            {
-                "title": "Instant Clear Ticket: Daily Dungeon",
-                "location": "Windbreeze Weekly Shop",
-                "schedule": "weekly",
-                "priority": "middle",
-                "is_general": false,
-                "price": "30",
-                "currency": "kinah",
-                "id": "d0000008-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Instant Clear Ticket: Nightmare",
-                "location": "Windbreeze Weekly Shop",
-                "schedule": "weekly",
-                "priority": "middle",
-                "is_general": false,
-                "price": "30",
-                "currency": "kinah",
-                "id": "d0000009-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Soul Crystal",
-                "location": "Windbreeze Weekly Shop",
-                "schedule": "weekly",
-                "priority": "low",
-                "is_general": false,
-                "price": "1",
-                "currency": "kinah",
-                "id": "d0000010-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Daevanion Crystal: Ariel",
-                "location": "Nightmare Store",
-                "schedule": "season",
-                "priority": "high",
-                "is_general": false,
-                "price": "6,4",
-                "currency": "nightmare",
-                "id": "d0000022-e5f6-7890-abcd-ef1234567800",
-                "amount": "1",
-                "character": "",
-                "_from_import": false
-            },
-            {
-                "title": "Soul Crystal (Bound)",
-                "location": "Weekly Nightmare Store",
-                "schedule": "weekly",
-                "priority": "high",
-                "is_general": false,
-                "price": "50",
-                "currency": "nightmare",
-                "id": "d0000032-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Soul Crystal (Bound)",
-                "location": "Shugo Store",
-                "schedule": "weekly",
-                "priority": "high",
-                "is_general": false,
-                "price": "20",
-                "currency": "shugo",
-                "id": "d0000038-e5f6-7890-abcd-ef1234567800"
-            },
-            {
-                "title": "Abyss Command (Bound)",
-                "location": "Abyss Command Shop",
-                "schedule": "weekly",
-                "priority": "high",
-                "is_general": false,
-                "price": "15",
-                "currency": "kinah",
-                "id": "d0000039-e5f6-7890-abcd-ef1234567800",
-                "amount": "1",
-                "character": "",
-                "_from_import": false
-            },
-            {
-                "title": "Abyss Command: Proficiency (Bound)",
-                "location": "Abyss Command Shop",
-                "schedule": "weekly",
-                "priority": "high",
-                "is_general": false,
-                "price": "37,5",
-                "currency": "kinah",
-                "id": "d0000040-e5f6-7890-abcd-ef1234567800",
-                "amount": "1",
-                "character": "",
-                "_from_import": false
-            },
-            {
-                "title": "Abyss Command: Elite (Bound)",
-                "location": "Abyss Command Shop",
-                "schedule": "weekly",
-                "priority": "middle",
-                "is_general": false,
-                "price": "75",
-                "currency": "kinah",
-                "id": "d0000041-e5f6-7890-abcd-ef1234567800",
-                "amount": "1",
-                "character": "",
-                "_from_import": false
-            },
-            {
-                "title": "Abyss Command: Special Mission (Bound)",
-                "location": "Abyss Command Shop",
-                "schedule": "weekly",
-                "priority": "middle",
-                "is_general": false,
-                "price": "150",
-                "currency": "kinah",
-                "id": "d0000042-e5f6-7890-abcd-ef1234567800",
-                "amount": "1",
-                "character": "",
-                "_from_import": false
-            }
-        ]
+        "tasks": {
+            "Test1": [
+                {
+                    "title": "Sanctum (2800gs+)",
+                    "location": "Raid",
+                    "schedule": "weekly",
+                    "priority": "high",
+                    "is_general": true,
+                    "id": "d0000101-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Daily Commands",
+                    "location": "Journal",
+                    "schedule": "daily",
+                    "priority": "high",
+                    "is_general": true,
+                    "id": "d0000102-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Ascension Trial",
+                    "location": "Direct Entry",
+                    "schedule": "weekly",
+                    "priority": "high",
+                    "is_general": true,
+                    "id": "d0000103-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Nightmare",
+                    "location": "Direct Entry",
+                    "schedule": "daily",
+                    "priority": "high",
+                    "is_general": true,
+                    "id": "d0000104-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Monsterfarm 30min",
+                    "location": "",
+                    "schedule": "daily",
+                    "priority": "middle",
+                    "is_general": false,
+                    "id": "cb3f8c83-3ee4-41eb-a128-d6ef4d1aaa20"
+                },
+                {
+                    "title": "Secret Dungeons (all)",
+                    "location": "",
+                    "schedule": "season",
+                    "priority": "middle",
+                    "is_general": false,
+                    "id": "76306781-cad0-4ac1-acd6-061160a04044"
+                },
+                {
+                    "title": "Daily Dungeon",
+                    "location": "Wind Breeze Store",
+                    "schedule": "weekly",
+                    "priority": "middle",
+                    "is_general": false,
+                    "id": "6a504c77-9b46-4f14-b3ab-e1267beff69a"
+                },
+                {
+                    "title": "Duty Daily Command",
+                    "location": "Journal",
+                    "schedule": "daily",
+                    "priority": "low",
+                    "is_general": false,
+                    "id": "73d6ae62-d9d6-429d-89c1-145c27d7eaff"
+                },
+                {
+                    "title": "Expedition: Conquest",
+                    "location": "",
+                    "schedule": "daily",
+                    "priority": "middle",
+                    "is_general": false,
+                    "id": "b205346d-f3ce-4ec8-97b4-daa9c71f3bbb"
+                },
+                {
+                    "title": "Transcendence",
+                    "location": "",
+                    "schedule": "daily",
+                    "priority": "middle",
+                    "is_general": false,
+                    "id": "e6935153-f5a7-4511-aa37-9dc8b485a3a5"
+                },
+                {
+                    "title": "Battlefield",
+                    "location": "",
+                    "schedule": "weekly",
+                    "priority": "middle",
+                    "is_general": false,
+                    "id": "dcd6ee87-0ddf-4850-8d82-6224552ce8f6"
+                },
+                {
+                    "title": "Craft: Odyle Energy",
+                    "location": "Morph Method",
+                    "schedule": "weekly",
+                    "priority": "middle",
+                    "is_general": false,
+                    "id": "5923ca56-749e-4edb-bca9-dc56745ea80b"
+                },
+                {
+                    "title": "Spacetime Rift",
+                    "location": "",
+                    "schedule": "daily",
+                    "priority": "middle",
+                    "is_general": false,
+                    "id": "298b9b1b-b7e2-4351-9e33-aa55fac16474"
+                }
+            ],
+            "testr2": []
+        },
+        "shopping": {
+            "Default": [
+                {
+                    "title": "Odyle",
+                    "location": "Windbreeze Store",
+                    "schedule": "weekly",
+                    "priority": "high",
+                    "is_general": false,
+                    "price": "100",
+                    "currency": "kinah",
+                    "id": "d0000005-e5f6-7890-abcd-ef1234567800",
+                    "amount": "1"
+                },
+                {
+                    "title": "Resurrection Stone",
+                    "location": "Windbreeze Store",
+                    "schedule": "weekly",
+                    "priority": "high",
+                    "is_general": false,
+                    "price": "0",
+                    "currency": "kinah",
+                    "id": "d0000006-e5f6-7890-abcd-ef1234567800",
+                    "amount": "1"
+                },
+                {
+                    "title": "Entry Tickets: Daily Dungeon",
+                    "location": "Windbreeze Store",
+                    "schedule": "daily",
+                    "priority": "middle",
+                    "is_general": false,
+                    "price": "100",
+                    "currency": "kinah",
+                    "id": "d0000007-e5f6-7890-abcd-ef1234567800",
+                    "amount": "1"
+                },
+                {
+                    "title": "Instant Clear Ticket: Daily Dungeon",
+                    "location": "Windbreeze Weekly Shop",
+                    "schedule": "weekly",
+                    "priority": "middle",
+                    "is_general": false,
+                    "price": "30",
+                    "currency": "kinah",
+                    "id": "d0000008-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Instant Clear Ticket: Nightmare",
+                    "location": "Windbreeze Weekly Shop",
+                    "schedule": "weekly",
+                    "priority": "middle",
+                    "is_general": false,
+                    "price": "30",
+                    "currency": "kinah",
+                    "id": "d0000009-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Soul Crystal",
+                    "location": "Windbreeze Weekly Shop",
+                    "schedule": "weekly",
+                    "priority": "low",
+                    "is_general": false,
+                    "price": "1",
+                    "currency": "kinah",
+                    "id": "d0000010-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Daevanion Crystal: Ariel",
+                    "location": "Nightmare Store",
+                    "schedule": "season",
+                    "priority": "high",
+                    "is_general": false,
+                    "price": "6,4",
+                    "currency": "nightmare",
+                    "id": "d0000022-e5f6-7890-abcd-ef1234567800",
+                    "amount": "1",
+                    "character": "",
+                    "_from_import": false
+                },
+                {
+                    "title": "Soul Crystal (Bound)",
+                    "location": "Weekly Nightmare Store",
+                    "schedule": "weekly",
+                    "priority": "high",
+                    "is_general": false,
+                    "price": "50",
+                    "currency": "nightmare",
+                    "id": "d0000032-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Soul Crystal (Bound)",
+                    "location": "Shugo Store",
+                    "schedule": "weekly",
+                    "priority": "high",
+                    "is_general": false,
+                    "price": "20",
+                    "currency": "shugo",
+                    "id": "d0000038-e5f6-7890-abcd-ef1234567800"
+                },
+                {
+                    "title": "Abyss Command (Bound)",
+                    "location": "Abyss Command Shop",
+                    "schedule": "weekly",
+                    "priority": "high",
+                    "is_general": false,
+                    "price": "15",
+                    "currency": "kinah",
+                    "id": "d0000039-e5f6-7890-abcd-ef1234567800",
+                    "amount": "1",
+                    "character": "",
+                    "_from_import": false
+                },
+                {
+                    "title": "Abyss Command: Proficiency (Bound)",
+                    "location": "Abyss Command Shop",
+                    "schedule": "weekly",
+                    "priority": "high",
+                    "is_general": false,
+                    "price": "37,5",
+                    "currency": "kinah",
+                    "id": "d0000040-e5f6-7890-abcd-ef1234567800",
+                    "amount": "1",
+                    "character": "",
+                    "_from_import": false
+                },
+                {
+                    "title": "Abyss Command: Elite (Bound)",
+                    "location": "Abyss Command Shop",
+                    "schedule": "weekly",
+                    "priority": "middle",
+                    "is_general": false,
+                    "price": "75",
+                    "currency": "kinah",
+                    "id": "d0000041-e5f6-7890-abcd-ef1234567800",
+                    "amount": "1",
+                    "character": "",
+                    "_from_import": false
+                },
+                {
+                    "title": "Abyss Command: Special Mission (Bound)",
+                    "location": "Abyss Command Shop",
+                    "schedule": "weekly",
+                    "priority": "middle",
+                    "is_general": false,
+                    "price": "150",
+                    "currency": "kinah",
+                    "id": "d0000042-e5f6-7890-abcd-ef1234567800",
+                    "amount": "1",
+                    "character": "",
+                    "_from_import": false
+                }
+            ]
+        }
     },
-    "build_planner": null
+    "build_planner": {
+        "character_class": "Chanter",
+        "character_race": "Asmodae",
+        "current_build_name": "2nd test",
+        "active_gear_types": [
+            "Neutral",
+            "PvE"
+        ],
+        "stat_priority_profiles": {
+            "PvE": {
+                "Angreifer": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": []
+                },
+                "Verteidiger": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": []
+                },
+                "Support": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": []
+                }
+            },
+            "PvP": {
+                "Angreifer": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": []
+                },
+                "Verteidiger": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": []
+                },
+                "Support": {
+                    "weapon": [
+                        "Weapon Damage Boost",
+                        "Combat Speed",
+                        "Damage Boost",
+                        "Might",
+                        "Precision",
+                        "Attack",
+                        "Multi-hit Chance"
+                    ],
+                    "helmet": [
+                        "Attack increase",
+                        "Smite",
+                        "Attack",
+                        "Endurance",
+                        "Incoming Heal"
+                    ],
+                    "shoulder": [
+                        "Critical Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "torso": [
+                        "Damage Boost",
+                        "Attack",
+                        "Endurance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "gloves": [
+                        "Combat Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "pants": [
+                        "Damage Tolerance",
+                        "Attack increase",
+                        "Attack",
+                        "Perfect Chance",
+                        "Endurance"
+                    ],
+                    "boots": [
+                        "Move Speed",
+                        "Attack",
+                        "Perfect Chance",
+                        "Defense increase",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "jewelry": [
+                        "Attack",
+                        "Accuracy",
+                        "Critical Hit"
+                    ],
+                    "ring": [
+                        "Attack"
+                    ],
+                    "bracelet": []
+                }
+            }
+        },
+        "monolith_level": 0,
+        "skill_levels": {},
+        "skill_arcana_wish": {},
+        "skill_active_specs": {},
+        "current_skill_build_name": "TestPvP",
+        "skill_builds_data": {
+            "": {
+                "Default": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
+                }
+            },
+            "gladiator": {
+                "Default": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
+                }
+            },
+            "chanter": {
+                "Default": {
+                    "priority": {
+                        "active": [
+                            null
+                        ],
+                        "passive": [
+                            null
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
+                },
+                "TestPvE": {
+                    "priority": {
+                        "active": [
+                            "18010000",
+                            "18090000",
+                            "18100000",
+                            "18060000"
+                        ],
+                        "passive": [
+                            "18710000",
+                            "18750000",
+                            "18720000"
+                        ],
+                        "stigma": [
+                            "18700000"
+                        ]
+                    },
+                    "arcana_cards": {
+                        "Chalice": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18100000",
+                                    "level": 4
+                                },
+                                {
+                                    "skill_id": "18090000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18010000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18080000",
+                                    "level": 1
+                                }
+                            ]
+                        },
+                        "Compass": {
+                            "theme": "Magic",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18060000",
+                                    "level": 4
+                                },
+                                {
+                                    "skill_id": "18300000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18210000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18200000",
+                                    "level": 1
+                                }
+                            ]
+                        },
+                        "Bell": {
+                            "theme": "Vigor",
+                            "grade": "Unique",
+                            "slots": [
+                                {
+                                    "skill_id": "18710000",
+                                    "level": 3
+                                },
+                                {
+                                    "skill_id": "18750000",
+                                    "level": 2
+                                },
+                                {
+                                    "skill_id": "18730000",
+                                    "level": 1
+                                },
+                                {
+                                    "skill_id": "18770000",
+                                    "level": 1
+                                }
+                            ]
+                        }
+                    }
+                },
+                "TestPvP": {
+                    "priority": {
+                        "active": [
+                            "18080000",
+                            "18290000",
+                            "18040000",
+                            "18210000"
+                        ],
+                        "passive": [
+                            "18720000",
+                            "18740000"
+                        ],
+                        "stigma": [
+                            null
+                        ]
+                    },
+                    "arcana_cards": {}
+                }
+            }
+        },
+        "equip_builds_data": {
+            "": {
+                "Default": {
+                    "equipped": {},
+                    "substats": {},
+                    "enchant": {},
+                    "philosopher_stone": {},
+                    "priority": {},
+                    "priority_progress": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
+                }
+            },
+            "gladiator": {
+                "Default": {
+                    "equipped": {},
+                    "substats": {},
+                    "enchant": {},
+                    "philosopher_stone": {},
+                    "priority": {
+                        "weapon": [
+                            null
+                        ],
+                        "guard": [
+                            null
+                        ],
+                        "helm": [
+                            null
+                        ],
+                        "shoulder": [
+                            null
+                        ],
+                        "torso": [
+                            null
+                        ],
+                        "gloves": [
+                            null
+                        ],
+                        "legs": [
+                            null
+                        ],
+                        "shoes": [
+                            null
+                        ],
+                        "cloak": [
+                            null
+                        ],
+                        "earrings": [
+                            null
+                        ],
+                        "necklace": [
+                            null
+                        ],
+                        "ring": [
+                            null
+                        ]
+                    },
+                    "priority_progress": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
+                }
+            },
+            "chanter": {
+                "Default": {
+                    "equipped": {},
+                    "substats": {},
+                    "enchant": {},
+                    "philosopher_stone": {},
+                    "priority": {},
+                    "priority_progress": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
+                },
+                "Test Equip 1": {
+                    "equipped": {
+                        "MainHand": {
+                            "id": 110820001,
+                            "name": "Noble Dragon Lord Staff",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WP_ST_0110_T05.png",
+                            "grade": "Epic",
+                            "options": [
+                                "PvE Damage Boost 5%",
+                                "Accuracy 75",
+                                "Block 125",
+                                "Attack 436 ~ 600",
+                                "Critical Hit 100"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Staff",
+                            "classNames": [
+                                "Chanter"
+                            ]
+                        },
+                        "Torso": {
+                            "id": 210120001,
+                            "name": "Noble Dragon Lord Breastplate",
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_GM_0071_T06_Torso.png",
+                            "grade": "Epic",
+                            "options": [
+                                "HP 305",
+                                "Defense 534",
+                                "PvE Damage Tolerance 2.5%"
+                            ],
+                            "favorite": false,
+                            "tradable": true,
+                            "categoryName": "Top"
+                        }
+                    },
+                    "substats": {
+                        "MainHand": []
+                    },
+                    "enchant": {
+                        "MainHand": 0
+                    },
+                    "philosopher_stone": {
+                        "MainHand": false
+                    },
+                    "priority": {
+                        "weapon": [
+                            null
+                        ],
+                        "guard": [
+                            null
+                        ],
+                        "helm": [
+                            null
+                        ],
+                        "shoulder": [
+                            null
+                        ],
+                        "torso": [
+                            null
+                        ],
+                        "gloves": [
+                            null
+                        ],
+                        "legs": [
+                            null
+                        ],
+                        "shoes": [
+                            null
+                        ],
+                        "cloak": [
+                            null
+                        ],
+                        "earrings": [
+                            null
+                        ],
+                        "necklace": [
+                            null
+                        ],
+                        "ring": [
+                            null
+                        ]
+                    },
+                    "priority_progress": {},
+                    "linked_skill_build": "TestPvP",
+                    "linked_genius_build": null
+                },
+                "2nd test": {
+                    "equipped": {
+                        "Wings1": {
+                            "categoryName": "Wings Equip",
+                            "favorite": false,
+                            "grade": "Unique",
+                            "id": 40100300,
+                            "image": "https://assets.playnccdn.com/static-aion2-gamedata/resources/Icon_WingA_003.png",
+                            "name": "Brawler Wings (Asmodae)",
+                            "options": [
+                                "FPMax: 200",
+                                "DamageTolerance: 1"
+                            ],
+                            "tradable": false
+                        }
+                    },
+                    "substats": {
+                        "Wings1": []
+                    },
+                    "enchant": {
+                        "Wings1": 0
+                    },
+                    "philosopher_stone": {
+                        "Wings1": false
+                    },
+                    "priority": {
+                        "weapon": [
+                            null
+                        ],
+                        "guard": [
+                            null
+                        ],
+                        "helm": [
+                            null
+                        ],
+                        "shoulder": [
+                            null
+                        ],
+                        "torso": [
+                            null
+                        ],
+                        "gloves": [
+                            null
+                        ],
+                        "legs": [
+                            null
+                        ],
+                        "shoes": [
+                            null
+                        ],
+                        "cloak": [
+                            null
+                        ],
+                        "earrings": [
+                            null
+                        ],
+                        "necklace": [
+                            null
+                        ],
+                        "ring": [
+                            null
+                        ]
+                    },
+                    "priority_progress": {},
+                    "linked_skill_build": null,
+                    "linked_genius_build": null
+                }
+            }
+        },
+        "daevanion_active": {
+            "s:11": [
+                "110113"
+            ],
+            "s:81": [
+                "810113"
+            ]
+        },
+        "daevanion_filter_checked": {
+            "s:gladiator": [],
+            "s:chanter": []
+        },
+        "genius_builds_data": {
+            "Default": {
+                "Cogni": {
+                    "1": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                },
+                "Fera": {
+                    "1": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                },
+                "Natura": {
+                    "1": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                },
+                "Varian": {
+                    "1": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "DefenseBonus",
+                        "value": 160,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                },
+                "Special": {
+                    "1": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "2": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "3": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "4": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "5": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "6": {
+                        "stat": "DamageTolerance",
+                        "value": 2.4,
+                        "locked": false
+                    },
+                    "7": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "8": {
+                        "stat": "AttackBonus",
+                        "value": 16,
+                        "locked": false
+                    },
+                    "9": {
+                        "stat": "DamageBoost",
+                        "value": 2.4,
+                        "locked": false
+                    }
+                }
+            }
+        },
+        "current_genius_build_name": "Default",
+        "pantheon_slots": {
+            "Artwork1": "",
+            "Artwork2": "",
+            "Artwork3": "",
+            "Artwork4": "",
+            "Artwork5": "",
+            "Artwork6": "",
+            "Artwork7": "",
+            "Artwork8": "",
+            "Artwork9": "",
+            "Artwork10": "",
+            "Artwork11": "",
+            "Artwork12": "",
+            "Statue1": "",
+            "Statue2": "",
+            "Statue3": "",
+            "Statue4": "",
+            "Colossus1": ""
+        }
+    },
+    "schema_version": 1
 }

@@ -150,10 +150,15 @@ class TasksPage(QWidget):
     # "+Add" while the Standards tab is active (User-Wunsch, 2026-09-09:
     # "Falls Templates bereits zugewiesen sind, sollen alle templates aus
     # dem Standard hinzugefügt werden, die nicht bereits zugewiesen sind")
-    # -- carries just the target character; MainWindow owns the actual
-    # "which titles does this character already have" check, since only it
-    # can see the live task/shopping lists.
-    standard_apply_requested = Signal(str)
+    # -- carries the target character AND which named Standard Template
+    # Set to pull from (Planner: "Mehrere benennbare/umbenennbare
+    # Standard-Template-Sets", Nachtrag 2026-09-23: tobia's screenshot
+    # showed this main tab view had no set-switcher at all, only the
+    # separate TemplateDialog did -- see self._std_set_combo below).
+    # MainWindow owns the actual "which titles does this character
+    # already have" check, since only it can see the live task/shopping
+    # lists.
+    standard_apply_requested = Signal(str, str)
     sort_requested = Signal(object)  # tab_key, sort_key
     filter_changed = Signal(str)
     char_filter_changed = Signal(str)
@@ -271,7 +276,12 @@ class TasksPage(QWidget):
         # amount haben"), so those three controls lock (disabled, shown for
         # reference only) whenever the Standards tab is active.
         self._template_source = "templates"
-        self._standard_templates: dict = {"tasks": [], "shopping": []}
+        self._standard_templates: dict = {"tasks": {}, "shopping": {}}
+        # Which named set std_set_combo currently shows, per kind -- kept
+        # even while the OTHER tab/kind is active, so switching Tasks <->
+        # Shopping (or Standards <-> Templates and back) doesn't reset a
+        # choice the user already made for the tab they're not looking at.
+        self._std_set_selected: dict = {"tasks": None, "shopping": None}
 
         self.source_tab_row = QHBoxLayout()
         self.source_tab_row.setSpacing(3)
@@ -419,6 +429,34 @@ class TasksPage(QWidget):
         self.no_templates_hint = QLabel(self.tr(self.language, "no_templates_hint"))
         self.no_templates_hint.setObjectName("subtitle")
 
+        # Standard Template Set switcher (Planner: "Mehrere benennbare/
+        # umbenennbare Standard-Template-Sets", Nachtrag 2026-09-23).
+        # First tried living next to the "★ Standard Templates" tab
+        # button up in source_tab_row -- tobia's screenshot showed that
+        # squeezed tight against the tab, reading as an overlapping mess
+        # rather than its own control (Nachtrag 2026-09-23 #2). Moved
+        # into the add-row proper as its own control (tobia's suggestion
+        # A). Placed RIGHT of the character dropdown, not left (Nachtrag
+        # 2026-09-23 #3: with the character combo's own shrink-to-content
+        # sizing sitting to its right, this combo's own shrink-to-content
+        # width made the row visibly reflow -- shift set/shift-back --
+        # whenever the selected set name's length changed or the combo
+        # was momentarily empty; swapping the two combos AND giving this
+        # one setFixedWidth put it at a constant slot regardless of
+        # content). Same row rules as every other add-row control
+        # (_add_row_tail/_update_add_row_wrap wraps it to the second line
+        # together with them once the window gets narrow). Only shown
+        # once there is more than one set to choose from (0 or 1 sets:
+        # nothing to pick, so it stays hidden and out of the way, same
+        # zero-friction rule MainWindow._pick_standard_set already uses
+        # elsewhere) AND only while the Standards tab itself is active
+        # (see update_input_mode).
+        self.std_set_combo = QComboBox()
+        self.std_set_combo.setObjectName("priorityInput")
+        self.std_set_combo.setFixedWidth(140)
+        self.std_set_combo.setVisible(False)
+        self.std_set_combo.currentIndexChanged.connect(self._on_std_set_selected)
+
         # Character selector — shopping only
         self.char_input = QComboBox()
         self.char_input.setObjectName("priorityInput")
@@ -484,6 +522,7 @@ class TasksPage(QWidget):
         add_layout.addWidget(self.template_combo, 3)
         add_layout.addWidget(self.no_templates_hint)
         add_layout.addWidget(self.char_input, 2)
+        add_layout.addWidget(self.std_set_combo)
         add_layout.addWidget(self.amount_input)
 
         # Hidden by default
@@ -509,6 +548,7 @@ class TasksPage(QWidget):
             (self.template_combo, 3),
             (self.no_templates_hint, 0),
             (self.char_input, 2),
+            (self.std_set_combo, 0),
             (self.amount_input, 0),
             (self.add_btn, 0),
         ]
@@ -787,6 +827,44 @@ class TasksPage(QWidget):
         self.template_combo.blockSignals(False)
         self.template_combo.lineEdit().setPlaceholderText(placeholder)
 
+    def _refresh_std_set_combo(self, std_sets: dict | None):
+        """Rebuilds std_set_combo for the CURRENT tab's named Standard
+        Template Sets (Planner Nachtrag 2026-09-23: this main tab view had
+        no way to pick which set is active, only the separate
+        TemplateDialog did). Hidden outright for 0-or-1 sets (nothing to
+        pick), same zero-friction rule as MainWindow._pick_standard_set.
+        Preserves the previously selected set for this kind across
+        rebuilds when it still exists; otherwise falls back to the first
+        set."""
+        if not std_sets or len(std_sets) < 2:
+            self.std_set_combo.setVisible(False)
+            if std_sets:
+                # Exactly one set: still record it as "selected" so
+                # update_input_mode's source_list lookup above finds it,
+                # even though the combo itself stays hidden.
+                self._std_set_selected[self.active_tab] = next(iter(std_sets))
+            return
+        names = list(std_sets.keys())
+        current = self._std_set_selected.get(self.active_tab)
+        if current not in names:
+            current = names[0]
+            self._std_set_selected[self.active_tab] = current
+        self.std_set_combo.blockSignals(True)
+        self.std_set_combo.clear()
+        for name in names:
+            self.std_set_combo.addItem(name, name)
+        idx = self.std_set_combo.findData(current)
+        self.std_set_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.std_set_combo.blockSignals(False)
+        self.std_set_combo.setVisible(True)
+
+    def _on_std_set_selected(self, _index: int):
+        name = self.std_set_combo.currentData()
+        if name is None:
+            return
+        self._std_set_selected[self.active_tab] = name
+        self.update_input_mode()
+
     def _set_template_source(self, source: str):
         """Swaps the Template dropdown between the normal catalog and
         Standard Templates (User-Wunsch, 2026-09-09, after a preview
@@ -804,11 +882,26 @@ class TasksPage(QWidget):
         is_template_mode = is_shopping or is_tasks
         is_standards = self._template_source == "standards"
 
-        # Repopulate combo for the active tab + source
+        # Repopulate combo for the active tab + source. Standard Templates
+        # are named-set dicts here ({"SetName": [...]}) -- the set switcher
+        # (std_set_combo) picks WHICH one this quick-add combo/placeholder
+        # and "+Add" (see emit_add_task's "standards" branch) actually
+        # operate on. Kept per-kind in self._std_set_selected so switching
+        # tabs and back doesn't lose the choice.
         if is_tasks:
-            source_list = self._standard_templates.get("tasks", []) if is_standards else self._task_templates
+            std_sets = self._standard_templates.get("tasks", {}) if is_standards else None
         elif is_shopping:
-            source_list = self._standard_templates.get("shopping", []) if is_standards else self._templates
+            std_sets = self._standard_templates.get("shopping", {}) if is_standards else None
+        else:
+            std_sets = None
+        self._refresh_std_set_combo(std_sets)
+        if std_sets is not None:
+            set_name = self._std_set_selected.get(self.active_tab)
+            source_list = std_sets.get(set_name, []) if set_name else []
+        elif is_tasks:
+            source_list = self._task_templates
+        elif is_shopping:
+            source_list = self._templates
         else:
             source_list = []
 
@@ -1015,7 +1108,8 @@ class TasksPage(QWidget):
         # task/shopping lists.
         if self._template_source == "standards":
             character = self.char_input.currentData() or ""
-            self.standard_apply_requested.emit(character)
+            set_name = self._std_set_selected.get(self.active_tab) or ""
+            self.standard_apply_requested.emit(character, set_name)
             self.char_input.setCurrentIndex(0)
             return
 
@@ -1120,7 +1214,7 @@ class TasksPage(QWidget):
             self.update_input_mode()
 
     def update_standard_templates(self, standard_templates: dict):
-        self._standard_templates = standard_templates or {"tasks": [], "shopping": []}
+        self._standard_templates = standard_templates or {"tasks": {}, "shopping": {}}
         if self._template_source == "standards":
             self.update_input_mode()
 
