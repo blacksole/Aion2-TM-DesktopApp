@@ -126,7 +126,9 @@ def _parse(path: Path):
 # 1. no German literal reaches a widget
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("path", _ui_files(), ids=lambda p: str(p.relative_to(UI_ROOT)))
+@pytest.mark.parametrize(
+    "path", _ui_files(), ids=lambda p: p.relative_to(UI_ROOT).as_posix()
+)
 def test_no_german_literal_is_set_on_a_widget(path):
     leaks = [
         f"{path.relative_to(UI_ROOT)}:{lineno} {call}({string!r})"
@@ -161,9 +163,17 @@ def test_the_scanner_ignores_a_translated_call_with_a_fallback():
 
 
 def test_the_scan_covers_the_files_this_change_touched():
-    scanned = {str(p.relative_to(UI_ROOT)) for p in _ui_files()}
+    # `as_posix()`, not `str()`: on Windows the latter yields
+    # "pages\\timers_page.py" while TOUCHED is written with forward slashes,
+    # so four of the five entries never matched and this guard failed for a
+    # path separator rather than for a real gap in coverage.
+    scanned = {p.relative_to(UI_ROOT).as_posix() for p in _ui_files()}
 
-    assert set(TOUCHED) <= scanned
+    missing = sorted(set(TOUCHED) - scanned)
+    assert not missing, (
+        "TOUCHED lists files the scan never reaches -- either they moved or "
+        f"the entry is stale: {missing}"
+    )
 
 
 # ---------------------------------------------------------------------------

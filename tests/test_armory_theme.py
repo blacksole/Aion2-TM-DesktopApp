@@ -42,7 +42,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QDeadlineTimer, QEventLoop
 from PySide6.QtGui import QBrush, QColor, QCursor, QImage, QStandardItem
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QAbstractItemView, QWidget
 
 from core import theme
 from tests.conftest import destroy_window
@@ -135,6 +135,38 @@ def _exact_pixels(image, color: str) -> int:
     words = array("I")
     words.frombytes(bytes(rgb32.constBits()))
     return words.count(0xFF000000 | (QColor(color).rgb() & 0xFFFFFF))
+
+
+def _near_pixels(image, color: str, tolerance: int = 40) -> int:
+    """Pixels within `tolerance` per channel of `color`.
+
+    Text is antialiased: a glyph in a thin font can be almost entirely edge
+    pixels, so an exact match counts a handful even when the colour is
+    plainly there (measured: 7 exact hits on a row rendering in visibly
+    correct #38bdf8, against blends like #33a9df).  Exactness is the right
+    test for a flat fill -- a border, a plate -- and the wrong one for a
+    glyph.
+
+    The tolerance stays far tighter than the failure it guards against: the
+    flattened case repaints the text in the view's foreground, which is a
+    light grey ~200 units away per channel, and the surfaces beneath are
+    darker still.  Nothing in that range can be mistaken for a rarity.
+    """
+    target = QColor(color)
+    red, green, blue = target.red(), target.green(), target.blue()
+    rgb32 = image.convertToFormat(QImage.Format_RGB32)
+    words = array("I")
+    words.frombytes(bytes(rgb32.constBits()))
+
+    hits = 0
+    for word in words:
+        if (
+            abs(((word >> 16) & 0xFF) - red) <= tolerance
+            and abs(((word >> 8) & 0xFF) - green) <= tolerance
+            and abs((word & 0xFF) - blue) <= tolerance
+        ):
+            hits += 1
+    return hits
 
 
 # ---------------------------------------------------------------------------
@@ -628,21 +660,37 @@ def test_a_rarity_foreground_survives_the_sheet(qapp, armory_module, windows):
     row[2].setText("QA Legend Blade")
     row[2].setForeground(QBrush(QColor(legend)))
     database.model.appendRow(row)
+    qa_index = database.model.rowCount() - 1
     try:
         _settle(qapp, 400)
         assert database.proxy.rowCount() > 0, "the QA row was filtered out of the view"
-        database.table.scrollToTop()
-        _settle(qapp, 120)
+
+        # Scroll to the QA row, not to the top.  `appendRow` puts it LAST in a
+        # model that carries the full catalogue (7140 rows with the filters
+        # off), so `scrollToTop()` framed rows 0..n and the row under test was
+        # never on screen -- measured: 0 Legend pixels at the top, 2304 once
+        # the view is scrolled to it.  The other rarity colours were visible
+        # the whole time, which is what rules out a flattening `color:` and
+        # makes this a positioning bug in the check rather than a finding.
+        qa_row = database.proxy.mapFromSource(database.model.index(qa_index, 2))
+        assert qa_row.isValid(), "the QA row is not reachable through the proxy"
+        database.table.scrollTo(qa_row, QAbstractItemView.ScrollHint.PositionAtCenter)
+        _settle(qapp, 200)
         image = database.table.viewport().grab().toImage()
-        hits = _exact_pixels(image, legend)
+        # Near, not exact: the row is text, and antialiased glyphs are mostly
+        # blend pixels -- see _near_pixels.
+        hits = _near_pixels(image, legend)
         assert hits > 20, (
             f"only {hits} pixels of the Legend colour in the table — a QSS "
             f"`color` on the item view has flattened setForeground() again "
             f"(User-reported 2026-08-29)"
         )
-        assert database.model.item(0, 2).foreground().color().name() == legend
+        assert database.model.item(qa_index, 2).foreground().color().name() == legend
     finally:
-        database.model.removeRow(0)
+        # Remove the row that was added, not row 0.  These windows are shared
+        # across the module, so dropping a catalogue row here left the other
+        # tests working on a model this test had quietly edited.
+        database.model.removeRow(qa_index)
 
 
 def test_the_equipped_item_plate_really_wears_the_rarity_ring(qapp, armory_module, windows):
