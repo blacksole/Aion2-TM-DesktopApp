@@ -45,6 +45,9 @@ ItemDatabase/data/
 # ── Discord announcement draft — internal, not part of the repo ───────────
 DISCORD.md
 
+# ── Branding guideline draft — internal, not part of the repo ─────────────
+BRANDING.md
+
 # ── Ad-hoc dev scratch scripts dropped in the repo root ───────────────────
 # Root-anchored on purpose: the old unanchored `test_*.py` pattern also
 # swallowed the real suite under tests/, so pytest files were invisible to

@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import shutil
 import urllib.request
@@ -12,13 +13,15 @@ from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextBrowser, QFrame, QScrollArea, QWidget, QButtonGroup,
+    QSizePolicy,
 )
 
 from core.app_logger import get_logger
 from core.update_checker import (
     decide_checksum_policy, parse_sha256_sidecar, safe_extract, verify_sha256,
 )
-from core.version import GITHUB_USER, GITHUB_REPO
+from core.version import GITHUB_USER, GITHUB_REPO, APP_VERSION
+from core.translations import tr
 
 logger = get_logger("update_dialog")
 
@@ -335,34 +338,115 @@ class UpdateDialog(QDialog):
         QApplication.instance().quit()
 
 
+def _changelog_path() -> Path:
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    else:
+        base = Path(__file__).resolve().parent.parent
+    return base / "CHANGELOG.md"
+
+
+def _parse_local_changelog() -> list[dict]:
+    """Reads the bundled CHANGELOG.md directly (newest version first, same
+    order it's written in) so every version that was ever written down
+    shows up here -- not just the ones that happened to get published as
+    an actual GitHub Release. In practice a release can lag behind its git
+    tag (User-reported, 2026-09-17: v2.0.6/v2.0.4 were tagged and built but
+    never separately published, so they silently never showed up here
+    when this only read GitHub's /releases list)."""
+    path = _changelog_path()
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8")
+    sections = re.split(r"(?m)^#\s+Version\s+", text)
+    entries = []
+    for section in sections[1:]:
+        lines = section.strip().splitlines()
+        if not lines:
+            continue
+        tag = lines[0].strip()
+        body = "\n".join(lines[1:]).strip()
+        # "Release Date: YYYY-MM-DD" (the format the 0.x/1.x entries already
+        # use) is the local fallback date for a version that never became
+        # its own GitHub Release (User-reported, 2026-09-24: v2.0.6/v2.0.4
+        # showed no date at all).  Taken out of the body so the notes don't
+        # repeat what the rail and header already show.
+        release_date = ""
+        date_match = _RELEASE_DATE_RE.search(body)
+        if date_match:
+            release_date = date_match.group(1)
+            body = _RELEASE_DATE_RE.sub("", body, count=1).strip()
+        entries.append({"tag": tag, "body": body, "release_date": release_date})
+    return entries
+
+
+# "Release Date: 2026-09-17" on a line of its own.
+_RELEASE_DATE_RE = re.compile(r"(?mi)^\s*Release Date:\s*(\d{4}-\d{2}-\d{2})\s*$\n?")
+
+# A hotfix is marked by a line that says only "Hotfix" (usually bold, see
+# the 2.0.5 entry) -- NOT by the word turning up somewhere in the notes.
+# The old substring check badged 2.0.6, whose notes merely mention that
+# "Hotfix releases are marked with a badge" (User-reported, 2026-09-24).
+_HOTFIX_MARK_RE = re.compile(r"(?mi)^\s*[*_]*\s*hotfix\s*[*_]*\s*$")
+
+
+def _is_hotfix(body: str) -> bool:
+    return bool(_HOTFIX_MARK_RE.search(body or ""))
+
+
 class _ChangelogFetcher(QThread):
-    """Fetches the last 3 non-draft releases (newest first) for the History
-    dialog below -- same GitHub /releases list endpoint UpdateChecker's own
-    include_prereleases path already uses, just keeping the first 3 entries
-    instead of only the first."""
-    fetched = Signal(list)   # list of {"tag", "body"} dicts
+    """Builds the full version history for the dialog below by reading the
+    bundled CHANGELOG.md (the single source of truth, always present and
+    always complete) and, best-effort, overlaying the real publish date
+    from GitHub's /releases list for whichever versions actually got
+    published there. A version missing from GitHub simply shows with no
+    date instead of not showing at all, and a totally failed GitHub fetch
+    (offline) still leaves the full local history visible with no dates."""
+    fetched = Signal(list)   # list of {"tag", "body", "published_at"} dicts
     failed = Signal()
 
     def run(self):
+        # Only the current "major line" (User-Wunsch, 2026-09-17: "immer
+        # bis zur letzten vollen Zahl" -- while the app sits on 2.0.x this
+        # means 2.0.0 upward, not every 1.x/0.x release ever made). Bumping
+        # to 3.0.0 later automatically narrows the window to 3.x.x with no
+        # code change needed here.
+        current_major = APP_VERSION.split(".")[0]
+        local_entries = [
+            e for e in _parse_local_changelog()
+            if e["tag"].split(".")[0] == current_major
+        ]
+
+        published_dates: dict[str, str] = {}
         try:
             req = urllib.request.Request(
                 _RELEASES_LIST_URL, headers={"User-Agent": "Aion2-TM-UpdateCheck"}
             )
             with urllib.request.urlopen(req, timeout=5) as resp:
                 releases = json.loads(resp.read())
-            entries = [
-                {
-                    "tag": (r.get("tag_name") or "").lstrip("v"),
-                    "body": r.get("body") or "",
-                    "published_at": r.get("published_at") or "",
-                }
-                for r in releases if not r.get("draft")
-            ][:3]
-            if entries:
-                self.fetched.emit(entries)
-            else:
-                self.failed.emit()
+            for r in releases:
+                if r.get("draft"):
+                    continue
+                tag = (r.get("tag_name") or "").lstrip("v")
+                published_dates[tag] = r.get("published_at") or ""
         except Exception:
+            pass
+
+        entries = [
+            {
+                "tag": e["tag"],
+                "body": e["body"],
+                # GitHub's real publish time wins; CHANGELOG.md's own
+                # "Release Date:" covers versions that were never published
+                # there (and the whole list when offline).
+                "published_at": published_dates.get(e["tag"], "") or e.get("release_date", ""),
+            }
+            for e in local_entries
+        ]
+
+        if entries:
+            self.fetched.emit(entries)
+        else:
             self.failed.emit()
 
 
@@ -380,14 +464,22 @@ class ChangelogHistoryDialog(QDialog):
     def __init__(self, parent=None, language: str = "en"):
         super().__init__(parent)
         self._language = language
-        self.setWindowTitle("Update-Verlauf")
+        self.setWindowTitle(tr(language, "changelog_dialog_title"))
         self.setObjectName("UpdateDialog")
-        # Wide enough that the left rail (fixed at 190px below, matching the
+        # Wide enough that the left rail (fixed at 212px below, matching the
         # approved mockup's ~176px rail) never has to fight the markdown
         # content area for space (User-reported, 2026-09-14, screenshot:
         # too narrow overall, clipping the rail's own version/date/badge).
-        self.setMinimumSize(820, 560)
-        self.resize(820, 620)
+        # Rail bumped from 190->212 (User-reported, 2026-09-17: a horizontal
+        # scrollbar appeared under the version buttons) -- once the rail
+        # became its own scrollable area (to fit the full version history),
+        # its slim 10px vertical scrollbar started eating into the same
+        # ~186px a #changelogVersionBtn needs (min-width 160px + padding +
+        # border), so 190px was no longer quite enough; +22px covers that
+        # with real breathing room. Dialog width grows by the same amount
+        # so the notes area on the right keeps its original width.
+        self.setMinimumSize(842, 560)
+        self.resize(842, 620)
         # Explicit close-button hint + a closeEvent override (User-reported,
         # 2026-09-14: the native titlebar "X" was visible but didn't
         # actually close the dialog) -- belt-and-suspenders since a plain
@@ -400,12 +492,13 @@ class ChangelogHistoryDialog(QDialog):
 
         self._sections: list[tuple[QPushButton, QWidget]] = []
         self._suppress_scroll_sync = False
+        self._load_more_btn: QPushButton | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 24, 28, 24)
         layout.setSpacing(16)
 
-        title = QLabel("Update-Verlauf")
+        title = QLabel(tr(language, "changelog_dialog_title"))
         title.setObjectName("updateDialogTitle")
         layout.addWidget(title)
 
@@ -423,20 +516,35 @@ class ChangelogHistoryDialog(QDialog):
         # a too-narrow rail) -- a QVBoxLayout alone has no width of its own
         # to constrain, so the whole rail column is wrapped in a QWidget
         # with a real fixed width, matching the approved mockup's ~176px
-        # rail plus a little breathing room for the HOTFIX badge.
+        # rail plus a little breathing room for the HOTFIX badge. The
+        # button list itself now lives in its own nested scroll area
+        # (User-Wunsch, 2026-09-17: show every version, not just the last
+        # 3), since a full local-changelog history can run well past what
+        # fits in the fixed dialog height; the "Versionen" title stays put
+        # outside that inner scroll so it never scrolls away.
+        rail_outer = QWidget()
+        rail_outer.setFixedWidth(212)
+        rail_outer_layout = QVBoxLayout(rail_outer)
+        rail_outer_layout.setContentsMargins(0, 0, 0, 0)
+        rail_outer_layout.setSpacing(8)
+        rail_title = QLabel(tr(language, "changelog_versions_label"))
+        rail_title.setObjectName("updateDialogNotesLabel")
+        rail_outer_layout.addWidget(rail_title)
+
+        rail_scroll = QScrollArea()
+        rail_scroll.setWidgetResizable(True)
+        rail_scroll.setFrameShape(QFrame.NoFrame)
         rail_container = QWidget()
-        rail_container.setFixedWidth(190)
         rail_label_col = QVBoxLayout(rail_container)
         rail_label_col.setContentsMargins(0, 0, 0, 0)
         rail_label_col.setSpacing(8)
-        rail_title = QLabel("Versionen")
-        rail_title.setObjectName("updateDialogNotesLabel")
-        rail_label_col.addWidget(rail_title)
+        rail_scroll.setWidget(rail_container)
+        rail_outer_layout.addWidget(rail_scroll, 1)
 
         self._rail_group = QButtonGroup(self)
         self._rail_group.setExclusive(True)
         self._rail_col = rail_label_col
-        body_row.addWidget(rail_container)
+        body_row.addWidget(rail_outer)
 
         self._scroll = QScrollArea()
         self._scroll.setObjectName("updateDialogNotes")
@@ -450,14 +558,14 @@ class ChangelogHistoryDialog(QDialog):
         self._scroll.verticalScrollBar().valueChanged.connect(self._on_scrolled)
         body_row.addWidget(self._scroll, 1)
 
-        self.status_label = QLabel("Lade Update-Verlauf …")
+        self.status_label = QLabel(tr(language, "changelog_loading"))
         self.status_label.setObjectName("updateDialogStatus")
         self.status_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.status_label)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
-        close_btn = QPushButton("Schließen")
+        close_btn = QPushButton(tr(language, "close"))
         close_btn.setObjectName("updateDialogLaterBtn")
         close_btn.clicked.connect(self.reject)
         btn_row.addWidget(close_btn)
@@ -473,14 +581,70 @@ class ChangelogHistoryDialog(QDialog):
         event.accept()
 
     def _on_failed(self):
-        self.status_label.setText("Update-Verlauf konnte nicht geladen werden.")
+        self.status_label.setText(tr(self._language, "changelog_load_failed"))
 
     def _on_fetched(self, entries: list[dict]):
         self.status_label.hide()
-        for i, entry in enumerate(entries):
+        # Only the current major line shows right away (User-Wunsch,
+        # 2026-09-17: "immer bis zur letzten vollen Zahl", e.g. 2.0.0
+        # upward while the app sits on 2.0.x) -- older major lines sit
+        # behind a "Load more" button appended below the visible list
+        # instead of being dropped entirely (User-Wunsch, same message:
+        # "darunter dann einen 'load more' einbauen, der dann den Rest
+        # anzeigt").
+        current_major = APP_VERSION.split(".")[0]
+        primary = [e for e in entries if e["tag"].split(".")[0] == current_major]
+        older = [e for e in entries if e["tag"].split(".")[0] != current_major]
+
+        for entry in primary:
+            self._add_entry(entry)
+
+        if older:
+            # No trailing stretch yet -- adding one now and another one
+            # after "Load more" reveals the rest would leave a dead
+            # expanding gap sitting between the two button groups (a
+            # QVBoxLayout stretch item stays wherever it was inserted).
+            # The stretch only ever gets added once, in whichever branch
+            # turns out to be the final state.
+            # A plain QPushButton(text) has no built-in word-wrap, so a
+            # longer translation (User-reported, 2026-09-17: a horizontal
+            # scrollbar reappeared) forces Qt's own single-line sizeHint
+            # calculation, which came out far wider than the rail (up to
+            # ~360px for the German text, measured directly -- nowhere
+            # close to what the padding/font CSS values alone would
+            # suggest). Built the same composite way #changelogVersionBtn
+            # already is elsewhere in this dialog: a fixed-width button
+            # with an embedded, word-wrapping QLabel, so its width is
+            # deterministic regardless of language/text length.
+            self._load_more_btn = QPushButton()
+            self._load_more_btn.setObjectName("changelogLoadMoreBtn")
+            self._load_more_btn.setFixedWidth(188)
+            load_more_layout = QVBoxLayout(self._load_more_btn)
+            load_more_layout.setContentsMargins(10, 8, 10, 8)
+            load_more_label = QLabel(tr(self._language, "changelog_load_more"))
+            load_more_label.setObjectName("changelogLoadMoreLabel")
+            load_more_label.setWordWrap(True)
+            load_more_label.setAlignment(Qt.AlignCenter)
+            load_more_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+            load_more_layout.addWidget(load_more_label)
+            self._load_more_btn.clicked.connect(lambda: self._on_load_more_clicked(older))
+            self._rail_col.addWidget(self._load_more_btn)
+        else:
+            self._rail_col.addStretch(1)
+
+    def _on_load_more_clicked(self, older: list[dict]):
+        self._rail_col.removeWidget(self._load_more_btn)
+        self._load_more_btn.deleteLater()
+        self._load_more_btn = None
+        for entry in older:
+            self._add_entry(entry)
+        self._rail_col.addStretch(1)
+
+    def _add_entry(self, entry: dict):
             tag, body = entry["tag"], entry["body"]
-            is_hotfix = "hotfix" in body.lower()
+            is_hotfix = _is_hotfix(body)
             date_str = _format_release_date(entry.get("published_at", ""), self._language)
+            is_first = not self._sections
 
             # Composite button content (User-Wunsch, 2026-09-14: version
             # number big/bold like a title, date small/muted underneath,
@@ -493,9 +657,9 @@ class ChangelogHistoryDialog(QDialog):
             btn = QPushButton()
             btn.setObjectName("changelogVersionBtn")
             btn.setCheckable(True)
-            btn.setChecked(i == 0)
+            btn.setChecked(is_first)
             if is_hotfix:
-                btn.setToolTip("Hotfix")
+                btn.setToolTip(tr(self._language, "changelog_hotfix_badge"))
             # A QPushButton with an embedded layout (needed for the two
             # differently-sized labels below) doesn't reliably grow to fit
             # that layout's own size hint the way a real button's text
@@ -512,25 +676,44 @@ class ChangelogHistoryDialog(QDialog):
             version_lbl = QLabel(f"v{tag}")
             version_lbl.setObjectName("changelogVersionBtnTitle")
             version_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-            btn_top_row.addWidget(version_lbl)
-            if is_hotfix:
-                small_tag = QLabel("HOTFIX")
-                small_tag.setObjectName("changelogHotfixBadge")
-                small_tag.setAttribute(Qt.WA_TransparentForMouseEvents)
-                btn_top_row.addWidget(small_tag)
+            # Fixed vertically, centred in the row (User-reported,
+            # 2026-09-24): without a date line underneath, the button's
+            # spare height used to be handed to this row, stretching the
+            # title and the HOTFIX badge to 38px -- the badge looked like a
+            # different, bigger control on 2.0.6 than on 2.0.5.
+            version_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            btn_top_row.addWidget(version_lbl, 0, Qt.AlignVCenter)
+            # The badge exists in EVERY row, hidden-but-sized where there is
+            # no hotfix: the top row is then always exactly as tall as it is
+            # with a badge, so every date line sits at the same y in every
+            # button (measured before: 6px lower on 2.0.5 than elsewhere).
+            small_tag = QLabel(tr(self._language, "changelog_hotfix_badge").upper())
+            small_tag.setObjectName("changelogHotfixBadge")
+            small_tag.setAttribute(Qt.WA_TransparentForMouseEvents)
+            badge_policy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            badge_policy.setRetainSizeWhenHidden(True)
+            small_tag.setSizePolicy(badge_policy)
+            small_tag.setVisible(is_hotfix)
+            btn_top_row.addWidget(small_tag, 0, Qt.AlignVCenter)
             btn_top_row.addStretch(1)
             btn_inner.addLayout(btn_top_row)
-            if date_str:
-                btn_date_lbl = QLabel(date_str)
-                btn_date_lbl.setObjectName("changelogVersionBtnDate")
-                btn_date_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-                btn_inner.addWidget(btn_date_lbl)
+            # The date line is ALWAYS there, even empty (tobia, 2026-09-24:
+            # "die Groesse wie mit dem Datum ist richtig") -- a version
+            # without a date keeps the same two-line layout instead of
+            # collapsing into a different, one-line button.
+            btn_date_lbl = QLabel(date_str or "\u00a0")
+            btn_date_lbl.setObjectName("changelogVersionBtnDate")
+            btn_date_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            btn_date_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            btn_inner.addWidget(btn_date_lbl)
+            btn_inner.addStretch(1)
             self._rail_group.addButton(btn)
             self._rail_col.addWidget(btn)
+            self._equalize_rail_buttons(btn)
 
             header_row = QHBoxLayout()
             header_row.setSpacing(8)
-            header = QLabel(f"Version {tag}")
+            header = QLabel(f"{tr(self._language, 'changelog_version_word')} {tag}")
             header.setObjectName("changelogVersionHeader")
             header_row.addWidget(header)
             # "Hotfix" badge (User-Wunsch, 2026-09-14) -- CHANGELOG.md marks
@@ -540,7 +723,7 @@ class ChangelogHistoryDialog(QDialog):
             # separate GitHub API field for this, so a plain case-
             # insensitive substring check is the only signal available.
             if is_hotfix:
-                hotfix_badge = QLabel("Hotfix")
+                hotfix_badge = QLabel(tr(self._language, "changelog_hotfix_badge"))
                 hotfix_badge.setObjectName("changelogHotfixBadge")
                 header_row.addWidget(hotfix_badge)
             header_row.addStretch(1)
@@ -558,7 +741,7 @@ class ChangelogHistoryDialog(QDialog):
             # converter (QLabel itself has no setMarkdown), matching what
             # QTextBrowser.setMarkdown does internally.
             doc = QTextDocument()
-            doc.setMarkdown(body or "_Keine Release Notes vorhanden._")
+            doc.setMarkdown(body or tr(self._language, "changelog_no_notes"))
             notes = QLabel()
             notes.setTextFormat(Qt.RichText)
             notes.setWordWrap(True)
@@ -576,7 +759,7 @@ class ChangelogHistoryDialog(QDialog):
                 date_lbl.setAlignment(Qt.AlignLeft)
                 section_layout.addWidget(date_lbl)
             section_layout.addWidget(notes)
-            if i > 0:
+            if not is_first:
                 divider = QFrame()
                 divider.setFrameShape(QFrame.HLine)
                 divider.setObjectName("updateDialogSep")
@@ -586,7 +769,26 @@ class ChangelogHistoryDialog(QDialog):
             btn.clicked.connect(lambda _c=False, s=section, b=btn: self._jump_to(s, b))
             self._sections.append((btn, section))
 
-        self._rail_col.addStretch(1)
+    def _equalize_rail_buttons(self, new_btn: QPushButton):
+        """Every version button gets the height of the tallest one.
+
+        A HOTFIX badge makes its row a few px taller than a bare version
+        number; with the old fixed 58px that squeezed the date underneath
+        (14px instead of 17px, measured).  Sizing all buttons to the tallest
+        content keeps the whole rail one height and nothing gets squeezed
+        (tobia, 2026-09-24: the layout WITH date is the reference)."""
+        buttons = [btn for btn, _section in self._sections] + [new_btn]
+        height = 58
+        for btn in buttons:
+            for child in btn.findChildren(QLabel):
+                child.ensurePolished()
+            btn.ensurePolished()
+            layout = btn.layout()
+            if layout is not None:
+                layout.invalidate()
+                height = max(height, layout.sizeHint().height())
+        for btn in buttons:
+            btn.setMinimumHeight(height)
 
     def _jump_to(self, section: QWidget, btn: QPushButton):
         self._suppress_scroll_sync = True

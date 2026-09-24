@@ -1,4 +1,29 @@
+# Version 2.0.8
+
+Release Date: 2026-09-22
+
+## ✨ New Features
+
+- **The app now runs natively on Linux** (from source for now — a packaged Linux build is still on the roadmap). Profiles, sounds, notifications, the system tray and "reveal in file manager" all use the right OS conventions automatically; see the README's new "Run on Linux" section for setup.
+- **The Armory landing page is now a live dashboard** instead of a static menu: it shows your current build at a glance (class, race, equipped slots, enchant range, Daevanion nodes, tracked skills) and a new **Recommendations** panel that points out specific gaps — a missing set piece, a substat that doesn't match your role — each with a "Why?" explanation of the reasoning behind it.
+- **A full visual refresh**: a new icon set replaces the old emoji-style glyphs everywhere in the app, and all 6 color themes (Abyss, Inferno, Emerald, Frostbite, Obsidian, Void) got a contrast and consistency pass so text and icons stay readable on every surface.
+- **Deleting a task or shopping entry now shows a 6-second "Undo" option** in the toast instead of deleting immediately.
+- **New keyboard shortcuts**: Ctrl+N focuses the add row, Ctrl+1/Ctrl+2 switch tabs, Ctrl+O opens the Overlay, Ctrl+S saves, and Delete removes the currently selected card.
+- Empty lists (no tasks, no shopping items, no timers) now show a proper placeholder with guidance instead of just blank space.
+
+## 🐛 Bug Fixes
+
+- **The Settings → Changelog "Update History" window always showed German text ("Update-Verlauf", "Versionen", etc.) regardless of the app's own language setting**, and only ever showed the last 3 versions that happened to be published as an actual GitHub Release — so a version like 2.0.6 or 2.0.4, tagged and built but never separately published, silently never appeared. The window now fully follows your language setting and shows every version in the current release line (2.0.0 onward) straight from the app's own bundled changelog, with a "Show older versions" button underneath for everything before that. The version list on the left was also slightly widened so its own scroll area no longer needs a horizontal scrollbar to show each version button.
+- **Profile saves are now crash- and power-loss-safe**: every save first writes to a temporary file and only replaces your real profile once that write fully succeeded, and a `.bak` backup of your last-known-good profile is kept alongside it. If a profile ever fails to load, the app now offers to recover from that backup instead of just failing.
+- **The updater now verifies the downloaded update file's integrity before installing it**, instead of trusting it unconditionally.
+- The add row (new task/shopping entry) no longer clips its text at narrower window widths — it wraps to a second line instead.
+- A handful of leftover German words (e.g. a hardcoded "T" in day countdowns) were showing up in the English and Russian versions of the app; everything now goes through the proper translation.
+
+---
+
 # Version 2.0.7
+
+Release Date: 2026-09-17
 
 ## ✨ New Features
 
@@ -11,6 +36,10 @@
 ---
 
 # Version 2.0.6
+
+Release Date: 2026-09-17
+
+**Hotfix**
 
 ## ✨ New Features
 
@@ -26,6 +55,8 @@
 
 # Version 2.0.5
 
+Release Date: 2026-09-14
+
 **Hotfix**
 
 ## 🐛 Bug Fixes
@@ -36,6 +67,8 @@
 
 # Version 2.0.4
 
+Release Date: 2026-09-14
+
 ## 🐛 Bug Fixes
 
 - **Build Planner: an already-open Property Priority editor could show stale skill names** after reordering the Priority List or switching to a different Arcana/Skill Planner build — it now refreshes live instead of only picking up the change the next time it's reopened.
@@ -45,6 +78,8 @@
 ---
 
 # Version 2.0.3
+
+Release Date: 2026-09-14
 
 ## ✨ New Features
 
@@ -63,6 +98,8 @@
 ---
 
 # Version 2.0.2
+
+Release Date: 2026-09-13
 
 ## ✨ New Features
 
@@ -83,6 +120,8 @@
 
 # Version 2.0.1
 
+Release Date: 2026-09-12
+
 ## ✨ New Features
 
 - **Cloak/Cape is now a real equipment slot in the Build Planner.** Previously the only genuine armor category with no way to equip it at all — it now shows up on the paperdoll, contributes to GearScore and stat totals like every other armor piece, and has its own tab in Quick Select and the Property Priority editor.
@@ -97,6 +136,8 @@
 ---
 
 # Version 2.0.0
+
+Release Date: 2026-09-12
 
 ## ✨ New Features
 

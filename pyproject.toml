@@ -1,7 +1,7 @@
 [project]
 name = "aion2-tm"
-version = "2.0.7"
-description = "Aion2 Task Manager — desktop companion for Aion 2 (tasks, timers, flow map, HUD overlay, Armory)"
+version = "2.0.8"
+description = "Aion 2 Companion — desktop companion for Aion 2 (tasks, timers, flow map, HUD overlay, Armory)"
 requires-python = ">=3.12,<3.15"
 dependencies = [
     "PySide6>=6.11,<6.12",

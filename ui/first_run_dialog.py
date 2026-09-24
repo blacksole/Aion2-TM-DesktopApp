@@ -18,7 +18,7 @@ class FirstRunDialog(QDialog):
         # language preference) has been loaded, so there's no language
         # signal to translate against anyway; English matches the app's
         # own actual default/fallback language for exactly that state.
-        self.setWindowTitle("Welcome to Aion2 TM")
+        self.setWindowTitle("Welcome to Aion 2 Companion")
         self.setObjectName("UpdateDialog")
         self.setFixedSize(480, 280)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
@@ -27,7 +27,7 @@ class FirstRunDialog(QDialog):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
 
-        title = QLabel("Welcome to Aion2 TM!")
+        title = QLabel("Welcome to Aion 2 Companion!")
         title.setObjectName("updateDialogTitle")
         layout.addWidget(title)
 
