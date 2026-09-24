@@ -25,72 +25,83 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Populate ItemDatabase/data (gitignored, regenerated at build time)
+        # ItemDatabase/data/ is deliberately gitignored (~14 MB of cached,
+        # regenerable shugo.gg/gamers4.life/questlog.gg API data -- not
+        # source) but "Aion2 TM.spec" bundles 13 specific files from it as
+        # PyInstaller datas, so the CI runner needs its own copy before
+        # PyInstaller runs. This mirrors what tobia does by hand locally
+        # before cutting a release. Order follows each script's own
+        # docstring ("Run after fetch_X.py" / "needs data/Y.json"):
+        # fetch_items/fetch_skills first (everything else's input), then
+        # the arcana/detail fetches that read them, then the three
+        # compute_*.py scripts last (they all read data/details/).
+        #
+        # bash's default `-eo pipefail` (GitHub Actions' bash step flags)
+        # already fails the whole step -- and the job -- the moment any
+        # one script exits non-zero, so a partially-populated data/ never
+        # silently reaches PyInstaller.
+        #
+        # retry(): shugo.gg/gamers4.life/questlog.gg are third-party sites
+        # this project doesn't control: one quick retry after a short pause
+        # absorbs a transient network hiccup without hiding a real, repeated
+        # failure (which still fails the job after the 2nd attempt, on
+        # purpose -- no silent skip of missing data).
+        shell: bash
+        working-directory: ItemDatabase
+        run: |
+          retry() {
+            "$@" && return 0
+            echo "  -> retrying once after a transient failure..."
+            sleep 5
+            "$@"
+          }
+
+          # Independent fetches -- no other fetch_*.py output required.
+          retry python fetch_items.py
+          retry python fetch_skills.py
+          retry python fetch_recipes.py
+          retry python fetch_dungeons.py
+          retry python fetch_daevanion_start.py
+          retry python fetch_daevanion_advanced.py
+          retry python fetch_pantheon_items.py
+          retry python fetch_wings_items.py
+
+          # Depend on the fetches above having already written their file.
+          retry python fetch_arcana_info.py          # needs data/items_all.json
+          retry python fetch_arcana_class_skills.py   # needs data/skills_all.json
+          retry python fetch_item_details.py          # needs data/items_all.json -> data/details/*.json
+
+          # compute_*.py: offline, read data/items_all.json + data/details/
+          # only -- no network, so no retry needed.
+          python compute_shop_items.py
+          python compute_dungeon_sets.py
+          python compute_stat_priority_options.py
+
       - name: Build executable (Onedir)
         run: |
           pyinstaller "Aion2 TM.spec" --clean --noconfirm
 
-      - name: Create ZIP
-        run: |
-          powershell Compress-Archive -Path "dist/Aion2 TM/*" -DestinationPath Aion2_TM.zip
-
-      - name: Create SHA-256 checksum
+      - name: TEST-BRANCH-ONLY -- verify bundled data files instead of releasing
+        # This step replaces the real ZIP/checksum/GitHub-Release steps on
+        # this throwaway developer/ci-release-data-fetch test branch only,
+        # so the CI test run proves PyInstaller actually bundled
+        # ItemDatabase/data/*.json without creating/overwriting a real
+        # GitHub Release under the v2.0.9 tag that already exists. Deleted
+        # again before this branch is ever considered for merging.
         shell: pwsh
         run: |
-          $hash = (Get-FileHash Aion2_TM.zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  Aion2_TM.zip" | Set-Content -Path Aion2_TM.zip.sha256 -Encoding ascii
-
-      - name: Extract changelog section
-        shell: python
-        run: |
-          import re
-          import os
-
-          # GITHUB_REF_NAME is the TAG on a tag push but the BRANCH under
-          # workflow_dispatch -- taking the version from it unconditionally
-          # made every manual run look for a "feat/xyz" changelog section and
-          # fall back to a bare "Release <branch>". core/version.py is the
-          # single source of truth whenever the ref is not a tag.
-          ref_type = os.environ.get("GITHUB_REF_TYPE", "")
-          ref_name = os.environ.get("GITHUB_REF_NAME", "")
-
-          if ref_type == "tag":
-              version = ref_name.lstrip("v")
-          else:
-              source = open("core/version.py", encoding="utf-8").read()
-              match = re.search(r"""^APP_VERSION\s*=\s*["']([^"']+)["']""", source, re.M)
-              version = match.group(1) if match else ref_name.lstrip("v")
-
-          tag = f"v{version}"
-
-          text = open("CHANGELOG.md", encoding="utf-8").read()
-          sections = re.split(r"(?m)^#\s+(?:Version\s+|Changelog\s+[–-]\s+Version\s+)", text)
-
-          notes = ""
-          for section in sections[1:]:
-              lines = section.strip().splitlines()
-              if lines and lines[0].strip() == version:
-                  notes = "\n".join(lines[1:]).strip()
-                  break
-
-          notes = re.sub(r"\n-{3,}\s*$", "", notes).strip()
-
-          if not notes:
-              notes = f"Release {tag}"
-
-          with open("release_notes.md", "w", encoding="utf-8") as f:
-              f.write(notes)
-
-          # Same derived tag for the release itself -- otherwise a manual run
-          # would name (and tag) the release after the branch too.
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-              f.write(f"RELEASE_TAG={tag}\n")
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "Aion2 Task Manager ${{ env.RELEASE_TAG }}"
-          tag_name: ${{ env.RELEASE_TAG }}
-          body_path: release_notes.md
-          files: |
-            Aion2_TM.zip
-            Aion2_TM.zip.sha256
+          $dataDir = "dist/Aion2 TM/_internal/ItemDatabase/data"
+          Get-ChildItem $dataDir -Filter *.json | ForEach-Object { Write-Host $_.Name $_.Length }
+          $required = @(
+            "items_all.json","recipes_all.json","skills_all.json","arcana_info.json",
+            "arcana_class_skills.json","dungeons_all.json","daevanion_boards_s.json",
+            "daevanion_boards_a.json","pantheon_items.json","wings_items.json",
+            "shop_items.json","dungeon_sets.json","stat_priority_options.json"
+          )
+          $missing = $required | Where-Object { -not (Test-Path (Join-Path $dataDir $_)) }
+          if ($missing) {
+            Write-Error "MISSING BUNDLED DATA FILES: $missing"
+            exit 1
+          }
+          Write-Host "ALL 13 DATA FILES PRESENT IN THE BUILT EXE FOLDER -- TEST PASSED"
