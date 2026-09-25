@@ -25,16 +25,9 @@ real font metrics, and the colours stay in the sheet.
 
 from __future__ import annotations
 
-import re
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QTextCharFormat
-from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QCalendarWidget,
-    QDateEdit,
-    QGraphicsDropShadowEffect,
-)
+from PySide6.QtWidgets import QAbstractItemView, QCalendarWidget, QDateEdit
 
 from core import fonts, theme
 
@@ -58,31 +51,6 @@ _CELL_PAD_V = "space_2"
 #: selector cannot: inside a widget stylesheet Qt matches types against the
 #: widget's children, not the widget.
 _OBJECT_NAME = "Aion2CalendarPopup"
-
-
-def _parse_shadow(value: str) -> tuple[int, int, QColor]:
-    """Pull blur, y-offset and alpha out of the `shadow.popup` token.
-
-    The token is a CSS shadow string -- offset, blur and a translucent
-    black -- because that is the form the QSS template needs.  Reading it
-    here keeps one definition instead of a second, silently diverging copy
-    in code.  Falls back to the Abyss geometry if the token is reshaped.
-    """
-    numbers = re.findall(r"(\d+(?:\.\d+)?)", value)
-    try:
-        dy = int(float(numbers[1]))
-        blur = int(float(numbers[2]))
-        # The rgba() tail of the token: three channels and an alpha.  Taken
-        # from the token rather than written out here, so the shadow has one
-        # definition (MASTER §4-3) instead of a copy that can drift.
-        red, green, blue = (int(float(n)) for n in numbers[3:6])
-        colour = QColor(red, green, blue)
-        colour.setAlphaF(float(numbers[6]))
-    except (IndexError, ValueError):  # pragma: no cover - token reshaped
-        fallback = QColor(theme.qcolor(theme.current_tokens(), "bg.window"))
-        fallback.setAlphaF(0.35)
-        return 18, 6, fallback
-    return blur, dy, colour
 
 
 def style_calendar_popup(date_edit: QDateEdit) -> QCalendarWidget | None:
@@ -180,16 +148,32 @@ def style_calendar_popup(date_edit: QDateEdit) -> QCalendarWidget | None:
 
     # --- lift the popup off the page ------------------------------------
     # MASTER §1 defines exactly one shadow, "reserved for popups/tooltips",
-    # and `shadow.popup` existed as a token that nothing ever applied.  This
-    # is the case it was written for: measured, `bg.overlay` on the card
-    # below it is 1.08-1.13:1 across the six themes -- a surface step that
-    # small cannot carry "this floats above the page" on its own, and the
-    # popup read as a hole punched in the settings card.
+    # and `bg.overlay` on the card below it is only 1.08-1.13:1 across the
+    # six themes -- a surface step that small cannot carry "this floats
+    # above the page" on its own, and the popup read as a hole punched in
+    # the settings card.
     #
-    # Qt cannot put a CSS box-shadow on a Qt::Popup (it has no compositing
-    # parent to draw into), so the depth is built from what a popup does
-    # have: a full-strength border in `border.strong` instead of `border`,
-    # plus a QGraphicsDropShadowEffect carrying the token's own geometry.
+    # Qt cannot put a CSS box-shadow on a Qt::Popup, so the depth is built
+    # from what a popup does have: a full-strength border in `border.strong`
+    # instead of `border`.
+    #
+    # NOT a QGraphicsDropShadowEffect (Apex review of PR #7, finding 9).
+    # An effect makes Qt render the widget through a pixmap and paint into a
+    # bounding rect EXPANDED by blur+offset -- which on Windows is exactly
+    # the "dirty rect larger than the window" condition that took three
+    # rounds to remove from the Daevanion tooltip
+    # (`_TranslucentCardTooltip.__init__` in ItemDatabase/app.py), and which
+    # here also clips the shadow to the container's own opaque rect so the
+    # lift mostly did not happen anyway.
+    #
+    # The tooltip's replacement -- reserve a margin band inside the widget
+    # and hand-paint `shadow.popup` into it, see `core.shadows` -- needs a
+    # WA_TranslucentBackground top-level whose paintEvent we own. This
+    # container is neither: QDateEdit creates it, shows it and paints it
+    # through WA_StyledBackground. Making it translucent and taking over its
+    # paint to gain a drop shadow would re-introduce the layered-window
+    # condition above on a SECOND surface, which is a bad trade for a
+    # 6px offset. The border is the depth cue here.
     #
     # The navigation bar is styled here too, not in the sheet: Qt builds its
     # month/year labels as QToolButtons that it paints through the *disabled*
@@ -237,9 +221,9 @@ def style_calendar_popup(date_edit: QDateEdit) -> QCalendarWidget | None:
 
     # The calendar is not the popup: QDateEdit puts it inside a container
     # window named `qt_datetimedit_calendar` (confirmed live -- the calendar
-    # itself reports isWindow() == False).  The edge and the shadow belong
-    # on that container, otherwise they are drawn inside a window whose own
-    # background still meets the page flush.
+    # itself reports isWindow() == False).  The edge belongs on that
+    # container, otherwise it is drawn inside a window whose own background
+    # still meets the page flush.
     container = calendar.parentWidget()
     if container is not None and container.isWindow():
         # A plain QWidget ignores a stylesheet background/border unless it
@@ -264,18 +248,6 @@ def style_calendar_popup(date_edit: QDateEdit) -> QCalendarWidget | None:
         if layout is not None:
             inset = tokens.border_width
             layout.setContentsMargins(inset, inset, inset, inset)
-        shadow_target = container
-    else:  # pragma: no cover - Qt changed the popup's shape
-        shadow_target = calendar
-
-    shadow = QGraphicsDropShadowEffect(shadow_target)
-    # Parsed from `shadow.popup` rather than retyped, so a change to the
-    # token moves the real shadow with it.
-    blur, dy, shadow_colour = _parse_shadow(tokens.shadow_popup)
-    shadow.setBlurRadius(blur)
-    shadow.setOffset(0, dy)
-    shadow.setColor(shadow_colour)
-    shadow_target.setGraphicsEffect(shadow)
 
     # --- days of the neighbouring months --------------------------------
     # Nothing to do here, and that is worth stating: Qt paints out-of-month
@@ -296,6 +268,12 @@ def calendar_needs_restyle() -> bool:
     Colours come from ``QTextCharFormat`` objects captured at call time, so
     unlike the stylesheet they do not follow a live theme switch on their
     own.  Kept as a named predicate so the call site reads as intent.
+
+    Wired into ``SettingsPage._refresh_active_button_styles`` -- the hook
+    that already runs right after ``MainWindow.apply_theme``. It was dead
+    until then (Apex review of PR #7, finding 10): the weekday/weekend/
+    header formats froze at construction-time colours and never followed a
+    theme switch.
     """
     return True
 
