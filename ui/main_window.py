@@ -938,6 +938,7 @@ class MainWindow(QMainWindow):
         self._build_planner_state = state
         page = getattr(self, "armory_page", None)
         if page is not None:
+            page.set_daevanion_start_ids(self._daevanion_start_ids())
             page.set_build_planner_state(state)
             page.set_recommendations(self._armory_recommendations(state))
 
@@ -1065,6 +1066,35 @@ class MainWindow(QMainWindow):
         except Exception:  # pragma: no cover - same reasoning as above
             logger.exception("Armory recommendations failed for the current build")
             return []
+
+    def _daevanion_start_ids(self) -> dict[str, str]:
+        """``{"<variant>:<board id>": start node id}`` for the dashboard.
+
+        Pushed into the page for the same reason the recommendations are:
+        the answer lives in the board data under ``ItemDatabase/data/`` and
+        ``ui/pages/armory_page.py`` imports neither that nor the engine.
+        Without it the page falls back to subtracting one per board, which
+        under-reports a board saved without its start node (Apex review of
+        PR #7, finding 8).
+
+        Cached: the board data cannot change while the app runs, and this
+        runs on every profile load and every planner close. Never raises --
+        a dashboard number is not worth an exception, and ``{}`` is exactly
+        the "not known" the page's fallback is written for.
+        """
+        cached = getattr(self, "_daevanion_start_id_cache", None)
+        if cached is not None:
+            return cached
+        start_ids: dict[str, str] = {}
+        try:
+            self._ensure_armory_engine_importable(self._armory_bundle_dir())
+            from armory_engine.daevanion import daevanion_start_id_by_board_key
+
+            start_ids = daevanion_start_id_by_board_key(self._armory_data_dir())
+        except Exception:  # pragma: no cover - same reasoning as the engine loader
+            logger.exception("Daevanion board data unreadable — node counts fall back")
+        self._daevanion_start_id_cache = start_ids
+        return start_ids
 
     def _refresh_armory_summary(self):
         """Re-read the live Build Planner into the dict, then the page.
@@ -1240,13 +1270,35 @@ class MainWindow(QMainWindow):
         window.raise_()
         window.activateWindow()
 
-    # LoadoutWindow.main_tabs index order (see ItemDatabase/app.py's
-    # main_tabs.addTab calls in LoadoutWindow.__init__): Equipment=0,
-    # Daevanion Board=1, Arcana=2, Skill Planner=3, Pantheon=4, Genius
-    # Insight=5. Named here so the Armory dashboard's per-card launchers
-    # below don't repeat bare index numbers.
+    # LoadoutWindow.main_tabs index order is a fact about
+    # ItemDatabase/app.py's own addTab calls, so it is READ from
+    # ``LoadoutWindow.TAB_*`` (see :meth:`_loadout_tab`) rather than copied.
+    # These two constants used to be that copy, and nothing held the pair
+    # together: reorder a tab over there and the Armory dashboard's cards
+    # silently landed on the wrong page (Apex review of PR #7, finding 7).
+    # They survive only as the last-resort fallback for the case where the
+    # module could not be loaded at all -- in which case no window opens
+    # either.
     _DAEVANION_BOARD_TAB = 1
     _SKILL_PLANNER_TAB = 3
+
+    def _loadout_tab(self, name: str, fallback: int) -> int:
+        """The Armory's own index for one of its Build Planner tabs.
+
+        ``name`` is a ``LoadoutWindow.TAB_*`` attribute name. The module is
+        always loaded by the time a launcher below runs
+        (``_ensure_item_database_window`` is called first), so the fallback
+        is genuinely a dead branch in practice -- it exists so that a
+        missing/renamed constant degrades to the old behaviour instead of
+        raising inside a click handler.
+        """
+        module = getattr(self, "_item_database_module", None)
+        loadout = getattr(module, "LoadoutWindow", None)
+        index = getattr(loadout, name, None)
+        if isinstance(index, int):
+            return index
+        logger.warning("LoadoutWindow.%s is unavailable — falling back to %d", name, fallback)
+        return fallback
 
     def open_build_planner_window(self):
         logger.debug("Opening Build Planner window")
@@ -1256,12 +1308,12 @@ class MainWindow(QMainWindow):
     def open_daevanion_board_window(self):
         logger.debug("Opening Build Planner window (Daevanion Board tab)")
         window = self._ensure_item_database_window()
-        window.open_loadout_window(tab=self._DAEVANION_BOARD_TAB)
+        window.open_loadout_window(tab=self._loadout_tab("TAB_DAEVANION", self._DAEVANION_BOARD_TAB))
 
     def open_skill_planner_window(self):
         logger.debug("Opening Build Planner window (Skill Planner tab)")
         window = self._ensure_item_database_window()
-        window.open_loadout_window(tab=self._SKILL_PLANNER_TAB)
+        window.open_loadout_window(tab=self._loadout_tab("TAB_SKILLS", self._SKILL_PLANNER_TAB))
 
     def open_crafting_calculator_window(self):
         logger.debug("Opening Crafting Calculator window")

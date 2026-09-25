@@ -16,7 +16,7 @@ from core.app_logger import get_log_path
 from core.platform import open_path, platform_placeholder_exe_path, reveal_in_file_manager
 from core.sound import list_system_wavs, play_wav
 from ui.widgets import icons
-from ui.widgets.calendar_popup import style_calendar_popup
+from ui.widgets.calendar_popup import calendar_needs_restyle, style_calendar_popup
 
 #: Item data marking the "Browse..." row of a notification-sound picker.
 SOUND_BROWSE_DATA = "__browse_wav__"
@@ -1054,7 +1054,18 @@ class SettingsPage(QWidget):
         haben immernoch den gleichen Stil wie das abyss Stil"). Called
         right after emitting theme_changed, since MainWindow's
         apply_theme() (connected to that signal) runs synchronously first
-        and updates self.window()'s "theme" property before this runs."""
+        and updates self.window()'s "theme" property before this runs.
+
+        Same story, same hook, for the calendar popup: its weekday/weekend/
+        header colours are QTextCharFormat objects captured when
+        style_calendar_popup() ran, and a QTextCharFormat follows no
+        stylesheet -- so without this they stayed on whichever theme was
+        active when the settings page was built (Apex review of PR #7,
+        finding 10; calendar_needs_restyle() was written for exactly this
+        call site and was never wired to one)."""
+        date_edit = getattr(self, "season_reset_date", None)
+        if date_edit is not None and calendar_needs_restyle():
+            style_calendar_popup(date_edit)
         for btn in getattr(self, "weekly_day_buttons", []):
             if btn.isChecked():
                 _apply_active_button_style(btn, True, "day")

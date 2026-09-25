@@ -811,7 +811,7 @@
     ],
     "standard_templates": {
         "tasks": {
-            "Test1": [
+            "Daily": [
                 {
                     "title": "Sanctum (2800gs+)",
                     "location": "Raid",
@@ -917,7 +917,7 @@
                     "id": "298b9b1b-b7e2-4351-9e33-aa55fac16474"
                 }
             ],
-            "testr2": []
+            "Weekly": []
         },
         "shopping": {
             "Default": [
