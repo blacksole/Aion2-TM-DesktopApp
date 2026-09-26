@@ -24,6 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget  # noqa: E402
 
 import ui.update_dialog as ud  # noqa: E402
+from tests.conftest import destroy_window  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -112,10 +113,14 @@ def dialog(qapp, monkeypatch):
     for _ in range(10):
         qapp.processEvents()
     yield dlg
+    # destroy_window() (not just deleteLater()+one processEvents()) pumps
+    # Qt's DeferredDelete queue until the tree is actually gone -- without
+    # it this fixture leaked ~416 live widgets across the suite (PR #8
+    # review, Voyd-star, 2026-09-25: budget is 150). host is a plain
+    # QWidget, not a MainWindow, so give destroy_window() a shape it
+    # tolerates: no HOST_WINDOW_ATTRIBUTES, no .close() of its own needed.
     dlg.close()
-    dlg.deleteLater()
-    host.deleteLater()
-    qapp.processEvents()
+    destroy_window(host)
 
 
 def _rail(dlg) -> dict[str, QPushButton]:
