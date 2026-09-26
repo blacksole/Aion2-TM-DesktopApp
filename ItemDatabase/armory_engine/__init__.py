@@ -34,6 +34,7 @@ Modules
 ``providers``   the disk-backed DetailProvider and the catalog DataBundle.
 ``score``       rank-derived role weights, stat coverage, substat alignment.
 ``recommend``   set completion, and the orchestrator the dashboard calls.
+``compare``     the Item Compare window's data contract + comparison builder.
 
 Stage 2 added the last three (audit §3.4 features #1 and #2).  They keep the
 rule: ``providers`` is the only module that touches the filesystem, and it
@@ -45,6 +46,7 @@ by name, which keeps the "where did this come from" answer one grep away.
 
 __all__ = [
     "arcana",
+    "compare",
     "daevanion",
     "enchant",
     "explain",

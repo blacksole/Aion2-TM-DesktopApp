@@ -197,9 +197,9 @@ class SettingsDialog(QDialog):
                 ("Abyss Neon", "abyss"),
                 ("Inferno Crimson", "inferno"),
                 ("Emerald Night", "emerald"),
-                ("Frostbite", "frostbite"),
+                ("Elyos", "frostbite"),
                 ("Obsidian Gold", "obsidian"),
-                ("Void Purple", "void"),
+                ("Asmodae", "void"),
             ]
         )
 

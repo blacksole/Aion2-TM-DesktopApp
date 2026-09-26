@@ -326,11 +326,18 @@ THEMES: dict[str, Tokens] = {
         name="inferno",
         # 2026-09-18: was #fb923c (orange.400), only ΔE≈14 from warn
         # (#fbbf24) — "attention" and "actif" read as the same colour on a
-        # badge row.  Deeper orange.500 pulls the accent away from warn
-        # while keeping fg.on-accent at 6.72:1 (was 8.44:1, still ≥ 4.5).
-        accent="#f97316",
-        accent_hover="#fdba74",
-        accent_soft="rgba(249, 115, 22, 0.14)",
+        # badge row.  Deeper orange.500 pulled the accent away from warn but
+        # only bought ~19° of hue separation from warn (43°) and ~25° from
+        # danger (0°) — still under the ≥31° every other theme has (Obsidian
+        # is hue-neutral, exempt).  2026-09-24: hue 22° sits exactly midway
+        # between danger (0°) and warn (43°), maximising separation from
+        # both (~22° each) instead of leaning on warn's side.  Contrast
+        # verified: 6.79:1 against inferno's own bg.window (#140c0c) and
+        # 6.62:1 for fg.on-accent drawn on the accent fill — both comfortably
+        # above the 4.5:1 WCAG AA floor.
+        accent="#fc6e1c",
+        accent_hover="#fda572",
+        accent_soft="rgba(252, 110, 28, 0.14)",
         secondary="#fda4af",
         secondary_soft="rgba(253, 164, 175, 0.16)",
         bg_window="#140c0c",
@@ -364,11 +371,30 @@ THEMES: dict[str, Tokens] = {
     "frostbite": replace(
         ABYSS,
         name="frostbite",
-        accent="#7dd3fc",
-        accent_hover="#bae6fd",
-        accent_soft="rgba(125, 211, 252, 0.14)",
-        secondary="#c4b5fd",
-        secondary_soft="rgba(196, 181, 253, 0.16)",
+        # 2026-09-24 (tobia): read as near-identical to Abyss — accent hue
+        # 199 vs Abyss's 188 is only 11.5 apart, and both bg families
+        # differ by a single hex digit (#0b1220 vs #0b1120).  Re-tuned
+        # toward the game's own Elyos identity (aion2guide.wiki: "bright
+        # architecture, warm landscapes, light wings" — sky-blue + warm
+        # gold, not another cyan).  Accent hue 213 (sky-blue #60a5fa) sits
+        # 25° from Abyss instead of 11.5°.  Secondary swapped from a
+        # violet borrowed from Void to a desaturated warm gold — Elyos's
+        # own radiance color, kept low-saturation so it doesn't collide
+        # with `warn` (amber) despite the shared warm hue family.
+        # Contrast verified: accent vs fg.on-accent 7.41:1 AAA.
+        #
+        # User-facing display name is now "Elyos" (settings_dialog.py /
+        # settings_page.py) — the internal key stays "frostbite" (dict key,
+        # profile JSON `"theme"` field, `logo_frostbite.png`, test
+        # parametrizations) so existing saved profiles keep working
+        # unmigrated.  Same split as `Aion2 TM` (internal) vs `Aion 2
+        # Companion` (display) in BRANDING.md §1 — never worth the
+        # migration churn for a naming-only cleanup.
+        accent="#60a5fa",
+        accent_hover="#93c5fd",
+        accent_soft="rgba(96, 165, 250, 0.14)",
+        secondary="#ead9ae",
+        secondary_soft="rgba(234, 217, 174, 0.16)",
         bg_window="#0b1220",
         bg_surface="#101a2e",
         bg_elevated="#17233b",
@@ -396,11 +422,31 @@ THEMES: dict[str, Tokens] = {
     "void": replace(
         ABYSS,
         name="void",
-        accent="#c084fc",
-        accent_hover="#d8b4fe",
-        accent_soft="rgba(192, 132, 252, 0.14)",
-        secondary="#f472b6",
-        secondary_soft="rgba(244, 114, 182, 0.16)",
+        # 2026-09-24 (tobia): pull toward the game's own Asmodian identity
+        # (aion.wiki: "black wings as dark as night... when enraged, eyes
+        # become a dark crimson glow"; aion2guide.wiki: "dark landscapes,
+        # rugged silhouettes, dark wings") — a deeper violet-magenta reads
+        # closer to that than the previous flat lavender (`#c084fc`, hue
+        # 270, a fairly generic "void purple"). Accent hue shifted to 290
+        # (violet-magenta, `#e06ef7`). Secondary echoes the "dark crimson
+        # eye glow" cue with a wine/crimson-magenta — an earlier draft
+        # (`#dc4b5c`, hue 353) looked reasonable in isolation but is only
+        # 7° from `danger` (hue 0) on the circular scale, i.e. the exact
+        # same emerald-theme mistake MASTER caught on 2026-09-18 (a status
+        # color duplicated as an accent). Re-picked at hue 330 (`#ea539e`)
+        # for 30° separation from danger and 40° from the new accent.
+        # Contrast verified: accent vs fg.on-accent 6.94:1 AAA, secondary
+        # vs bg.window 5.59:1 AA.
+        #
+        # User-facing display name is now "Asmodae" (settings_dialog.py /
+        # settings_page.py) — internal key stays "void" (dict key, profile
+        # JSON `"theme"` field, `logo_void.png`, test parametrizations),
+        # same rename split as Frostbite → "Elyos" above.
+        accent="#e06ef7",
+        accent_hover="#ee9ffa",
+        accent_soft="rgba(224, 110, 247, 0.14)",
+        secondary="#ea539e",
+        secondary_soft="rgba(234, 83, 158, 0.16)",
         bg_window="#0c0a14",
         bg_surface="#120f1e",
         bg_elevated="#1a1528",

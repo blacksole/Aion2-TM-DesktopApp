@@ -25,6 +25,59 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Populate ItemDatabase/data (gitignored, regenerated at build time)
+        # ItemDatabase/data/ is deliberately gitignored (~14 MB of cached,
+        # regenerable shugo.gg/gamers4.life/questlog.gg API data -- not
+        # source) but "Aion2 TM.spec" bundles 13 specific files from it as
+        # PyInstaller datas, so the CI runner needs its own copy before
+        # PyInstaller runs. This mirrors what tobia does by hand locally
+        # before cutting a release. Order follows each script's own
+        # docstring ("Run after fetch_X.py" / "needs data/Y.json"):
+        # fetch_items/fetch_skills first (everything else's input), then
+        # the arcana/detail fetches that read them, then the three
+        # compute_*.py scripts last (they all read data/details/).
+        #
+        # bash's default `-eo pipefail` (GitHub Actions' bash step flags)
+        # already fails the whole step -- and the job -- the moment any
+        # one script exits non-zero, so a partially-populated data/ never
+        # silently reaches PyInstaller.
+        #
+        # retry(): shugo.gg/gamers4.life/questlog.gg are third-party sites
+        # this project doesn't control: one quick retry after a short pause
+        # absorbs a transient network hiccup without hiding a real, repeated
+        # failure (which still fails the job after the 2nd attempt, on
+        # purpose -- no silent skip of missing data).
+        shell: bash
+        working-directory: ItemDatabase
+        run: |
+          retry() {
+            "$@" && return 0
+            echo "  -> retrying once after a transient failure..."
+            sleep 5
+            "$@"
+          }
+
+          # Independent fetches -- no other fetch_*.py output required.
+          retry python fetch_items.py
+          retry python fetch_skills.py
+          retry python fetch_recipes.py
+          retry python fetch_dungeons.py
+          retry python fetch_daevanion_start.py
+          retry python fetch_daevanion_advanced.py
+          retry python fetch_pantheon_items.py
+          retry python fetch_wings_items.py
+
+          # Depend on the fetches above having already written their file.
+          retry python fetch_arcana_info.py          # needs data/items_all.json
+          retry python fetch_arcana_class_skills.py   # needs data/skills_all.json
+          retry python fetch_item_details.py          # needs data/items_all.json -> data/details/*.json
+
+          # compute_*.py: offline, read data/items_all.json + data/details/
+          # only -- no network, so no retry needed.
+          python compute_shop_items.py
+          python compute_dungeon_sets.py
+          python compute_stat_priority_options.py
+
       - name: Build executable (Onedir)
         run: |
           pyinstaller "Aion2 TM.spec" --clean --noconfirm
