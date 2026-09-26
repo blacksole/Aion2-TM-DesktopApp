@@ -4,7 +4,7 @@ Two halves, deliberately separated:
 
 1. ``summarize_build_planner`` — a pure function over the persisted
    ``profile["build_planner"]`` dict, tested without a widget: ``None``, an
-   empty dict, a *real* profile section (``profiles/Claude.json``) and a
+   empty dict, a *real* profile section (``profiles/_fixtures/real_build_planner_profile.json``) and a
    synthetic state whose every number is known by hand.  Robustness matters
    more than the numbers here: six different Armory windows write into that
    dict, and this page only ever reads it.
@@ -56,7 +56,7 @@ if str(REPO / "ItemDatabase") not in sys.path:
 from armory_engine.explain import Reason, Recommendation  # noqa: E402
 
 FIXTURE_PROFILE = REPO / "tests" / "fixtures" / "reset_profile.json"
-REAL_PROFILE = REPO / "profiles" / "Claude.json"
+REAL_PROFILE = REPO / "profiles" / "_fixtures" / "real_build_planner_profile.json"
 SHOTS = REPO / "docs" / "audit-2026-09-18" / "shots" / "aether"
 
 #: Every new key the dashboard reads, in all three language tables (the
@@ -157,7 +157,7 @@ def test_summary_rejects_non_dict_state():
 
 
 def test_summary_of_the_real_profile_section():
-    """profiles/Claude.json is a real, hand-built state (read-only here)."""
+    """profiles/_fixtures/real_build_planner_profile.json is a real, hand-built state (read-only here)."""
     state = json.loads(REAL_PROFILE.read_text(encoding="utf-8"))["build_planner"]
     summary = summarize_build_planner(state)
 
