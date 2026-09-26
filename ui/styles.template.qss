@@ -1830,6 +1830,7 @@ QWidget[aion2="true"] #SkillLevelValue {
 
 QWidget[aion2="true"] #DeleteConfirmDialog,
 QWidget[aion2="true"] #UpdateDialog,
+QWidget[aion2="true"] #newsDialog,
 QWidget[aion2="true"] #DonateQrDialog,
 QWidget[aion2="true"] #TemplateItemPickerDialog,
 QWidget[aion2="true"] #ItemPickerPopup,
@@ -1910,7 +1911,7 @@ QWidget[aion2="true"] #changelogVersionBtn {
     font-weight: {{font_weight_semibold}};
     padding: {{space_2}}px {{space_3}}px;
     text-align: left;
-    min-width: 160px;
+    min-width: 180px;
 }
 
 QWidget[aion2="true"] #changelogVersionBtn:hover {

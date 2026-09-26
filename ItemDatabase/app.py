@@ -108,6 +108,13 @@ from armory_engine.enchant import (
     estimate_enchant_bonus,
     estimate_exceed_bonus,
 )
+from armory_engine.compare import (
+    ItemComparison,
+    StatComparison,
+    build_item_comparison,
+    format_signed,
+    format_stat_value,
+)
 from armory_engine.sets import _build_dungeon_sets
 from armory_engine.stats import (
     _parse_stat_value,
@@ -216,6 +223,11 @@ _FALLBACK_TOKENS = {
     "text_xs": "11", "text_sm": "12", "text_base": "13", "text_md": "14",
     "text_lg": "16", "text_xl": "20", "text_2xl": "26",
     "font_weight_semibold": "600", "font_weight_bold": "700",
+    # Corner radii (MASTER §1), first asked for by the Item Compare rules.
+    # Every placeholder the template uses must resolve here too, or the
+    # standalone build ships literal "{{radius_sm}}px" -- which is what
+    # test_the_fallback_renderer_understands_the_same_template caught.
+    "radius_sm": "4", "radius_md": "6",
 }
 
 
@@ -3828,6 +3840,22 @@ class ItemPickerPopup(QWidget):
     def show_anchored(self, anchor: QWidget):
         target_pos = anchor.mapToGlobal(QPoint(0, anchor.height()))
         logger.info("ItemPickerPopup.show_anchored: anchor global pos target=%s", target_pos)
+        self.show_at(target_pos)
+
+    def show_at(self, target_pos: QPoint):
+        """Everything show_anchored does, at a global position -- split out
+        for the Item Database's "Compare with …" entry, which opens this
+        picker from a right-click where there is no anchor widget, only the
+        cursor.  Kept on screen: a right-click near the bottom edge would
+        otherwise open the list half off the monitor."""
+        screen = QApplication.screenAt(target_pos) or QApplication.primaryScreen()
+        if screen is not None:
+            area = screen.availableGeometry()
+            height = max(self.height(), self.minimumHeight())
+            target_pos = QPoint(
+                min(max(target_pos.x(), area.left()), area.right() - self.width()),
+                min(max(target_pos.y(), area.top()), area.bottom() - height),
+            )
         self.move(target_pos)
         self.show()
         logger.info(
@@ -11105,11 +11133,29 @@ class StatPriorityEditorDialog(QWidget):
         # exact concept instead of inventing new copy, self-hides after a
         # couple seconds since this is a discrete click, not Flow Map's
         # continuous autosave indicator.
+        #
+        # The check is DRAWN (_make_check_icon), not a "✓" typed into the
+        # label: the project draws its glyphs rather than trusting whatever
+        # font Qt falls back to (see ui/flow/widgets/flow_guide_view.py), and
+        # the label text alone ("Saved", same muted size as the buttons) was
+        # easy to miss beside two buttons of the same weight.
+        self.save_status_icon = QLabel()
+        self.save_status_icon.setVisible(False)
+        button_row.addWidget(self.save_status_icon)
         self.save_status_label = QLabel(_t("flow_saved"))
         self.save_status_label.setObjectName("FlowSaveStatusLabel")
         self.save_status_label.setProperty("state", "saved")
         self.save_status_label.setVisible(False)
         button_row.addWidget(self.save_status_label)
+        # ONE timer, restarted on every Save.  Each click used to queue its
+        # own QTimer.singleShot(2000, hide), so a second Save inside the
+        # window was hidden by the FIRST click's timer -- measured: 0.7 s
+        # after a second click the confirmation was already gone.  That is
+        # exactly the moment a user who is unsure clicks again to be safe.
+        self._save_status_timer = QTimer(self)
+        self._save_status_timer.setSingleShot(True)
+        self._save_status_timer.setInterval(2000)
+        self._save_status_timer.timeout.connect(self._hide_save_status)
         cancel_btn = QPushButton(_t("arm_cancel"))
         cancel_btn.clicked.connect(self._cancel)
         button_row.addWidget(cancel_btn)
@@ -11277,8 +11323,17 @@ class StatPriorityEditorDialog(QWidget):
         if self._on_save_callback:
             self._on_save_callback(self._data)
         self._saved_snapshot = copy.deepcopy(self._data)
+        # Drawn fresh on every Save so it follows a theme switch that
+        # happened while the editor was open.
+        side = self.save_status_label.fontMetrics().height()
+        self.save_status_icon.setPixmap(_make_check_icon(side, _c("ok")))
+        self.save_status_icon.setVisible(True)
         self.save_status_label.setVisible(True)
-        QTimer.singleShot(2000, lambda: self.save_status_label.setVisible(False))
+        self._save_status_timer.start()  # (re)starts the full 2 s window
+
+    def _hide_save_status(self):
+        self.save_status_icon.setVisible(False)
+        self.save_status_label.setVisible(False)
 
 
 class _SearchableComboBox(QComboBox):
@@ -20783,6 +20838,357 @@ class _ComboPopupFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class ItemCompareDialog(QDialog):
+    """Two items side by side: the window behind "Compare with …".
+
+    Planner "Item-Vergleich", 2026-09-24.  Design: Obsidian vault,
+    ``Design/Konzept - Item-Vergleich.md``.
+
+    Only SHOWS an :class:`ItemComparison` -- it decides nothing.  Which side
+    wins a row comes from ``armory_engine.compare`` (@developer), on the
+    displayed value; this class reads ``row.winner`` and paints it.  A window
+    that re-derived winners from the numbers could disagree with the logic
+    about a rounded tie, which is the "0%"-in-red bug Build Compare already
+    had once.
+
+    Colours are tobia's call (2026-09-24): winner green (``ok``), loser red
+    (``danger``) -- the same pair Build Compare uses, so both compare views
+    read alike.  The colour is never the only carrier: the winner also gets
+    ``▲`` and the loser ``▼``, because ``ok`` against ``danger`` is 1.59:1 in
+    luminance (measured on Abyss) and does not survive red-green colour
+    blindness on its own.
+
+    Three sections, and only the first has winners:
+
+    * main stats -- per-row winner, plus a count in the header ("A ahead in
+      n · B ahead in m"), deliberately NO overall verdict: which stat
+      matters more depends on class and build;
+    * possible sub stats -- the random-roll pool (1776 of 2092 cached items
+      roll these), shown as upper bounds with no winner, collapsed to
+      ``_POOL_PREVIEW_ROWS`` because an item can list 23 of them;
+    * properties -- enchant cap, sockets, tradable; neutral.
+    """
+
+    _POOL_PREVIEW_ROWS = 6
+    _ICON_SIZE = 48
+    #: Column stretch: stat name, A, difference, B.  The difference column
+    #: is as wide as a value column, not narrower -- a range delta
+    #: ("+85 ~ +115") is the longest text in the table.
+    _COLUMN_STRETCH = (3, 2, 2, 2)
+    #: Properties rows are named here, not by the logic: the window owns the
+    #: UI language, the logic only knows the stat id.
+    _META_NAME_KEYS = {
+        "equipLevel": "arm_cmp_required_level",
+        "sockets": "arm_cmp_sockets",
+        "maxEnchantLevel": "arm_cmp_max_enchant",
+        "tradable": "arm_cmp_tradable",
+    }
+    _META_VALUE_KEYS = {"Yes": "arm_yes", "No": "arm_no"}
+
+    def __init__(self, icon_cache: "IconCache", parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setObjectName("CompareDialog")
+        self.setWindowTitle(_t("arm_cmp_title"))
+        self.setMinimumWidth(720)
+        self.icon_cache = icon_cache
+        self._comparison: ItemComparison | None = None
+        self._pool_expanded = False
+        self._icon_labels: dict[str, list[tuple[QLabel, str | None]]] = {}
+        icon_cache.icon_ready.connect(self._on_icon_ready)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setObjectName("CompareScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        self._body = QWidget()
+        self._body.setObjectName("CompareBody")
+        self._layout = QVBoxLayout(self._body)
+        self._layout.setContentsMargins(20, 18, 20, 18)
+        self._layout.setSpacing(12)
+        scroll.setWidget(self._body)
+        outer.addWidget(scroll)
+
+    # -- public ---------------------------------------------------------------
+
+    @property
+    def comparison(self) -> "ItemComparison | None":
+        return self._comparison
+
+    def show_loading(self):
+        """Placeholder while the logic fetches uncached details."""
+        self._comparison = None
+        _clear_layout(self._layout)
+        label = QLabel(_t("arm_cmp_loading"))
+        label.setObjectName("CompareNote")
+        label.setAlignment(Qt.AlignCenter)
+        self._layout.addWidget(label)
+        self._layout.addStretch(1)
+
+    def show_comparison(self, comparison: "ItemComparison"):
+        self._comparison = comparison
+        self._pool_expanded = False
+        self._render()
+
+    def swap(self):
+        if self._comparison is not None:
+            self.show_comparison(self._comparison.swapped())
+
+    # -- rendering ------------------------------------------------------------
+
+    def _render(self):
+        comparison = self._comparison
+        if comparison is None:
+            return
+        self._icon_labels.clear()
+        _clear_layout(self._layout)
+
+        head = QHBoxLayout()
+        title = QLabel(_t("arm_cmp_title"))
+        title.setObjectName("CompareTitle")
+        head.addWidget(title, 1)
+        swap_btn = QPushButton(_t("arm_cmp_swap"))
+        swap_btn.setObjectName("CompareSwap")
+        swap_btn.clicked.connect(self.swap)
+        head.addWidget(swap_btn)
+        self._layout.addLayout(head)
+
+        cards = QHBoxLayout()
+        cards.setSpacing(10)
+        cards.addWidget(self._item_card(comparison.item_a), 1)
+        vs = QLabel(_t("arm_cmp_vs"))
+        vs.setObjectName("CompareVs")
+        cards.addWidget(vs)
+        cards.addWidget(self._item_card(comparison.item_b), 1)
+        self._layout.addLayout(cards)
+
+        wins_a, wins_b, ties = comparison.wins
+        summary = QLabel(_t("arm_cmp_summary", a=wins_a, b=wins_b, tie=ties))
+        summary.setObjectName("CompareSummary")
+        self._layout.addWidget(summary)
+        note = QLabel(_t("arm_cmp_summary_note"))
+        note.setObjectName("CompareNote")
+        self._layout.addWidget(note)
+
+        self._section_title(_t("arm_cmp_section_main"))
+        if comparison.main:
+            grid = self._table(with_header=True)
+            for row_index, row in enumerate(comparison.main, start=1):
+                self._main_row(grid, row_index, row)
+        else:
+            empty = QLabel(_t("arm_cmp_no_stats"))
+            empty.setObjectName("CompareNote")
+            self._layout.addWidget(empty)
+
+        if comparison.sub_pool:
+            self._section_title(_t("arm_cmp_section_pool"))
+            item_a, item_b = comparison.item_a, comparison.item_b
+            if item_a.get("subStatRandom") or item_b.get("subStatRandom"):
+                pool_note = QLabel(_t(
+                    "arm_cmp_pool_note",
+                    a=item_a.get("subStatCount") or 0, b=item_b.get("subStatCount") or 0,
+                ))
+                pool_note.setObjectName("CompareNote")
+                pool_note.setWordWrap(True)
+                self._layout.addWidget(pool_note)
+            rows = comparison.sub_pool
+            hidden = len(rows) - self._POOL_PREVIEW_ROWS
+            if hidden > 0 and not self._pool_expanded:
+                rows = rows[: self._POOL_PREVIEW_ROWS]
+            grid = self._table(with_header=False)
+            for row_index, row in enumerate(rows):
+                self._neutral_row(grid, row_index, row)
+            if hidden > 0:
+                toggle = QPushButton(
+                    _t("arm_cmp_show_less") if self._pool_expanded
+                    else _t("arm_cmp_show_more", n=hidden)
+                )
+                toggle.setObjectName("CompareToggle")
+                toggle.setCursor(Qt.PointingHandCursor)
+                toggle.clicked.connect(self._toggle_pool)
+                self._layout.addWidget(toggle, 0, Qt.AlignLeft)
+
+        if comparison.meta:
+            self._section_title(_t("arm_cmp_section_meta"))
+            grid = self._table(with_header=False)
+            for row_index, row in enumerate(comparison.meta):
+                self._neutral_row(grid, row_index, row)
+
+        self._layout.addStretch(1)
+        QTimer.singleShot(0, self._fit_to_content)
+
+    def _fit_to_content(self):
+        """Tall enough for the content, never taller than the screen --
+        the body scrolls beyond that.  Same deferred-adjust reasoning as
+        ItemDetailDialog.load_item: word-wrapped labels settle one tick
+        late."""
+        screen = self.screen() or QApplication.primaryScreen()
+        limit = int(screen.availableGeometry().height() * 0.85) if screen else 900
+        wanted = self._body.sizeHint().height() + 4
+        self.resize(max(self.width(), 760), min(wanted, limit))
+
+    def _toggle_pool(self):
+        self._pool_expanded = not self._pool_expanded
+        self._render()
+
+    def _item_card(self, detail: dict) -> QFrame:
+        card = QFrame()
+        card.setObjectName("CompareCard")
+        row = QHBoxLayout(card)
+        row.setContentsMargins(12, 10, 12, 10)
+        row.setSpacing(12)
+
+        icon = QLabel()
+        icon.setObjectName("CompareIcon")
+        icon.setFixedSize(self._ICON_SIZE, self._ICON_SIZE)
+        icon.setAlignment(Qt.AlignCenter)
+        url = detail.get("icon") or ""
+        grade = detail.get("grade")
+        if url:
+            pixmap = self.icon_cache.pixmap(url, self._ICON_SIZE, grade=grade)
+            if pixmap is not None:
+                icon.setPixmap(pixmap)
+            else:
+                self._icon_labels.setdefault(url, []).append((icon, grade))
+                self.icon_cache.request(url)
+        row.addWidget(icon, 0, Qt.AlignTop)
+
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        name = QLabel(detail.get("name") or "")
+        name.setObjectName("CompareItemName")
+        name.setWordWrap(True)
+        # The name wears its rarity, like every other item name in the app.
+        _set_data_color(name, "item_grade", grade)
+        text.addWidget(name)
+        facts = [detail.get("categoryName") or ""]
+        if detail.get("level"):
+            facts.append(_t("arm_cmp_level", level=detail["level"]))
+        if detail.get("gradeName"):
+            facts.append(detail["gradeName"])
+        meta = QLabel("  ·  ".join(fact for fact in facts if fact))
+        meta.setObjectName("CompareItemMeta")
+        meta.setWordWrap(True)
+        text.addWidget(meta)
+        text.addStretch(1)
+        row.addLayout(text, 1)
+        return card
+
+    def _on_icon_ready(self, url: str):
+        for label, grade in self._icon_labels.pop(url, []):
+            try:
+                pixmap = self.icon_cache.pixmap(url, self._ICON_SIZE, grade=grade)
+                if pixmap is not None:
+                    label.setPixmap(pixmap)
+            except RuntimeError:
+                pass  # the card was re-rendered away meanwhile
+
+    def _section_title(self, text: str):
+        label = QLabel(text.upper())
+        label.setObjectName("CompareSection")
+        self._layout.addWidget(label)
+
+    def _table(self, with_header: bool) -> QGridLayout:
+        box = QFrame()
+        box.setObjectName("CompareTable")
+        grid = QGridLayout(box)
+        grid.setContentsMargins(1, 1, 1, 1)
+        grid.setHorizontalSpacing(0)
+        grid.setVerticalSpacing(0)
+        for column, stretch in enumerate(self._COLUMN_STRETCH):
+            grid.setColumnStretch(column, stretch)
+        if with_header:
+            headings = (_t("arm_cmp_col_stat"), "A", _t("arm_cmp_col_delta"), "B")
+            for column, heading in enumerate(headings):
+                label = QLabel(heading.upper())
+                label.setObjectName("CompareHead")
+                label.setAlignment(Qt.AlignLeft if column == 0 else Qt.AlignCenter)
+                grid.addWidget(label, 0, column)
+        self._layout.addWidget(box)
+        return grid
+
+    @staticmethod
+    def _stripe(grid: QGridLayout, row_index: int, zebra_index: int):
+        """Every other row gets ONE frame spanning all four columns, added
+        before the cells so it sits beneath them.  Painting each cell's own
+        background left gaps between cells and half-striped rows as soon as
+        one cell carried a state (seen in the mockup's first render)."""
+        if zebra_index % 2:
+            stripe = QFrame()
+            stripe.setObjectName("CompareStripe")
+            grid.addWidget(stripe, row_index, 0, 1, 4)
+
+    @staticmethod
+    def _cell(text: str, state: str, align=Qt.AlignCenter) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("CompareCell")
+        label.setProperty("state", state)
+        label.setAlignment(align | Qt.AlignVCenter)
+        return label
+
+    @staticmethod
+    def _value_text(value, percent: bool) -> str:
+        if value is None:
+            return "—"
+        high = format_stat_value(value.high, percent)
+        if value.is_range:
+            return f"{format_stat_value(value.low, percent)} ~ {high}"
+        return high
+
+    def _main_row(self, grid: QGridLayout, row_index: int, row: "StatComparison"):
+        self._stripe(grid, row_index, row_index - 1)
+        grid.addWidget(self._cell(row.name, "name", Qt.AlignLeft), row_index, 0)
+
+        def side_state(side: str, value) -> str:
+            if value is None:
+                return "absent"
+            if row.winner == side:
+                return "win"
+            if row.winner in ("a", "b"):
+                return "lose"
+            return "tie"
+
+        for column, side, value in ((1, "a", row.a), (3, "b", row.b)):
+            state = side_state(side, value)
+            text = self._value_text(value, row.percent)
+            if state == "win":
+                text = f"▲ {text}"
+            elif state == "lose":
+                text = f"▼ {text}"
+            grid.addWidget(self._cell(text, state), row_index, column)
+
+        # B relative to A, like Build Compare's "(+delta)" on its B column.
+        # Its colour follows the SIGN, and the sign agrees with the winner
+        # because both come from the same displayed values.
+        if row.a is None or row.b is None:
+            delta = self._cell(_t("arm_cmp_only_a" if row.b is None else "arm_cmp_only_b"), "flat")
+        elif row.winner == "tie":
+            delta = self._cell(format_signed(0, row.percent), "flat")
+        else:
+            text = format_signed(row.delta_high or 0.0, row.percent)
+            if row.delta_low is not None:
+                text = f"{format_signed(row.delta_low, row.percent)} ~ {text}"
+            delta = self._cell(text, "up" if row.winner == "b" else "down")
+        delta.setObjectName("CompareDelta")
+        grid.addWidget(delta, row_index, 2)
+
+    def _neutral_row(self, grid: QGridLayout, row_index: int, row: "StatComparison"):
+        self._stripe(grid, row_index, row_index)
+        name_key = self._META_NAME_KEYS.get(row.stat_id)
+        name = _t(name_key) if name_key else row.name
+        grid.addWidget(self._cell(name, "name", Qt.AlignLeft), row_index, 0)
+        for column, text, value in ((1, row.text_a, row.a), (3, row.text_b, row.b)):
+            if text is not None:
+                value_key = self._META_VALUE_KEYS.get(text)
+                shown = _t(value_key) if value_key else text
+            else:
+                shown = self._value_text(value, row.percent)
+            state = "absent" if shown in ("—", "-") else "pool"
+            grid.addWidget(self._cell(shown, state), row_index, column)
+
+
 class ItemDatabaseWindow(QMainWindow):
     # Emitted with (item_id, name) (User-Wunsch, 2026-09-05: a right-click
     # "Add to Templates" entry -- renamed from an earlier "Add to Shopping
@@ -20797,6 +21203,18 @@ class ItemDatabaseWindow(QMainWindow):
     # happens on the host side; this window's own job ends at "here's what
     # the user picked."
     add_to_templates_requested = Signal(int, str)
+    # Item Compare (Planner, 2026-09-24): (item_id_a, item_id_b), emitted
+    # once the user has picked both sides.  The UI stops here on purpose --
+    # fetching both details and building the ItemComparison is the logic's
+    # job (@developer, armory_engine.compare.build_item_comparison), which
+    # then hands it to ItemCompareDialog.show_comparison() via the
+    # _on_compare_requested slot connected below.
+    compare_requested = Signal(int, int)
+    # Reactivated (tobia, 2026-09-25): compare window + connected logic
+    # (_on_compare_requested) were both already finished, uncommitted --
+    # only the menu was gated off.  Flip back to False to hide again;
+    # nothing else needs to change.
+    _COMPARE_MENU_ENABLED = True
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -21124,6 +21542,28 @@ class ItemDatabaseWindow(QMainWindow):
 
         self._load_items()
         QTimer.singleShot(0, self._request_visible_icons)
+        # Item Compare: the item remembered as A after "Compare with …"
+        # (id, name, categoryName) -- lets every later right-click offer
+        # "Compare with <A>" directly, the "scroll the list and check each
+        # one against mine" case, without the picker.
+        self._compare_anchor: tuple[int, str, str] | None = None
+        self._compare_picker: "ItemPickerPopup | None" = None
+        self._compare_dialog: ItemCompareDialog | None = None
+        # (item_id_a, item_id_b) still waiting on detail_cache -- lets
+        # _on_compare_detail_ready ignore every OTHER item's detail_ready
+        # (e.g. one fired by the table's own lazy level/icon lookups) and
+        # tell the two-details-needed pair apart from a stale one left by
+        # a comparison the user has since replaced.
+        self._compare_pending: tuple[int, int] | None = None
+        self.compare_requested.connect(self._on_compare_requested)
+        self.detail_cache.detail_ready.connect(self._on_compare_detail_ready)
+        # Item detail popup: one window, reused -- same reasoning as
+        # compare_dialog() below (User-reported, 2026-09-26: double-clicking
+        # a second row while a detail popup was already open stacked a new
+        # window instead of replacing the first, so several near-identical
+        # popups could pile up on screen with no way to tell which was
+        # which).
+        self._detail_dialog: ItemDetailDialog | None = None
 
     def _open_detail_popup(self, index):
         source_index = self.proxy.mapToSource(index)
@@ -21136,9 +21576,13 @@ class ItemDatabaseWindow(QMainWindow):
         image_url = icon_item.data(Qt.UserRole) if icon_item else ""
         description = id_item.data(WING_DESCRIPTION_ROLE) or ""
 
-        dialog = ItemDetailDialog(self.icon_cache, self.detail_cache, self)
+        if self._detail_dialog is None:
+            self._detail_dialog = ItemDetailDialog(self.icon_cache, self.detail_cache, self)
+        dialog = self._detail_dialog
         dialog.load_item(item_id, name_item.text(), image_url, description=description)
         dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _show_item_context_menu(self, pos):
         """Right-click menu on the item table (User-Wunsch, 2026-09-05:
@@ -21159,13 +21603,28 @@ class ItemDatabaseWindow(QMainWindow):
         details_action = menu.addAction(_t("arm_ctx_show_details"))
         copy_action = menu.addAction(_t("arm_ctx_copy_name"))
         menu.addSeparator()
+        # "Compare with <A>" only when A is a DIFFERENT item -- comparing an
+        # item with itself answers nothing.  Both compare entries are gated
+        # by _COMPARE_MENU_ENABLED (hidden for now, tobia 2026-09-24).
+        anchor = self._compare_anchor
+        quick_compare_action = None
+        compare_action = None
+        if self._COMPARE_MENU_ENABLED:
+            if anchor is not None and anchor[0] != item_id:
+                quick_compare_action = menu.addAction(_t("arm_ctx_compare_with_item", name=anchor[1]))
+            compare_action = menu.addAction(_t("arm_ctx_compare_with"))
         template_action = menu.addAction(_t("arm_ctx_add_to_templates"))
 
-        chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
+        global_pos = self.table.viewport().mapToGlobal(pos)
+        chosen = menu.exec(global_pos)
         if chosen == details_action:
             self._open_detail_popup(index)
         elif chosen == copy_action:
             QApplication.clipboard().setText(name)
+        elif quick_compare_action is not None and chosen == quick_compare_action and anchor is not None:
+            self.compare_requested.emit(anchor[0], item_id)
+        elif compare_action is not None and chosen == compare_action:
+            self._start_compare(item_id, name, global_pos)
         elif chosen == template_action:
             # Host app (MainWindow) owns the actual Task-vs-Shopping choice
             # + template-edit dialog + save -- see
@@ -21173,6 +21632,92 @@ class ItemDatabaseWindow(QMainWindow):
             # message fired here: that flow can still be cancelled by the
             # user, so "added" isn't true yet at emit time.
             self.add_to_templates_requested.emit(item_id, name)
+
+    # -- Item Compare -----------------------------------------------------------
+
+    def _start_compare(self, item_id: int, name: str, global_pos: QPoint):
+        """"Compare with …": remember the item as A, then pick B.
+
+        The picker is the same ItemPickerPopup the Build Planner uses,
+        limited to A's category (a sword against a sword).  It filters by
+        category hard, in its constructor -- comparing across categories
+        would be a picker feature, not a compare-window one.
+        """
+        item = next((i for i in self._raw_items if i.get("id") == item_id), None)
+        category = (item or {}).get("categoryName") or ""
+        self._compare_anchor = (item_id, name, category)
+        if not category:
+            return  # nothing to filter the picker by -- A is remembered anyway
+        picker = ItemPickerPopup(
+            [i for i in self._raw_items if i.get("id") != item_id],
+            [category], self.icon_cache, self.detail_cache, self,
+        )
+        picker.item_chosen.connect(self._on_compare_partner_chosen)
+        # Kept alive by this reference, like LoadoutWindow's picker.
+        self._compare_picker = picker
+        picker.show_at(global_pos)
+
+    def _on_compare_partner_chosen(self, item: dict):
+        anchor = self._compare_anchor
+        item_b = item.get("id")
+        if anchor is None or item_b is None or item_b == anchor[0]:
+            return
+        self.compare_requested.emit(anchor[0], item_b)
+
+    def compare_dialog(self) -> ItemCompareDialog:
+        """The one compare window, created on first use and reused -- a
+        second comparison replaces the first rather than stacking windows.
+        Parentless like the Armory's other top-levels (see
+        ensure_loadout_window), so it carries its own copy of the sheet."""
+        if self._compare_dialog is None:
+            self._compare_dialog = ItemCompareDialog(self.icon_cache, None)
+            _style_window(self._compare_dialog)
+        return self._compare_dialog
+
+    def _on_compare_requested(self, item_id_a: int, item_id_b: int):
+        """The logic side of Item Compare: fetches both cached details
+        (kicking off a request() for whichever is still cold) and builds
+        the ItemComparison once both resolve, per the split laid out in
+        armory_engine.compare's own module docstring.
+
+        A pair, not two independent single-item fetches: showing the
+        dialog only once BOTH sides have arrived avoids a half-populated
+        comparison flashing before the second detail lands.
+        """
+        dialog = self.compare_dialog()
+        dialog.show_loading()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+        detail_a = self.detail_cache.get(item_id_a)
+        detail_b = self.detail_cache.get(item_id_b)
+        if detail_a and detail_b:
+            self._compare_pending = None
+            dialog.show_comparison(build_item_comparison(detail_a, detail_b))
+            return
+
+        # At least one side is cold -- remember BOTH ids (even the one
+        # already cached) so _on_compare_detail_ready knows this exact
+        # pair is what the dialog is now waiting for, and request()
+        # whichever one is missing. request() is a no-op for an id
+        # that's already pending/cached, so calling it unconditionally
+        # here is safe.
+        self._compare_pending = (item_id_a, item_id_b)
+        self.detail_cache.request(item_id_a)
+        self.detail_cache.request(item_id_b)
+
+    def _on_compare_detail_ready(self, item_id: int):
+        pending = self._compare_pending
+        if pending is None or item_id not in pending:
+            return
+        item_id_a, item_id_b = pending
+        detail_a = self.detail_cache.get(item_id_a)
+        detail_b = self.detail_cache.get(item_id_b)
+        if not detail_a or not detail_b:
+            return  # still waiting on the other side
+        self._compare_pending = None
+        self.compare_dialog().show_comparison(build_item_comparison(detail_a, detail_b))
 
     def ensure_loadout_window(self) -> "LoadoutWindow":
         """Creates the Build Planner window if it doesn't exist yet, WITHOUT

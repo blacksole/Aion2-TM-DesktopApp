@@ -11,11 +11,17 @@ What was wrong, measured on the real dialog before the fix:
   title and HOTFIX badge stretched to 38px (21px on 2.0.5);
 * 2.0.6 got a HOTFIX badge at all only because its notes contain the
   sentence "Hotfix releases are marked with a badge".
+
+companion.g-place.de migration (2026-09-26): the GitHub Releases API call
+that used to overlay a "real" publish date on top of CHANGELOG.md's own
+"Release Date:" line is gone entirely (that host has no such endpoint at
+all) -- every version's date now always comes from CHANGELOG.md, which was
+already the fallback path these regression tests exercise, so the
+expectations below are unchanged.
 """
 from __future__ import annotations
 
 import gc
-import json
 import os
 
 import pytest
@@ -25,6 +31,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget  # noqa: E402
 
 import ui.update_dialog as ud  # noqa: E402
+from core.changelog import parse_local_changelog, is_hotfix  # noqa: E402
+from tests.conftest import destroy_window  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -39,16 +47,17 @@ def qapp():
 def test_every_current_line_version_has_a_date_offline():
     """No GitHub at all (offline): every 2.x entry still carries a date."""
     major = ud.APP_VERSION.split(".")[0]
-    entries = [e for e in ud._parse_local_changelog() if e["tag"].split(".")[0] == major]
+    entries = [e for e in parse_local_changelog() if e["tag"].split(".")[0] == major]
     assert entries, "CHANGELOG.md has no entries for the current major line"
     missing = [e["tag"] for e in entries if not e["release_date"]]
-    # GitHub's publish time still wins where it exists; "Release Date:" is
-    # what makes the dialog right offline and for never-published versions.
+    # GitHub's publish time is gone entirely now; "Release Date:" is the
+    # ONLY source, what makes the dialog right offline and for
+    # never-published versions alike.
     assert not missing, f"CHANGELOG.md entries without 'Release Date:': {missing}"
 
 
 def test_release_date_line_is_taken_out_of_the_notes():
-    entries = {e["tag"]: e for e in ud._parse_local_changelog()}
+    entries = {e["tag"]: e for e in parse_local_changelog()}
     assert entries["2.0.6"]["release_date"] == "2026-09-17"
     assert "Release Date" not in entries["2.0.6"]["body"]
 
@@ -64,16 +73,16 @@ def test_release_date_line_is_taken_out_of_the_notes():
     ],
 )
 def test_hotfix_is_the_marker_line_not_the_word(body, expected):
-    assert ud._is_hotfix(body) is expected
+    assert is_hotfix(body) is expected
 
 
 def test_the_real_hotfixes_are_205_and_206():
     """2.0.6 is a hotfix (tobia, 2026-09-24) -- by its "**Hotfix**" line,
     not by its notes mentioning the word."""
-    entries = {e["tag"]: e for e in ud._parse_local_changelog()}
-    assert ud._is_hotfix(entries["2.0.5"]["body"])
-    assert ud._is_hotfix(entries["2.0.6"]["body"])
-    assert not ud._is_hotfix(entries["2.0.4"]["body"])
+    entries = {e["tag"]: e for e in parse_local_changelog()}
+    assert is_hotfix(entries["2.0.5"]["body"])
+    assert is_hotfix(entries["2.0.6"]["body"])
+    assert not is_hotfix(entries["2.0.4"]["body"])
 
 
 # ---------------------------------------------------------------------------
@@ -82,41 +91,30 @@ def test_the_real_hotfixes_are_205_and_206():
 
 @pytest.fixture
 def dialog(qapp, monkeypatch):
-    """The real dialog, offline, with GitHub knowing only SOME versions --
-    exactly the situation that broke 2.0.6 / 2.0.4."""
+    """The real dialog, entirely offline -- there is no GitHub call left to
+    mock; every date comes straight from CHANGELOG.md's "Release Date:"
+    line, exactly the situation that broke 2.0.6 / 2.0.4 before the fix."""
     from core import theme
 
     theme.apply(qapp, "Abyss")
-    published = [
-        {"tag_name": "v2.0.8", "published_at": "2026-09-22T16:39:22Z"},
-        {"tag_name": "v2.0.5", "published_at": "2026-09-14T16:35:09Z"},
-    ]
-
-    class _Resp:
-        def read(self):
-            return json.dumps(published).encode()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    monkeypatch.setattr(ud.urllib.request, "urlopen", lambda *a, **k: _Resp())
     monkeypatch.setattr(ud._ChangelogFetcher, "start", lambda self: self.run())
 
     host = QWidget()
     host.setProperty("aion2", True)
     dlg = ud.ChangelogHistoryDialog(host, language="en")
-    dlg.resize(842, 1100)
+    dlg.resize(862, 1100)
     dlg.show()
     for _ in range(10):
         qapp.processEvents()
     yield dlg
+    # destroy_window() (not just deleteLater()+one processEvents()) pumps
+    # Qt's DeferredDelete queue until the tree is actually gone -- without
+    # it this fixture leaked ~416 live widgets across the suite (PR #8
+    # review, Voyd-star, 2026-09-25: budget is 150). host is a plain
+    # QWidget, not a MainWindow, so give destroy_window() a shape it
+    # tolerates: no HOST_WINDOW_ATTRIBUTES, no .close() of its own needed.
     dlg.close()
-    dlg.deleteLater()
-    host.deleteLater()
-    qapp.processEvents()
+    destroy_window(host)
 
 
 def _rail(dlg) -> dict[str, QPushButton]:
@@ -221,7 +219,8 @@ def _offline(monkeypatch):
 def _changelog_fixture(monkeypatch, tmp_path, text):
     path = tmp_path / "CHANGELOG.md"
     path.write_text(text, encoding="utf-8")
-    monkeypatch.setattr(ud, "_changelog_path", lambda: path)
+    from core import changelog as _changelog
+    monkeypatch.setattr(_changelog, "changelog_path", lambda: path)
 
 
 def test_the_fetcher_yields_versions_from_older_major_lines(qapp, monkeypatch, tmp_path):

@@ -33,7 +33,9 @@ from core.translations import tr
 from core import theme
 from . import motion
 from core.update_checker import UpdateChecker
+from core.news_checker import NewsChecker
 from core.version import ARMORY_ENABLED
+from ui.news_dialog import NewsDialog, NEWS_POPUP_ENABLED
 from utils import paths
 from ui.widgets import icons
 
@@ -415,6 +417,7 @@ class MainWindow(QMainWindow):
         self.dps_meter_autostart = False
         self.minimize_to_tray = None  # None = not asked yet
         self._avatar_b64 = ""
+        self._last_seen_news_id = 0
         self.characters: list = []
 
         self.profile_dir = self._resolve_profile_dir()
@@ -1759,6 +1762,15 @@ class MainWindow(QMainWindow):
         # network QThread that can still be running at interpreter exit.
         if not os.environ.get("AION2TM_NO_UPDATE_CHECK"):
             QTimer.singleShot(2000, self, self.run_update_check)
+
+        # News popup (Teil 2, @koordinator 2026-09-26): same startup-timer
+        # pattern as the update check above, gated behind NEWS_POPUP_ENABLED
+        # (ui/news_dialog.py) until format/frequency/dismiss-behaviour/i18n
+        # are settled with the real WordPress site. AION2TM_NO_UPDATE_CHECK
+        # also skips this -- same "no network thread at interpreter exit in
+        # tests/CI" reasoning as the update checker.
+        if NEWS_POPUP_ENABLED and not os.environ.get("AION2TM_NO_UPDATE_CHECK"):
+            QTimer.singleShot(2500, self, self.run_news_check)
 
     def open_main_menu(self):
         menu = QMenu(self)
@@ -3243,6 +3255,7 @@ class MainWindow(QMainWindow):
                 raw_mtt = cfg.get("minimize_to_tray", None)
                 self.minimize_to_tray = bool(raw_mtt) if raw_mtt is not None else None
                 self._avatar_b64 = cfg.get("avatar", "")
+                self._last_seen_news_id = cfg.get("last_seen_news_id", 0)
                 custom = cfg.get("profile_dir", "")
                 if custom:
                     p = Path(custom)
@@ -3271,6 +3284,7 @@ class MainWindow(QMainWindow):
             "dps_meter_autostart": self.dps_meter_autostart,
             "minimize_to_tray": self.minimize_to_tray,
             "avatar": self._avatar_b64,
+            "last_seen_news_id": self._last_seen_news_id,
         }
         self.app_config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
@@ -5102,6 +5116,26 @@ class MainWindow(QMainWindow):
         self._checker.update_available.connect(self._on_update_available)
         self._checker.up_to_date.connect(lambda: None)
         self._checker.start()
+
+    def run_news_check(self):
+        self._news_checker = NewsChecker()
+        self._news_checker.post_available.connect(self._on_news_post_available)
+        self._news_checker.no_news.connect(lambda: None)
+        self._news_checker.start()
+
+    def _on_news_post_available(self, post_id: int, title: str, excerpt: str, link: str, date: str = ""):
+        # Only ever show a post once -- persisted in config.json (not the
+        # per-character profile) so it's remembered across restarts and
+        # isn't duplicated per character. A lower/equal id (including a
+        # post getting un-published and a different one taking the "latest"
+        # spot) is treated as "nothing new", same as the update checker
+        # treats "not newer" as up_to_date.
+        if post_id <= self._last_seen_news_id:
+            return
+        self._last_seen_news_id = post_id
+        self._save_app_config()
+        dlg = NewsDialog(title, excerpt, link, date=date, language=self.language, parent=self)
+        dlg.exec()
 
     def _on_update_available(self, version: str, body: str, asset_url: str, sha256_url: str = ""):
         # sha256_url is "" when the release published no checksum sidecar --

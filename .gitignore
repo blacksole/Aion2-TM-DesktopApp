@@ -34,6 +34,12 @@ profiles/last_profile.txt
 # 2026-09-10), regenerated on every app launch -- never the source of truth,
 # so committing it would just be a stale duplicate of Default*.json.
 profiles/Backup/
+# Local .bak backup copies written by the app's crash-safe profile save
+# (v2.0.8, "write temp file first, keep last-known-good as a backup") --
+# per-machine safety copies, not source of truth. Keeps `profiles/Claude.json`
+# (a real, committed test fixture read by test_armory_dashboard.py) itself
+# tracked -- only its loose .bak sibling is excluded.
+profiles/*.bak
 app.log
 *.db
 *.sqlite
@@ -41,6 +47,17 @@ app.log
 
 # ── ItemDatabase — cached API data/icons, not source ──────────────────────
 ItemDatabase/data/
+
+# ── Test-generated dashboard screenshots — non-deterministic pixel render,
+# rewritten by every `pytest tests/test_armory_dashboard.py` run even with
+# zero real changes (rendering noise: font hinting/antialiasing), so
+# committing them just creates a binary diff nobody can review. The test
+# writes them for local visual debugging (SHOTS in test_armory_dashboard.py),
+# never as an assertion target -- safe to regenerate anytime, never a
+# reviewable artifact. Scoped to exactly this subfolder: the sibling
+# aether-armory/ and after-m1m2/ shots are hand-curated audit documentation,
+# not test output, and stay tracked.
+docs/audit-2026-09-18/shots/aether/
 
 # ── Discord announcement draft — internal, not part of the repo ───────────
 DISCORD.md

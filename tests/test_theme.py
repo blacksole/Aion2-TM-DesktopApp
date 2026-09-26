@@ -582,10 +582,22 @@ def test_emerald_accent_and_secondary_are_not_more_greens():
 
 
 def test_inferno_accent_is_distinguishable_from_warn():
+    """2026-09-24: was only >=12deg apart from warn — every other theme has
+    >=31deg from both warn and danger (Obsidian is hue-neutral, exempt).
+    Accent re-tuned to hue 22 (exact midpoint of danger 0 / warn 43), so the
+    floor tightens to what MASTER's Design-Entscheidungen log flagged.
+    """
     tokens = theme.THEMES["inferno"]
     accent_hue = theme.QColor(tokens.accent).hue()
     warn_hue = theme.QColor(tokens.warn).hue()
-    assert abs(accent_hue - warn_hue) >= 12, "accent and warn are the same orange"
+    danger_hue = theme.QColor(tokens.danger).hue()
+
+    def apart(first, second):
+        delta = abs(first - second) % 360
+        return min(delta, 360 - delta)
+
+    assert apart(accent_hue, warn_hue) >= 20, "accent and warn are the same orange"
+    assert apart(accent_hue, danger_hue) >= 20, "accent and danger are the same orange"
 
 
 @pytest.mark.parametrize("name", sorted(set(theme.THEMES) - {"abyss"}))

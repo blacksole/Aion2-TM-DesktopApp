@@ -964,9 +964,9 @@ class SettingsPage(QWidget):
             ("abyss", "Abyss"),
             ("inferno", "Inferno"),
             ("emerald", "Emerald"),
-            ("frostbite", "Frostbite"),
+            ("frostbite", "Elyos"),
             ("obsidian", "Obsidian"),
-            ("void", "Void"),
+            ("void", "Asmodae"),
         ]
 
         self.theme_buttons = {}

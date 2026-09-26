@@ -1,5 +1,4 @@
 import hashlib
-import json
 import ntpath
 import urllib.request
 import zipfile
@@ -7,17 +6,27 @@ from pathlib import Path, PurePosixPath
 
 from PySide6.QtCore import QThread, Signal
 
-from core.version import APP_VERSION, GITHUB_USER, GITHUB_REPO
+from core.changelog import release_notes_for
+from core.version import APP_VERSION
 
-_LATEST_URL = (
-    f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
-)
-_LIST_URL = (
-    f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases"
-)
+# companion.g-place.de replaces the GitHub Releases API as of 2026-10 (tobia,
+# @koordinator 2026-09-26): the repo goes PRIVATE on 2026-10-02 to stop
+# cloning, which would turn api.github.com/repos/.../releases/latest into a
+# silent 404 for every already-installed copy of the app. This host serves
+# just the two things an update check needs -- a bare version string and the
+# build ZIP -- no release-notes/changelog endpoint and (so far) no checksum
+# sidecar, unlike the old GitHub asset list. Release notes come from the
+# CHANGELOG.md already bundled with the app (local_release_notes() below);
+# sha256_url is always "" for now, which decide_checksum_policy() already
+# treats as "release published no sidecar -- install unverified", the exact
+# same path every pre-checksum GitHub release already went through.
+_VERSION_URL = "https://companion.g-place.de/download/Aion2_TM-latest.version"
+_ZIP_URL = "https://companion.g-place.de/download/Aion2_TM-latest.zip"
 
 # The release workflow publishes "<asset>.sha256" next to every build asset
-# (coreutils format: "<hex>  Aion2_TM.zip").
+# (coreutils format: "<hex>  Aion2_TM.zip") -- kept for when/if
+# companion.g-place.de grows a matching "<zip>.sha256" sidecar; unused by
+# UpdateChecker.run() today (see _VERSION_URL/_ZIP_URL comment above).
 SHA256_SUFFIX = ".sha256"
 _HEX_DIGITS = frozenset("0123456789abcdef")
 _CHUNK_SIZE = 1024 * 1024
@@ -137,100 +146,48 @@ def decide_checksum_policy(sidecar_url: str | None, fetched: str | None) -> str:
     return "verify"
 
 
-def select_assets(assets: list) -> tuple[str, str]:
-    """Pick (download_url, sha256_url) out of a release's asset list.
-
-    Same choice as before for the payload -- first .zip/.exe -- plus that
-    asset's checksum sidecar when the release publishes one (releases built
-    before the sidecar step simply return "" for it).
-    """
-    asset_url = ""
-    asset_name = ""
-    for asset in assets or []:
-        name = asset.get("name", "")
-        if name.endswith(".zip") or name.endswith(".exe"):
-            asset_url = asset.get("browser_download_url", "")
-            asset_name = name
-            break
-
-    sha256_url = ""
-    if asset_name:
-        wanted = asset_name + SHA256_SUFFIX
-        for asset in assets or []:
-            if asset.get("name", "") == wanted:
-                sha256_url = asset.get("browser_download_url", "")
-                break
-
-    return asset_url, sha256_url
-
-
 class UpdateChecker(QThread):
     update_available = Signal(str, str, str, str)  # (version, body, asset_url, sha256_url)
     up_to_date = Signal()
 
     def __init__(self, include_prereleases: bool = False, parent=None):
         super().__init__(parent)
-        # Separate, on-demand check (not a persisted setting) -- GitHub's
-        # own /releases/latest endpoint never returns a prerelease, so a
-        # normal check can't see test builds at all. This flag switches to
-        # /releases (the full list, newest first) instead, so someone can
-        # explicitly go looking for the newest test build when they want to.
+        # No longer meaningful (companion.g-place.de serves exactly one
+        # "latest" version, no separate pre-release channel like GitHub's
+        # full /releases list did) -- kept as a constructor arg purely so
+        # existing callers (ui/main_window.py's UpdateChecker() calls, any
+        # future "check for a test build" menu action) don't need updating
+        # too; it is simply ignored.
         self.include_prereleases = include_prereleases
-        # Checksum sidecar of the asset the last run picked, or "" when the
-        # release published none. Also emitted with `update_available`: the
-        # installer thread cannot re-derive the DIFFERENCE between "no sidecar
-        # was published" and "the sidecar could not be fetched" from a URL
-        # alone, and that difference decides whether a failed fetch installs
-        # or aborts (see decide_checksum_policy).
+        # Always "" -- companion.g-place.de publishes no checksum sidecar
+        # (see the module docstring above). decide_checksum_policy() already
+        # treats an empty sidecar_url as "release published none -- install
+        # unverified", the same path every pre-checksum GitHub release went
+        # through, so nothing downstream needed to change for this.
         self.sha256_url = ""
 
     def run(self):
         try:
-            data = self._fetch_with_prereleases() if self.include_prereleases else self._fetch_latest_stable()
-            if data is None:
+            remote_version = self._fetch_latest_version()
+            if not remote_version:
                 self.up_to_date.emit()
                 return
 
-            tag = (data.get("tag_name") or "").lstrip("v")
-            body = data.get("body") or ""
-
-            asset_url, self.sha256_url = select_assets(data.get("assets", []))
-
-            # Kein kompiliertes Asset → kein Update anbieten (Source-Archiv reicht nicht)
-            if not tag or not asset_url:
-                self.up_to_date.emit()
-                return
-
-            if self.include_prereleases:
-                # Manuelle Test-Build-Suche: zeigt immer den neuesten
-                # veröffentlichten Release (egal ob stable oder pre-release)
-                # -- ein Beta-Tag wie "1.3.1-beta1" lässt sich mit der
-                # einfachen numerischen _is_newer()-Prüfung unten ohnehin
-                # nicht zuverlässig vergleichen, und wer aktiv nach einer
-                # Testversion sucht, will sie sehen, nicht stillschweigend
-                # per Versionsvergleich übersprungen bekommen.
-                self.update_available.emit(tag, body, asset_url, self.sha256_url)
-            elif self._is_newer(tag, APP_VERSION):
-                self.update_available.emit(tag, body, asset_url, self.sha256_url)
+            if self._is_newer(remote_version, APP_VERSION):
+                body = release_notes_for(remote_version)
+                self.update_available.emit(remote_version, body, _ZIP_URL, self.sha256_url)
             else:
                 self.up_to_date.emit()
         except Exception:
             self.up_to_date.emit()
 
-    def _fetch_latest_stable(self) -> dict | None:
-        req = urllib.request.Request(_LATEST_URL, headers={"User-Agent": "Aion2-TM-UpdateCheck"})
+    def _fetch_latest_version(self) -> str:
+        """The bare version string companion.g-place.de serves, e.g.
+        "2.0.9" -- stripped of whitespace/a stray leading "v" in case the
+        file ever gets hand-edited to match the CHANGELOG.md/tag style."""
+        req = urllib.request.Request(_VERSION_URL, headers={"User-Agent": "Aion2-TM-UpdateCheck"})
         with urllib.request.urlopen(req, timeout=5) as resp:
-            return json.loads(resp.read())
-
-    def _fetch_with_prereleases(self) -> dict | None:
-        req = urllib.request.Request(_LIST_URL, headers={"User-Agent": "Aion2-TM-UpdateCheck"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            releases = json.loads(resp.read())
-        for release in releases:
-            if release.get("draft"):
-                continue
-            return release  # GitHub lists newest first
-        return None
+            return resp.read().decode("utf-8", "replace").strip().lstrip("v")
 
     @staticmethod
     def _is_newer(remote: str, local: str) -> bool:
