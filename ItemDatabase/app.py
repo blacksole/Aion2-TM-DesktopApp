@@ -79,6 +79,7 @@ from armory_engine.arcana import (
 )
 from armory_engine.daevanion import (
     _DAEVANION_MP_NAMES,
+    daevanion_start_node_id,
     _daevanion_compute_auto_route,
     _daevanion_is_reachable,
     _daevanion_neighbors,
@@ -195,6 +196,15 @@ except ImportError:  # step 2
     except ImportError:  # step 3
         _theme = None
         logger.warning("core.theme is unimportable — the Armory renders plain Abyss")
+
+#: MASTER §1's one popup shadow, parsed from ``shadow.popup`` and painted by
+#: hand (see :mod:`core.shadows`).  Same three-step degradation as
+#: ``_theme``: if ``core`` is unimportable the tooltips simply draw no
+#: shadow rather than inventing geometry of their own.
+if _theme is None:
+    _shadows = None
+else:
+    from core import shadows as _shadows
 
 #: MASTER §2 Abyss values, for step 3 only.  ``core/theme.py`` is the owner
 #: of all of these; this table is a last-resort mirror, not a second
@@ -354,7 +364,7 @@ def _get_bounded_text_input(parent, title: str, label: str, initial_text: str = 
     ok = dlg.exec() == QDialog.Accepted
     return dlg.textValue(), ok
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, QSize, Qt, QSortFilterProxyModel, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QSortFilterProxyModel, QTimer, Signal
 from PySide6.QtGui import (
     QBrush, QColor, QCursor, QFont, QFontMetrics, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette,
     QPen, QPixmap, QPolygonF, QStandardItem, QStandardItemModel, QTextDocument, QTextOption,
@@ -11916,18 +11926,37 @@ class _TranslucentCardTooltip(QWidget):
     (User-Wunsch, 2026-08-28, re: the skill tooltip: "gerne ähnlicher
     Aufbau des Tooltips wie beim Daeva Board")."""
 
-    # Manual shadow parameters (replaces QGraphicsDropShadowEffect -- see
-    # __init__'s comment for why) -- same visual values the old effect used
-    # (blurRadius 48, offset (0, 16)), just painted by hand instead.
-    _SHADOW_BLUR = 48
-    _SHADOW_OFFSET = QPoint(0, 16)
+    #: Radius of the card itself; the shadow rings widen from it.
+    _CARD_RADIUS = 13
 
     def __init__(self, width: int, parent=None):
         super().__init__(parent, Qt.ToolTip | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.setFixedWidth(width)
+        # The shadow is MASTER §1's `shadow.popup` token (blur/offset/colour
+        # all read from it, never retyped here) and it is given ROOM: the
+        # widget is the card plus a margin band wide enough for the blur, and
+        # the card is drawn inset by exactly that band. Before this the card
+        # filled `self.rect()` and all ten rings were painted UNDERNEATH an
+        # alpha=235 fill, so the one shadow the design system defines
+        # rendered as a faint seam and nothing else (Apex review of PR #7,
+        # finding 4).
+        #
+        # `shadow.popup` is theme-invariant (MASTER §2 lets a theme redefine
+        # only accent*/secondary*/bg.*), so the band is measured once here
+        # and the geometry of the window never moves under a theme switch --
+        # only the shadow's colour does, which paintEvent re-reads.
+        self._shadow_margins = (0, 0, 0, 0)
+        if _shadows is not None:
+            blur, dy, _colour = _shadows.popup_shadow()
+            self._shadow_margins = _shadows.shadow_margins(blur, dy)
+        left, top, right, bottom = self._shadow_margins
+        # QWidget.setContentsMargins insets the LAYOUT, so every subclass
+        # keeps its own 14px card padding unchanged and simply lands inside
+        # the band.
+        self.setContentsMargins(left, top, right, bottom)
+        self.setFixedWidth(width + left + right)
         # ROOT CAUSE FOUND (2026-09-23, @koordinator root-cause analysis +
         # @developer verification by hand-computing Qt's own bounding-rect
         # formula): the previous QGraphicsDropShadowEffect(blur=48,
@@ -11945,55 +11974,65 @@ class _TranslucentCardTooltip(QWidget):
         # too), because it changed which paints happened to still line up
         # by accident without addressing the actual mismatch source.
         # Fix: drop the graphics effect entirely and paint the shadow by
-        # hand in paintEvent(), fully WITHIN the widget's own existing
-        # bounds (no size/margin change at all -- QPainter already clips
-        # to the widget's real rect automatically, so nothing ever wants
-        # to paint outside size=(w,h) again, and the dirty rect Qt hands
-        # to Windows can never mismatch the widget's real size).
+        # hand in paintEvent(), fully WITHIN the widget's own bounds --
+        # QPainter clips to the widget's real rect automatically, so nothing
+        # ever wants to paint outside size=(w,h) again and the dirty rect Qt
+        # hands to Windows can never mismatch the widget's real size. The
+        # room the shadow needs is reserved above instead of stolen from the
+        # card.
+
+    def card_rect(self) -> QRect:
+        """Where the opaque card is drawn -- ``self.rect()`` minus the band
+        the shadow is painted into."""
+        left, top, right, bottom = self._shadow_margins
+        return self.rect().adjusted(left, top, -right, -bottom)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        card_rect = self.rect()
-        # Hand-rolled soft shadow, entirely within the widget's own rect
-        # (QPainter clips to it automatically) -- several progressively
-        # larger, more transparent rounded rects behind the card, offset
-        # the same way the old QGraphicsDropShadowEffect was configured
-        # (see __init__ for why that effect had to go). The shadow now
-        # bleeds INTO the card's own margin area instead of outside the
-        # widget -- a minor cosmetic trade-off for a tooltip this small,
-        # in exchange for the widget never asking Qt/Windows to paint
-        # outside its own real size again.
-        shadow_color = _qc("bg.window", 150)
-        steps = 10
-        for i in range(steps, 0, -1):
-            grow = int(self._SHADOW_BLUR * i / steps)
-            alpha = max(1, int(shadow_color.alpha() * (1 - i / steps) * 0.5))
-            c = QColor(shadow_color)
-            c.setAlpha(alpha)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(c)
-            shadow_rect = card_rect.translated(self._SHADOW_OFFSET).adjusted(-grow, -grow, grow, grow)
-            painter.drawRoundedRect(shadow_rect, 13 + grow, 13 + grow)
+        card_rect = self.card_rect()
+        # Shadow FIRST and entirely outside the card rect, so the card fill
+        # below covers none of it; the colour is re-read every paint so a
+        # live theme switch moves it (the geometry cannot move -- see
+        # __init__).
+        if _shadows is not None:
+            blur, dy, colour = _shadows.popup_shadow()
+            _shadows.paint_popup_shadow(
+                painter, card_rect, blur, dy, colour, self._CARD_RADIUS
+            )
         painter.setPen(QPen(_qc("fg.muted", 90), 1))
         painter.setBrush(_qc("bg.surface", 235))
-        painter.drawRoundedRect(card_rect.adjusted(0, 0, -1, -1), 13, 13)
+        painter.drawRoundedRect(
+            card_rect.adjusted(0, 0, -1, -1), self._CARD_RADIUS, self._CARD_RADIUS
+        )
         painter.end()
 
     def show_at(self, global_pos: QPoint):
+        """Put the CARD 16px off the cursor -- not the widget.
+
+        The widget is larger than the card by the shadow band (see
+        __init__), so every number here is computed against the card and the
+        window is then moved back by the band's top-left. Without that
+        compensation the visible card would drift away from the cursor by
+        the blur radius, and the screen-edge flips would fire on the
+        shadow's edge instead of the card's.
+        """
         self.adjustSize()
+        left, top, right, bottom = self._shadow_margins
+        card_w = self.width() - left - right
+        card_h = self.height() - top - bottom
         screen = QApplication.screenAt(global_pos) or QApplication.primaryScreen()
         avail = screen.availableGeometry() if screen else None
         x = global_pos.x() + 16
         y = global_pos.y() + 16
         if avail is not None:
-            if x + self.width() > avail.right():
-                x = global_pos.x() - self.width() - 16
-            if y + self.height() > avail.bottom():
-                y = global_pos.y() - self.height() - 16
+            if x + card_w > avail.right():
+                x = global_pos.x() - card_w - 16
+            if y + card_h > avail.bottom():
+                y = global_pos.y() - card_h - 16
             x = max(avail.left(), x)
             y = max(avail.top(), y)
-        self.move(x, y)
+        self.move(x - left, y - top)
         self.show()
 
 
@@ -12056,10 +12095,6 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         status_key: str,
         status_text: str,
     ):
-        logger.debug(
-            "DAEVANION DEBUG DaevanionNodeTooltip.set_node called with name=%r grade_key=%r cost=%r level=%r status_key=%r",
-            name, grade_key, cost, level, status_key,
-        )
         self._grade_label.setText(grade_label.upper())
         _set_data_color(self._grade_label, "item_grade", grade_key)
         self._title_label.setText(name)
@@ -12095,26 +12130,15 @@ class DaevanionNodeTooltip(_TranslucentCardTooltip):
         self._status_label.style().unpolish(self._status_label)
         self._status_label.style().polish(self._status_label)
 
+        # adjustSize() is all this needs.  The repaint() that used to sit
+        # here was the FIRST of three attempts at the Windows
+        # "UpdateLayeredWindowIndirect failed" / frozen-content bug, and its
+        # own comment recorded that it did not fix the reported symptom.
+        # The root cause -- the QGraphicsDropShadowEffect that made Qt hand
+        # Windows a dirty rect larger than the window (see
+        # _TranslucentCardTooltip.__init__) -- is gone, so the workarounds
+        # it spawned go with it rather than staying as cargo.
         self.adjustSize()
-        # Explicit repaint after the setText() calls above (Windows-
-        # Compositing-Bug: mehrere Nodes durchgehen zeigte weiterhin nur
-        # den Inhalt des ZUERST gehoverten Nodes, obwohl die Position via
-        # show_at() korrekt der Maus folgte -- User-reported 2026-09-23,
-        # per Screenshot). adjustSize() allein genügt hier NICHT: dieses
-        # Fenster ist ein WA_TranslucentBackground-Top-Level mit
-        # Qt.ToolTip-Flag, das schon sichtbar ist, wenn set_node() erneut
-        # aufgerufen wird (zwei aufeinanderfolgende Hovers rufen
-        # set_node()+show_at() OHNE ein hide() dazwischen -- siehe
-        # _daevanion_on_node_hovered). Windows' DWM-Compositing cached für
-        # ein bereits sichtbares, transparentes Popup-Fenster offenbar den
-        # zuletzt gerenderten Frame und übernimmt neue Kind-Widget-Texte
-        # nicht zuverlässig von selbst, auch wenn setText() intern schon
-        # ein scheduled update() der Labels auslöst -- ein explizites
-        # repaint() auf dem TOP-LEVEL-Fenster selbst erzwingt den
-        # synchronen Neuzeichnen-Durchlauf, den die einzelnen
-        # QLabel.update()-Aufrufe alleine offenbar nicht zuverlässig
-        # durchsetzen konnten.
-        self.repaint()
 
 
 class SkillInfoTooltip(_TranslucentCardTooltip):
@@ -13102,6 +13126,38 @@ class LoadoutWindow(QMainWindow):
     character. Lets you try any catalog item per slot and preview its
     (estimated) enchant scaling in the shared detail panel."""
 
+    # ── main_tabs: the named API, owned here ──────────────────────────────
+    # A host that wants to open the Build Planner ON a particular tab needs
+    # an index, and an index is a fact about THIS class's addTab order. The
+    # host used to keep its own copy (ui/main_window.py's
+    # _DAEVANION_BOARD_TAB/_SKILL_PLANNER_TAB), so reordering a tab here
+    # silently sent the Armory dashboard's cards to the wrong page (Apex
+    # review of PR #7, finding 7). Named here, read there.
+    #
+    # ``_pin_tab_indices`` at the end of the addTab block compares these to
+    # what addTab() actually returned, so the two can never drift apart
+    # unnoticed -- a reorder fails loudly, at construction.
+    TAB_EQUIPMENT = 0
+    TAB_DAEVANION = 1
+    TAB_ARCANA = 2
+    TAB_SKILLS = 3
+    TAB_PANTHEON = 4
+    TAB_GENIUS = 5
+
+    def _pin_tab_indices(self, built: dict[str, int]) -> None:
+        """Fail loudly if the addTab order stopped matching the TAB_* names.
+
+        A programming error, not a user-facing one: every test that builds a
+        LoadoutWindow catches it immediately, and a wrong index would
+        otherwise show up only as "the Daevanion card opens Arcana".
+        """
+        expected = {name: getattr(type(self), name) for name in built}
+        if built != expected:
+            raise RuntimeError(
+                f"LoadoutWindow tab order changed: addTab gave {built}, "
+                f"the TAB_* constants say {expected} -- update the constants"
+            )
+
     def __init__(self, items: list[dict], icon_cache: "IconCache", detail_cache: "ItemDetailCache",
                  parent=None, character_class: str | None = None,
                  character_name: str = "", character_race: str | None = None):
@@ -13257,7 +13313,7 @@ class LoadoutWindow(QMainWindow):
         self._equip_priority_page_index = self.equip_view_stack.addWidget(self._build_equip_priority_page())
         self._stat_priority_editor_widget: QWidget | None = None
         equipment_outer.addWidget(self.equip_view_stack, 1)
-        self.main_tabs.addTab(equipment_tab, _t("arm_equipment_btn"))
+        built_tabs = {"TAB_EQUIPMENT": self.main_tabs.addTab(equipment_tab, _t("arm_equipment_btn"))}
 
         # "EQ Priority" moved out of main_tabs into its own equip_view_stack
         # takeover (see _open_equip_priority_page) -- this slot now holds
@@ -13265,7 +13321,9 @@ class LoadoutWindow(QMainWindow):
         # steht, da soll stattdessen Daevanionboard hin"). Placeholder for
         # now -- the real interactive board (72 boards x 225 nodes, ported
         # from the browser mockup) is its own separate, larger task.
-        self.main_tabs.addTab(self._build_daevanion_board_tab(), _t("arm_daevanion_board_tab"))
+        built_tabs["TAB_DAEVANION"] = self.main_tabs.addTab(
+            self._build_daevanion_board_tab(), _t("arm_daevanion_board_tab")
+        )
 
         # Built before the Arcana tab below even though it appears AFTER it
         # in the tab bar -- _build_arcana_sets_tab() needs
@@ -13275,13 +13333,17 @@ class LoadoutWindow(QMainWindow):
         # what sets those up.
         skill_planner_widget = self._build_skill_planner_tab()
 
-        self.main_tabs.addTab(self._build_arcana_tab(), _t("arm_arcana_tab"))
+        built_tabs["TAB_ARCANA"] = self.main_tabs.addTab(self._build_arcana_tab(), _t("arm_arcana_tab"))
 
-        self.main_tabs.addTab(skill_planner_widget, _t("arm_skill_planner_tab"))
+        built_tabs["TAB_SKILLS"] = self.main_tabs.addTab(skill_planner_widget, _t("arm_skill_planner_tab"))
 
-        self.main_tabs.addTab(self._build_pantheon_tab(), _t("arm_pantheon_tab"))
+        built_tabs["TAB_PANTHEON"] = self.main_tabs.addTab(self._build_pantheon_tab(), _t("arm_pantheon_tab"))
 
-        self.main_tabs.addTab(self._build_genius_insight_tab(), _t("arm_genius_insight_tab"))
+        built_tabs["TAB_GENIUS"] = self.main_tabs.addTab(
+            self._build_genius_insight_tab(), _t("arm_genius_insight_tab")
+        )
+
+        self._pin_tab_indices(built_tabs)
 
         icon_cache.icon_ready.connect(self._on_icon_ready)
         detail_cache.detail_ready.connect(self._on_detail_ready)
@@ -15164,7 +15226,7 @@ class LoadoutWindow(QMainWindow):
     def _daevanion_active_set(self, board: dict, grid: dict) -> set[str]:
         key = self._daevanion_variant + ":" + board["id"]
         if key not in self._daevanion_active:
-            start_id = next((n["id"] for n in grid.values() if n["g"] == "start"), None)
+            start_id = daevanion_start_node_id(grid)
             self._daevanion_active[key] = {start_id} if start_id else set()
         return self._daevanion_active[key]
 
@@ -15535,30 +15597,6 @@ class LoadoutWindow(QMainWindow):
         self._daevanion_show_tooltip(node)
 
     def _daevanion_show_tooltip(self, node: dict):
-        logger.debug(
-            "DAEVANION DEBUG _daevanion_show_tooltip called with node id=%r name=%r grade=%r r=%r c=%r effects=%r",
-            node.get("id"), node.get("name"), node.get("g"), node.get("r"), node.get("c"), node.get("e"),
-        )
-        try:
-            self._daevanion_show_tooltip_impl(node)
-        except Exception:
-            # User-reported, 2026-09-23 (third round): the tooltip freezes
-            # on the first-hovered node's content ONLY for "common"/white
-            # nodes, with zero flicker -- exactly what an UNCAUGHT
-            # exception raised partway through this Qt slot would look
-            # like from the outside (Qt slots swallow exceptions, printing
-            # a traceback to stderr that nobody sees in a frozen/no-console
-            # build, then simply abort the call -- leaving the tooltip in
-            # whatever state the LAST successful call left it in, forever,
-            # on every subsequent hover that hits the same code path).
-            # Logging here turns that silent abort into a visible,
-            # diagnosable traceback instead of two more rounds of guessing.
-            logger.exception(
-                "DAEVANION DEBUG _daevanion_show_tooltip_impl raised for node id=%r name=%r grade=%r",
-                node.get("id"), node.get("name"), node.get("g"),
-            )
-
-    def _daevanion_show_tooltip_impl(self, node: dict):
         board = self._daevanion_current_board()
         if not board:
             return
@@ -15588,31 +15626,16 @@ class LoadoutWindow(QMainWindow):
         else:
             status_key, status_text = "available", _t("arm_daevanion_status_available")
 
-        # Force a real hide/show cycle when the tooltip is already visible,
-        # NOT just a repaint (User-reported, 2026-09-23, second round: the
-        # repaint() fix in DaevanionNodeTooltip.set_node() DID visibly fix
-        # something -- the grid's own hover BORDER updates correctly on
-        # every node change now -- but the tooltip's own CONTENT stayed
-        # constant, frozen on the very first node hovered this session, on
-        # every subsequent hover, with zero flicker/delay/intermittent
-        # correctness. That "not even once correct again" constancy,
-        # despite an explicit repaint() call executing every time, points
-        # to Windows' DWM literally reusing a cached composited surface for
-        # this specific kind of window (WA_TranslucentBackground top-level,
-        # Qt.ToolTip flag, layered/per-pixel-alpha) rather than a Qt-side
-        # dirty-region problem repaint() could fix -- Qt's own backing
-        # store WAS updated (repaint() is synchronous), but the OS
-        # compositor's layered-window surface apparently wasn't told to
-        # refresh unless the window transitions hidden->visible again.
-        # hide() here forces exactly that transition on every hover.
-        if self._daevanion_tooltip.isVisible():
-            self._daevanion_tooltip.hide()
+        # No hide()/show() cycle here: that was the SECOND attempt at the
+        # Windows frozen-tooltip bug (its own comment recorded that the
+        # first, repaint(), had not fixed the symptom either), and it ran on
+        # every platform -- on X11/Wayland/macOS, where the bug does not
+        # exist, it made the tooltip visibly flicker on every node change.
+        # The actual cause was the QGraphicsDropShadowEffect (see
+        # _TranslucentCardTooltip.__init__); with that gone, set_node() +
+        # show_at() is the whole update.
         self._daevanion_tooltip.set_node(
             name, grade_label, grade_key, node["cost"], node["lvl"], effect_rows, status_key, status_text
-        )
-        logger.debug(
-            "DAEVANION DEBUG _daevanion_show_tooltip about to show_at; grade=%r grade_label=%r grade_key=%r name=%r tooltip_id=%r",
-            node.get("g"), grade_label, grade_key, name, id(self._daevanion_tooltip),
         )
         self._daevanion_tooltip.show_at(QCursor.pos())
 
@@ -15622,7 +15645,7 @@ class LoadoutWindow(QMainWindow):
             return
         variant = _daevanion_variant(self._daevanion_variant)
         grid = variant["nodes_by_board"].get(board["id"], {})
-        start_id = next((n["id"] for n in grid.values() if n["g"] == "start"), None)
+        start_id = daevanion_start_node_id(grid)
         key = self._daevanion_variant + ":" + board["id"]
         self._daevanion_active[key] = {start_id} if start_id else set()
         self._daevanion_route_status_label.setText("")
@@ -15639,7 +15662,7 @@ class LoadoutWindow(QMainWindow):
         if not wanted:
             self._daevanion_route_status_label.setText(_t("arm_daevanion_route_pick_value"))
             return
-        start_id = next((n["id"] for n in grid.values() if n["g"] == "start"), None)
+        start_id = daevanion_start_node_id(grid)
         result = _daevanion_compute_auto_route(grid, variant["node_by_id"], wanted, start_id)
         key = self._daevanion_variant + ":" + board["id"]
         self._daevanion_active[key] = result["tree"]
@@ -21740,13 +21763,12 @@ class ItemDatabaseWindow(QMainWindow):
         can be set any time via the class combo in Skill Planner or the
         gear-icon settings popup. Both dialogs remain defined but unused.
 
-        ``tab``, when given, is the main_tabs index to land on (e.g. the
-        Armory dashboard's Daevanion/Skill Planner cards use this to jump
-        straight to their own tab instead of always opening on Equipment
-        -- see LoadoutWindow.__init__'s main_tabs.addTab calls for the
-        current index order). None leaves main_tabs wherever it already
-        was, so the plain 'Open Build Planner' card doesn't force a tab
-        switch."""
+        ``tab``, when given, is the main_tabs index to land on -- pass one
+        of ``LoadoutWindow.TAB_*`` (e.g. the Armory dashboard's
+        Daevanion/Skill Planner cards jump straight to their own tab
+        instead of always opening on Equipment) rather than a bare integer.
+        None leaves main_tabs wherever it already was, so the plain 'Open
+        Build Planner' card doesn't force a tab switch."""
         self.ensure_loadout_window()
         self._loadout_window.show()
         self._loadout_window.raise_()

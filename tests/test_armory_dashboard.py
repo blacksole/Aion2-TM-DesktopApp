@@ -42,6 +42,7 @@ from ui.pages.armory_page import (
     ARMORY_EQUIP_SLOTS,
     ArmoryPage,
     ArmorySummary,
+    _count_chosen_daevanion_nodes,
     summarize_build_planner,
 )
 
@@ -239,6 +240,92 @@ def test_summary_of_a_full_synthetic_state():
     assert summary.genius_build_name == "Raid"
     assert (summary.pantheon_filled, summary.pantheon_total) == (2, 3)
     assert summary.is_empty is False
+
+
+# ---------------------------------------------------------------------------
+# The Daevanion start node: excluded by ID, not by subtracting one
+# ---------------------------------------------------------------------------
+# Apex review of PR #7, finding 8.  Every board carries one free, always-on
+# "start" node that app.py seeds lazily and refuses to toggle, so it must not
+# show up as "1 nodes active" on a board nobody clicked.  `len(nodes) - 1`
+# gets the common case right and is wrong about everything else: a board
+# saved WITHOUT its start node (a legacy profile, or one written before lazy
+# seeding) silently under-reports.  The rule lives once, Qt-free, in
+# armory_engine.daevanion; the host pushes the ids in.
+
+def test_the_engine_knows_the_start_node_by_its_grade_not_its_position():
+    from armory_engine.daevanion import daevanion_start_node_id
+
+    grid = {
+        (0, 0): {"id": "a", "g": "common"},
+        (0, 1): {"id": "root", "g": "start"},
+        (1, 0): {"id": "b", "g": "legend"},
+    }
+    assert daevanion_start_node_id(grid) == "root"
+    assert daevanion_start_node_id({(0, 0): {"id": "a", "g": "common"}}) is None
+    assert daevanion_start_node_id({}) is None
+
+
+def test_the_engine_counts_the_nodes_the_player_picked():
+    from armory_engine.daevanion import daevanion_chosen_node_count
+
+    # The start node is NOT first -- the whole point of matching by id.
+    assert daevanion_chosen_node_count(["a", "root", "b"], "root") == 2
+    # Never seeded: nothing to subtract, and the old "-1" lost a real node.
+    assert daevanion_chosen_node_count(["a", "b"], "root") == 2
+    assert daevanion_chosen_node_count(["root"], "root") == 0
+    assert daevanion_chosen_node_count([], "root") == 0
+    assert daevanion_chosen_node_count(["a", "", None], "root") == 1
+
+
+@pytest.mark.parametrize(
+    ("ids", "start_id", "expected"),
+    [
+        (["a", "root", "b"], "root", 2),   # start in the middle of the list
+        (["root", "a", "b"], "root", 2),   # start first (the common case)
+        (["a", "b", "root"], "root", 2),   # start last
+        (["a", "b"], "root", 2),           # never seeded -- "-1" would say 1
+        (["root"], "root", 0),
+        (["a", "root", "b"], None, 2),     # fallback: subtract one
+        (["a", "b"], None, 1),             # fallback, and wrong -- knowingly
+    ],
+)
+def test_the_page_excludes_the_start_node_by_id_when_it_knows_it(ids, start_id, expected):
+    assert _count_chosen_daevanion_nodes(ids, start_id) == expected
+
+
+def test_the_summary_uses_the_start_ids_the_host_pushes_in():
+    """A board whose start node is not the first entry, and one that was
+    never seeded at all -- the two cases the blind "-1" gets wrong."""
+    state = {
+        "daevanion_active": {
+            "s:11": ["110201", "110113", "110202"],   # start node in the MIDDLE
+            "s:81": ["810301", "810302"],             # never seeded: no start node
+        }
+    }
+    start_ids = {"s:11": "110113", "s:81": "810113"}
+    assert summarize_build_planner(state, start_ids).daevanion_nodes == 4
+
+    # Without the mapping the page falls back and under-reports s:81 by one.
+    assert summarize_build_planner(state).daevanion_nodes == 3
+
+
+def test_the_summary_still_works_when_the_board_data_is_missing():
+    """``{}`` is what the host pushes when the board files are unreadable --
+    the dashboard must degrade, not raise."""
+    state = _synthetic_state()
+    assert summarize_build_planner(state, {}).daevanion_nodes == 2
+    assert summarize_build_planner(state, None).daevanion_nodes == 2
+
+
+def test_the_page_hook_ignores_anything_that_is_not_a_mapping(page):
+    """The host computes the mapping behind a try/except, so it must be able
+    to say "not known" without inventing a shape (same contract as
+    ``set_recommendations``)."""
+    page.set_daevanion_start_ids({"s:11": "110113"})
+    page.set_daevanion_start_ids(None)
+    page.set_build_planner_state(_synthetic_state())
+    assert page.summary.daevanion_nodes == 2
 
 
 def test_a_state_with_only_a_pantheon_piece_is_not_empty():
@@ -468,17 +555,31 @@ def test_every_card_piece_carries_its_objectname(page):
     assert {label.objectName() for label in card._hint_labels} == {"armoryCardHint"}
 
 
+#: card, the signal it emits, and -- for the two cards that open the Build
+#: Planner ON a particular tab -- the ``LoadoutWindow.TAB_*`` name that tab
+#: is called by its owner (ItemDatabase/app.py).  The third column is what
+#: was missing: these tests asserted the SIGNAL fires and nothing asserted
+#: where it lands, so the two bare indices ui/main_window.py used to keep
+#: could drift out of the Armory's addTab order unnoticed (Apex review of
+#: PR #7, finding 7).  ``tests/test_armory_theme.py`` consumes the pairs
+#: against a real LoadoutWindow; here they pin the host's own mapping.
 CTA_CASES = (
-    ("build_card", "open_build_planner_requested"),
-    ("daevanion_card", "open_daevanion_requested"),
-    ("skill_card", "open_skill_planner_requested"),
-    ("items_card", "open_item_database_requested"),
-    ("crafting_card", "open_crafting_calculator_requested"),
+    ("build_card", "open_build_planner_requested", None),
+    ("daevanion_card", "open_daevanion_requested", "TAB_DAEVANION"),
+    ("skill_card", "open_skill_planner_requested", "TAB_SKILLS"),
+    ("items_card", "open_item_database_requested", None),
+    ("crafting_card", "open_crafting_calculator_requested", None),
+)
+
+#: The MainWindow launcher each tab-opening card is wired to, and the
+#: ``LoadoutWindow.TAB_*`` name it must ask for.
+PLANNER_TAB_CASES = tuple(
+    (signal, tab) for _card, signal, tab in CTA_CASES if tab is not None
 )
 
 
-@pytest.mark.parametrize("card_name,signal_name", CTA_CASES)
-def test_the_cta_button_emits_the_page_signal(page, card_name, signal_name):
+@pytest.mark.parametrize("card_name,signal_name,tab_name", CTA_CASES)
+def test_the_cta_button_emits_the_page_signal(page, card_name, signal_name, tab_name):
     page.set_build_planner_state(_synthetic_state())
     fired = []
     getattr(page, signal_name).connect(lambda: fired.append(card_name))
@@ -486,8 +587,8 @@ def test_the_cta_button_emits_the_page_signal(page, card_name, signal_name):
     assert fired == [card_name]
 
 
-@pytest.mark.parametrize("card_name,signal_name", CTA_CASES)
-def test_the_whole_card_is_clickable(page, card_name, signal_name):
+@pytest.mark.parametrize("card_name,signal_name,tab_name", CTA_CASES)
+def test_the_whole_card_is_clickable(page, card_name, signal_name, tab_name):
     """The card is a button, via a real Signal -- not the
     ``row.mousePressEvent = closure`` monkey-patch this page used to carry
     (which kept the widget alive inside a default argument)."""
@@ -500,14 +601,61 @@ def test_the_whole_card_is_clickable(page, card_name, signal_name):
     assert fired == [card_name]
 
 
-@pytest.mark.parametrize("card_name,signal_name", CTA_CASES)
-def test_the_card_is_activatable_by_keyboard(page, card_name, signal_name):
+@pytest.mark.parametrize("card_name,signal_name,tab_name", CTA_CASES)
+def test_the_card_is_activatable_by_keyboard(page, card_name, signal_name, tab_name):
     page.set_build_planner_state(_synthetic_state())
     card = getattr(page, card_name)
     fired = []
     getattr(page, signal_name).connect(lambda: fired.append(card_name))
     QTest.keyClick(card, Qt.Key_Space)
     assert fired == [card_name]
+
+
+@pytest.mark.parametrize("signal_name,tab_name", PLANNER_TAB_CASES)
+def test_the_host_asks_the_armory_for_the_tab_by_name(signal_name, tab_name):
+    """MainWindow must resolve the index through ``LoadoutWindow.TAB_*``.
+
+    A source-level gate rather than a live click, because a live click needs
+    the whole 22k-line Armory module -- which
+    ``tests/test_armory_theme.py::test_opening_the_planner_on_a_named_tab_lands_there``
+    already pays for and asserts against. What this pins is the half that
+    lives here: that the host does not go back to spelling the integer.
+    """
+    import ast
+
+    source = (REPO / "ui" / "main_window.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    main_window = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "MainWindow"
+    )
+    connects = {
+        node.func.value.attr: node.args[0].attr
+        for node in ast.walk(main_window)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "connect"
+        and isinstance(node.func.value, ast.Attribute)
+        and node.args
+        and isinstance(node.args[0], ast.Attribute)
+    }
+    launcher_name = connects[signal_name]
+    launcher = next(
+        node for node in main_window.body
+        if isinstance(node, ast.FunctionDef) and node.name == launcher_name
+    )
+    asked = [
+        node.args[0].value
+        for node in ast.walk(launcher)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "_loadout_tab"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+    ]
+    assert asked == [tab_name], (
+        f"{launcher_name} asks for {asked}, not LoadoutWindow.{tab_name}"
+    )
 
 
 def test_the_empty_state_cta_opens_the_build_planner(page):

@@ -38,8 +38,16 @@ pins 12 seeded random boards' full routes so either decision stays honest.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 __all__ = [
+    "DAEVANION_BOARD_FILES",
+    "DAEVANION_START_GRADE",
     "_DAEVANION_MP_NAMES",
+    "daevanion_chosen_node_count",
+    "daevanion_start_id_by_board_key",
+    "daevanion_start_node_id",
     "_daevanion_compute_auto_route",
     "_daevanion_is_reachable",
     "_daevanion_neighbors",
@@ -49,6 +57,64 @@ __all__ = [
     "_daevanion_spent_cost",
     "_daevanion_total_cost",
 ]
+
+#: The grade every board's free, always-on root node carries.  One spelling,
+#: because two modules depend on it: app.py seeds it into the active set and
+#: refuses to toggle it, and the Armory dashboard must NOT count it as a
+#: node the player chose.
+DAEVANION_START_GRADE = "start"
+
+#: The per-variant board data files, relative to the catalog directory
+#: (``armory_engine.providers.CATALOG_SUBDIR``).  Named here so the host can
+#: read them without importing the 22k-line ``app.py``.
+DAEVANION_BOARD_FILES = {"s": "daevanion_boards_s.json", "a": "daevanion_boards_a.json"}
+
+
+def daevanion_start_node_id(grid: dict) -> str | None:
+    """The id of ``grid``'s start node, or ``None`` if it has none.
+
+    ``grid`` is ``{(r, c): node}``.  Identity is the node's GRADE, never its
+    position or its position in some list -- boards do not agree on where
+    the root sits, and a dict has no first element to rely on.
+    """
+    return next(
+        (node["id"] for node in grid.values() if node.get("g") == DAEVANION_START_GRADE),
+        None,
+    )
+
+
+def daevanion_chosen_node_count(node_ids, start_id: str | None) -> int:
+    """How many nodes the PLAYER picked on one board.
+
+    The start node is free and always on (app.py seeds it lazily and refuses
+    to toggle it), so it must not inflate a "N nodes active" count.  It is
+    excluded BY ID: subtracting one blindly under-reports a board that was
+    never seeded, and over-reports nothing only by luck (Apex review of
+    PR #7, finding 8).
+    """
+    return sum(1 for node_id in node_ids if node_id and node_id != start_id)
+
+
+def daevanion_start_id_by_board_key(data_dir) -> dict[str, str]:
+    """``{"<variant>:<board id>": start node id}`` straight off the board data.
+
+    The key shape is the one ``LoadoutWindow`` persists ``daevanion_active``
+    under, so a caller holding only a saved profile can still exclude the
+    right node.  Missing or malformed data yields ``{}``: the caller falls
+    back, it never raises.
+    """
+    start_ids: dict[str, str] = {}
+    for variant, filename in DAEVANION_BOARD_FILES.items():
+        path = Path(data_dir) / filename
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for node in raw.get("nodes", []):
+            if node.get("g") == DAEVANION_START_GRADE and node.get("b"):
+                start_ids[f"{variant}:{node['b']}"] = node["id"]
+    return start_ids
+
 
 def _daevanion_neighbors(r: int, c: int) -> list[tuple[int, int]]:
     return [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]

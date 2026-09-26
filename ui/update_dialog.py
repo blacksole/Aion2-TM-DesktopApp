@@ -320,16 +320,17 @@ class _ChangelogFetcher(QThread):
     failed = Signal()
 
     def run(self):
-        # Only the current "major line" (User-Wunsch, 2026-09-17: "immer
-        # bis zur letzten vollen Zahl" -- while the app sits on 2.0.x this
-        # means 2.0.0 upward, not every 1.x/0.x release ever made). Bumping
-        # to 3.0.0 later automatically narrows the window to 3.x.x with no
-        # code change needed here.
-        current_major = APP_VERSION.split(".")[0]
-        local_entries = [
-            e for e in parse_local_changelog()
-            if e["tag"].split(".")[0] == current_major
-        ]
+        # EVERY version ever written down, oldest included. The split into
+        # "the current major line, shown right away" and "older lines,
+        # behind Load more" is the DIALOG's job (see
+        # ChangelogHistoryDialog._on_fetched) -- filtering by major version
+        # HERE (as an earlier revision of this thread did) made
+        # _on_fetched's `older` list permanently empty and the
+        # User-requested "Load more" button (User-Wunsch, 2026-09-17:
+        # "darunter dann einen 'load more' einbauen, der dann den Rest
+        # anzeigt") structurally unreachable, along with the whole
+        # 1.9.x/0.x history in CHANGELOG.md.
+        local_entries = parse_local_changelog()
 
         entries = [
             {

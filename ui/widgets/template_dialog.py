@@ -1313,38 +1313,71 @@ class TemplateDialog(QDialog):
             else:
                 self._rebuild_task_list()
 
-    def _default_new_entries(self, kind: str) -> list[dict]:
-        """Entries in the SAME-NAMED set of the language-matched Default
-        profile's Standard Template Sets that THIS profile's currently
-        selected set doesn't have yet, matched by title (case-insensitive)
-        -- ids never match across different profiles (established this
-        session), so title is the only reliable key.
+    def _default_sync_source(self, kind: str) -> tuple[list[dict], str]:
+        """``(the Default-profile set to sync against, hint key)``.
 
-        Named-Set aware (User-Wunsch, 2026-09-23: Sync needs to know which
-        of the now-multiple sets it's comparing against) -- Sync compares
-        the CURRENTLY SELECTED set here against the identically-named set
-        over in the Default profile; if this profile has no set of that
-        name selected yet (empty profile, first set), there's nothing to
-        sync against and this returns empty rather than guessing a target."""
+        Sync compares this profile's CURRENTLY SELECTED set against a set in
+        the language-matched Default profile.  Matching them by NAME is the
+        obvious rule and was the only rule -- which made the whole feature
+        die the moment a user renamed or created a set (Apex review of
+        PR #7, finding 6): ``profiles/Default*.json`` ship the flat legacy
+        list, so after migration Default holds exactly ONE set, and any name
+        but that one returned ``[]`` forever with a silently disabled
+        button and no explanation.
+
+        So: same name wins; failing that, if Default has exactly one set
+        there is no ambiguity about what "the standard templates" means and
+        that set is the target.  Only a genuine ambiguity (Default grew a
+        second set and none of them matches by name) leaves Sync without a
+        source -- and then it says so, in the hint, instead of going quiet.
+        """
         set_name = self._current_set_name(kind)
         if set_name is None:
-            return []
+            return [], "standards_sync_hint_no_set"
+        default_sets = self._default_standard_templates.get(kind, {})
+        if set_name in default_sets:
+            return list(default_sets[set_name]), ""
+        if len(default_sets) == 1:
+            return list(next(iter(default_sets.values()))), ""
+        if not default_sets:
+            return [], "standards_sync_hint_no_default"
+        return [], "standards_sync_hint_ambiguous"
+
+    def _default_new_entries(self, kind: str) -> list[dict]:
+        """Entries in the Default profile's matching set (see
+        :meth:`_default_sync_source`) that THIS profile's currently selected
+        set doesn't have yet, matched by title (case-insensitive) -- ids
+        never match across different profiles (established this session), so
+        title is the only reliable key."""
+        default_set, _hint = self._default_sync_source(kind)
         existing = {t.get("title", "").strip().lower() for t in self._current_set_list(kind) if t.get("title")}
-        default_set = self._default_standard_templates.get(kind, {}).get(set_name, [])
         return [
             t for t in default_set
             if t.get("title", "").strip().lower() not in existing
         ]
 
+    def _update_sync_btn(self, kind: str, button):
+        """Count on the button, and -- when it is disabled -- WHY on its
+        tooltip.  A permanently greyed-out button with no explanation is
+        what made finding 6 invisible for two weeks."""
+        default_set, hint_key = self._default_sync_source(kind)
+        count = len(self._default_new_entries(kind))
+        button.setText(f'{self._t("standards_sync_btn")} ({count})')
+        button.setEnabled(count > 0)
+        if count > 0:
+            button.setToolTip(self._t("standards_sync_title"))
+        elif hint_key:
+            button.setToolTip(self._t(hint_key))
+        elif default_set:
+            button.setToolTip(self._t("standards_sync_hint_up_to_date"))
+        else:
+            button.setToolTip(self._t("standards_sync_hint_no_default"))
+
     def _update_shop_sync_btn(self):
-        count = len(self._default_new_entries("shopping"))
-        self._shop_sync_btn.setText(f'{self._t("standards_sync_btn")} ({count})')
-        self._shop_sync_btn.setEnabled(count > 0)
+        self._update_sync_btn("shopping", self._shop_sync_btn)
 
     def _update_task_sync_btn(self):
-        count = len(self._default_new_entries("tasks"))
-        self._task_sync_btn.setText(f'{self._t("standards_sync_btn")} ({count})')
-        self._task_sync_btn.setEnabled(count > 0)
+        self._update_sync_btn("tasks", self._task_sync_btn)
 
     def _open_sync_dialog(self, kind: str):
         """"⟳ Sync" (User-Wunsch, 2026-09-10) -- merge-only: never touches or
@@ -1354,7 +1387,8 @@ class TemplateDialog(QDialog):
         catalog either (different profile, so ids never carried over), a
         copy of it is added there too, so the new Standard entry has a real
         source to link back to via source_id -- same as every other entry.
-        Targets the CURRENTLY SELECTED named set (see _default_new_entries)."""
+        Targets the CURRENTLY SELECTED named set, comparing it against
+        whichever Default set :meth:`_default_sync_source` resolves to."""
         new_entries = self._default_new_entries(kind)
         if not new_entries:
             return
