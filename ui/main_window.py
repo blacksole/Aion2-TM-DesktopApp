@@ -33,7 +33,9 @@ from core.translations import tr
 from core import theme
 from . import motion
 from core.update_checker import UpdateChecker
+from core.news_checker import NewsChecker
 from core.version import ARMORY_ENABLED
+from ui.news_dialog import NewsDialog, NEWS_POPUP_ENABLED
 from utils import paths
 from ui.widgets import icons
 
@@ -415,6 +417,7 @@ class MainWindow(QMainWindow):
         self.dps_meter_autostart = False
         self.minimize_to_tray = None  # None = not asked yet
         self._avatar_b64 = ""
+        self._last_seen_news_id = 0
         self.characters: list = []
 
         self.profile_dir = self._resolve_profile_dir()
@@ -462,7 +465,10 @@ class MainWindow(QMainWindow):
 
         self.item_templates: list = []
         self.task_templates: list = []
-        self.standard_templates: dict = {"tasks": [], "shopping": []}
+        # Named Standard Template Sets -- {"tasks": {"SetName": [...]},
+        # "shopping": {"SetName": [...]}}. See core.persistence.
+        # migrate_standard_templates for the shape's history/migration.
+        self.standard_templates: dict = {"tasks": {}, "shopping": {}}
 
         self.flow_maps: dict = {}
         self.active_flow_map_name: str = "Map 1"
@@ -935,6 +941,7 @@ class MainWindow(QMainWindow):
         self._build_planner_state = state
         page = getattr(self, "armory_page", None)
         if page is not None:
+            page.set_daevanion_start_ids(self._daevanion_start_ids())
             page.set_build_planner_state(state)
             page.set_recommendations(self._armory_recommendations(state))
 
@@ -1062,6 +1069,35 @@ class MainWindow(QMainWindow):
         except Exception:  # pragma: no cover - same reasoning as above
             logger.exception("Armory recommendations failed for the current build")
             return []
+
+    def _daevanion_start_ids(self) -> dict[str, str]:
+        """``{"<variant>:<board id>": start node id}`` for the dashboard.
+
+        Pushed into the page for the same reason the recommendations are:
+        the answer lives in the board data under ``ItemDatabase/data/`` and
+        ``ui/pages/armory_page.py`` imports neither that nor the engine.
+        Without it the page falls back to subtracting one per board, which
+        under-reports a board saved without its start node (Apex review of
+        PR #7, finding 8).
+
+        Cached: the board data cannot change while the app runs, and this
+        runs on every profile load and every planner close. Never raises --
+        a dashboard number is not worth an exception, and ``{}`` is exactly
+        the "not known" the page's fallback is written for.
+        """
+        cached = getattr(self, "_daevanion_start_id_cache", None)
+        if cached is not None:
+            return cached
+        start_ids: dict[str, str] = {}
+        try:
+            self._ensure_armory_engine_importable(self._armory_bundle_dir())
+            from armory_engine.daevanion import daevanion_start_id_by_board_key
+
+            start_ids = daevanion_start_id_by_board_key(self._armory_data_dir())
+        except Exception:  # pragma: no cover - same reasoning as the engine loader
+            logger.exception("Daevanion board data unreadable — node counts fall back")
+        self._daevanion_start_id_cache = start_ids
+        return start_ids
 
     def _refresh_armory_summary(self):
         """Re-read the live Build Planner into the dict, then the page.
@@ -1237,13 +1273,35 @@ class MainWindow(QMainWindow):
         window.raise_()
         window.activateWindow()
 
-    # LoadoutWindow.main_tabs index order (see ItemDatabase/app.py's
-    # main_tabs.addTab calls in LoadoutWindow.__init__): Equipment=0,
-    # Daevanion Board=1, Arcana=2, Skill Planner=3, Pantheon=4, Genius
-    # Insight=5. Named here so the Armory dashboard's per-card launchers
-    # below don't repeat bare index numbers.
+    # LoadoutWindow.main_tabs index order is a fact about
+    # ItemDatabase/app.py's own addTab calls, so it is READ from
+    # ``LoadoutWindow.TAB_*`` (see :meth:`_loadout_tab`) rather than copied.
+    # These two constants used to be that copy, and nothing held the pair
+    # together: reorder a tab over there and the Armory dashboard's cards
+    # silently landed on the wrong page (Apex review of PR #7, finding 7).
+    # They survive only as the last-resort fallback for the case where the
+    # module could not be loaded at all -- in which case no window opens
+    # either.
     _DAEVANION_BOARD_TAB = 1
     _SKILL_PLANNER_TAB = 3
+
+    def _loadout_tab(self, name: str, fallback: int) -> int:
+        """The Armory's own index for one of its Build Planner tabs.
+
+        ``name`` is a ``LoadoutWindow.TAB_*`` attribute name. The module is
+        always loaded by the time a launcher below runs
+        (``_ensure_item_database_window`` is called first), so the fallback
+        is genuinely a dead branch in practice -- it exists so that a
+        missing/renamed constant degrades to the old behaviour instead of
+        raising inside a click handler.
+        """
+        module = getattr(self, "_item_database_module", None)
+        loadout = getattr(module, "LoadoutWindow", None)
+        index = getattr(loadout, name, None)
+        if isinstance(index, int):
+            return index
+        logger.warning("LoadoutWindow.%s is unavailable — falling back to %d", name, fallback)
+        return fallback
 
     def open_build_planner_window(self):
         logger.debug("Opening Build Planner window")
@@ -1253,12 +1311,12 @@ class MainWindow(QMainWindow):
     def open_daevanion_board_window(self):
         logger.debug("Opening Build Planner window (Daevanion Board tab)")
         window = self._ensure_item_database_window()
-        window.open_loadout_window(tab=self._DAEVANION_BOARD_TAB)
+        window.open_loadout_window(tab=self._loadout_tab("TAB_DAEVANION", self._DAEVANION_BOARD_TAB))
 
     def open_skill_planner_window(self):
         logger.debug("Opening Build Planner window (Skill Planner tab)")
         window = self._ensure_item_database_window()
-        window.open_loadout_window(tab=self._SKILL_PLANNER_TAB)
+        window.open_loadout_window(tab=self._loadout_tab("TAB_SKILLS", self._SKILL_PLANNER_TAB))
 
     def open_crafting_calculator_window(self):
         logger.debug("Opening Crafting Calculator window")
@@ -1704,6 +1762,15 @@ class MainWindow(QMainWindow):
         # network QThread that can still be running at interpreter exit.
         if not os.environ.get("AION2TM_NO_UPDATE_CHECK"):
             QTimer.singleShot(2000, self, self.run_update_check)
+
+        # News popup (Teil 2, @koordinator 2026-09-26): same startup-timer
+        # pattern as the update check above, gated behind NEWS_POPUP_ENABLED
+        # (ui/news_dialog.py) until format/frequency/dismiss-behaviour/i18n
+        # are settled with the real WordPress site. AION2TM_NO_UPDATE_CHECK
+        # also skips this -- same "no network thread at interpreter exit in
+        # tests/CI" reasoning as the update checker.
+        if NEWS_POPUP_ENABLED and not os.environ.get("AION2TM_NO_UPDATE_CHECK"):
+            QTimer.singleShot(2500, self, self.run_news_check)
 
     def open_main_menu(self):
         menu = QMenu(self)
@@ -2372,7 +2439,7 @@ class MainWindow(QMainWindow):
         if self.minimize_to_tray is True and self._tray_ready():
             event.ignore()
             self.hide()
-            self._notify("Aion2 TM", tr(self.language, "tray_running"), 3000)
+            self._notify("Aion 2 Companion", tr(self.language, "tray_running"), 3000)
             return
 
         if self.minimize_to_tray is None and self._tray_ready():
@@ -2391,7 +2458,7 @@ class MainWindow(QMainWindow):
                 self._save_app_config()
                 event.ignore()
                 self.hide()
-                self._notify("Aion2 TM", tr(self.language, "tray_running"), 3000)
+                self._notify("Aion 2 Companion", tr(self.language, "tray_running"), 3000)
             else:
                 self.minimize_to_tray = False
                 self._save_app_config()
@@ -2881,7 +2948,15 @@ class MainWindow(QMainWindow):
 
             self.item_templates = data.get("item_templates", [])
             self.task_templates = data.get("task_templates", [])
-            self.standard_templates = data.get("standard_templates", {"tasks": [], "shopping": []})
+            # Named Standard Template Sets (Planner: "Mehrere benennbare/
+            # umbenennbare Standard-Template-Sets", freigegeben 2026-09-23)
+            # -- migrate_standard_templates handles both an old profile's
+            # flat list (wrapped into one set) and an already-migrated
+            # named-dict profile (passed through unchanged) the same way,
+            # so every load -- regardless of when the profile was last
+            # saved -- ends up in the current {"tasks": {name: [...]}} shape.
+            from core.persistence import migrate_standard_templates
+            self.standard_templates = migrate_standard_templates(data.get("standard_templates"))
             self.tasks_page.update_templates(self.item_templates)
             self.tasks_page.update_task_templates(self.task_templates)
             self.tasks_page.update_standard_templates(self.standard_templates)
@@ -3180,6 +3255,7 @@ class MainWindow(QMainWindow):
                 raw_mtt = cfg.get("minimize_to_tray", None)
                 self.minimize_to_tray = bool(raw_mtt) if raw_mtt is not None else None
                 self._avatar_b64 = cfg.get("avatar", "")
+                self._last_seen_news_id = cfg.get("last_seen_news_id", 0)
                 custom = cfg.get("profile_dir", "")
                 if custom:
                     p = Path(custom)
@@ -3208,6 +3284,7 @@ class MainWindow(QMainWindow):
             "dps_meter_autostart": self.dps_meter_autostart,
             "minimize_to_tray": self.minimize_to_tray,
             "avatar": self._avatar_b64,
+            "last_seen_news_id": self._last_seen_news_id,
         }
         self.app_config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
@@ -3296,26 +3373,32 @@ class MainWindow(QMainWindow):
         return backup_dir
 
     def _load_default_standard_templates(self) -> dict:
-        """The language-matched Default profile's OWN Standard Templates --
-        read-only reference for TemplateDialog's "⟳ Sync" (User-Wunsch,
-        2026-09-10: let an existing profile pull in Standard Template
-        entries a later update added to Default). Reads from profile_dir/
-        Backup/ (this version's pristine bundled copy, refreshed every
-        launch) rather than the user's own live Default.json -- that live
-        file could itself be the user's heavily-customized profile, which
-        would make Sync compare it against itself and always find nothing
-        new. Tolerant of a missing/unreadable file since this is a non-
-        critical convenience feature, not core profile data."""
+        """The language-matched Default profile's OWN Standard Template
+        Sets -- read-only reference for TemplateDialog's "⟳ Sync" (User-
+        Wunsch, 2026-09-10: let an existing profile pull in Standard
+        Template entries a later update added to Default). Reads from
+        profile_dir/Backup/ (this version's pristine bundled copy, refreshed
+        every launch) rather than the user's own live Default.json -- that
+        live file could itself be the user's heavily-customized profile,
+        which would make Sync compare it against itself and always find
+        nothing new. Tolerant of a missing/unreadable file since this is a
+        non-critical convenience feature, not core profile data.
+
+        Named-Set shape (Planner: "Mehrere benennbare/umbenennbare
+        Standard-Template-Sets") via migrate_standard_templates, same as
+        the profile's own standard_templates -- so TemplateDialog can
+        compare the two using identical set names."""
+        from core.persistence import migrate_standard_templates
         stem = self._LANG_DEFAULT_STEMS.get(self.language, "Default")
         path = self.profile_dir / "Backup" / f"{stem}.json"
         if not path.exists():
-            return {"tasks": [], "shopping": []}
+            return {"tasks": {}, "shopping": {}}
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError):
-            return {"tasks": [], "shopping": []}
-        return data.get("standard_templates", {"tasks": [], "shopping": []})
+            return {"tasks": {}, "shopping": {}}
+        return migrate_standard_templates(data.get("standard_templates"))
 
     def _restore_default_profiles(self):
         """"Restore Default profile" button in Settings (User-Wunsch, 2026-
@@ -4137,6 +4220,30 @@ class MainWindow(QMainWindow):
         )
         dlg.exec()
 
+    def _pick_standard_set(self, kind: str, title_key: str, label_key: str) -> str | None:
+        """Lets the user pick WHICH named Standard Template Set of `kind`
+        to use, when there is more than one to choose from (Planner:
+        "Mehrere benennbare/umbenennbare Standard-Template-Sets" -- User-
+        Wunsch, 2026-09-23: assignment happens by free selection at
+        APPLICATION time, no Main/Twink tag stored on the character).
+
+        Zero-friction for the common case: 0 sets -> None (nothing to
+        apply), exactly 1 set -> that one set, no dialog at all (matches
+        the old single-starter-pack behaviour exactly). Only 2+ sets ever
+        show the picker."""
+        sets = self.standard_templates.get(kind, {})
+        names = list(sets.keys())
+        if not names:
+            return None
+        if len(names) == 1:
+            return names[0]
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getItem(
+            self, tr(self.language, title_key), tr(self.language, label_key),
+            names, 0, False,
+        )
+        return name if ok else None
+
     def _add_character(self, name: str) -> tuple[bool, str]:
         """Creates a real Flow Map "character"-icon node as a direct child
         of the ACTIVE flow map's root -- characters have no separate
@@ -4192,8 +4299,20 @@ class MainWindow(QMainWindow):
         button, which replaced the old CSV Import/Export at the same spot,
         per the user's own earlier decision), independent of the existing
         is_general flag (that one auto-adds to EVERY character's live
-        list already; this one only fires once, at character creation)."""
-        for tmpl in self.standard_templates.get("tasks", []):
+        list already; this one only fires once, at character creation).
+
+        Named-Set aware (Planner: "Mehrere benennbare/umbenennbare
+        Standard-Template-Sets", freigegeben 2026-09-23): Tasks and
+        Shopping pick their OWN set independently -- there is no
+        assumption that a shared name between the two means anything, and
+        no Main/Twink tag is stored on the character; the set is chosen
+        fresh, right here, at application time (0 sets -> skipped, exactly
+        1 -> auto-picked, 2+ -> the user is asked which one)."""
+        task_set = self._pick_standard_set("tasks", "standards_pick_set_title_tasks", "standards_pick_set_label")
+        shop_set = self._pick_standard_set("shopping", "standards_pick_set_title_shopping", "standards_pick_set_label")
+        task_templates = self.standard_templates.get("tasks", {}).get(task_set, []) if task_set else []
+        shop_templates = self.standard_templates.get("shopping", {}).get(shop_set, []) if shop_set else []
+        for tmpl in task_templates:
             card = TaskCard(
                 tmpl.get("title", ""),
                 tmpl.get("description", ""),
@@ -4206,7 +4325,7 @@ class MainWindow(QMainWindow):
             )
             self._wire_card(card)
             self.task_lists.setdefault("tasks", []).append(card)
-        for tmpl in self.standard_templates.get("shopping", []):
+        for tmpl in shop_templates:
             card = ShoppingCard(
                 priority=tmpl.get("priority", "middle"),
                 amount=str(tmpl.get("amount", "1")),
@@ -4220,12 +4339,12 @@ class MainWindow(QMainWindow):
             )
             self._wire_card(card)
             self.task_lists.setdefault("shopping", []).append(card)
-        if self.standard_templates.get("tasks") or self.standard_templates.get("shopping"):
+        if task_templates or shop_templates:
             self.refresh()
             if self.auto_save:
                 self.save_profile(silent=True)
 
-    def _apply_standard_templates_to_existing(self, character: str):
+    def _apply_standard_templates_to_existing(self, character: str, set_name: str = ""):
         """"+Add" on the Standards tab of the Tasks/Shopping toolbar (User-
         Wunsch, 2026-09-09: "Falls Templates bereits zugewiesen sind, sollen
         alle templates aus dem Standard hinzugefügt werden, die nicht
@@ -4236,9 +4355,23 @@ class MainWindow(QMainWindow):
         this call's active tab) are skipped instead of duplicated. Also
         resolves the "nothing happens" report from picking one entry in the
         dropdown -- there is no picker requirement here at all, every
-        not-yet-assigned Standard Template just gets added at once."""
+        not-yet-assigned Standard Template just gets added at once.
+
+        Named-Set aware: `set_name` now comes straight from
+        TasksPage.standard_apply_requested, i.e. whatever its OWN
+        std_set_combo has selected (Planner Nachtrag 2026-09-23: tobia's
+        screenshot showed that combo was missing from this main tab view
+        entirely -- added right there, next to the Standards tab toggle).
+        Falls back to _pick_standard_set's zero-friction rule (0 sets ->
+        skipped, exactly 1 -> auto-picked, 2+ -> asks) only if the page
+        didn't send one -- e.g. a stale connection during a hot-reload."""
         kind = self.active_tab
         if kind not in ("tasks", "shopping"):
+            return
+        if not set_name or set_name not in self.standard_templates.get(kind, {}):
+            title_key = "standards_pick_set_title_tasks" if kind == "tasks" else "standards_pick_set_title_shopping"
+            set_name = self._pick_standard_set(kind, title_key, "standards_pick_set_label")
+        if not set_name:
             return
         existing_titles = {
             c.title.strip().lower()
@@ -4246,7 +4379,7 @@ class MainWindow(QMainWindow):
             if getattr(c, "character", "") == character
         }
         added_any = False
-        for tmpl in self.standard_templates.get(kind, []):
+        for tmpl in self.standard_templates.get(kind, {}).get(set_name, []):
             title = tmpl.get("title", "").strip()
             if not title or title.lower() in existing_titles:
                 continue
@@ -4983,6 +5116,26 @@ class MainWindow(QMainWindow):
         self._checker.update_available.connect(self._on_update_available)
         self._checker.up_to_date.connect(lambda: None)
         self._checker.start()
+
+    def run_news_check(self):
+        self._news_checker = NewsChecker()
+        self._news_checker.post_available.connect(self._on_news_post_available)
+        self._news_checker.no_news.connect(lambda: None)
+        self._news_checker.start()
+
+    def _on_news_post_available(self, post_id: int, title: str, excerpt: str, link: str, date: str = ""):
+        # Only ever show a post once -- persisted in config.json (not the
+        # per-character profile) so it's remembered across restarts and
+        # isn't duplicated per character. A lower/equal id (including a
+        # post getting un-published and a different one taking the "latest"
+        # spot) is treated as "nothing new", same as the update checker
+        # treats "not newer" as up_to_date.
+        if post_id <= self._last_seen_news_id:
+            return
+        self._last_seen_news_id = post_id
+        self._save_app_config()
+        dlg = NewsDialog(title, excerpt, link, date=date, language=self.language, parent=self)
+        dlg.exec()
 
     def _on_update_available(self, version: str, body: str, asset_url: str, sha256_url: str = ""):
         # sha256_url is "" when the release published no checksum sidecar --

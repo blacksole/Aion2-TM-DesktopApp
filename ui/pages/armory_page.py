@@ -192,11 +192,44 @@ def _current_build(state: dict, data_key: str, name_key: str, class_key: str) ->
     return name, _as_dict(builds.get(name))
 
 
-def summarize_build_planner(state: dict | None) -> ArmorySummary:
+def _count_chosen_daevanion_nodes(node_ids: list, start_id: str | None) -> int:
+    """Nodes on one board the PLAYER actually picked.
+
+    Every board carries a free, always-on "start" node
+    (``LoadoutWindow._daevanion_active_set`` seeds it lazily and
+    ``_daevanion_on_node_clicked`` refuses to toggle it), so it must not
+    inflate this card's "N nodes active" count -- User-reported,
+    2026-09-22: a fresh board nobody had clicked read "1 nodes active".
+
+    With ``start_id`` known the node is excluded BY ID, which is the real
+    rule (``armory_engine.daevanion.daevanion_chosen_node_count``).  Without
+    it -- board data absent, or a host that pushes nothing in -- this falls
+    back to subtracting one, which is what shipped in 2.0.8 and is wrong in
+    exactly one direction: a board saved WITHOUT its start node (a legacy
+    profile, or a board seeded by an older build) under-reports by one
+    (Apex review of PR #7, finding 8).
+    """
+    present = [node_id for node_id in node_ids if node_id]
+    if start_id is not None:
+        return sum(1 for node_id in present if node_id != start_id)
+    return max(0, len(present) - 1)
+
+
+def summarize_build_planner(
+    state: dict | None, daevanion_start_ids: dict[str, str] | None = None
+) -> ArmorySummary:
     """Fold the persisted Armory state into the numbers the cards show.
 
     ``None`` (no profile loaded, or a profile saved before the Build Planner
     existed) returns the default summary, whose ``is_empty`` is True.
+
+    ``daevanion_start_ids`` maps a ``daevanion_active`` key
+    (``"<variant>:<board id>"``) to that board's free start-node id.  It is
+    PUSHED IN by the host, exactly like the recommendations are and for the
+    same reason: which node is the start is a fact about the board data
+    under ``ItemDatabase/data/``, and this page imports neither the data nor
+    the engine.  ``None``/missing key falls back to the old "subtract one"
+    guess -- see :func:`_count_chosen_daevanion_nodes`.
     """
     if not isinstance(state, dict):
         return ArmorySummary()
@@ -240,17 +273,9 @@ def summarize_build_planner(state: dict | None) -> ArmorySummary:
         if skill_id
     )
 
-    # Every per-board entry here always carries its board's "start" node
-    # (LoadoutWindow._daevanion_active_set seeds it lazily and
-    # _daevanion_on_node_clicked refuses to toggle it, see app.py) --
-    # that node is free/always-on in-game, not something the player chose,
-    # so it must not inflate this card's "N nodes active" count (User-
-    # reported, 2026-09-22: showed "1 nodes active" on a fresh board no
-    # node had ever been clicked on). One real node id -> zero counted
-    # nodes stays 0 via max(), never negative.
     daevanion_nodes = sum(
-        max(0, sum(1 for node in _as_list(nodes) if node) - 1)
-        for nodes in _as_dict(state.get("daevanion_active")).values()
+        _count_chosen_daevanion_nodes(_as_list(nodes), (daevanion_start_ids or {}).get(key))
+        for key, nodes in _as_dict(state.get("daevanion_active")).items()
     )
 
     pantheon = _as_dict(state.get("pantheon_slots"))
@@ -593,6 +618,9 @@ class ArmoryPage(QWidget):
         # here, and kept as engine objects rather than as rendered strings
         # so a language switch re-renders them.
         self._recommendations: tuple = ()
+        # Same contract as the recommendations: pushed in by the host (see
+        # set_daevanion_start_ids), never read off disk here.
+        self._daevanion_start_ids: dict[str, str] = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -684,7 +712,7 @@ class ArmoryPage(QWidget):
 
     def set_build_planner_state(self, state: dict | None):
         """Host hook: re-derive and re-render from the persisted dict."""
-        self._summary = summarize_build_planner(state)
+        self._summary = summarize_build_planner(state, self._daevanion_start_ids)
         self._render()
 
     @property
@@ -707,6 +735,19 @@ class ArmoryPage(QWidget):
             tuple(recommendations) if isinstance(recommendations, (list, tuple)) else ()
         )
         self._render()
+
+    def set_daevanion_start_ids(self, start_ids: dict[str, str] | None) -> None:
+        """Host hook: ``{"<variant>:<board id>": start node id}``.
+
+        Which node is a board's free start node is a fact about the board
+        data under ``ItemDatabase/data/``; the host reads it (Qt-free, via
+        ``armory_engine.daevanion.daevanion_start_id_by_board_key``) and
+        pushes it in, so this page keeps its no-ItemDatabase-import rule.
+        Anything but a dict is "not known", which is what makes the
+        fallback in :func:`_count_chosen_daevanion_nodes` reachable rather
+        than theoretical.
+        """
+        self._daevanion_start_ids = dict(start_ids) if isinstance(start_ids, dict) else {}
 
     # ── language ──────────────────────────────────────────────────────────
 

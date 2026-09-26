@@ -62,12 +62,22 @@ def _home(env: Mapping[str, str] | None = None) -> Path:
 def _xdg(env: Mapping[str, str] | None, var: str, fallback: str) -> Path:
     """An XDG base directory: the variable when set to an *absolute* path,
     else the spec-mandated fallback relative to home (the XDG basedir spec
-    requires relative values to be ignored)."""
+    requires relative values to be ignored).
+
+    The absolute check is a plain string ``startswith("/")``, not
+    ``Path(value).is_absolute()``: on a Windows *host*,
+    ``Path("/xdg/data").is_absolute()`` is False (no drive letter), which
+    would silently take the "relative value, ignore it" branch below even
+    for a genuinely absolute POSIX override -- this branch is exercised from
+    Windows dev machines via the ``platform=`` injection (see
+    test_platform.py's module docstring), not just real Linux hosts. Still
+    returns a plain ``Path`` (unlike a ``PurePosixPath`` attempt at this same
+    fix): callers ``mkdir()`` these on a real Linux host, e.g.
+    ``ensure_dir(user_cache_dir() / "armory")`` in ItemDatabase/app.py.
+    """
     value = _envmap(env).get(var, "")
-    if value:
-        candidate = Path(value)
-        if candidate.is_absolute():
-            return candidate
+    if value.startswith("/"):
+        return Path(value)
     return _home(env) / fallback
 
 

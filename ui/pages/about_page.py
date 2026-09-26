@@ -354,8 +354,8 @@ class AboutPage(QWidget):
         # this call) can translate its own button too.
         self._cur_lang = language
         self._cur_tr = tr_func
-        _nav_labels = {"de": "Über Aion2 TM", "ru": "Об Aion2 TM"}
-        self.page_title.setText(_nav_labels.get(language, "About Aion2 TM"))
+        _nav_labels = {"de": "Über Aion 2 Companion", "ru": "Об Aion 2 Companion"}
+        self.page_title.setText(_nav_labels.get(language, "About Aion 2 Companion"))
         self.about_title_lbl.setText(tr_func(language, "about"))
         self.about_version_lbl.setText(f"v{APP_VERSION}  ·  Python + PySide6  ·  by blacksole")
         self.about_desc_lbl.setText(tr_func(language, "about_desc"))
@@ -379,7 +379,7 @@ class AboutPage(QWidget):
         self.sources_desc_lbl.setText(tr_func(language, "sources_desc"))
 
     def _copy_version(self):
-        QApplication.clipboard().setText(f"Aion2 TM v{APP_VERSION}")
+        QApplication.clipboard().setText(f"Aion 2 Companion v{APP_VERSION}")
 
     def _show_qr_dialog(self):
         qr_path = _PROJECT_ROOT / "assets" / "images" / "QR-Code.png"

@@ -204,6 +204,13 @@ def test_play_wav_missing_file_returns_false(tmp_path):
 
 
 def test_play_wav_falls_back_to_cli_player(tmp_path, monkeypatch):
+    # play_wav() reads sys.platform directly (no injectable `platform=`, since
+    # this is the one function real playback goes through). On a Windows
+    # host `_plat(None) == _WIN` is true and the function returns via
+    # _play_winsound() before ever touching the mocked _play_qt/CLI path
+    # below -- monkeypatch _plat itself so this test exercises the
+    # non-Windows branch regardless of the host running it.
+    monkeypatch.setattr(sound, "_plat", lambda _p: "linux")
     wav = tmp_path / "beep.wav"
     wav.write_bytes(b"")
     spawned: list[list[str]] = []
@@ -220,6 +227,7 @@ def test_play_wav_falls_back_to_cli_player(tmp_path, monkeypatch):
 
 
 def test_play_wav_returns_false_when_no_backend_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(sound, "_plat", lambda _p: "linux")
     wav = tmp_path / "beep.wav"
     wav.write_bytes(b"")
     monkeypatch.setattr(sound, "_play_qt", lambda *a: (_ for _ in ()).throw(RuntimeError("none")))

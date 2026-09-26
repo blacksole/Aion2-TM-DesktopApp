@@ -1780,6 +1780,148 @@ QListWidget::item:selected {
     font-weight: {{font_weight_bold}};
 }
 
+/* ── Item Compare (ItemCompareDialog) ──────────────────────────────────
+   Winner/loser colours are Build Compare's pair above -- ok / danger,
+   tobia's call 2026-09-24 -- so both compare views read alike.  The
+   arrow in the text (▲/▼) carries the same information for anyone who
+   cannot tell the two apart: ok vs danger is 1.59:1 in luminance.       */
+
+#CompareBody {
+    background-color: {{bg_surface}};
+}
+
+#CompareTitle {
+    font-size: {{text_lg}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#CompareSwap {
+    color: {{fg_secondary}};
+    background: transparent;
+    border: 1px solid {{border}};
+    border-radius: {{radius_sm}}px;
+    padding: 4px 12px;
+}
+
+#CompareSwap:hover {
+    color: {{fg}};
+    border-color: {{border_strong}};
+}
+
+#CompareCard {
+    background-color: {{bg_elevated}};
+    border: 1px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+#CompareIcon {
+    background-color: {{bg_overlay}};
+    border-radius: {{radius_sm}}px;
+}
+
+#CompareItemName {
+    font-size: {{text_md}}px;
+    font-weight: {{font_weight_semibold}};
+}
+
+#CompareItemMeta {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+#CompareVs {
+    color: {{fg_muted}};
+    font-weight: {{font_weight_semibold}};
+    padding: 0 4px;
+}
+
+#CompareSummary {
+    color: {{fg_secondary}};
+}
+
+#CompareNote {
+    color: {{fg_muted}};
+    font-size: {{text_sm}}px;
+}
+
+#CompareSection {
+    color: {{fg_secondary}};
+    font-size: {{text_xs}}px;
+    font-weight: {{font_weight_semibold}};
+    letter-spacing: 1px;
+    padding-top: 6px;
+}
+
+#CompareTable {
+    background-color: {{bg_elevated}};
+    border: 1px solid {{border}};
+    border-radius: {{radius_md}}px;
+}
+
+#CompareHead {
+    color: {{fg_muted}};
+    font-size: {{text_xs}}px;
+    padding: 8px 10px;
+    border-bottom: 1px solid {{border}};
+}
+
+#CompareStripe {
+    background-color: {{bg_overlay}};
+    border: none;
+}
+
+#CompareCell,
+#CompareDelta {
+    background: transparent;
+    padding: 7px 10px;
+}
+
+#CompareCell[state="win"] {
+    color: {{ok}};
+    font-weight: {{font_weight_bold}};
+}
+
+#CompareCell[state="lose"] {
+    color: {{danger}};
+    font-weight: {{font_weight_bold}};
+}
+
+#CompareCell[state="absent"] {
+    color: {{fg_muted}};
+}
+
+#CompareCell[state="pool"] {
+    color: {{fg_secondary}};
+}
+
+#CompareDelta {
+    font-size: {{text_sm}}px;
+}
+
+#CompareDelta[state="up"] {
+    color: {{ok}};
+}
+
+#CompareDelta[state="down"] {
+    color: {{danger}};
+}
+
+#CompareDelta[state="flat"] {
+    color: {{fg_muted}};
+}
+
+#CompareToggle {
+    color: {{accent}};
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+    text-align: left;
+}
+
+#CompareToggle:hover {
+    text-decoration: underline;
+}
+
 /* ── Equip panel: the item plate, ringed in the item's rarity ──────── */
 
 #EquipItemIconLabel {

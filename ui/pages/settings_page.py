@@ -16,6 +16,7 @@ from core.app_logger import get_log_path
 from core.platform import open_path, platform_placeholder_exe_path, reveal_in_file_manager
 from core.sound import list_system_wavs, play_wav
 from ui.widgets import icons
+from ui.widgets.calendar_popup import calendar_needs_restyle, style_calendar_popup
 
 #: Item data marking the "Browse..." row of a notification-sound picker.
 SOUND_BROWSE_DATA = "__browse_wav__"
@@ -963,9 +964,9 @@ class SettingsPage(QWidget):
             ("abyss", "Abyss"),
             ("inferno", "Inferno"),
             ("emerald", "Emerald"),
-            ("frostbite", "Frostbite"),
+            ("frostbite", "Elyos"),
             ("obsidian", "Obsidian"),
-            ("void", "Void"),
+            ("void", "Asmodae"),
         ]
 
         self.theme_buttons = {}
@@ -1053,7 +1054,18 @@ class SettingsPage(QWidget):
         haben immernoch den gleichen Stil wie das abyss Stil"). Called
         right after emitting theme_changed, since MainWindow's
         apply_theme() (connected to that signal) runs synchronously first
-        and updates self.window()'s "theme" property before this runs."""
+        and updates self.window()'s "theme" property before this runs.
+
+        Same story, same hook, for the calendar popup: its weekday/weekend/
+        header colours are QTextCharFormat objects captured when
+        style_calendar_popup() ran, and a QTextCharFormat follows no
+        stylesheet -- so without this they stayed on whichever theme was
+        active when the settings page was built (Apex review of PR #7,
+        finding 10; calendar_needs_restyle() was written for exactly this
+        call site and was never wired to one)."""
+        date_edit = getattr(self, "season_reset_date", None)
+        if date_edit is not None and calendar_needs_restyle():
+            style_calendar_popup(date_edit)
         for btn in getattr(self, "weekly_day_buttons", []):
             if btn.isChecked():
                 _apply_active_button_style(btn, True, "day")
@@ -1176,12 +1188,16 @@ class SettingsPage(QWidget):
         self.season_reset_date.setDisplayFormat("dd.MM.yyyy")
         self.season_reset_date.setCalendarPopup(True)
         self.season_reset_date.setDate(QDate.currentDate())
-        self.season_reset_date.setFixedWidth(130)
+        self.season_reset_date.setMinimumWidth(130)
+        # The popup is its own top-level window and inherits neither the app
+        # sheet nor the app font; it is themed explicitly.  See
+        # ui/widgets/calendar_popup.py for why the sizing lives in code.
+        style_calendar_popup(self.season_reset_date)
         self.season_reset_time = QTimeEdit()
         self.season_reset_time.setObjectName("settingsTimeInput")
         self.season_reset_time.setDisplayFormat("HH:mm")
         self.season_reset_time.setTime(QTime(9, 0))
-        self.season_reset_time.setFixedWidth(90)
+        self.season_reset_time.setMinimumWidth(90)
         self.season_reset_date.dateChanged.connect(self._on_season_reset_changed)
         self.season_reset_time.timeChanged.connect(self._on_season_reset_changed)
         season_layout.addWidget(self.season_reset_label)
@@ -1239,11 +1255,11 @@ class SettingsPage(QWidget):
         self.shugo_enabled_btn.setAttribute(Qt.WA_StyledBackground, True)
         self.shugo_enabled_btn.setFixedWidth(70)
         self.shugo_minute_combo = QComboBox()
-        self.shugo_minute_combo.setObjectName("settingsCombo")
+        self.shugo_minute_combo.setObjectName("settingsTimerCombo")
         self.shugo_minute_combo.addItems(["00", "15", "30", "45"])
         self.shugo_minute_combo.setFixedWidth(80)
         self.shugo_interval_combo = QComboBox()
-        self.shugo_interval_combo.setObjectName("settingsCombo")
+        self.shugo_interval_combo.setObjectName("settingsTimerCombo")
         self.shugo_interval_combo.addItem("30 min", "30min")
         self.shugo_interval_combo.addItem("1 Stunde", "1h")
         self.shugo_interval_combo.addItem("2 Stunden", "2h")
@@ -1282,11 +1298,11 @@ class SettingsPage(QWidget):
         self.riss_enabled_btn.setAttribute(Qt.WA_StyledBackground, True)
         self.riss_enabled_btn.setFixedWidth(70)
         self.riss_anchor_combo = QComboBox()
-        self.riss_anchor_combo.setObjectName("settingsCombo")
+        self.riss_anchor_combo.setObjectName("settingsTimerCombo")
         self.riss_anchor_combo.addItems(["00", "01", "02"])
         self.riss_anchor_combo.setFixedWidth(80)
         self.riss_interval_combo = QComboBox()
-        self.riss_interval_combo.setObjectName("settingsCombo")
+        self.riss_interval_combo.setObjectName("settingsTimerCombo")
         self.riss_interval_combo.addItem("1 Stunde", "1h")
         self.riss_interval_combo.addItem("2 Stunden", "2h")
         self.riss_interval_combo.addItem("3 Stunden", "3h")

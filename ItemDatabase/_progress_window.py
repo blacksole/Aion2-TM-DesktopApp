@@ -40,7 +40,7 @@ class ProgressWindow(QWidget):
     def __init__(self, steps: list[str]):
         super().__init__()
         self._steps = steps
-        self.setWindowTitle("Aion2 TM -- Game Data Check")
+        self.setWindowTitle("Aion 2 Companion -- Game Data Check")
         self.setFixedSize(420, 480)
 
         layout = QVBoxLayout(self)

@@ -1,21 +1,21 @@
 import os
-import re
 import sys
 import shutil
 import urllib.request
-from datetime import datetime
 from pathlib import Path
-
-import json
-
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextBrowser, QFrame, QScrollArea, QWidget, QButtonGroup,
+    QSizePolicy,
 )
 
 from core.app_logger import get_logger
+from core.changelog import (
+    is_hotfix as _is_hotfix, parse_local_changelog,
+    format_release_date as _format_release_date,
+)
 from core.update_checker import (
     decide_checksum_policy, parse_sha256_sidecar, safe_extract, verify_sha256,
 )
@@ -23,39 +23,6 @@ from core.version import GITHUB_USER, GITHUB_REPO, APP_VERSION
 from core.translations import tr
 
 logger = get_logger("update_dialog")
-
-_RELEASES_LIST_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases"
-
-# Lightweight month-name lookup (User-Wunsch, 2026-09-14: show each
-# version's release date) -- no locale/babel dependency, matching this
-# app's existing lightweight-translation style elsewhere (e.g. the plain
-# "Mo"/"Di" weekday defaults). Only the 3 languages the app itself supports.
-_MONTH_NAMES = {
-    "de": ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
-           "August", "September", "Oktober", "November", "Dezember"],
-    "ru": ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
-           "августа", "сентября", "октября", "ноября", "декабря"],
-    "en": ["January", "February", "March", "April", "May", "June", "July",
-           "August", "September", "October", "November", "December"],
-}
-
-
-def _format_release_date(iso_str: str, language: str) -> str:
-    """GitHub's "published_at" (e.g. "2026-09-14T18:07:29Z") into a
-    human-readable date in the given UI language. Empty/unparsable input
-    just returns "" -- an older or malformed release simply shows no date
-    rather than a confusing placeholder."""
-    if not iso_str:
-        return ""
-    try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-    except ValueError:
-        return ""
-    months = _MONTH_NAMES.get(language, _MONTH_NAMES["en"])
-    month = months[dt.month - 1]
-    if language == "en":
-        return f"{month} {dt.day}, {dt.year}"
-    return f"{dt.day}. {month} {dt.year}"
 
 
 class _InstallerThread(QThread):
@@ -337,81 +304,39 @@ class UpdateDialog(QDialog):
         QApplication.instance().quit()
 
 
-def _changelog_path() -> Path:
-    if getattr(sys, "frozen", False):
-        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-    else:
-        base = Path(__file__).resolve().parent.parent
-    return base / "CHANGELOG.md"
-
-
-def _parse_local_changelog() -> list[dict]:
-    """Reads the bundled CHANGELOG.md directly (newest version first, same
-    order it's written in) so every version that was ever written down
-    shows up here -- not just the ones that happened to get published as
-    an actual GitHub Release. In practice a release can lag behind its git
-    tag (User-reported, 2026-09-17: v2.0.6/v2.0.4 were tagged and built but
-    never separately published, so they silently never showed up here
-    when this only read GitHub's /releases list)."""
-    path = _changelog_path()
-    if not path.exists():
-        return []
-    text = path.read_text(encoding="utf-8")
-    sections = re.split(r"(?m)^#\s+Version\s+", text)
-    entries = []
-    for section in sections[1:]:
-        lines = section.strip().splitlines()
-        if not lines:
-            continue
-        tag = lines[0].strip()
-        body = "\n".join(lines[1:]).strip()
-        entries.append({"tag": tag, "body": body})
-    return entries
-
-
 class _ChangelogFetcher(QThread):
     """Builds the full version history for the dialog below by reading the
-    bundled CHANGELOG.md (the single source of truth, always present and
-    always complete) and, best-effort, overlaying the real publish date
-    from GitHub's /releases list for whichever versions actually got
-    published there. A version missing from GitHub simply shows with no
-    date instead of not showing at all, and a totally failed GitHub fetch
-    (offline) still leaves the full local history visible with no dates."""
+    bundled CHANGELOG.md -- the single source of truth, always present and
+    always complete, and (since the companion.g-place.de migration,
+    2026-09-26) the ONLY source: there is no longer a GitHub Releases API
+    call here to overlay a real "published_at" date on top of it. That
+    overlay is gone, not degraded -- every version's date already came from
+    CHANGELOG.md's own "Release Date:" line whenever GitHub had nothing for
+    it (a version tagged/built but never separately published there), so
+    dropping GitHub entirely just means every version now takes the path
+    that was already the normal fallback.
+    """
     fetched = Signal(list)   # list of {"tag", "body", "published_at"} dicts
     failed = Signal()
 
     def run(self):
-        # Only the current "major line" (User-Wunsch, 2026-09-17: "immer
-        # bis zur letzten vollen Zahl" -- while the app sits on 2.0.x this
-        # means 2.0.0 upward, not every 1.x/0.x release ever made). Bumping
-        # to 3.0.0 later automatically narrows the window to 3.x.x with no
-        # code change needed here.
-        current_major = APP_VERSION.split(".")[0]
-        local_entries = [
-            e for e in _parse_local_changelog()
-            if e["tag"].split(".")[0] == current_major
-        ]
-
-        published_dates: dict[str, str] = {}
-        try:
-            req = urllib.request.Request(
-                _RELEASES_LIST_URL, headers={"User-Agent": "Aion2-TM-UpdateCheck"}
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                releases = json.loads(resp.read())
-            for r in releases:
-                if r.get("draft"):
-                    continue
-                tag = (r.get("tag_name") or "").lstrip("v")
-                published_dates[tag] = r.get("published_at") or ""
-        except Exception:
-            pass
+        # EVERY version ever written down, oldest included. The split into
+        # "the current major line, shown right away" and "older lines,
+        # behind Load more" is the DIALOG's job (see
+        # ChangelogHistoryDialog._on_fetched) -- filtering by major version
+        # HERE (as an earlier revision of this thread did) made
+        # _on_fetched's `older` list permanently empty and the
+        # User-requested "Load more" button (User-Wunsch, 2026-09-17:
+        # "darunter dann einen 'load more' einbauen, der dann den Rest
+        # anzeigt") structurally unreachable, along with the whole
+        # 1.9.x/0.x history in CHANGELOG.md.
+        local_entries = parse_local_changelog()
 
         entries = [
             {
                 "tag": e["tag"],
                 "body": e["body"],
-                "published_at": published_dates.get(e["tag"], ""),
+                "published_at": e.get("release_date", ""),
             }
             for e in local_entries
         ]
@@ -450,8 +375,11 @@ class ChangelogHistoryDialog(QDialog):
         # border), so 190px was no longer quite enough; +22px covers that
         # with real breathing room. Dialog width grows by the same amount
         # so the notes area on the right keeps its original width.
-        self.setMinimumSize(842, 560)
-        self.resize(842, 620)
+        # Rail bumped again 212->232 (2026-09-26, v2.0.10's extra digit --
+        # see rail_outer.setFixedWidth() below); dialog width grows by the
+        # same +20px for the same reason.
+        self.setMinimumSize(862, 560)
+        self.resize(862, 620)
         # Explicit close-button hint + a closeEvent override (User-reported,
         # 2026-09-14: the native titlebar "X" was visible but didn't
         # actually close the dialog) -- belt-and-suspenders since a plain
@@ -494,8 +422,18 @@ class ChangelogHistoryDialog(QDialog):
         # 3), since a full local-changelog history can run well past what
         # fits in the fixed dialog height; the "Versionen" title stays put
         # outside that inner scroll so it never scrolls away.
+        # Widened 212->232 (2026-09-26): v2.0.10 was the first double-digit
+        # patch version released. Measured directly: the top row needs
+        # title sizeHint (98px) + spacing (6px) + badge sizeHint (99px) +
+        # left/right content margins (24px) = 227px minimum to lay out
+        # without compressing either label below its sizeHint -- 212px
+        # (barely enough for v2.0.9's narrower "v2.0.9" title) started
+        # shrinking both below their real size on any two-digit patch
+        # version. +20px (227 rounded up with a few px of breathing room)
+        # keeps every patch version up to v2.0.99 exactly as roomy as
+        # one-digit ones were.
         rail_outer = QWidget()
-        rail_outer.setFixedWidth(212)
+        rail_outer.setFixedWidth(232)
         rail_outer_layout = QVBoxLayout(rail_outer)
         rail_outer_layout.setContentsMargins(0, 0, 0, 0)
         rail_outer_layout.setSpacing(8)
@@ -614,7 +552,7 @@ class ChangelogHistoryDialog(QDialog):
 
     def _add_entry(self, entry: dict):
             tag, body = entry["tag"], entry["body"]
-            is_hotfix = "hotfix" in body.lower()
+            is_hotfix = _is_hotfix(body)
             date_str = _format_release_date(entry.get("published_at", ""), self._language)
             is_first = not self._sections
 
@@ -648,21 +586,40 @@ class ChangelogHistoryDialog(QDialog):
             version_lbl = QLabel(f"v{tag}")
             version_lbl.setObjectName("changelogVersionBtnTitle")
             version_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-            btn_top_row.addWidget(version_lbl)
-            if is_hotfix:
-                small_tag = QLabel(tr(self._language, "changelog_hotfix_badge").upper())
-                small_tag.setObjectName("changelogHotfixBadge")
-                small_tag.setAttribute(Qt.WA_TransparentForMouseEvents)
-                btn_top_row.addWidget(small_tag)
+            # Fixed vertically, centred in the row (User-reported,
+            # 2026-09-24): without a date line underneath, the button's
+            # spare height used to be handed to this row, stretching the
+            # title and the HOTFIX badge to 38px -- the badge looked like a
+            # different, bigger control on 2.0.6 than on 2.0.5.
+            version_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            btn_top_row.addWidget(version_lbl, 0, Qt.AlignVCenter)
+            # The badge exists in EVERY row, hidden-but-sized where there is
+            # no hotfix: the top row is then always exactly as tall as it is
+            # with a badge, so every date line sits at the same y in every
+            # button (measured before: 6px lower on 2.0.5 than elsewhere).
+            small_tag = QLabel(tr(self._language, "changelog_hotfix_badge").upper())
+            small_tag.setObjectName("changelogHotfixBadge")
+            small_tag.setAttribute(Qt.WA_TransparentForMouseEvents)
+            badge_policy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            badge_policy.setRetainSizeWhenHidden(True)
+            small_tag.setSizePolicy(badge_policy)
+            small_tag.setVisible(is_hotfix)
+            btn_top_row.addWidget(small_tag, 0, Qt.AlignVCenter)
             btn_top_row.addStretch(1)
             btn_inner.addLayout(btn_top_row)
-            if date_str:
-                btn_date_lbl = QLabel(date_str)
-                btn_date_lbl.setObjectName("changelogVersionBtnDate")
-                btn_date_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-                btn_inner.addWidget(btn_date_lbl)
+            # The date line is ALWAYS there, even empty (tobia, 2026-09-24:
+            # "die Groesse wie mit dem Datum ist richtig") -- a version
+            # without a date keeps the same two-line layout instead of
+            # collapsing into a different, one-line button.
+            btn_date_lbl = QLabel(date_str or "\u00a0")
+            btn_date_lbl.setObjectName("changelogVersionBtnDate")
+            btn_date_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            btn_date_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            btn_inner.addWidget(btn_date_lbl)
+            btn_inner.addStretch(1)
             self._rail_group.addButton(btn)
             self._rail_col.addWidget(btn)
+            self._equalize_rail_buttons(btn)
 
             header_row = QHBoxLayout()
             header_row.setSpacing(8)
@@ -721,6 +678,27 @@ class ChangelogHistoryDialog(QDialog):
 
             btn.clicked.connect(lambda _c=False, s=section, b=btn: self._jump_to(s, b))
             self._sections.append((btn, section))
+
+    def _equalize_rail_buttons(self, new_btn: QPushButton):
+        """Every version button gets the height of the tallest one.
+
+        A HOTFIX badge makes its row a few px taller than a bare version
+        number; with the old fixed 58px that squeezed the date underneath
+        (14px instead of 17px, measured).  Sizing all buttons to the tallest
+        content keeps the whole rail one height and nothing gets squeezed
+        (tobia, 2026-09-24: the layout WITH date is the reference)."""
+        buttons = [btn for btn, _section in self._sections] + [new_btn]
+        height = 58
+        for btn in buttons:
+            for child in btn.findChildren(QLabel):
+                child.ensurePolished()
+            btn.ensurePolished()
+            layout = btn.layout()
+            if layout is not None:
+                layout.invalidate()
+                height = max(height, layout.sizeHint().height())
+        for btn in buttons:
+            btn.setMinimumHeight(height)
 
     def _jump_to(self, section: QWidget, btn: QPushButton):
         self._suppress_scroll_sync = True

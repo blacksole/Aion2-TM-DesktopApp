@@ -41,8 +41,8 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QDeadlineTimer, QEventLoop
-from PySide6.QtGui import QBrush, QColor, QImage, QStandardItem
-from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import QBrush, QColor, QCursor, QImage, QStandardItem
+from PySide6.QtWidgets import QAbstractItemView, QWidget
 
 from core import theme
 from tests.conftest import destroy_window
@@ -135,6 +135,38 @@ def _exact_pixels(image, color: str) -> int:
     words = array("I")
     words.frombytes(bytes(rgb32.constBits()))
     return words.count(0xFF000000 | (QColor(color).rgb() & 0xFFFFFF))
+
+
+def _near_pixels(image, color: str, tolerance: int = 40) -> int:
+    """Pixels within `tolerance` per channel of `color`.
+
+    Text is antialiased: a glyph in a thin font can be almost entirely edge
+    pixels, so an exact match counts a handful even when the colour is
+    plainly there (measured: 7 exact hits on a row rendering in visibly
+    correct #38bdf8, against blends like #33a9df).  Exactness is the right
+    test for a flat fill -- a border, a plate -- and the wrong one for a
+    glyph.
+
+    The tolerance stays far tighter than the failure it guards against: the
+    flattened case repaints the text in the view's foreground, which is a
+    light grey ~200 units away per channel, and the surfaces beneath are
+    darker still.  Nothing in that range can be mistaken for a rarity.
+    """
+    target = QColor(color)
+    red, green, blue = target.red(), target.green(), target.blue()
+    rgb32 = image.convertToFormat(QImage.Format_RGB32)
+    words = array("I")
+    words.frombytes(bytes(rgb32.constBits()))
+
+    hits = 0
+    for word in words:
+        if (
+            abs(((word >> 16) & 0xFF) - red) <= tolerance
+            and abs(((word >> 8) & 0xFF) - green) <= tolerance
+            and abs((word & 0xFF) - blue) <= tolerance
+        ):
+            hits += 1
+    return hits
 
 
 # ---------------------------------------------------------------------------
@@ -628,21 +660,37 @@ def test_a_rarity_foreground_survives_the_sheet(qapp, armory_module, windows):
     row[2].setText("QA Legend Blade")
     row[2].setForeground(QBrush(QColor(legend)))
     database.model.appendRow(row)
+    qa_index = database.model.rowCount() - 1
     try:
         _settle(qapp, 400)
         assert database.proxy.rowCount() > 0, "the QA row was filtered out of the view"
-        database.table.scrollToTop()
-        _settle(qapp, 120)
+
+        # Scroll to the QA row, not to the top.  `appendRow` puts it LAST in a
+        # model that carries the full catalogue (7140 rows with the filters
+        # off), so `scrollToTop()` framed rows 0..n and the row under test was
+        # never on screen -- measured: 0 Legend pixels at the top, 2304 once
+        # the view is scrolled to it.  The other rarity colours were visible
+        # the whole time, which is what rules out a flattening `color:` and
+        # makes this a positioning bug in the check rather than a finding.
+        qa_row = database.proxy.mapFromSource(database.model.index(qa_index, 2))
+        assert qa_row.isValid(), "the QA row is not reachable through the proxy"
+        database.table.scrollTo(qa_row, QAbstractItemView.ScrollHint.PositionAtCenter)
+        _settle(qapp, 200)
         image = database.table.viewport().grab().toImage()
-        hits = _exact_pixels(image, legend)
+        # Near, not exact: the row is text, and antialiased glyphs are mostly
+        # blend pixels -- see _near_pixels.
+        hits = _near_pixels(image, legend)
         assert hits > 20, (
             f"only {hits} pixels of the Legend colour in the table — a QSS "
             f"`color` on the item view has flattened setForeground() again "
             f"(User-reported 2026-08-29)"
         )
-        assert database.model.item(0, 2).foreground().color().name() == legend
+        assert database.model.item(qa_index, 2).foreground().color().name() == legend
     finally:
-        database.model.removeRow(0)
+        # Remove the row that was added, not row 0.  These windows are shared
+        # across the module, so dropping a catalogue row here left the other
+        # tests working on a model this test had quietly edited.
+        database.model.removeRow(qa_index)
 
 
 def test_the_equipped_item_plate_really_wears_the_rarity_ring(qapp, armory_module, windows):
@@ -732,6 +780,229 @@ def test_the_daevanion_status_pill_is_styled(qapp, armory_module, windows):
     finally:
         tooltip.deleteLater()
         _settle(qapp, 80)
+
+
+def test_daevanion_tooltip_content_updates_across_consecutive_hovers(qapp, armory_module, windows):
+    """User-reported, 2026-09-23 (Screenshots): sweeping the mouse across
+    several Daevanion nodes kept showing only the FIRST hovered node's
+    content, even though the tooltip's on-screen POSITION correctly
+    followed the mouse the whole time.
+
+    That split (position right, content stuck) points straight at
+    DaevanionBoardCanvas.mouseMoveEvent -> _daevanion_on_node_hovered ->
+    _daevanion_show_tooltip, which calls set_node() + show_at() on the
+    SAME already-visible tooltip instance for every new node -- there is
+    no hide() between hovers. show_at() always calls move()+show(), which
+    Qt/Windows always processes; set_node()'s setText() calls only
+    scheduled the child QLabels for an update AT SOME POINT, on an
+    already-visible, WA_TranslucentBackground top-level (Qt.ToolTip flag)
+    window -- exactly the situation where Windows' DWM compositing can
+    reuse an already-composited frame for the popup and never actually
+    repaint the new label text into it, since nothing forced a synchronous
+    redraw. Grabbing the widget's pixels (not just reading .text()) is the
+    point: .text() reflects what setText() was TOLD, not what actually got
+    painted onto that composited surface -- a stale-content bug like this
+    would otherwise slip through checks that only assert on the Qt object
+    model."""
+    tooltip = armory_module.DaevanionNodeTooltip()
+    try:
+        tooltip.set_node("First Node", "Legend", "Legend", 3, 10, [], "available", "OK")
+        tooltip.show_at(QCursor.pos())
+        _settle(qapp, 80)
+        first_image = tooltip._title_label.grab().toImage()
+
+        tooltip.set_node("Second Node", "Legend", "Legend", 3, 10, [], "available", "OK")
+        tooltip.show_at(QCursor.pos())
+        _settle(qapp, 80)
+
+        assert tooltip._title_label.text() == "Second Node"
+        second_image = tooltip._title_label.grab().toImage()
+        assert second_image != first_image, (
+            "the title label's PAINTED pixels are unchanged across two "
+            "consecutive hovers, even though .text() reports the new node "
+            "-- the widget was told about the new content but never "
+            "actually repainted it (the reported bug)"
+        )
+    finally:
+        tooltip.hide()
+        tooltip.deleteLater()
+        _settle(qapp, 80)
+
+
+def _render(widget) -> QImage:
+    """The widget's own painted pixels on a TRANSPARENT ground.
+
+    ``grab()`` is no good for a ``WA_TranslucentBackground`` top-level: it
+    hands back an opaque pixmap, which is exactly the alpha channel these
+    assertions are about.
+    """
+    from PySide6.QtCore import Qt
+
+    image = QImage(widget.size(), QImage.Format_ARGB32)
+    image.fill(Qt.transparent)
+    widget.render(image)
+    return image
+
+
+def test_the_popup_shadow_is_painted_beside_the_card_not_under_it(
+    qapp, armory_module, windows
+):
+    """MASTER §1 defines exactly one shadow, ``shadow.popup``, "reserved for
+    popups/tooltips" -- and until this fix it rendered nowhere.
+
+    The card filled ``self.rect()``, so all ten hand-painted rings were
+    drawn and then covered by an ``alpha=235`` fill (Apex review of PR #7,
+    finding 4: ~8% bleed-through, i.e. a faint seam and nothing else). A
+    token that renders nowhere is worse than no token, so the geometry is
+    pinned in PIXELS rather than in the object model: shadow in the margin
+    band, card colour only inside the card.
+
+    The other half of the invariant is what keeps the Windows fix intact --
+    no ``QGraphicsEffect`` on the tooltip, so Qt never hands Windows a dirty
+    rect bigger than the window (see ``_TranslucentCardTooltip.__init__``).
+    """
+    from core import shadows
+
+    tooltip = armory_module.DaevanionNodeTooltip()
+    try:
+        tooltip.set_node("Node", "Legend", "Legend", 3, 10, [("A", "1")], "available", "OK")
+        tooltip.show_at(QCursor.pos())
+        _settle(qapp, 80)
+
+        # 1. nothing expands the widget's bounding rect.
+        assert tooltip.graphicsEffect() is None, (
+            "a QGraphicsEffect is back on the tooltip -- that is what made Qt "
+            "paint outside the window and UpdateLayeredWindowIndirect fail"
+        )
+
+        # 2. the card is inset by exactly the token's own band.
+        blur, dy, _colour = shadows.popup_shadow()
+        assert (blur, dy) == shadows.parse_shadow(theme.current_tokens().shadow_popup)[:2]
+        left, top, right, bottom = shadows.shadow_margins(blur, dy)
+        card = tooltip.card_rect()
+        assert card != tooltip.rect(), "the card still fills the whole widget"
+        assert (card.left(), card.top()) == (left, top)
+        assert tooltip.rect().contains(card)
+        assert (tooltip.width() - card.width(), tooltip.height() - card.height()) == (
+            left + right,
+            top + bottom,
+        )
+
+        image = _render(tooltip)
+        surface = theme.qcolor(theme.current_tokens(), "bg.surface")
+
+        # 3. the band carries shadow and no card colour.
+        for label, point in (
+            ("left", (card.left() // 2, card.center().y())),
+            ("below", (card.center().x(), card.bottom() + (bottom // 2))),
+        ):
+            pixel = image.pixelColor(*point)
+            assert pixel.alpha() > 0, f"{label} band has no shadow at all"
+            assert (pixel.red(), pixel.green(), pixel.blue()) != (
+                surface.red(), surface.green(), surface.blue()
+            ), f"{label} band is painted in the card's own colour"
+
+        # 4. the card is the card.
+        inside = image.pixelColor(card.left() + 4, card.center().y())
+        assert abs(inside.red() - surface.red()) <= 3
+        assert abs(inside.green() - surface.green()) <= 3
+        assert abs(inside.blue() - surface.blue()) <= 3
+        assert inside.alpha() > 200
+    finally:
+        tooltip.hide()
+        tooltip.deleteLater()
+        _settle(qapp, 80)
+
+
+def test_show_at_puts_the_card_where_the_cursor_is_not_the_shadow(
+    qapp, armory_module, windows
+):
+    """The widget grew by the shadow band, so ``show_at`` has to compensate.
+
+    Without it the visible card drifts away from the cursor by the blur
+    radius -- the kind of regression a "the tooltip looks fine" screenshot
+    never catches.
+    """
+    from PySide6.QtCore import QPoint
+
+    tooltip = armory_module.SkillInfoTooltip()
+    try:
+        tooltip.show_at(QPoint(500, 500))
+        _settle(qapp, 80)
+        card_top_left = tooltip.mapToGlobal(tooltip.card_rect().topLeft())
+        assert (card_top_left.x(), card_top_left.y()) == (516, 516)
+    finally:
+        tooltip.hide()
+        tooltip.deleteLater()
+        _settle(qapp, 80)
+
+
+# ---------------------------------------------------------------------------
+# The Build Planner's tab indices, as a named API
+# ---------------------------------------------------------------------------
+# Apex review of PR #7, finding 7: ui/main_window.py kept its own copy of
+# LoadoutWindow's main_tabs order (_DAEVANION_BOARD_TAB = 1 /
+# _SKILL_PLANNER_TAB = 3), and nothing held the two in step -- reorder a tab
+# in app.py and the Armory dashboard's cards silently open the wrong page.
+# The order is owned where the addTab calls are; these tests are what make
+# that ownership real.
+
+#: ``LoadoutWindow.TAB_*`` and the translation key of the tab it must name.
+TAB_CASES = (
+    ("TAB_EQUIPMENT", "arm_equipment_btn"),
+    ("TAB_DAEVANION", "arm_daevanion_board_tab"),
+    ("TAB_ARCANA", "arm_arcana_tab"),
+    ("TAB_SKILLS", "arm_skill_planner_tab"),
+    ("TAB_PANTHEON", "arm_pantheon_tab"),
+    ("TAB_GENIUS", "arm_genius_insight_tab"),
+)
+
+
+@pytest.mark.parametrize("attribute,key", TAB_CASES)
+def test_the_named_tab_constants_match_the_real_tab_order(
+    armory_module, windows, attribute, key
+):
+    loadout = windows["build planner"]
+    index = getattr(armory_module.LoadoutWindow, attribute)
+    assert loadout.main_tabs.tabText(index) == armory_module._t(key)
+
+
+def test_every_tab_is_named_exactly_once(armory_module, windows):
+    """No gaps, no duplicates, no tab the host cannot name."""
+    loadout = windows["build planner"]
+    indices = [getattr(armory_module.LoadoutWindow, attribute) for attribute, _ in TAB_CASES]
+    assert sorted(indices) == list(range(loadout.main_tabs.count()))
+
+
+@pytest.mark.parametrize("attribute", ["TAB_DAEVANION", "TAB_SKILLS"])
+def test_opening_the_planner_on_a_named_tab_lands_there(
+    qapp, armory_module, windows, attribute
+):
+    """The half the host cannot assert on its own: ``open_loadout_window``
+    really does leave main_tabs on the index it was handed."""
+    database = windows["item database"]
+    loadout = windows["build planner"]
+    index = getattr(armory_module.LoadoutWindow, attribute)
+    try:
+        database.open_loadout_window(tab=index)
+        _settle(qapp, 80)
+        assert loadout.main_tabs.currentIndex() == index
+    finally:
+        # The `windows` fixture is module-scoped: leave the planner on the
+        # tab every other test in this file expects to grab.
+        loadout.main_tabs.setCurrentIndex(armory_module.LoadoutWindow.TAB_EQUIPMENT)
+        _settle(qapp, 80)
+
+
+def test_the_hosts_fallback_indices_still_agree_with_the_armory(armory_module):
+    """MainWindow reads ``LoadoutWindow.TAB_*`` now, but keeps the two old
+    integers as a last-resort fallback.  A fallback that is silently wrong
+    is worse than none, so it is pinned too."""
+    from ui.main_window import MainWindow
+
+    loadout = armory_module.LoadoutWindow
+    assert MainWindow._DAEVANION_BOARD_TAB == loadout.TAB_DAEVANION
+    assert MainWindow._SKILL_PLANNER_TAB == loadout.TAB_SKILLS
 
 
 def test_apply_theme_restyles_a_window_that_is_already_open(qapp, armory_module, windows):

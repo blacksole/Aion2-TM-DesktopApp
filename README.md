@@ -1,8 +1,14 @@
-# Aion2 Task Manager
+# Aion 2 Companion
 
 **v2.0.7** — Modern desktop productivity manager for Aion players.
 
-Aion2 Task Manager combines task management, shopping organization, event timers, a visual flow map planner and an in-game HUD overlay into a single lightweight desktop application — built specifically for Aion 2 players who want to stay on top of their daily and weekly goals without alt-tabbing constantly. An Armory module (item database, crafting calculator, build planner) is included as a full, always-available feature — see the Armory (Expert) section below.
+Aion 2 Companion combines task management, shopping organization, event timers, a visual flow map planner and an in-game HUD overlay into a single lightweight desktop application — built specifically for Aion 2 players who want to stay on top of their daily and weekly goals without alt-tabbing constantly. An Armory module (item database, crafting calculator, build planner) is included as a full, always-available feature — see the Armory (Expert) section below.
+
+---
+
+## 📜 License
+
+Licensed under the **GNU Affero General Public License v3.0** (see [`LICENSE`](LICENSE)). In short: anyone is free to use, fork, modify, and contribute back — including running or distributing a modified copy — but any distributed or network-served version (including a paid or closed fork) must itself stay open under AGPL-3.0 and make its source available to its users. This keeps the project open for community contributions (PRs, forks-to-collaborate) while preventing someone from taking the codebase closed-source and reselling it as their own product.
 
 ---
 

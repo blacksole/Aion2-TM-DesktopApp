@@ -1245,6 +1245,112 @@
    "font-size": "14px",
    "background": "transparent"
   },
+  "#CompareBody": {
+   "background-color": "#0f172a"
+  },
+  "#CompareCard": {
+   "background-color": "#151e33",
+   "border": "1px solid #26324a",
+   "border-radius": "6px"
+  },
+  "#CompareCell": {
+   "background": "transparent",
+   "padding": "7px 10px"
+  },
+  "#CompareCell[state=\"absent\"]": {
+   "color": "#94a3b8"
+  },
+  "#CompareCell[state=\"lose\"]": {
+   "color": "#f87171",
+   "font-weight": "700"
+  },
+  "#CompareCell[state=\"pool\"]": {
+   "color": "#c3cadb"
+  },
+  "#CompareCell[state=\"win\"]": {
+   "color": "#4ade80",
+   "font-weight": "700"
+  },
+  "#CompareDelta": {
+   "background": "transparent",
+   "padding": "7px 10px",
+   "font-size": "12px"
+  },
+  "#CompareDelta[state=\"down\"]": {
+   "color": "#f87171"
+  },
+  "#CompareDelta[state=\"flat\"]": {
+   "color": "#94a3b8"
+  },
+  "#CompareDelta[state=\"up\"]": {
+   "color": "#4ade80"
+  },
+  "#CompareHead": {
+   "color": "#94a3b8",
+   "font-size": "11px",
+   "padding": "8px 10px",
+   "border-bottom": "1px solid #26324a"
+  },
+  "#CompareIcon": {
+   "background-color": "#1c2740",
+   "border-radius": "4px"
+  },
+  "#CompareItemMeta": {
+   "color": "#94a3b8",
+   "font-size": "12px"
+  },
+  "#CompareItemName": {
+   "font-size": "14px",
+   "font-weight": "600"
+  },
+  "#CompareNote": {
+   "color": "#94a3b8",
+   "font-size": "12px"
+  },
+  "#CompareSection": {
+   "color": "#c3cadb",
+   "font-size": "11px",
+   "font-weight": "600",
+   "letter-spacing": "1px",
+   "padding-top": "6px"
+  },
+  "#CompareStripe": {
+   "background-color": "#1c2740",
+   "border": "none"
+  },
+  "#CompareSummary": {
+   "color": "#c3cadb"
+  },
+  "#CompareSwap": {
+   "color": "#c3cadb",
+   "background": "transparent",
+   "border": "1px solid #26324a",
+   "border-radius": "4px",
+   "padding": "4px 12px"
+  },
+  "#CompareSwap:hover": {
+   "color": "#e5e7eb",
+   "border-color": "#3b4863"
+  },
+  "#CompareTable": {
+   "background-color": "#151e33",
+   "border": "1px solid #26324a",
+   "border-radius": "6px"
+  },
+  "#CompareTitle": {
+   "font-size": "16px",
+   "font-weight": "600"
+  },
+  "#CompareToggle": {
+   "color": "#22d3ee",
+   "background": "transparent",
+   "border": "none",
+   "padding": "2px 0",
+   "text-align": "left"
+  },
+  "#CompareToggle:hover": {
+   "text-decoration": "underline"
+  },
   "#CompareValueBetter": {
    "color": "#4ade80",
    "font-weight": "700"
@@ -1252,6 +1358,11 @@
   "#CompareValueWorse": {
    "color": "#f87171",
    "font-weight": "700"
+  },
+  "#CompareVs": {
+   "color": "#94a3b8",
+   "font-weight": "600",
+   "padding": "0 4px"
   },
   "#CraftMenuRow": {
    "padding": "4px 20px",

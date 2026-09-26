@@ -1,4 +1,36 @@
+# Version 2.0.10
+
+Release Date: 2026-09-26
+
+## ✨ New Features
+
+- **In-app news.** Shortly after startup, the app checks the new `companion.g-place.de` community site for announcements and shows a small popup with the title and a short excerpt if there's something new — with an "Open" button to read the full post in your browser. Each announcement is only ever shown once.
+
+## 🔧 Under the Hood
+
+- **The update checker no longer talks to GitHub.** With the repository moving to private soon, the app now asks `companion.g-place.de` directly for the latest version number and build instead of GitHub's Releases API, so existing installs keep getting updates without interruption. Release notes still come from the app's own bundled changelog, exactly as before — nothing changes in how updates look or feel, only where the version check and download come from.
+
+---
+
+# Version 2.0.9
+
+Release Date: 2026-09-24
+
+## ✨ New Features
+
+- **Named template sets**: Tasks and Shopping templates now live in named, switchable sets instead of one flat list — build separate sets (e.g. per character or per playstyle) and switch between them from a dropdown right in the tab, without opening the template dialog. Add, duplicate, rename and delete sets independently for Shopping and Tasks. Existing templates are migrated automatically, nothing is lost.
+
+## 🐛 Bug Fixes
+
+- **The "Update History" window in Settings showed no release date for some versions, and the HOTFIX badge appeared in the wrong size compared to versions with a date.** The date was only ever pulled from the GitHub release list, so any version that was tagged and built but never separately published there (like 2.0.6 or 2.0.4) silently showed no date — and offline, no version showed one. Dates now also fall back to the app's own bundled changelog, so every version always shows one, and the hotfix badge is now always the same fixed size regardless of whether a date is present.
+- **Hovering over Daevanion skill board nodes could throw a native Windows paint error (`UpdateLayeredWindowIndirect`) and, once it happened, the tooltip stopped updating for every node afterward** — orange/skill nodes eventually stopped showing their tooltip at all. The tooltip's drop-shadow effect was quietly expanding the window's paint area past its actual visible bounds, which triggered the error; the shadow is now hand-drawn fully inside the tooltip's own boundary, so the paint area always matches the window and the error can no longer happen.
+- **The date-picker popup (used for Season/event dates in Settings) clipped the day numbers with the app's condensed font and didn't respect the current color theme.** It's now its own properly-sized popup window that sizes itself to the actual font metrics and follows the active theme like the rest of the app.
+
+---
+
 # Version 2.0.8
+
+Release Date: 2026-09-22
 
 ## ✨ New Features
 
@@ -21,6 +53,8 @@
 
 # Version 2.0.7
 
+Release Date: 2026-09-17
+
 ## ✨ New Features
 
 - **Season-scheduled tasks and shopping entries now actually reset once the Season timer's end date passes**, the same way Daily/Weekly entries already did — previously "Season" was just a filter label with no automatic reset behind it.
@@ -32,6 +66,10 @@
 ---
 
 # Version 2.0.6
+
+Release Date: 2026-09-17
+
+**Hotfix**
 
 ## ✨ New Features
 
@@ -47,6 +85,8 @@
 
 # Version 2.0.5
 
+Release Date: 2026-09-14
+
 **Hotfix**
 
 ## 🐛 Bug Fixes
@@ -57,6 +97,8 @@
 
 # Version 2.0.4
 
+Release Date: 2026-09-14
+
 ## 🐛 Bug Fixes
 
 - **Build Planner: an already-open Property Priority editor could show stale skill names** after reordering the Priority List or switching to a different Arcana/Skill Planner build — it now refreshes live instead of only picking up the change the next time it's reopened.
@@ -66,6 +108,8 @@
 ---
 
 # Version 2.0.3
+
+Release Date: 2026-09-14
 
 ## ✨ New Features
 
@@ -84,6 +128,8 @@
 ---
 
 # Version 2.0.2
+
+Release Date: 2026-09-13
 
 ## ✨ New Features
 
@@ -104,6 +150,8 @@
 
 # Version 2.0.1
 
+Release Date: 2026-09-12
+
 ## ✨ New Features
 
 - **Cloak/Cape is now a real equipment slot in the Build Planner.** Previously the only genuine armor category with no way to equip it at all — it now shows up on the paperdoll, contributes to GearScore and stat totals like every other armor piece, and has its own tab in Quick Select and the Property Priority editor.
@@ -118,6 +166,8 @@
 ---
 
 # Version 2.0.0
+
+Release Date: 2026-09-12
 
 ## ✨ New Features
 
