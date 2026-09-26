@@ -15,6 +15,7 @@ UI for a decision that touches none of it.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -109,7 +110,7 @@ def test_stale_config_path_falls_back_to_the_existing_profiles_folder(frozen_ins
     local.mkdir()
     (local / "Main.json").write_text("{}", encoding="utf-8")
     config = frozen_install / "config.json"
-    config.write_text('{"profile_dir": "%s"}' % (tmp_path / "gone" / "Profiles"), encoding="utf-8")
+    config.write_text(json.dumps({"profile_dir": str(tmp_path / "gone" / "Profiles")}), encoding="utf-8")
 
     win = _resolver(frozen_install, config)
     assert win._resolve_profile_dir() == local
@@ -123,7 +124,7 @@ def test_valid_config_path_wins_over_everything(frozen_install, tmp_path):
     (local / "Main.json").write_text("{}", encoding="utf-8")
     paths.portable_marker(paths.install_root()).write_text("", encoding="utf-8")
     config = frozen_install / "config.json"
-    config.write_text('{"profile_dir": "%s"}' % chosen, encoding="utf-8")
+    config.write_text(json.dumps({"profile_dir": str(chosen)}), encoding="utf-8")
 
     win = _resolver(frozen_install, config)
     assert win._resolve_profile_dir() == chosen
