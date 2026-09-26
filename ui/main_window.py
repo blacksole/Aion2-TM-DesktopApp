@@ -5071,7 +5071,7 @@ class MainWindow(QMainWindow):
         self._news_checker.no_news.connect(lambda: None)
         self._news_checker.start()
 
-    def _on_news_post_available(self, post_id: int, title: str, excerpt: str, link: str):
+    def _on_news_post_available(self, post_id: int, title: str, excerpt: str, link: str, date: str = ""):
         # Only ever show a post once -- persisted in config.json (not the
         # per-character profile) so it's remembered across restarts and
         # isn't duplicated per character. A lower/equal id (including a
@@ -5082,7 +5082,7 @@ class MainWindow(QMainWindow):
             return
         self._last_seen_news_id = post_id
         self._save_app_config()
-        dlg = NewsDialog(title, excerpt, link, language=self.language, parent=self)
+        dlg = NewsDialog(title, excerpt, link, date=date, language=self.language, parent=self)
         dlg.exec()
 
     def _on_update_available(self, version: str, body: str, asset_url: str, sha256_url: str = ""):

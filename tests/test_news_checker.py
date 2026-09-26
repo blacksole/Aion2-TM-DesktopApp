@@ -48,6 +48,7 @@ def test_fetches_and_strips_html_from_title_and_excerpt(monkeypatch):
         "title": {"rendered": "Season 3 is <em>live</em>!"},
         "excerpt": {"rendered": "<p>Read more &amp; enjoy.</p>\n"},
         "link": "https://companion.g-place.de/season-3/",
+        "date": "2026-09-26T12:00:00",
     }]
     monkeypatch.setattr(
         nc.urllib.request, "urlopen", lambda *a, **k: _Resp(_wp_payload(posts))
@@ -58,7 +59,7 @@ def test_fetches_and_strips_html_from_title_and_excerpt(monkeypatch):
 
     checker.run()
 
-    assert emitted == [(42, "Season 3 is live!", "Read more & enjoy.", "https://companion.g-place.de/season-3/")]
+    assert emitted == [(42, "Season 3 is live!", "Read more & enjoy.", "https://companion.g-place.de/season-3/", "2026-09-26T12:00:00")]
 
 
 def test_no_posts_emits_no_news(monkeypatch):
@@ -104,9 +105,9 @@ def test_news_dialog_shows_title_and_excerpt(qapp):
     from ui.news_dialog import NewsDialog
     from tests.conftest import destroy_window
 
-    dlg = NewsDialog("Hello", "World", "https://x", parent=None)
+    dlg = NewsDialog("Hello", "World", "https://x", language="en", parent=None)
     try:
-        assert dlg.windowTitle() == "Hello"
+        assert dlg.windowTitle() == "News"
     finally:
         dlg.close()
         destroy_window(dlg)
@@ -152,16 +153,16 @@ def test_main_window_shows_a_post_only_once(monkeypatch):
     shown = []
     monkeypatch.setattr(
         mw, "NewsDialog",
-        lambda title, excerpt, link, language=None, parent=None: shown.append((title, excerpt, link, language)) or _FakeDialog(),
+        lambda title, excerpt, link, date="", language=None, parent=None: shown.append((title, excerpt, link, date, language)) or _FakeDialog(),
     )
 
-    mw.MainWindow._on_news_post_available(win, 5, "Old", "old excerpt", "https://x/old")
+    mw.MainWindow._on_news_post_available(win, 5, "Old", "old excerpt", "https://x/old", "2026-09-20T10:00:00")
     assert shown == []
     assert saved == []
     assert win._last_seen_news_id == 5
 
-    mw.MainWindow._on_news_post_available(win, 7, "New", "new excerpt", "https://x/new")
-    assert shown == [("New", "new excerpt", "https://x/new", "en")]
+    mw.MainWindow._on_news_post_available(win, 7, "New", "new excerpt", "https://x/new", "2026-09-26T10:00:00")
+    assert shown == [("New", "new excerpt", "https://x/new", "2026-09-26T10:00:00", "en")]
     assert saved == [7]
     assert win._last_seen_news_id == 7
 

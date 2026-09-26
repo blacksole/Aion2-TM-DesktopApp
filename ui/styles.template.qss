@@ -1830,6 +1830,7 @@ QWidget[aion2="true"] #SkillLevelValue {
 
 QWidget[aion2="true"] #DeleteConfirmDialog,
 QWidget[aion2="true"] #UpdateDialog,
+QWidget[aion2="true"] #newsDialog,
 QWidget[aion2="true"] #DonateQrDialog,
 QWidget[aion2="true"] #TemplateItemPickerDialog,
 QWidget[aion2="true"] #ItemPickerPopup,

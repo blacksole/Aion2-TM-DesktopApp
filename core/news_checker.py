@@ -45,8 +45,8 @@ def _strip_html(text: str) -> str:
 
 
 class NewsChecker(QThread):
-    # (post_id, title, excerpt, link)
-    post_available = Signal(int, str, str, str)
+    # (post_id, title, excerpt, link, date)
+    post_available = Signal(int, str, str, str, str)
     no_news = Signal()
 
     def run(self):
@@ -60,12 +60,13 @@ class NewsChecker(QThread):
             title = _strip_html((post.get("title") or {}).get("rendered", ""))
             excerpt = _strip_html((post.get("excerpt") or {}).get("rendered", ""))
             link = post.get("link") or ""
+            date = post.get("date") or ""
 
             if not isinstance(post_id, int) or not title:
                 self.no_news.emit()
                 return
 
-            self.post_available.emit(post_id, title, excerpt, link)
+            self.post_available.emit(post_id, title, excerpt, link, date)
         except Exception:
             # Same policy as UpdateChecker: a WordPress hiccup (site not
             # live yet, DNS blip, malformed JSON) must never surface as a

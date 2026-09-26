@@ -2,9 +2,7 @@ import os
 import sys
 import shutil
 import urllib.request
-from datetime import datetime
 from pathlib import Path
-
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
@@ -14,7 +12,10 @@ from PySide6.QtWidgets import (
 )
 
 from core.app_logger import get_logger
-from core.changelog import is_hotfix as _is_hotfix, parse_local_changelog
+from core.changelog import (
+    is_hotfix as _is_hotfix, parse_local_changelog,
+    format_release_date as _format_release_date,
+)
 from core.update_checker import (
     decide_checksum_policy, parse_sha256_sidecar, safe_extract, verify_sha256,
 )
@@ -22,37 +23,6 @@ from core.version import GITHUB_USER, GITHUB_REPO, APP_VERSION
 from core.translations import tr
 
 logger = get_logger("update_dialog")
-
-# Lightweight month-name lookup (User-Wunsch, 2026-09-14: show each
-# version's release date) -- no locale/babel dependency, matching this
-# app's existing lightweight-translation style elsewhere (e.g. the plain
-# "Mo"/"Di" weekday defaults). Only the 3 languages the app itself supports.
-_MONTH_NAMES = {
-    "de": ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
-           "August", "September", "Oktober", "November", "Dezember"],
-    "ru": ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
-           "августа", "сентября", "октября", "ноября", "декабря"],
-    "en": ["January", "February", "March", "April", "May", "June", "July",
-           "August", "September", "October", "November", "December"],
-}
-
-
-def _format_release_date(iso_str: str, language: str) -> str:
-    """GitHub's "published_at" (e.g. "2026-09-14T18:07:29Z") into a
-    human-readable date in the given UI language. Empty/unparsable input
-    just returns "" -- an older or malformed release simply shows no date
-    rather than a confusing placeholder."""
-    if not iso_str:
-        return ""
-    try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-    except ValueError:
-        return ""
-    months = _MONTH_NAMES.get(language, _MONTH_NAMES["en"])
-    month = months[dt.month - 1]
-    if language == "en":
-        return f"{month} {dt.day}, {dt.year}"
-    return f"{dt.day}. {month} {dt.year}"
 
 
 class _InstallerThread(QThread):
