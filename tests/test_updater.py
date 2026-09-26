@@ -12,8 +12,6 @@ from core.update_checker import (
     is_sha256_hex,
     parse_sha256_sidecar,
     safe_extract,
-    select_assets,
-    sha256_sidecar_url,
     verify_sha256,
 )
 
@@ -181,37 +179,8 @@ def test_safe_extract_writes_nothing_when_one_member_is_unsafe(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# asset selection
-# --------------------------------------------------------------------------
-
-def test_select_assets_picks_zip_and_its_sidecar():
-    assets = [
-        {"name": "source.tar.gz", "browser_download_url": "https://x/source.tar.gz"},
-        {"name": _ZIP_NAME, "browser_download_url": _BASE_URL},
-        {"name": f"{_ZIP_NAME}.sha256", "browser_download_url": f"{_BASE_URL}.sha256"},
-    ]
-
-    assert select_assets(assets) == (_BASE_URL, f"{_BASE_URL}.sha256")
-
-
-def test_select_assets_without_sidecar():
-    assets = [{"name": _ZIP_NAME, "browser_download_url": _BASE_URL}]
-    assert select_assets(assets) == (_BASE_URL, "")
-
-
-def test_select_assets_with_no_build_asset():
-    assert select_assets([{"name": "notes.md", "browser_download_url": "https://x/notes.md"}]) == ("", "")
-    assert select_assets([]) == ("", "")
-
-
-def test_sidecar_url_is_the_asset_url_plus_suffix():
-    assert sha256_sidecar_url(_BASE_URL) == f"{_BASE_URL}.sha256"
-    assert sha256_sidecar_url("") == ""
-
-
-# ---------------------------------------------------------------------------
 # checksum policy: "no sidecar published" is NOT "sidecar fetch failed"
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 def test_policy_skips_when_the_release_published_no_sidecar():
     # Every release built before the checksum step. Refusing these would
@@ -231,45 +200,46 @@ def test_policy_verifies_when_the_digest_is_in_hand():
     assert decide_checksum_policy("https://x/asset.zip.sha256", "a" * 64) == "verify"
 
 
-def test_checker_emits_the_sidecar_url_with_the_update(monkeypatch):
+def test_checker_emits_the_zip_url_and_local_release_notes(monkeypatch):
     # The plumbing that makes the distinction above reachable: the installer
     # sees a URL only, so the asset LIST knowledge has to travel with it.
     from core import update_checker as uc
 
-    release = {
-        "tag_name": "v99.0.0",
-        "body": "notes",
-        "assets": [
-            {"name": "Aion2_TM.zip", "browser_download_url": "https://x/Aion2_TM.zip"},
-            {"name": "Aion2_TM.zip.sha256", "browser_download_url": "https://x/Aion2_TM.zip.sha256"},
-        ],
-    }
+    monkeypatch.setattr(uc.UpdateChecker, "_fetch_latest_version", lambda self: "99.0.0")
+    monkeypatch.setattr(uc, "release_notes_for", lambda version: "notes")
     checker = uc.UpdateChecker()
-    monkeypatch.setattr(checker, "_fetch_latest_stable", lambda: release)
     emitted = []
     checker.update_available.connect(lambda *args: emitted.append(args))
 
     checker.run()
 
-    assert emitted == [("99.0.0", "notes", "https://x/Aion2_TM.zip", "https://x/Aion2_TM.zip.sha256")]
+    assert emitted == [("99.0.0", "notes", uc._ZIP_URL, "")]
 
 
-def test_checker_emits_an_empty_sidecar_url_for_an_old_release(monkeypatch):
+def test_checker_reports_up_to_date_when_remote_is_not_newer(monkeypatch):
     from core import update_checker as uc
 
-    release = {
-        "tag_name": "v99.0.0",
-        "body": "",
-        "assets": [{"name": "Aion2_TM.zip", "browser_download_url": "https://x/Aion2_TM.zip"}],
-    }
+    monkeypatch.setattr(uc.UpdateChecker, "_fetch_latest_version", lambda self: uc.APP_VERSION)
     checker = uc.UpdateChecker()
-    monkeypatch.setattr(checker, "_fetch_latest_stable", lambda: release)
-    emitted = []
-    checker.update_available.connect(lambda *args: emitted.append(args))
+    up_to_date = []
+    checker.up_to_date.connect(lambda: up_to_date.append(True))
 
     checker.run()
 
-    assert emitted[0][3] == ""
+    assert up_to_date == [True]
+
+
+def test_checker_reports_up_to_date_when_the_version_endpoint_is_empty(monkeypatch):
+    from core import update_checker as uc
+
+    monkeypatch.setattr(uc.UpdateChecker, "_fetch_latest_version", lambda self: "")
+    checker = uc.UpdateChecker()
+    up_to_date = []
+    checker.up_to_date.connect(lambda: up_to_date.append(True))
+
+    checker.run()
+
+    assert up_to_date == [True]
 
 
 def test_dialog_hands_the_sidecar_url_to_the_installer_thread(qapp, tmp_path):

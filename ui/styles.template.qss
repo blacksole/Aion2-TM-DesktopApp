@@ -1910,7 +1910,7 @@ QWidget[aion2="true"] #changelogVersionBtn {
     font-weight: {{font_weight_semibold}};
     padding: {{space_2}}px {{space_3}}px;
     text-align: left;
-    min-width: 160px;
+    min-width: 180px;
 }
 
 QWidget[aion2="true"] #changelogVersionBtn:hover {

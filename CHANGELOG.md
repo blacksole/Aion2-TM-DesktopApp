@@ -1,3 +1,17 @@
+# Version 2.0.10
+
+Release Date: 2026-09-26
+
+## ✨ New Features
+
+- **In-app news.** Shortly after startup, the app checks the new `companion.g-place.de` community site for announcements and shows a small popup with the title and a short excerpt if there's something new — with an "Open" button to read the full post in your browser. Each announcement is only ever shown once.
+
+## 🔧 Under the Hood
+
+- **The update checker no longer talks to GitHub.** With the repository moving to private soon, the app now asks `companion.g-place.de` directly for the latest version number and build instead of GitHub's Releases API, so existing installs keep getting updates without interruption. Release notes still come from the app's own bundled changelog, exactly as before — nothing changes in how updates look or feel, only where the version check and download come from.
+
+---
+
 # Version 2.0.9
 
 Release Date: 2026-09-24
