@@ -21,6 +21,20 @@ def main() -> int:
     logger = get_logger("main")
     logger.info("=== App starting (frozen=%s) ===", getattr(sys, "frozen", False))
 
+    # A windowed (console=False) build has no stderr, so an exception raised
+    # inside a Qt slot -- a click handler -- used to vanish without a trace:
+    # the user saw "nothing happens" and app.log showed nothing either
+    # (GitHub issue #11: "not possible anymore to open the Buildplanner").
+    # PySide6 routes slot exceptions through sys.excepthook; send them to the
+    # log, then on to the previous hook so a console run still prints them.
+    previous_hook = sys.excepthook
+
+    def _log_uncaught(exc_type, exc, tb):
+        logger.error("Uncaught exception", exc_info=(exc_type, exc, tb))
+        previous_hook(exc_type, exc, tb)
+
+    sys.excepthook = _log_uncaught
+
     # Multi-monitor setups with mixed per-monitor scaling (e.g. 100% + 150%)
     # are a known Qt/Windows trigger for Qt.Popup windows self-closing the
     # instant they're shown (User-reported, 2026-08-29: EQ-Priority item

@@ -1707,11 +1707,6 @@ class MainWindow(QMainWindow):
                 self.open_profile_menu
             )
 
-        if hasattr(self.settings_page, "clear_events_btn"):
-            self.settings_page.clear_events_btn.clicked.connect(
-                self.clear_event_entries
-            )
-
         if hasattr(self.settings_page, "export_requested"):
             self.settings_page.export_requested.connect(self.export_profile)
 
@@ -2820,7 +2815,8 @@ class MainWindow(QMainWindow):
             self.last_season_reset_datetime = settings.get("last_season_reset_datetime")
             self.missed_daily_activities = settings.get("missed_daily_activities", [])
 
-            self.show_events = settings.get("show_events", True)
+            # Always on: the switch is gone from Settings (GitHub issue #12).
+            self.show_events = True
             # Straight into ui.motion: the profile's own preference has to be
             # live before the first fade this load could trigger.
             self.set_reduce_motion(settings.get("reduce_motion", False), save=False)
@@ -4373,15 +4369,26 @@ class MainWindow(QMainWindow):
             set_name = self._pick_standard_set(kind, title_key, "standards_pick_set_label")
         if not set_name:
             return
-        existing_titles = {
-            c.title.strip().lower()
+        # Duplicate check by (title, location), not by title alone (bug #133,
+        # website report "Soul Crystal Shugo Vorlage"): a set may hold the
+        # same item from two shops -- "Soul Crystal (Bound)" from the Weekly
+        # Nightmare Store AND from the Shugo Store -- and the title-only check
+        # threw the second one away as a "duplicate".  Creating a character
+        # (_apply_standard_templates) has no check at all, which is why the
+        # same set worked there and failed only when added afterwards.
+        def _key(title: str, location: str) -> tuple[str, str]:
+            return title.strip().lower(), (location or "").strip().lower()
+
+        existing_keys = {
+            _key(c.title, getattr(c, "location", ""))
             for c in self.task_lists.get(kind, [])
             if getattr(c, "character", "") == character
         }
         added_any = False
         for tmpl in self.standard_templates.get(kind, {}).get(set_name, []):
             title = tmpl.get("title", "").strip()
-            if not title or title.lower() in existing_titles:
+            key = _key(title, tmpl.get("location", ""))
+            if not title or key in existing_keys:
                 continue
             template_id = tmpl.get("source_id") or tmpl.get("id", "")
             if kind == "tasks":
@@ -4409,7 +4416,7 @@ class MainWindow(QMainWindow):
                 )
             self._wire_card(card)
             self.task_lists.setdefault(kind, []).append(card)
-            existing_titles.add(title.lower())
+            existing_keys.add(key)
             added_any = True
         if added_any:
             self.refresh()
@@ -4429,7 +4436,9 @@ class MainWindow(QMainWindow):
         window = self.flow_map_window
         if not window:
             return False
-        for node in window.nodes.values():
+        for nid, node in window.nodes.items():
+            if nid == window.root_node_id:
+                continue  # the root is never a character (issue #14)
             if node.icon == "character" and node.title == name and node.children:
                 return True
         return False
@@ -4543,18 +4552,27 @@ class MainWindow(QMainWindow):
         return removed_any, ""
 
     def _rebuild_characters(self):
-        """Collect all character node titles from every flow map and update the dropdown."""
+        """Collect all character node titles from every flow map and update the dropdown.
+
+        A map's ROOT node is never a character (GitHub issue #14): every new
+        map's root is seeded with icon="character" ("Create Character" /
+        "New Node"), but it is drawn as the home node, cannot hold the
+        character role (characters are only its direct children) and cannot
+        be deleted -- counting it put "Create Character" into every ToDo
+        character list, and removing it from there always failed."""
         chars: set[str] = set()
         active = self.active_flow_map_name
         if self.flow_map_window:
-            for node in self.flow_map_window.nodes.values():
-                if node.icon == "character" and node.title:
+            root_id = self.flow_map_window.root_node_id
+            for nid, node in self.flow_map_window.nodes.items():
+                if nid != root_id and node.icon == "character" and node.title:
                     chars.add(node.title)
         for map_name, map_data in self.flow_maps.items():
             if map_name == active:
                 continue
-            for nd in map_data.get("nodes", {}).values():
-                if nd.get("icon") == "character" and nd.get("title"):
+            root_id = map_data.get("root_node_id")
+            for nid, nd in map_data.get("nodes", {}).items():
+                if nid != root_id and nd.get("icon") == "character" and nd.get("title"):
                     chars.add(nd["title"])
         self.characters = sorted(chars)
         self.tasks_page.update_characters(self.characters)
@@ -4868,10 +4886,10 @@ class MainWindow(QMainWindow):
             self.season_enabled
         )
 
-        self.show_events = data.get(
-            "show_events",
-            self.show_events
-        )
+        # Settings no longer offers the switch (GitHub issue #12), so a
+        # profile saved with "show_events": false must not keep hiding the
+        # old event entries with no way left to show them again.
+        self.show_events = True
 
         if "reduce_motion" in data:
             self.set_reduce_motion(data["reduce_motion"], save=False)

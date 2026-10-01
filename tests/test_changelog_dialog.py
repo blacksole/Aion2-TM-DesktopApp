@@ -155,7 +155,15 @@ def test_the_hotfix_badge_is_one_size_on_every_hotfix(dialog):
     rail = _rail(dialog)
     badges = {tag: _child(btn, "changelogHotfixBadge") for tag, btn in rail.items()}
     visible = sorted(tag for tag, badge in badges.items() if badge.isVisible())
-    assert visible == ["v2.0.5", "v2.0.6"]
+    # Derived from the bundled CHANGELOG instead of a hardcoded list, so a
+    # new hotfix release (2.0.11) doesn't break this test every time.
+    from core.changelog import is_hotfix, parse_local_changelog
+    expected = sorted(
+        f"v{e['tag']}" for e in parse_local_changelog()
+        if is_hotfix(e.get("body", "")) and f"v{e['tag']}" in badges
+    )
+    assert {"v2.0.5", "v2.0.6"} <= set(expected)
+    assert visible == expected
     # Hidden badges keep their size, so the row is identical in every
     # button -- and nothing is stretched (was 38px / 21px before).
     sizes = {badge.size().toTuple() for badge in badges.values()}

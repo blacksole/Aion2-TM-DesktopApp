@@ -1,4 +1,46 @@
 # -*- mode: python ; coding: utf-8 -*-
+import re as _re
+
+from PyInstaller.utils.win32.versioninfo import (
+    FixedFileInfo,
+    StringFileInfo,
+    StringStruct,
+    StringTable,
+    VarFileInfo,
+    VarStruct,
+    VSVersionInfo,
+)
+
+# Windows version resource (GitHub issue #13).  Without it the EXE carries no
+# company / product / description / version at all -- together with the
+# unsigned stock PyInstaller bootloader that is the exact profile Defender's
+# ML heuristics flag as "Trojan:Win32/Bearfoos.A!ml" and quarantine on
+# download.  core/version.py stays the single source of the number.
+_APP_VERSION = _re.search(
+    r'^APP_VERSION\s*=\s*"([^"]+)"',
+    open('core/version.py', encoding='utf-8').read(),
+    _re.M,
+).group(1)
+_ver_tuple = tuple(int(p) for p in (_APP_VERSION.split('.') + ['0', '0', '0'])[:4])
+_VERSION_INFO = VSVersionInfo(
+    ffi=FixedFileInfo(filevers=_ver_tuple, prodvers=_ver_tuple),
+    kids=[
+        StringFileInfo([
+            StringTable('040904B0', [
+                StringStruct('CompanyName', 'Aion 2 Companion'),
+                StringStruct('FileDescription', 'Aion 2 Companion'),
+                StringStruct('FileVersion', _APP_VERSION),
+                StringStruct('InternalName', 'Aion2 TM'),
+                StringStruct('LegalCopyright', 'Copyright (C) 2026 blacksole. AGPL-3.0.'),
+                StringStruct('OriginalFilename', 'Aion2 TM.exe'),
+                StringStruct('ProductName', 'Aion 2 Companion'),
+                StringStruct('ProductVersion', _APP_VERSION),
+                StringStruct('Comments', 'https://companion.g-place.de'),
+            ]),
+        ]),
+        VarFileInfo([VarStruct('Translation', [0x0409, 1200])]),
+    ],
+)
 
 
 a = Analysis(
@@ -104,7 +146,18 @@ a = Analysis(
         # happens to contain -- see ui/update_dialog.py's _changelog_path().
         ('CHANGELOG.md', '.'),
     ],
-    hiddenimports=['email', 'email.mime', 'email.mime.text', 'email.mime.multipart'],
+    # ItemDatabase/app.py ships as a DATA file and is exec'd at runtime, so
+    # PyInstaller's import scan never sees what IT imports.  Every project
+    # module that only app.py uses must be listed here, or the Armory dies
+    # on open with "cannot import name ... from 'core'" (GitHub issue #11,
+    # point 4: core.shadows, imported only by app.py since 1ec4b85, was
+    # missing from the v2.0.10 build -> "Build Planner won't open").
+    # tests/test_github_issues_11_14.py checks this list against app.py.
+    hiddenimports=[
+        'email', 'email.mime', 'email.mime.text', 'email.mime.multipart',
+        'core.shadows', 'core.theme', 'core.translations', 'core.app_logger',
+        'utils.paths',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -161,6 +214,7 @@ exe = EXE(
     # Forward slashes: a backslash path is one literal filename on a
     # Linux PyInstaller run, and the Linux port landed 2026-09-18.
     icon=['assets/icons/aion2_tm_icon.ico'],
+    version=_VERSION_INFO,
 )
 coll = COLLECT(
     exe,
