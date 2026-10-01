@@ -36,8 +36,19 @@ _NAME_RE = re.compile(r"Arcana: (\w+) of (\w+)")
 _SET_LABEL_RE = re.compile(r"_([A-Za-z]+Set\d+)\.png")
 
 
-def parse_arcana_item(item: dict) -> dict:
+def parse_arcana_item(item: dict) -> dict | None:
+    """None when the item doesn't match the "Arcana: X of Y" card-name
+    shape -- shugo.gg's "Arcana" category also includes plain EXP/training
+    materials like "Lesser Training Arcana (Bound)" (CI failure,
+    2026-09-26/10-01: AttributeError crashed the whole fetch here, since
+    they carry none of a real card's cardType/theme/empyreanLord/deity
+    structure, just a flat "Grants <X>..." description). Those aren't
+    Arcana cards in the sense this file structures -- skip them, don't
+    crash the whole run over items nothing downstream reads anyway.
+    """
     name_match = _NAME_RE.match(item["name"])
+    if not name_match:
+        return None
     card_type, theme = name_match.group(1), name_match.group(2)
 
     desc = item.get("description", "")
@@ -72,7 +83,10 @@ def main():
     arcana_items = [it for it in data.get("items", []) if it.get("categoryName") == "Arcana"]
     print(f"Found {len(arcana_items)} Arcana items in {ITEMS_PATH.name}")
 
-    parsed = [parse_arcana_item(it) for it in arcana_items]
+    parsed = [p for p in (parse_arcana_item(it) for it in arcana_items) if p is not None]
+    skipped = len(arcana_items) - len(parsed)
+    if skipped:
+        print(f"Skipped {skipped} non-card Arcana item(s) (e.g. training/EXP materials)")
     OUT_PATH.write_text(json.dumps({"arcana": parsed}, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Saved structured data to {OUT_PATH}")
 

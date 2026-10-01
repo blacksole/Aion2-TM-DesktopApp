@@ -12,6 +12,7 @@ Usage:
 """
 
 import argparse
+import html
 import json
 import re
 import time
@@ -24,11 +25,6 @@ OUT_PATH = Path(__file__).parent / "data" / "dungeons_all.json"
 REQUEST_DELAY = 0.35  # seconds between requests -- be polite
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; Aion2TM-DungeonFetch/1.0)"}
-
-PROP_KEYS = [
-    "id", "mainCategory", "description", "dungeonType", "recommendLevel",
-    "usesDungeonUi", "isInstanceLayer", "mapId", "createdAt", "updatedAt",
-]
 
 
 def _get(url: str) -> str:
@@ -49,101 +45,79 @@ def _dungeon_ids_from_sitemap() -> list[str]:
     return ids
 
 
-def _unescape(html: str) -> str:
-    return html.replace('\\"', '"')
+def _unescape(html_str: str) -> str:
+    """No longer used by parse_dungeon_page() (see its docstring: the
+    current page shape has nothing left to backslash-unescape) -- kept
+    as a tiny public helper in case a future scrape of this same site
+    needs it again, same as fetch_recipes.py's own copy."""
+    return html_str.replace('\\"', '"')
 
 
-def _extract_balanced(html: str, start: int, open_ch="{", close_ch="}") -> str | None:
-    depth = 0
-    i = start
-    in_string = False
-    n = len(html)
-    while i < n:
-        ch = html[i]
-        if in_string:
-            if ch == "\\":
-                i += 2
-                continue
-            if ch == '"':
-                in_string = False
-        else:
-            if ch == '"':
-                in_string = True
-            elif ch == open_ch:
-                depth += 1
-            elif ch == close_ch:
-                depth -= 1
-                if depth == 0:
-                    return html[start:i + 1]
-        i += 1
-    return None
+_KV_RE = re.compile(r'<div class="k">([^<]*)</div><div class="v">([^<]*)</div>')
+_H1_TITLE_RE = re.compile(r'<h1 class="title">([^<]*)</h1>')
+# The one JSON blob the page embeds verbatim, inside a <details><summary>
+# dungeonRewardsItems</summary><pre>...</pre></details> block, HTML-escaped
+# (&quot; etc.) -- much simpler to pull out than the "Record fields"
+# key/value table above, which has no such structured sibling for lists.
+_REWARDS_PRE_RE = re.compile(
+    r'<summary>dungeonRewardsItems</summary><pre>(.*?)</pre>', re.DOTALL
+)
 
 
-def _parse_properties(html: str) -> dict:
+def _parse_record_fields(html: str) -> dict:
+    """The "Record fields" card is a flat sequence of <div class="k">KEY</div>
+    <div class="v">VALUE</div> pairs (no nesting, no quoting to worry about)
+    -- a key with no real value renders as the literal em-dash "—"."""
     result = {}
-    for key in PROP_KEYS:
-        marker = f'"div","{key}",{{'
-        idx = html.find(marker)
-        if idx == -1:
-            continue
-        obj_start = html.find("{", idx)
-        block = _extract_balanced(html, obj_start, "{", "}")
-        if not block:
-            continue
-        strings = re.findall(r'"children":"([^"]*)"', block)
-        if len(strings) >= 2:
-            result[key] = strings[-1]
-        elif len(strings) == 1:
-            result[key] = None
+    for key, value in _KV_RE.findall(html):
+        result[key] = None if value == "—" else value
     return result
 
 
-def _parse_name(html: str) -> str | None:
-    m2 = re.search(r'"font-display text-2xl font-bold leading-tight sm:text-3xl","children":"([^"]+)"', html)
-    return m2.group(1) if m2 else None
-
-
-def _parse_item_refs(block: str) -> list[dict]:
-    items = []
-    for m in re.finditer(r'"href":"/en/item/(\d+)/"', block):
-        item_id = int(m.group(1))
-        tail = block[m.end():m.end() + 800]
-        name_m = re.search(r'"children":"([^"]+)"', tail)
-        items.append({"id": item_id, "name": name_m.group(1) if name_m else None})
-    return items
-
-
-def _parse_section(html: str, section_key: str) -> str | None:
-    marker = f'"section","{section_key}",{{'
-    idx = html.find(marker)
-    if idx == -1:
-        return None
-    obj_start = html.find("{", idx)
-    return _extract_balanced(html, obj_start, "{", "}")
-
-
 def parse_dungeon_page(raw_html: str) -> dict | None:
-    html = _unescape(raw_html)
-    if '"div","mainCategory",{' not in html:
+    """gamers4.life switched its dungeon detail pages from a server-rendered
+    React/JSON data blob (the old `"div","mainCategory",{...}` shape this
+    function used to look for) to plain server-rendered HTML with a
+    key/value `.table` card plus one JSON blob for item rewards (CI
+    failure, 2026-10-01: 0/548 dungeons fetched, the old marker string no
+    longer exists anywhere on the page at all). Re-reads the SAME page
+    shape every other field already comes from, just via the new markup.
+    """
+    if '<h1 class="title">' not in raw_html or 'class="k">mainCategory</div>' not in raw_html:
         return None  # 404 or unrecognized page shape
 
-    props = _parse_properties(html)
-    name = _parse_name(html)
-    rewards_section = _parse_section(html, "dungeonRewardsItems")
+    name_match = _H1_TITLE_RE.search(raw_html)
+    fields = _parse_record_fields(raw_html)
 
+    reward_items = []
+    rewards_match = _REWARDS_PRE_RE.search(raw_html)
+    if rewards_match:
+        raw_json = html.unescape(rewards_match.group(1))
+        try:
+            reward_items = [
+                {"id": int(it["id"]), "name": it.get("name")}
+                for it in json.loads(raw_json)
+            ]
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+            reward_items = []
+
+    def _bool(key: str) -> bool:
+        return fields.get(key) == "true"
+
+    map_id = fields.get("mapId")
     return {
-        "id": int(props.get("id")) if props.get("id") else None,
-        "name": name,
-        "mainCategory": props.get("mainCategory"),
-        "description": props.get("description"),
-        "dungeonType": props.get("dungeonType"),
-        "recommendLevel": props.get("recommendLevel"),
-        "usesDungeonUi": props.get("usesDungeonUi") == "yes",
-        "isInstanceLayer": props.get("isInstanceLayer") == "yes",
-        "mapId": props.get("mapId"),
-        "createdAt": props.get("createdAt"),
-        "updatedAt": props.get("updatedAt"),
-        "rewardItems": _parse_item_refs(rewards_section) if rewards_section else [],
+        "id": int(map_id) if map_id and map_id.isdigit() else None,
+        "name": name_match.group(1) if name_match else None,
+        "mainCategory": fields.get("mainCategory"),
+        "description": fields.get("description"),
+        "dungeonType": fields.get("dungeonType"),
+        "recommendLevel": fields.get("recommendLevel"),
+        "usesDungeonUi": _bool("usesDungeonUi"),
+        "isInstanceLayer": _bool("isInstanceLayer"),
+        "mapId": map_id,
+        "createdAt": fields.get("createdAt"),
+        "updatedAt": fields.get("updatedAt"),
+        "rewardItems": reward_items,
     }
 
 
