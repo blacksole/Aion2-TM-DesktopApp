@@ -1,0 +1,1728 @@
+[
+  {
+    "id": "514310001",
+    "name": "Artwork: Zumion Stone Gate",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_r_StoneDoor_06.icon_AD_pic_L_r_StoneDoor_06",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310003",
+    "name": "Artwork: Verteron Fortress Ruins",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_Verteron_Fortress_Ruin.icon_AD_pic_L_c_Verteron_Fortress_Ruin",
+    "stats": {
+      "wisdom": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310015",
+    "name": "Artwork: Shugo Alchemist",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_c_NPC_ShugoM_02.icon_AD_pic_A_c_NPC_ShugoM_02",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310033",
+    "name": "Artwork: Moslan Forest",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_c_Moslan_Forest.icon_AD_pic_D_c_Moslan_Forest",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310035",
+    "name": "Artwork: Fire Temple",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_u_Fire_Temple.icon_AD_pic_A_u_Fire_Temple",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "destiny": 4
+    }
+  },
+  {
+    "id": "514310036",
+    "name": "Artwork: Safe Haven",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_l_FugitiveVillage.icon_AD_pic_D_l_FugitiveVillage",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310038",
+    "name": "Artwork: Quai Campsite",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_r_Quairerk_Camp.icon_AD_pic_D_r_Quairerk_Camp",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310039",
+    "name": "Artwork: Calderon Canyon",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_r_Buffer_Calderon_Hill.icon_AD_pic_D_r_Buffer_Calderon_Hill",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310040",
+    "name": "Artwork: Dredgion Crash Site",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_c_Dredgion_Crash_Site.icon_AD_pic_D_c_Dredgion_Crash_Site",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310041",
+    "name": "Artwork: Nameless Cemetery",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_c_Unnamed_Cemetery.icon_AD_pic_D_c_Unnamed_Cemetery",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310042",
+    "name": "Artwork: Sanctum Outpost",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_c_Sanctum_Watchpost.icon_AD_pic_D_c_Sanctum_Watchpost",
+    "stats": {
+      "wisdom": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310044",
+    "name": "Artwork: Ardus Shrine",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_u_Ardus_Shrine.icon_AD_pic_L_u_Ardus_Shrine",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310045",
+    "name": "Artwork: Ellun River Midstream",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_r_Buffer_EllunRiver_Midstream.icon_AD_pic_L_r_Buffer_EllunRiver_Midstream",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310046",
+    "name": "Artwork: Dawn Legion Base",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_l_Dawn_Legion_Base.icon_AD_pic_L_l_Dawn_Legion_Base",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310047",
+    "name": "Artwork: Pilgrim's Ridge",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_r_Buffer_Pilgrims_Ridge_Path.icon_AD_pic_L_r_Buffer_Pilgrims_Ridge_Path",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310048",
+    "name": "Artwork: Cantas Valley",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_Cantas_Valley.icon_AD_pic_L_c_Cantas_Valley",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310049",
+    "name": "Artwork: Ellun River Marsh",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_Ellun_River_Marsh.icon_AD_pic_L_c_Ellun_River_Marsh",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310050",
+    "name": "Artwork: Tolbas Forest",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_Tolbas_Forest.icon_AD_pic_L_c_Tolbas_Forest",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310052",
+    "name": "Artwork: Urugugu",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_u_Urugugu_Canyon.icon_AD_pic_A_u_Urugugu_Canyon",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "destiny": 4
+    }
+  },
+  {
+    "id": "514310054",
+    "name": "Artwork: Draupnir",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_u_Draupnir.icon_AD_pic_A_u_Draupnir",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310055",
+    "name": "Artwork: Impetusium",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_u_Impetusium.icon_AD_pic_D_u_Impetusium",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310056",
+    "name": "Artwork: Archon Underground Fortress Door",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_r_MagicDoor_01.icon_AD_pic_D_r_MagicDoor_01",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310064",
+    "name": "Artwork: Specter Archon Axios",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_DstrArchonE_01.icon_AD_pic_A_MOB_DstrArchonE_01",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310065",
+    "name": "Artwork: Addicted Hardirun",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_AddShulack_05.icon_AD_pic_A_MOB_AddShulack_05",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310066",
+    "name": "Artwork: Executioner Barthien",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_AltKnife_07.icon_AD_pic_A_MOB_AltKnife_07",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310067",
+    "name": "Artwork: Drakan Battalion Weapon Guruta",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_BeritraD_04_V01.icon_AD_pic_A_MOB_BeritraD_04_V01",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310068",
+    "name": "Artwork: Sentinel K'nash",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_BeritraD_04_V01.icon_AD_pic_A_MOB_BeritraD_04_V01",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310069",
+    "name": "Artwork: Veteran Shujakan",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Lycan_05.icon_AD_pic_A_MOB_Lycan_05",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310070",
+    "name": "Artwork: Visionary Karuka",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Lycan_04.icon_AD_pic_A_MOB_Lycan_04",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310071",
+    "name": "Artwork: Dark Shadow Vishwada",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_BeritraD_03_V01.icon_AD_pic_A_MOB_BeritraD_03_V01",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310072",
+    "name": "Artwork: Researcher Setram",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_BeritraD_03_V01.icon_AD_pic_A_MOB_BeritraD_03_V01",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310073",
+    "name": "Artwork: Sharp Shylak",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_DracoElite_01_V01.icon_AD_pic_A_MOB_DracoElite_01_V01",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310074",
+    "name": "Artwork: Black Tentacle Lawa",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_NagaElite_05.icon_AD_pic_A_MOB_NagaElite_05",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310075",
+    "name": "Artwork: Heretic Layla",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_SuraPriest_01_V04.icon_AD_pic_A_MOB_SuraPriest_01_V04",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310077",
+    "name": "Artwork: Divine Ansas",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Guardit_03.icon_AD_pic_A_MOB_Guardit_03",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310078",
+    "name": "Artwork: Harvest Manager Moshav",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_DrakanElite_03_V01.icon_AD_pic_A_MOB_DrakanElite_03_V01",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310079",
+    "name": "Artwork: Advisor Resana",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_DrakanElite_03_V01.icon_AD_pic_A_MOB_DrakanElite_03_V01",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310080",
+    "name": "Artwork: Phantasm Kasia",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Kasia_01.icon_AD_pic_A_MOB_Kasia_01",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310081",
+    "name": "Artwork: Melted Danar",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_DranaVar_02_V01.icon_AD_pic_A_MOB_DranaVar_02_V01",
+    "stats": {
+      "life": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "514310082",
+    "name": "Artwork: Black Warrior Aed",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_SuraWar_05_V02.icon_AD_pic_A_MOB_SuraWar_05_V02",
+    "stats": {
+      "wisdom": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "514310083",
+    "name": "Artwork: Faithful Rajit",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_DracoWar_01_V03.icon_AD_pic_A_MOB_DracoWar_01_V03",
+    "stats": {
+      "life": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "514310084",
+    "name": "Artwork: Berserker Vargor",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Varg_03_V01.icon_AD_pic_A_MOB_Varg_03_V01",
+    "stats": {
+      "wisdom": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "514310085",
+    "name": "Artwork: Predator Garsan",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_UrsussElite_01_CV01.icon_AD_pic_A_MOB_UrsussElite_01_CV01",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310086",
+    "name": "Artwork: Blood Warrior Lannar",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_AltKnife_04_V02.icon_AD_pic_A_MOB_AltKnife_04_V02",
+    "stats": {
+      "life": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "514310087",
+    "name": "Artwork: Deceiver Trid",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_NornirVar_02_V02.icon_AD_pic_A_MOB_NornirVar_02_V02",
+    "stats": {
+      "wisdom": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310088",
+    "name": "Artwork: Blue Wave Kelpina",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_WaterEle_04_V01.icon_AD_pic_A_MOB_WaterEle_04_V01",
+    "stats": {
+      "wisdom": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310089",
+    "name": "Artwork: High Overseer Nutah",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_SkurvWar_04_V03.icon_AD_pic_A_MOB_SkurvWar_04_V03",
+    "stats": {
+      "life": 3,
+      "wisdom": 3
+    }
+  },
+  {
+    "id": "514310090",
+    "name": "Artwork: Special Operations Leader Linx",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_FighterM_01_V03.icon_AD_pic_A_MOB_FighterM_01_V03",
+    "stats": {
+      "life": 3,
+      "wisdom": 3
+    }
+  },
+  {
+    "id": "514310091",
+    "name": "Artwork: Desecrator Newbold",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_AltKnife_06.icon_AD_pic_A_MOB_AltKnife_06",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310092",
+    "name": "Artwork: Kernon of the West",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Keneir_01_V02.icon_AD_pic_A_MOB_Keneir_01_V02",
+    "stats": {
+      "wisdom": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "514310093",
+    "name": "Artwork: Neikel of the East",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Keneir_01_V03.icon_AD_pic_A_MOB_Keneir_01_V03",
+    "stats": {
+      "destiny": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "514310094",
+    "name": "Artwork: Rotten Kutar",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_BigMan_01_V03.icon_AD_pic_A_MOB_BigMan_01_V03",
+    "stats": {
+      "destiny": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "514310095",
+    "name": "Artwork: Blooming Korin",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Coradon_01_V03.icon_AD_pic_A_MOB_Coradon_01_V03",
+    "stats": {
+      "life": 2,
+      "wisdom": 2
+    }
+  },
+  {
+    "id": "514310096",
+    "name": "Artwork: Bodyguard Teegant",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Neuth_03.icon_AD_pic_A_MOB_Neuth_03",
+    "stats": {
+      "life": 2,
+      "wisdom": 2
+    }
+  },
+  {
+    "id": "514310097",
+    "name": "Artwork: Kusan the Mad Gladiator",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_KrallElite_01_V01.icon_AD_pic_A_MOB_KrallElite_01_V01",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310098",
+    "name": "Artwork: Ritualist Garshim",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_KrallElite_02_V01.icon_AD_pic_A_MOB_KrallElite_02_V01",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310099",
+    "name": "Artwork: Bloodfang Pnyn",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_KalnifElite_01_V01.icon_AD_pic_A_MOB_KalnifElite_01_V01",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310100",
+    "name": "Artwork: Furious Saursus",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_UrsussElite_01_V01.icon_AD_pic_A_MOB_UrsussElite_01_V01",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "514310101",
+    "name": "Artwork: Scholar Aulla",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_OwlMagic_01_V01.icon_AD_pic_A_MOB_OwlMagic_01_V01",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310102",
+    "name": "Artwork: Forest Warrior Aullamu",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_OwlElite_01_V01.icon_AD_pic_A_MOB_OwlElite_01_V01",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310103",
+    "name": "Artwork: Chaser Taulo",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_OwlElite_01_CV01.icon_AD_pic_A_MOB_OwlElite_01_CV01",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "514310110",
+    "name": "Artwork: Immortal Gartua",
+    "subCategory": "artwork",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Gartua_01_V02.icon_AD_pic_A_MOB_Gartua_01_V02",
+    "stats": {
+      "life": 5,
+      "wisdom": 5,
+      "destiny": 5,
+      "illusion": 5
+    }
+  },
+  {
+    "id": "514310111",
+    "name": "Artwork: Eternal Gartua",
+    "subCategory": "artwork",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Gartua_01_V02.icon_AD_pic_A_MOB_Gartua_01_V02",
+    "stats": {
+      "life": 5,
+      "wisdom": 5,
+      "destiny": 5,
+      "illusion": 5
+    }
+  },
+  {
+    "id": "514310112",
+    "name": "Artwork: Argo, the Spirit King",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_EleKing_01_V02.icon_AD_pic_A_MOB_EleKing_01_V02",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310113",
+    "name": "Artwork: Soul Ruler Kashapa",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Kashapa_01.icon_AD_pic_A_MOB_Kashapa_01",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "destiny": 4
+    }
+  },
+  {
+    "id": "514310114",
+    "name": "Artwork: High Commander Lagta",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Lagta_01.icon_AD_pic_A_MOB_Lagta_01",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "destiny": 4
+    }
+  },
+  {
+    "id": "514310115",
+    "name": "Artwork: Guardian Lord Nahma",
+    "subCategory": "artwork",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_AbBoss_01.icon_AD_pic_A_MOB_AbBoss_01",
+    "stats": {
+      "life": 5,
+      "destiny": 5,
+      "illusion": 5
+    }
+  },
+  {
+    "id": "514310116",
+    "name": "Artwork: Silent Dartan",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_BeritraD_01.icon_AD_pic_A_MOB_BeritraD_01",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "destiny": 4
+    }
+  },
+  {
+    "id": "514310117",
+    "name": "Artwork: Watcher Kaira",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_BeritraD_01.icon_AD_pic_A_MOB_BeritraD_01",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310118",
+    "name": "Artwork: Vakron Sky Island",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_u_BakronIsland.icon_AD_pic_A_u_BakronIsland",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310119",
+    "name": "Artwork: Ferocious Horn Den",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_u_HornCave.icon_AD_pic_A_u_HornCave",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310120",
+    "name": "Artwork: Krao",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_u_KraoCave.icon_AD_pic_A_u_KraoCave",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310121",
+    "name": "Artwork: Centurion Demiros",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Undead_01.icon_AD_pic_A_MOB_Undead_01",
+    "stats": {
+      "wisdom": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "514310125",
+    "name": "Artwork: Executor Tamasa",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_MOB_Radvima_01_CV02.icon_AD_pic_A_MOB_Radvima_01_CV02",
+    "stats": {
+      "life": 4,
+      "wisdom": 4,
+      "destiny": 4
+    }
+  },
+  {
+    "id": "514330003",
+    "name": "Colossus: Guardian Lord Nahma",
+    "subCategory": "colossus",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueL_A_u_MOB_AbBoss_01.icon_AD_statueL_A_u_MOB_AbBoss_01",
+    "stats": {
+      "time": 55,
+      "justice": 55,
+      "destruction": 55
+    }
+  },
+  {
+    "id": "534310001",
+    "name": "Artwork: Zumion Stone Gate (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_r_StoneDoor_06.icon_AD_pic_L_r_StoneDoor_06",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "534310003",
+    "name": "Artwork: Verteron Fortress Ruins (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_Verteron_Fortress_Ruin.icon_AD_pic_L_c_Verteron_Fortress_Ruin",
+    "stats": {
+      "wisdom": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "534310007",
+    "name": "Artwork: Fortress Guardian Notun (Bound)",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_s1_MOB_Nothun_01.icon_AD_pic_A_s1_MOB_Nothun_01",
+    "stats": {}
+  },
+  {
+    "id": "534310009",
+    "name": "Artwork: Wind Breeze Merchants (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_r_NPC_F_ShugoA_01.icon_AD_pic_L_r_NPC_F_ShugoA_01",
+    "stats": {
+      "life": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "534310010",
+    "name": "Artwork: Quai Merchants (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_r_NPC_M_ShugoB_01.icon_AD_pic_D_r_NPC_M_ShugoB_01",
+    "stats": {
+      "life": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "534310011",
+    "name": "Artwork: Shulak (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_r_NPC_M_ShulackA_03.icon_AD_pic_A_r_NPC_M_ShulackA_03",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310012",
+    "name": "Artwork: Artisan Handicrafter (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_NPC_M_Master_03.icon_AD_pic_L_c_NPC_M_Master_03",
+    "stats": {
+      "life": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "534310013",
+    "name": "Artwork: Artisan Alchemist (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_NPC_M_Master_04.icon_AD_pic_L_c_NPC_M_Master_04",
+    "stats": {
+      "wisdom": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "534310014",
+    "name": "Artwork: Artisan Chef (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_NPC_M_Master_05.icon_AD_pic_L_NPC_M_Master_05",
+    "stats": {
+      "life": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "534310015",
+    "name": "Artwork: Shugo Alchemist (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_c_NPC_ShugoM_02.icon_AD_pic_A_c_NPC_ShugoM_02",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310018",
+    "name": "Artwork: Gerod (Bound)",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_s1_MOB_Gerod_01.icon_AD_pic_A_s1_MOB_Gerod_01",
+    "stats": {}
+  },
+  {
+    "id": "534310028",
+    "name": "Artwork: Duduka Worker (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_c_MOB_Duduka_01.icon_AD_pic_A_c_MOB_Duduka_01",
+    "stats": {
+      "life": 3,
+      "wisdom": 3
+    }
+  },
+  {
+    "id": "534310030",
+    "name": "Artwork: Artisan Chef (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_NPC_M_Master_05.icon_AD_pic_L_NPC_M_Master_05",
+    "stats": {
+      "life": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "534310031",
+    "name": "Artwork: Artisan Armorsmith (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_NPC_F_Master_02.icon_AD_pic_L_NPC_F_Master_02",
+    "stats": {
+      "wisdom": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "534310032",
+    "name": "Artwork: Artisan Armorsmith (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_NPC_F_Master_02.icon_AD_pic_L_NPC_F_Master_02",
+    "stats": {
+      "wisdom": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "534310033",
+    "name": "Artwork: Moslan Forest (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_c_Moslan_Forest.icon_AD_pic_D_c_Moslan_Forest",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310036",
+    "name": "Artwork: Safe Haven (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_l_FugitiveVillage.icon_AD_pic_D_l_FugitiveVillage",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310037",
+    "name": "Artwork: Nornir Assembly (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_l_Nornir_Lodge.icon_AD_pic_D_l_Nornir_Lodge",
+    "stats": {
+      "wisdom": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "534310038",
+    "name": "Artwork: Quai Campsite (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_r_Quairerk_Camp.icon_AD_pic_D_r_Quairerk_Camp",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310039",
+    "name": "Artwork: Calderon Canyon (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_r_Buffer_Calderon_Hill.icon_AD_pic_D_r_Buffer_Calderon_Hill",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310040",
+    "name": "Artwork: Dredgion Crash Site (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_c_Dredgion_Crash_Site.icon_AD_pic_D_c_Dredgion_Crash_Site",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310041",
+    "name": "Artwork: Nameless Cemetery (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_c_Unnamed_Cemetery.icon_AD_pic_D_c_Unnamed_Cemetery",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310042",
+    "name": "Artwork: Sanctum Outpost (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_c_Sanctum_Watchpost.icon_AD_pic_D_c_Sanctum_Watchpost",
+    "stats": {
+      "wisdom": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "534310043",
+    "name": "Artwork: Teina's Portrait (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_l_TeinaFrame_01.icon_AD_pic_L_l_TeinaFrame_01",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "534310044",
+    "name": "Artwork: Ardus Shrine (Bound)",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_u_Ardus_Shrine.icon_AD_pic_L_u_Ardus_Shrine",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "534310045",
+    "name": "Artwork: Ellun River Midstream (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_r_Buffer_EllunRiver_Midstream.icon_AD_pic_L_r_Buffer_EllunRiver_Midstream",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310046",
+    "name": "Artwork: Dawn Legion Base (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_l_Dawn_Legion_Base.icon_AD_pic_L_l_Dawn_Legion_Base",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310047",
+    "name": "Artwork: Pilgrim's Ridge (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_r_Buffer_Pilgrims_Ridge_Path.icon_AD_pic_L_r_Buffer_Pilgrims_Ridge_Path",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310048",
+    "name": "Artwork: Cantas Valley (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_Cantas_Valley.icon_AD_pic_L_c_Cantas_Valley",
+    "stats": {
+      "wisdom": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310049",
+    "name": "Artwork: Ellun River Marsh (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_Ellun_River_Marsh.icon_AD_pic_L_c_Ellun_River_Marsh",
+    "stats": {
+      "life": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310050",
+    "name": "Artwork: Tolbas Forest (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_Tolbas_Forest.icon_AD_pic_L_c_Tolbas_Forest",
+    "stats": {
+      "destiny": 3,
+      "illusion": 3
+    }
+  },
+  {
+    "id": "534310051",
+    "name": "Artwork: Zumion Village (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/Icon_Item_AD_Pic_A_l_001.Icon_Item_AD_Pic_A_l_001",
+    "stats": {
+      "wisdom": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "534310055",
+    "name": "Artwork: Impetusium (Bound)",
+    "subCategory": "artwork",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_u_Impetusium.icon_AD_pic_D_u_Impetusium",
+    "stats": {
+      "life": 4,
+      "destiny": 4,
+      "illusion": 4
+    }
+  },
+  {
+    "id": "534310056",
+    "name": "Artwork: Archon Underground Fortress Door (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_r_MagicDoor_01.icon_AD_pic_D_r_MagicDoor_01",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "534310057",
+    "name": "Artwork: Artisan Blacksmith (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_NPC_F_Master_01.icon_AD_pic_L_c_NPC_F_Master_01",
+    "stats": {
+      "destiny": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "534310058",
+    "name": "Artwork: Artisan Blacksmith (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_NPC_F_Master_01.icon_AD_pic_L_c_NPC_F_Master_01",
+    "stats": {
+      "destiny": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "534310059",
+    "name": "Artwork: Artisan Handicrafter (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_NPC_M_Master_03.icon_AD_pic_L_c_NPC_M_Master_03",
+    "stats": {
+      "life": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "534310060",
+    "name": "Artwork: Artisan Alchemist (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_NPC_M_Master_04.icon_AD_pic_L_c_NPC_M_Master_04",
+    "stats": {
+      "wisdom": 2,
+      "illusion": 2
+    }
+  },
+  {
+    "id": "534310061",
+    "name": "Artwork: Artisan Essence Extractor (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_NPC_M_Master_01.icon_AD_pic_L_c_NPC_M_Master_01",
+    "stats": {
+      "wisdom": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "534310062",
+    "name": "Artwork: Artisan Essence Extractor (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_L_c_NPC_M_Master_01.icon_AD_pic_L_c_NPC_M_Master_01",
+    "stats": {
+      "wisdom": 2,
+      "destiny": 2
+    }
+  },
+  {
+    "id": "534310063",
+    "name": "Artwork: Destruction Archons High Priest Hystan (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_D_l_NPC_Histan_01.icon_AD_pic_D_l_NPC_Histan_01",
+    "stats": {
+      "life": 3,
+      "destiny": 3
+    }
+  },
+  {
+    "id": "534310104",
+    "name": "Artwork: Zikel's Apparition (Bound)",
+    "subCategory": "artwork",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_s1_MOB_Zikel_01.icon_AD_pic_A_s1_MOB_Zikel_01",
+    "stats": {}
+  },
+  {
+    "id": "534310105",
+    "name": "Artwork: Pino Gatekeeper (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_s1_MOB_PinoBoss_01.icon_AD_pic_A_s1_MOB_PinoBoss_01",
+    "stats": {}
+  },
+  {
+    "id": "534310106",
+    "name": "Artwork: Furious Feruk (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_s1_MOB_Ferk_01.icon_AD_pic_A_s1_MOB_Ferk_01",
+    "stats": {}
+  },
+  {
+    "id": "534310107",
+    "name": "Artwork: Fafnir's Poison Blood (Bound)",
+    "subCategory": "artwork",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_s1_MOB_FafBlood_01.icon_AD_pic_A_s1_MOB_FafBlood_01",
+    "stats": {}
+  },
+  {
+    "id": "534310108",
+    "name": "Artwork: Wraith Giselle (Bound)",
+    "subCategory": "artwork",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_s1_MOB_Giselle_01.icon_AD_pic_A_s1_MOB_Giselle_01",
+    "stats": {}
+  },
+  {
+    "id": "534310109",
+    "name": "Artwork: Abyssal Ludra (Bound)",
+    "subCategory": "artwork",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_pic_A_u_MOB_Durbati_01_V01.icon_AD_pic_A_u_MOB_Durbati_01_V01",
+    "stats": {
+      "wisdom": 5,
+      "destiny": 5,
+      "illusion": 5
+    }
+  },
+  {
+    "id": "534320001",
+    "name": "Statue: Transcendent Bakarma (Bound)",
+    "subCategory": "statue",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_u_MOB_Bakarma_02.icon_AD_statueS_A_u_MOB_Bakarma_02",
+    "stats": {
+      "death": 12,
+      "space": 12,
+      "freedom": 12
+    }
+  },
+  {
+    "id": "534320002",
+    "name": "Statue: Kibelisk (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_L_c_TeleportArtifact_L_01.icon_AD_statueS_L_c_TeleportArtifact_L_01",
+    "stats": {
+      "space": 10,
+      "freedom": 10
+    }
+  },
+  {
+    "id": "534320003",
+    "name": "Statue: Sealing Wings (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_L_r_WingE_001.icon_AD_statueS_L_r_WingE_001",
+    "stats": {
+      "space": 8,
+      "freedom": 8
+    }
+  },
+  {
+    "id": "534320005",
+    "name": "Statue: Teina (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_L_u_NPC_Teina_01.icon_AD_statueS_L_u_NPC_Teina_01",
+    "stats": {
+      "death": 8,
+      "space": 8
+    }
+  },
+  {
+    "id": "534320006",
+    "name": "Statue: Glorious Wings (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_D_r_WingE_001A.icon_AD_statueS_D_r_WingE_001A",
+    "stats": {
+      "space": 8,
+      "freedom": 8
+    }
+  },
+  {
+    "id": "534320007",
+    "name": "Statue: Torn Forbidden Bookcase (Bound)",
+    "subCategory": "statue",
+    "grade": 11,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_L_c_SEQ_TornBook_01.icon_AD_statueS_L_c_SEQ_TornBook_01",
+    "stats": {
+      "death": 6
+    }
+  },
+  {
+    "id": "534320008",
+    "name": "Statue: Urd (Bound)",
+    "subCategory": "statue",
+    "grade": 11,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_c_NPC_F_NPC_Urd_01.icon_AD_statueS_A_c_NPC_F_NPC_Urd_01",
+    "stats": {
+      "death": 6
+    }
+  },
+  {
+    "id": "534320009",
+    "name": "Statue: Dream Fragment (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_r_DreamArtifact_01.icon_AD_statueS_A_r_DreamArtifact_01",
+    "stats": {
+      "death": 8,
+      "freedom": 8
+    }
+  },
+  {
+    "id": "534320014",
+    "name": "Statue: Selvis (Bound)",
+    "subCategory": "statue",
+    "grade": 11,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_c_NPC_Celvice_01.icon_AD_statueS_A_c_NPC_Celvice_01",
+    "stats": {
+      "freedom": 6
+    }
+  },
+  {
+    "id": "534320021",
+    "name": "Statue: Kibelisk (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_D_c_TeleportArtifact_D_01.icon_AD_statueS_D_c_TeleportArtifact_D_01",
+    "stats": {
+      "space": 10,
+      "freedom": 10
+    }
+  },
+  {
+    "id": "534320022",
+    "name": "Statue: Artifact of Eternity (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_r_SEQ_PortableArtifact_01.icon_AD_statueS_A_r_SEQ_PortableArtifact_01",
+    "stats": {
+      "death": 10,
+      "freedom": 10
+    }
+  },
+  {
+    "id": "534320023",
+    "name": "Statue: Mirror of Desire (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_r_MOB_Mirror_01.icon_AD_statueS_A_r_MOB_Mirror_01",
+    "stats": {
+      "space": 8,
+      "freedom": 8
+    }
+  },
+  {
+    "id": "534320024",
+    "name": "Statue: Asahr's Mirror (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_l_NPC_AsharMir_01.icon_AD_statueS_A_l_NPC_AsharMir_01",
+    "stats": {
+      "death": 10,
+      "space": 10
+    }
+  },
+  {
+    "id": "534320029",
+    "name": "Statue: Fafnir's Poison Blood (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statusS_A_r_MOB_FafBlood_01.icon_AD_statusS_A_r_MOB_FafBlood_01",
+    "stats": {
+      "death": 8,
+      "freedom": 8
+    }
+  },
+  {
+    "id": "534320032",
+    "name": "Statue: Gatekeeper Pinopi (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_c_MOB_PinoBoss_01.icon_AD_statueS_A_c_MOB_PinoBoss_01",
+    "stats": {
+      "death": 8,
+      "space": 8
+    }
+  },
+  {
+    "id": "534320033",
+    "name": "Statue: Grisilla (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_D_u_NPC_Grisilla_01.icon_AD_statueS_D_u_NPC_Grisilla_01",
+    "stats": {
+      "death": 8,
+      "space": 8
+    }
+  },
+  {
+    "id": "534320035",
+    "name": "Statue: Furious Feruk (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_c_MOB_Ferk_01.icon_AD_statueS_A_c_MOB_Ferk_01",
+    "stats": {
+      "death": 8,
+      "space": 8
+    }
+  },
+  {
+    "id": "534320041",
+    "name": "Statue: New World God Atiel (Bound)",
+    "subCategory": "statue",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_s1_MOB_Atiel_01.icon_AD_statueS_A_s1_MOB_Atiel_01",
+    "stats": {}
+  },
+  {
+    "id": "534320042",
+    "name": "Statue: Guard Troopers Captain Gelcos (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_s1_MOB_Gelcos_01.icon_AD_statueS_A_s1_MOB_Gelcos_01",
+    "stats": {}
+  },
+  {
+    "id": "534320043",
+    "name": "Statue: Laboratory Chief Nazmun (Bound)",
+    "subCategory": "statue",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_s1_MOB_Lepharist_M_03_V01.icon_AD_statueS_A_s1_MOB_Lepharist_M_03_V01",
+    "stats": {}
+  },
+  {
+    "id": "534320044",
+    "name": "Statue: Ruthilis of Pain (Bound)",
+    "subCategory": "statue",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_s1_MOB_NagaElite_02_V01.icon_AD_statueS_A_s1_MOB_NagaElite_02_V01",
+    "stats": {}
+  },
+  {
+    "id": "534320045",
+    "name": "Statue: Void Talisra (Bound)",
+    "subCategory": "statue",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_s1_MOB_Thalythra_01.icon_AD_statueS_A_s1_MOB_Thalythra_01",
+    "stats": {}
+  },
+  {
+    "id": "534320047",
+    "name": "Statue: Wraith Giselle (Bound)",
+    "subCategory": "statue",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_c_MOB_Giselle_01.icon_AD_statueS_A_c_MOB_Giselle_01",
+    "stats": {
+      "space": 8,
+      "freedom": 8
+    }
+  },
+  {
+    "id": "534320048",
+    "name": "Statue: Siliator of Deceit (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_A_s1_MOB_NagaElite_01_V01.icon_AD_statueS_A_s1_MOB_NagaElite_01_V01",
+    "stats": {}
+  },
+  {
+    "id": "534320049",
+    "name": "Statue: Radiant Elyos Leader (Bound)",
+    "subCategory": "statue",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_L_s1_abyss_01.icon_AD_statueS_L_s1_abyss_01",
+    "stats": {}
+  },
+  {
+    "id": "534320050",
+    "name": "Statue: Radiant Asmodian Leader (Bound)",
+    "subCategory": "statue",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_D_s1_abyss_01.icon_AD_statueS_D_s1_abyss_01",
+    "stats": {}
+  },
+  {
+    "id": "534320051",
+    "name": "Statue: Silvermoon Elyos Leader (Bound)",
+    "subCategory": "statue",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_L_s1_abyss_02.icon_AD_statueS_L_s1_abyss_02",
+    "stats": {}
+  },
+  {
+    "id": "534320052",
+    "name": "Statue: Silvermoon Asmodian Leader (Bound)",
+    "subCategory": "statue",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_D_s1_abyss_02.icon_AD_statueS_D_s1_abyss_02",
+    "stats": {}
+  },
+  {
+    "id": "534320053",
+    "name": "Statue: Glimmering Elyos Leader (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_L_s1_abyss_03.icon_AD_statueS_L_s1_abyss_03",
+    "stats": {}
+  },
+  {
+    "id": "534320054",
+    "name": "Statue: Glimmering Asmodian Leader (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueS_D_s1_abyss_03.icon_AD_statueS_D_s1_abyss_03",
+    "stats": {}
+  },
+  {
+    "id": "534320055",
+    "name": "Statue: Fortress Guardian Notun (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueL_A_l_MOB_Nothun_01.icon_AD_statueL_A_l_MOB_Nothun_01",
+    "stats": {
+      "death": 10,
+      "space": 10
+    }
+  },
+  {
+    "id": "534320056",
+    "name": "Statue: Gerod (Bound)",
+    "subCategory": "statue",
+    "grade": 31,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueL_A_r_MOB_Gerod_01.icon_AD_statueL_A_r_MOB_Gerod_01",
+    "stats": {
+      "space": 10,
+      "freedom": 10
+    }
+  },
+  {
+    "id": "534330003",
+    "name": "Colossus: Guardian Lord Nahma (Bound)",
+    "subCategory": "colossus",
+    "grade": 51,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueL_A_u_MOB_AbBoss_01.icon_AD_statueL_A_u_MOB_AbBoss_01",
+    "stats": {}
+  },
+  {
+    "id": "534330004",
+    "name": "Colossus: Kromede's Desire (Bound)",
+    "subCategory": "colossus",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueL_A_r_MOB_Cromede_01.icon_AD_statueL_A_r_MOB_Cromede_01",
+    "stats": {
+      "time": 45,
+      "justice": 45,
+      "destruction": 45
+    }
+  },
+  {
+    "id": "534330011",
+    "name": "Colossus: Zikel's Apparition (Bound)",
+    "subCategory": "colossus",
+    "grade": 41,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueL_D_u_MOB_Zikel_01.icon_AD_statueL_D_u_MOB_Zikel_01",
+    "stats": {
+      "time": 45,
+      "justice": 45,
+      "destruction": 45
+    }
+  },
+  {
+    "id": "534330015",
+    "name": "Colossus: Warden Santras (Bound)",
+    "subCategory": "colossus",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueL_A_r_MOB_Santras_01.icon_AD_statueL_A_r_MOB_Santras_01",
+    "stats": {
+      "time": 35,
+      "justice": 35
+    }
+  },
+  {
+    "id": "534330016",
+    "name": "Colossus: Incarnated Warding Feather (Bound)",
+    "subCategory": "colossus",
+    "grade": 21,
+    "icon": "/assets/Game/UI/Resource/Texture/Item/ETC/icon_AD_statueL_A_r_MOB_Protect_01.icon_AD_statueL_A_r_MOB_Protect_01",
+    "stats": {
+      "time": 35,
+      "justice": 35
+    }
+  }
+]

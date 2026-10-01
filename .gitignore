@@ -46,7 +46,22 @@ app.log
 *.sqlite3
 
 # ── ItemDatabase — cached API data/icons, not source ──────────────────────
-ItemDatabase/data/
+ItemDatabase/data/*
+# Snapshots the release build bundles (committed while FETCH_ITEM_DATA is off,
+# see .github/workflows/release.yml) -- everything else in data/ stays ignored.
+!ItemDatabase/data/items_all.json
+!ItemDatabase/data/recipes_all.json
+!ItemDatabase/data/skills_all.json
+!ItemDatabase/data/arcana_info.json
+!ItemDatabase/data/arcana_class_skills.json
+!ItemDatabase/data/dungeons_all.json
+!ItemDatabase/data/daevanion_boards_s.json
+!ItemDatabase/data/daevanion_boards_a.json
+!ItemDatabase/data/pantheon_items.json
+!ItemDatabase/data/wings_items.json
+!ItemDatabase/data/shop_items.json
+!ItemDatabase/data/dungeon_sets.json
+!ItemDatabase/data/stat_priority_options.json
 
 # ── Test-generated dashboard screenshots — non-deterministic pixel render,
 # rewritten by every `pytest tests/test_armory_dashboard.py` run even with

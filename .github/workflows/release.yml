@@ -26,7 +26,13 @@ jobs:
           pip install pyinstaller
 
       - name: Populate ItemDatabase/data (gitignored, regenerated at build time)
-        # ItemDatabase/data/ is deliberately gitignored (~14 MB of cached,
+        # PAUSED (tobia, 2026-10-01): skipped unless the repo variable
+        # FETCH_ITEM_DATA is set to "true" (Settings -> Variables). The
+        # external fetches broke when gamers4.life/questlog.gg changed, and
+        # item syncing waits for the Global API. While paused, the 13 data
+        # files the spec bundles come from committed snapshots instead.
+        if: ${{ vars.FETCH_ITEM_DATA == 'true' }}
+        # ItemDatabase/data/ is deliberately gitignored
         # regenerable shugo.gg/gamers4.life/questlog.gg API data -- not
         # source) but "Aion2 TM.spec" bundles 13 specific files from it as
         # PyInstaller datas, so the CI runner needs its own copy before

@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import html
 import json
 import re
 import time
@@ -52,20 +53,19 @@ def _recipe_ids_from_sitemap() -> list[str]:
     return ids
 
 
-def _unescape(html: str) -> str:
-    """Properly unescapes the JS string literal each RSC chunk is embedded
-    as (\\" -> ", \\n -> real newline, \\uXXXX -> the real character) --
-    a naive \\"->\" replace (the original approach) leaves literal \\n
-    sequences in place, which breaks the chunk-reference resolution below
-    (real newlines are what separate "ID:VALUE" definitions within one
-    push() call)."""
+def _unescape(html_str: str) -> str:
+    """No longer used by parse_recipe_page() (CI failure, 2026-10-01:
+    gamers4.life switched this page from the backslash-escaped Next.js RSC
+    stream this function used to decode to plain server-rendered HTML --
+    see parse_recipe_page()'s docstring). Kept as a tiny public helper in
+    case a future scrape of this same site needs it again."""
     out = []
     i = 0
-    n = len(html)
+    n = len(html_str)
     while i < n:
-        ch = html[i]
+        ch = html_str[i]
         if ch == "\\" and i + 1 < n:
-            nxt = html[i + 1]
+            nxt = html_str[i + 1]
             if nxt == '"':
                 out.append('"'); i += 2; continue
             if nxt == "\\":
@@ -78,7 +78,7 @@ def _unescape(html: str) -> str:
                 out.append("/"); i += 2; continue
             if nxt == "u" and i + 5 < n:
                 try:
-                    out.append(chr(int(html[i + 2:i + 6], 16)))
+                    out.append(chr(int(html_str[i + 2:i + 6], 16)))
                     i += 6
                     continue
                 except ValueError:
@@ -88,147 +88,113 @@ def _unescape(html: str) -> str:
     return "".join(out)
 
 
-_CHUNK_DEF_RE = re.compile(r"(?m)^([0-9a-fA-F]+):")
-_CHUNK_REF_RE = re.compile(r'"\$L([0-9a-fA-F]+)"')
+_KV_RE = re.compile(r'<div class="k">([^<]*)</div><div class="v">([^<]*)</div>')
+_H1_TITLE_RE = re.compile(r'<h1 class="title">([^<]*)</h1>')
+_GRADE_PILL_RE = re.compile(r'<span class="pill">Grade (\d+)</span>')
+_ID_PILL_RE = re.compile(r'<span class="pill id">ID (\d+)</span>')
+# Both JSON blobs the page embeds verbatim inside <details><summary>KEY
+# </summary><pre>...</pre></details> blocks, HTML-escaped (&quot; etc.).
+_SECTION_PRE_RE = {
+    "recipeInputItems": re.compile(
+        r'<summary>recipeInputItems</summary><pre>(.*?)</pre>', re.DOTALL
+    ),
+    "recipeOutputItems": re.compile(
+        r'<summary>recipeOutputItems</summary><pre>(.*?)</pre>', re.DOTALL
+    ),
+}
 
 
-def _collect_chunk_definitions(html: str) -> dict[str, str]:
-    """Each self.__next_f.push([1,"...")]) call's content is one or more
-    'ID:VALUE' definitions concatenated with real newlines (after
-    _unescape) -- e.g. "1f:[...]\\n20:[...]\\n21:[...]". Splits every push
-    call in the page into that flat id -> raw-value map."""
-    chunks: dict[str, str] = {}
-    for body in re.findall(r'self\.__next_f\.push\(\[1,"(.*?)"\]\)', html, re.DOTALL):
-        text = _unescape(body)
-        matches = list(_CHUNK_DEF_RE.finditer(text))
-        for i, m in enumerate(matches):
-            start = m.end()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-            chunks[m.group(1)] = text[start:end].rstrip("\n")
-    return chunks
-
-
-def _resolve_refs(html: str) -> str:
-    """Some fields (seen on recipes where the same label/value text repeats
-    elsewhere on the page, e.g. Mastery Grade / subCategory) are streamed as
-    a "$Lxx" back-reference to a chunk defined elsewhere on the same page,
-    instead of being inlined directly -- the naive parser silently returned
-    None for those. Substitutes every "$Lxx" token with that chunk's own
-    raw content so the existing field-extraction regexes see real text
-    either way. A few passes handle a reference pointing to another
-    reference."""
-    chunks = _collect_chunk_definitions(html)
-    for _ in range(4):
-        new_html = _CHUNK_REF_RE.sub(lambda m: chunks.get(m.group(1), '""'), html)
-        if new_html == html:
-            break
-        html = new_html
-    return html
-
-
-def _extract_balanced(html: str, start: int, open_ch="{", close_ch="}") -> str | None:
-    depth = 0
-    i = start
-    in_string = False
-    n = len(html)
-    while i < n:
-        ch = html[i]
-        if in_string:
-            if ch == "\\":
-                i += 2
-                continue
-            if ch == '"':
-                in_string = False
-        else:
-            if ch == '"':
-                in_string = True
-            elif ch == open_ch:
-                depth += 1
-            elif ch == close_ch:
-                depth -= 1
-                if depth == 0:
-                    return html[start:i + 1]
-        i += 1
-    return None
-
-
-def _parse_properties(html: str) -> dict:
+def _parse_record_fields(html_str: str) -> dict:
+    """The "Record fields" card is a flat sequence of <div class="k">KEY</div>
+    <div class="v">VALUE</div> pairs -- a key with no real value renders as
+    the literal em-dash "—"."""
     result = {}
-    for key in PROP_KEYS:
-        marker = f'"div","{key}",{{'
-        idx = html.find(marker)
-        if idx == -1:
-            continue
-        obj_start = html.find("{", idx)
-        block = _extract_balanced(html, obj_start, "{", "}")
-        if not block:
-            continue
-        strings = re.findall(r'"children":"([^"]*)"', block)
-        if len(strings) >= 2:
-            result[key] = strings[-1]
-        elif len(strings) == 1:
-            result[key] = None
+    for key, value in _KV_RE.findall(html_str):
+        result[key] = None if value == "—" else value
     return result
 
 
-def _parse_grade_badge(html: str) -> str | None:
-    m = re.search(r'"background":"#[0-9a-fA-F]{6,8}","color":"#[0-9a-fA-F]{6,8}"\},"children":"([^"]+)"', html)
-    return m.group(1) if m else None
+def _parse_item_refs(raw_json: str) -> list[dict]:
+    """recipeInputItems is a JSON array of item dicts; quantity -> qty to
+    match this file's existing on-disk field name."""
+    try:
+        items = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return []
+    return [
+        {"id": int(it["id"]), "name": it.get("name"), "qty": int(it.get("quantity") or 1)}
+        for it in items
+        if "id" in it
+    ]
 
 
-def _parse_item_refs(block: str) -> list[dict]:
-    items = []
-    for m in re.finditer(r'"href":"/en/item/(\d+)/"', block):
-        item_id = int(m.group(1))
-        tail = block[m.end():m.end() + 800]
-        name_m = re.search(r'"children":"([^"]+)"', tail)
-        qty_m = re.search(r'"children":\["[×xX]","([\d,]+)"\]', tail)
-        name = name_m.group(1) if name_m else None
-        qty = int(qty_m.group(1).replace(",", "")) if qty_m else 1
-        items.append({"id": item_id, "name": name, "qty": qty})
-    return items
-
-
-def _parse_section(html: str, section_key: str) -> str | None:
-    marker = f'"section","{section_key}",{{'
-    idx = html.find(marker)
-    if idx == -1:
-        return None
-    obj_start = html.find("{", idx)
-    return _extract_balanced(html, obj_start, "{", "}")
+def _parse_output_refs(raw_json: str) -> list[dict]:
+    """recipeOutputItems is a JSON OBJECT (not an array, unlike inputs):
+    {"productItem": {...} | null, "comboProbability": ..., "comboProductItem": {...} | null}
+    -- both productItem and a possible combo-craft alternate output."""
+    try:
+        obj = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return []
+    outputs = []
+    for key in ("productItem", "comboProductItem"):
+        item = obj.get(key)
+        if isinstance(item, dict) and "id" in item:
+            outputs.append({
+                "id": int(item["id"]),
+                "name": item.get("name"),
+                "qty": int(item.get("quantity") or 1),
+            })
+    return outputs
 
 
 def parse_recipe_page(raw_html: str) -> dict | None:
-    html = _unescape(raw_html)
-    if '"div","mainCategory",{' not in html:
+    """gamers4.life switched its recipe detail pages from a server-rendered
+    Next.js RSC data stream (the old backslash-escaped `"div","mainCategory",
+    {...}` shape this function used to decode) to plain server-rendered HTML
+    with a key/value `.table` card plus two JSON blobs for recipe
+    inputs/outputs (CI failure, 2026-10-01: 0/2442 recipes fetched, the old
+    marker string no longer exists anywhere on the page at all).
+    """
+    if '<h1 class="title">' not in raw_html or 'class="k">mainCategory</div>' not in raw_html:
         return None  # 404 or unrecognized page shape
-    html = _resolve_refs(html)
 
-    props = _parse_properties(html)
-    grade_badge = _parse_grade_badge(html)
-    input_section = _parse_section(html, "recipeInputItems")
-    output_section = _parse_section(html, "recipeOutputItems")
+    name_match = _H1_TITLE_RE.search(raw_html)
+    grade_match = _GRADE_PILL_RE.search(raw_html)
+    id_match = _ID_PILL_RE.search(raw_html)
+    fields = _parse_record_fields(raw_html)
+
+    def _section_json(key: str) -> str | None:
+        m = _SECTION_PRE_RE[key].search(raw_html)
+        return html.unescape(m.group(1)) if m else None
+
+    input_json = _section_json("recipeInputItems")
+    output_json = _section_json("recipeOutputItems")
+
+    def _int_or_none(value):
+        return int(value) if value and value.isdigit() else None
 
     return {
-        "id": int(props.get("id")) if props.get("id") else None,
-        "grade": grade_badge,
-        "masteryGradeNumeric": int(props["grade"]) if props.get("grade", "").isdigit() else None,
-        "mainCategory": props.get("mainCategory"),
-        "subCategory": props.get("subCategory"),
-        "qualificationRace": props.get("qualificationRace"),
-        "subTab": props.get("subTab"),
-        "masteryGrade": props.get("masteryGrade"),
-        "masteryLevel": int(props["masteryLevel"]) if props.get("masteryLevel", "").isdigit() else None,
-        "goldCost": props.get("goldCost"),
-        "remoteGoldCost": props.get("remoteGoldCost"),
-        "craftingFeeType": props.get("craftingFeeType"),
-        "craftGauge": props.get("craftGauge"),
-        "learnType": props.get("learnType"),
-        "isGuildCraft": props.get("isGuildCraft") == "yes",
-        "createdAt": props.get("createdAt"),
-        "updatedAt": props.get("updatedAt"),
-        "inputs": _parse_item_refs(input_section) if input_section else [],
-        "outputs": _parse_item_refs(output_section) if output_section else [],
+        "id": int(id_match.group(1)) if id_match else _int_or_none(fields.get("id")),
+        "grade": grade_match.group(1) if grade_match else fields.get("grade"),
+        "masteryGradeNumeric": _int_or_none(fields.get("grade")),
+        "mainCategory": fields.get("mainCategory"),
+        "subCategory": fields.get("subCategory"),
+        "qualificationRace": fields.get("qualificationRace"),
+        "subTab": fields.get("subTab"),
+        "masteryGrade": fields.get("masteryGrade"),
+        "masteryLevel": _int_or_none(fields.get("masteryLevel")),
+        "goldCost": fields.get("goldCost"),
+        "remoteGoldCost": fields.get("remoteGoldCost"),
+        "craftingFeeType": fields.get("craftingFeeType"),
+        "craftGauge": fields.get("craftGauge"),
+        "learnType": fields.get("learnType"),
+        "isGuildCraft": fields.get("isGuildCraft") == "true",
+        "createdAt": fields.get("createdAt"),
+        "updatedAt": fields.get("updatedAt"),
+        "name": name_match.group(1) if name_match else None,
+        "inputs": _parse_item_refs(input_json) if input_json else [],
+        "outputs": _parse_output_refs(output_json) if output_json else [],
     }
 
 

@@ -1,0 +1,138 @@
+{
+  "Expedition": {
+    "Afflicted Bakarma": {
+      "grade": "Unique",
+      "gearscore": 92
+    },
+    "Ancient Spirit": {
+      "grade": "Epic",
+      "gearscore": 98
+    },
+    "Apex": {
+      "grade": "Legend",
+      "gearscore": 74
+    },
+    "Atiel": {
+      "grade": "Unique",
+      "gearscore": 108
+    },
+    "Aulamus": {
+      "grade": "Unique",
+      "gearscore": 76
+    },
+    "Awakened Alturadon": {
+      "grade": "Unique",
+      "gearscore": 100
+    },
+    "Bakarma": {
+      "grade": "Unique",
+      "gearscore": 68
+    },
+    "Basilus": {
+      "grade": "Unique",
+      "gearscore": 108
+    },
+    "Berk": {
+      "grade": "Unique",
+      "gearscore": 68
+    },
+    "Black Claw": {
+      "grade": "Legend",
+      "gearscore": 67
+    },
+    "Corroded Sovereign's": {
+      "grade": "Epic",
+      "gearscore": 108
+    },
+    "Corrupted Judicator": {
+      "grade": "Legend",
+      "gearscore": 67
+    },
+    "Divine Canyon": {
+      "grade": "Legend",
+      "gearscore": 59
+    },
+    "Dramata": {
+      "grade": "Legend",
+      "gearscore": 74
+    },
+    "Durvati": {
+      "grade": "Unique",
+      "gearscore": 92
+    },
+    "Enraged Kromede": {
+      "grade": "Unique",
+      "gearscore": 84
+    },
+    "Faded Shadow": {
+      "grade": "Epic",
+      "gearscore": 108
+    },
+    "Lava Heart": {
+      "grade": "Epic",
+      "gearscore": 128
+    },
+    "Nathara": {
+      "grade": "Unique",
+      "gearscore": 100
+    },
+    "Nuakum": {
+      "grade": "Unique",
+      "gearscore": 84
+    },
+    "Scattered Radiance": {
+      "grade": "Unique",
+      "gearscore": 100
+    },
+    "Unyielding": {
+      "grade": "Legend",
+      "gearscore": 59
+    },
+    "Vakron": {
+      "grade": "Unique",
+      "gearscore": 76
+    }
+  },
+  "Abyss Gear": {
+    "Archon Centurion": {
+      "grade": "Unique",
+      "gearscore": 77
+    },
+    "Archon Decanus": {
+      "grade": "Unique",
+      "gearscore": 67
+    },
+    "Archon High Commander": {
+      "grade": "Epic",
+      "gearscore": 108
+    },
+    "Archon Praetorian Captain": {
+      "grade": "Epic",
+      "gearscore": 128
+    },
+    "Archon Tribunus": {
+      "grade": "Unique",
+      "gearscore": 87
+    },
+    "Guardian Centurion": {
+      "grade": "Unique",
+      "gearscore": 77
+    },
+    "Guardian Decanus": {
+      "grade": "Unique",
+      "gearscore": 67
+    },
+    "Guardian High Commander": {
+      "grade": "Epic",
+      "gearscore": 108
+    },
+    "Guardian Praetorian Captain": {
+      "grade": "Epic",
+      "gearscore": 128
+    },
+    "Guardian Tribunus": {
+      "grade": "Unique",
+      "gearscore": 87
+    }
+  }
+}
