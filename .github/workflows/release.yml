@@ -89,8 +89,9 @@ jobs:
           pyinstaller "Aion2 TM.spec" --clean --noconfirm
 
       - name: Create ZIP
+        shell: pwsh
         run: |
-          powershell Compress-Archive -Path "dist/Aion2 TM/*" -DestinationPath Aion2_TM.zip
+          Compress-Archive -Path "dist/Aion2 TM/*" -DestinationPath Aion2_TM.zip
 
       - name: Create SHA-256 checksum
         shell: pwsh
