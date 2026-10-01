@@ -18761,11 +18761,17 @@ class LoadoutWindow(QMainWindow):
         self.quick_stat_btn.setText(_t("arm_properties_btn"))
         self.stat_priority_edit_btn.setToolTip(_t("arm_stat_priority_editor_title"))
         self.equip_priority_btn.setText(_t("arm_eq_priority_tab"))
-        self.main_tabs.setTabText(0, _t("arm_equipment_btn"))
-        self.main_tabs.setTabText(1, _t("arm_daevanion_board_tab"))
-        self.main_tabs.setTabText(2, _t("arm_arcana_tab"))
-        self.main_tabs.setTabText(3, _t("arm_skill_planner_tab"))
-        self.main_tabs.setTabText(4, _t("arm_genius_insight_tab"))
+        # By the pinned constants, never by bare numbers (GitHub issue #11):
+        # Pantheon was inserted at 4 and this block kept writing the Genius
+        # Insight title into 4, so after any language change the Pantheon tab
+        # read "Genius Insight" and the real Genius tab (5) kept the old
+        # language.
+        self.main_tabs.setTabText(self.TAB_EQUIPMENT, _t("arm_equipment_btn"))
+        self.main_tabs.setTabText(self.TAB_DAEVANION, _t("arm_daevanion_board_tab"))
+        self.main_tabs.setTabText(self.TAB_ARCANA, _t("arm_arcana_tab"))
+        self.main_tabs.setTabText(self.TAB_SKILLS, _t("arm_skill_planner_tab"))
+        self.main_tabs.setTabText(self.TAB_PANTHEON, _t("arm_pantheon_tab"))
+        self.main_tabs.setTabText(self.TAB_GENIUS, _t("arm_genius_insight_tab"))
         self._genius_owned_title_lbl.setText(_t("arm_genius_owned_effects_title"))
         self._genius_owned_hint_lbl.setText(_t("arm_genius_owned_hint"))
         self._genius_owned_total_btn.setText(_t("arm_genius_owned_total_toggle"))
@@ -21738,6 +21744,7 @@ class ItemDatabaseWindow(QMainWindow):
             # no longer has a parent, it also no longer inherits this
             # window's stylesheet automatically — apply it explicitly.
             self._loadout_window = LoadoutWindow(self._raw_items, self.icon_cache, self.detail_cache, None)
+            self._loadout_language = _ARMORY_LANGUAGE
             _style_window(self._loadout_window)
             self._loadout_window.set_theme(self._theme)
             if self._pending_loadout_state:
@@ -21815,9 +21822,40 @@ class ItemDatabaseWindow(QMainWindow):
         set_armory_language(language)
         self._retranslate_ui()
         if self._loadout_window is not None:
-            self._loadout_window.update_language(language)
+            if getattr(self, "_loadout_language", None) != (language or "en"):
+                self._rebuild_loadout_window()
+            else:
+                self._loadout_window.update_language(language)
         if self._crafting_window is not None:
             self._crafting_window.update_language(language)
+
+    def _rebuild_loadout_window(self):
+        """Rebuild the Build Planner in the current Armory language, keeping
+        its state, visibility, tab and geometry (GitHub issue #11).
+
+        LoadoutWindow.update_language() re-applies only a hand-picked set of
+        labels -- ~100 other texts (Pantheon, Genius Insight, stat grids,
+        filters, hints) keep the language the window was BUILT in.  And it
+        is often built early in English: the overlay calls
+        ensure_loadout_window() before the profile's language is applied.
+        So the app was German, the Armory English.  Building the window
+        again is the one fix that cannot miss a label, now or when the next
+        one is added."""
+        old = self._loadout_window
+        state = old.get_persistable_state()
+        was_visible = old.isVisible()
+        tab = old.main_tabs.currentIndex()
+        geometry = old.saveGeometry()
+        self._pending_loadout_state = state
+        self._loadout_window = None
+        old.hide()
+        old.deleteLater()
+        new = self.ensure_loadout_window()
+        new.restoreGeometry(geometry)
+        new.main_tabs.setCurrentIndex(tab)
+        if was_visible:
+            new.show()
+            new.raise_()
 
     def _retranslate_ui(self):
         """Re-applies text to this window's always-visible top-level chrome

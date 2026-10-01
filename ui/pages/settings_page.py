@@ -623,8 +623,6 @@ class SettingsPage(QWidget):
         self.load_profile_btn.setText(tr_func(language, "load_profile"))
         self.reset_profile_btn.setText(tr_func(language, "reset_profile"))
         self.reset_profile_btn.setToolTip(tr_func(language, "reset_profile_tooltip"))
-        self.clear_events_btn.setText(tr_func(language, "clear_events"))
-        self.clear_events_btn.setToolTip(tr_func(language, "clear_events_tooltip"))
         self.duplicate_profile_btn.setText(tr_func(language, "duplicate_profile"))
         self.export_profile_btn.setText(tr_func(language, "export_profile"))
         self.import_profile_btn.setText(tr_func(language, "import_profile"))
@@ -633,14 +631,6 @@ class SettingsPage(QWidget):
 
         self.general_title.setText(
             tr_func(language, "general")
-        )
-
-        self.event_title.setText(
-            tr_func(language, "event_tasks")
-        )
-
-        self.event_desc.setText(
-            tr_func(language, "show_events_desc")
         )
 
         self.auto_save_title.setText(
@@ -877,13 +867,6 @@ class SettingsPage(QWidget):
 
 
         self._update_toggle_text(
-            self.show_events_btn,
-            self.show_events_btn.isChecked(),
-            language,
-            tr_func
-        )
-
-        self._update_toggle_text(
             self.auto_save_btn,
             self.auto_save_btn.isChecked(),
             language,
@@ -1078,7 +1061,6 @@ class SettingsPage(QWidget):
             getattr(self, "notif_shugo_enabled_btn", None),
             getattr(self, "notif_riss_enabled_btn", None),
             getattr(self, "auto_save_btn", None),
-            getattr(self, "show_events_btn", None),
             getattr(self, "dps_autostart_btn", None),
             getattr(self, "tray_minimize_btn", None),
         ):
@@ -1388,7 +1370,6 @@ class SettingsPage(QWidget):
             "riss_anchor_hour": int(self.riss_anchor_combo.currentText()),
             "riss_interval_text": self.riss_interval_combo.currentData(),
 
-            "show_events": self.show_events_btn.isChecked(),
             "auto_save": self.auto_save_btn.isChecked(),
             "minimize_to_tray": self.tray_minimize_btn.isChecked(),
             "dps_meter_path": self.dps_path_input.text().strip(),
@@ -1656,8 +1637,10 @@ class SettingsPage(QWidget):
 
         layout.addWidget(self.general_title)
 
-        event_row = QFrame()
-        event_row.setObjectName("settingsRow")
+        # The "Event Tasks" row (show/hide events) is gone (GitHub issue #12):
+        # nothing can be marked as an event any more, so the switch hid or
+        # showed nothing. Old event entries from earlier versions stay in the
+        # lists, always visible, and can be deleted one by one.
 
         auto_save_row = QFrame()
         auto_save_row.setObjectName("settingsRow")
@@ -1692,38 +1675,6 @@ class SettingsPage(QWidget):
 
         auto_save_layout.addLayout(auto_save_text, 1)
         auto_save_layout.addWidget(self.auto_save_btn)
-
-        row_layout = QHBoxLayout(event_row)
-        row_layout.setContentsMargins(14, 12, 14, 12)
-        row_layout.setSpacing(12)
-
-        text_layout = QVBoxLayout()
-        text_layout.setSpacing(2)
-
-        self.event_title = QLabel()
-        self.event_title.setObjectName("settingsLabel")
-
-        self.event_desc = QLabel()
-        self.event_desc.setObjectName("settingsDescription")
-
-
-        text_layout.addWidget(self.event_title)
-        text_layout.addWidget(self.event_desc)
-
-        self.show_events_btn = QPushButton("On")
-        self.show_events_btn.setCheckable(True)
-        self.show_events_btn.setChecked(True)
-        self.show_events_btn.setObjectName("toggleButton")
-        self.show_events_btn.setAttribute(Qt.WA_StyledBackground, True)
-        _apply_active_button_style(self.show_events_btn, True, "toggle")
-        self.show_events_btn.setFixedWidth(70)
-
-        self.show_events_btn.toggled.connect(
-            lambda checked: self._set_toggle(self.show_events_btn, checked)
-        )
-
-        row_layout.addLayout(text_layout, 1)
-        row_layout.addWidget(self.show_events_btn)
 
         update_row = QFrame()
         update_row.setObjectName("settingsRow")
@@ -1851,7 +1802,6 @@ class SettingsPage(QWidget):
         tray_layout.addLayout(tray_text, 1)
         tray_layout.addWidget(self.tray_minimize_btn)
 
-        layout.addWidget(event_row)
         layout.addWidget(auto_save_row)
         layout.addWidget(tray_row)
         layout.addWidget(dps_row)
@@ -1867,11 +1817,6 @@ class SettingsPage(QWidget):
 
     def set_values(self, data: dict):
         # Allgemein
-        if hasattr(self, "show_events_btn"):
-            show_events = data.get("show_events", True)
-            self.show_events_btn.setChecked(show_events)
-            self._set_toggle(self.show_events_btn, show_events)
-
         if hasattr(self, "dps_path_input"):
             self.dps_path_input.setText(data.get("dps_meter_path", ""))
 
@@ -2120,19 +2065,14 @@ class SettingsPage(QWidget):
             "Removes all current Tasks and Shopping entries from this profile."
         )
 
-        self.clear_events_btn = QPushButton("Clear Events")
-        self.clear_events_btn.setObjectName("secondaryButton")
-        self.clear_events_btn.setToolTip(
-            "Removes all Event entries from Tasks and Shopping lists."
-        )
-
         self.duplicate_profile_btn = QPushButton("Duplicate Profile")
         self.duplicate_profile_btn.setObjectName("secondaryButton")
 
+        # No "Clear Events" button any more (GitHub issue #12, comment):
+        # events cannot be created, so a bulk delete for them is dead UI.
         action_layout.addWidget(self.save_profile_btn)
         action_layout.addWidget(self.load_profile_btn)
         action_layout.addWidget(self.reset_profile_btn)
-        action_layout.addWidget(self.clear_events_btn)
         action_layout.addWidget(self.duplicate_profile_btn)
         action_layout.addStretch()
 

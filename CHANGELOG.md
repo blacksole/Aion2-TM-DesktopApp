@@ -1,3 +1,25 @@
+# Version 2.0.11
+
+Release Date: 2026-10-01
+
+**Hotfix**
+
+## 🐛 Bug Fixes
+
+- **Critical: the Build Planner / Armory would not open at all in 2.0.10** — clicking "Open Build Planner" did nothing. A module the Armory needs (the popup shadow helper) was left out of the packaged build, so loading the Armory failed silently. It is now always bundled, and the build is checked automatically so a missing module can't slip through again.
+- **Armory: the "Pantheon" tab showed the wrong title after switching the language** (it was overwritten with "Genius Insight"). Every tab now keeps its own title in every language.
+- **Armory: many labels in the Build Planner stayed English in the German version, and switching the language left the open Build Planner in the old language.** The German texts were completed (game names like Daevanion, Arcana, Pantheon or Genius Insight intentionally stay English), and the Build Planner now rebuilds itself in the new language — your current build is kept.
+- **Shopping templates: adding a Standard set to an existing character dropped items that appear twice with different sources** (e.g. "Soul Crystal (Bound)" from both the Weekly Nightmare Store and the Shugo Store — only one was added). Duplicates are now recognized by name *and* location, so both entries are added while adding the same set twice still creates no duplicates. Creating a new character was not affected. (Website report #133)
+- **Flow Map: the starting "Create Character" node was treated as a real character** — it showed up in the character list and triggered a "delete character?" prompt. It is now ignored there.
+
+## 🔧 Changes
+
+- **Settings: the "Show events" option and the "Clear events" button were removed.** Events are always shown now; existing event entries stay visible and can still be deleted individually. This also fixes events that stayed hidden forever once the option had been switched off.
+- **The Windows executable now carries proper version information** (product name "Aion 2 Companion", version, publisher), visible under Properties → Details. This helps Windows identify the app, which is part of reducing false-positive antivirus warnings.
+- **Unexpected errors are now written to the app log** (`%APPDATA%\Aion2 TM\app.log`), so problems like the Build Planner one can be diagnosed from a bug report instead of failing silently.
+
+---
+
 # Version 2.0.10
 
 Release Date: 2026-09-26
