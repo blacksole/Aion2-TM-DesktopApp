@@ -2844,6 +2844,16 @@ _WINGS_SLOT_ENABLED = True
 if _WINGS_SLOT_ENABLED:
     SLOT_LAYOUT.append(("Wings1", "arm_slot_wings", ["Wings Equip"]))
 
+# "Nach Spieler suchen" Build Planner import (tobia, 2026-10-03: "Die
+# Spieler Suche und das Somit importieren des Builds in den
+# Buildplanner?"). Backed by NC's own undocumented Aion 2 Global API
+# (core/aion2_lookup.py) -- confirmed live/unauthenticated by hand with
+# curl before building this, but NC can change or kill it without notice
+# at any time, hence the kill-switch (same convention as
+# NEWS_POPUP_ENABLED/ARMORY_ENABLED/_COMPARE_MENU_ENABLED): flip to False
+# to hide the button again, nothing else needs to change.
+AION2_LOOKUP_ENABLED = True
+
 SLOT_BUTTON_SIZE = 76
 
 # Distinguishes real equipment slots (which get the inline "Equipment Item"
@@ -13121,6 +13131,188 @@ class ArcanaResultsDialog(QDialog):
         self.accept()
 
 
+class PlayerSearchDialog(QDialog):
+    """"Nach Spieler suchen" (tobia, 2026-10-03): search a live EU
+    character on NC's own Aion 2 Global backend, preview their equipped
+    gear, and import it straight into the current LoadoutWindow Equip
+    Build. Behind AION2_LOOKUP_ENABLED (see that flag's own comment) --
+    an undocumented third-party API, never a hard dependency of the Build
+    Planner itself.
+
+    Two-pane flow in one dialog (User-Wunsch: "Dann geht ein Popup auf,
+    in dem man dann nach dem Spieler suchen kann. Bei einem Fund, kann
+    man dort den Build anschauen und dann via Button importieren"):
+    search box + result list on the left, a read-only preview of the
+    selected character's equipped slots on the right, with an Import
+    button that only enables once something is actually previewed.
+    """
+
+    def __init__(self, items_by_id: dict, parent=None):
+        super().__init__(parent)
+        self._items_by_id = items_by_id
+        self._search_worker = None  # core.aion2_lookup.CharacterSearchWorker, late-imported
+        self._equip_worker = None  # core.aion2_lookup.CharacterEquipmentWorker, late-imported
+        self._results: list[dict] = []
+        self._selected_result: dict | None = None
+        self._current_build: dict | None = None
+
+        self.imported: dict[str, tuple[dict, int]] | None = None
+
+        self.setWindowTitle(_t("arm_player_search_title"))
+        self.setObjectName("newsDialog")  # shares the dark dialog chrome
+        self.resize(760, 520)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 20, 20, 20)
+        outer.setSpacing(12)
+
+        search_row = QHBoxLayout()
+        self._search_input = QLineEdit()
+        self._search_input.setPlaceholderText(_t("arm_player_search_placeholder"))
+        self._search_input.returnPressed.connect(self._on_search_clicked)
+        search_row.addWidget(self._search_input, 1)
+        self._search_btn = QPushButton(_t("arm_player_search_btn"))
+        self._search_btn.clicked.connect(self._on_search_clicked)
+        search_row.addWidget(self._search_btn)
+        outer.addLayout(search_row)
+
+        self._status_label = QLabel("")
+        self._status_label.setObjectName("EquipSectionLabel")
+        outer.addWidget(self._status_label)
+
+        split_row = QHBoxLayout()
+        split_row.setSpacing(16)
+
+        self._results_list = QListWidget()
+        self._results_list.setMaximumWidth(260)
+        self._results_list.itemClicked.connect(self._on_result_clicked)
+        split_row.addWidget(self._results_list)
+
+        preview_col = QVBoxLayout()
+        self._preview_header = QLabel("")
+        self._preview_header.setObjectName("updateDialogTitle")
+        self._preview_header.setWordWrap(True)
+        preview_col.addWidget(self._preview_header)
+
+        self._preview_list = QListWidget()
+        preview_col.addWidget(self._preview_list, 1)
+
+        self._skipped_label = QLabel("")
+        self._skipped_label.setWordWrap(True)
+        self._skipped_label.setObjectName("EquipSectionLabel")
+        preview_col.addWidget(self._skipped_label)
+
+        split_row.addLayout(preview_col, 1)
+        outer.addLayout(split_row, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        close_btn = QPushButton(_t("arm_close"))
+        close_btn.clicked.connect(self.reject)
+        btn_row.addWidget(close_btn)
+        self._import_btn = QPushButton(_t("arm_player_search_import_btn"))
+        self._import_btn.setProperty("accent", True)
+        self._import_btn.setEnabled(False)
+        self._import_btn.clicked.connect(self._on_import_clicked)
+        btn_row.addWidget(self._import_btn)
+        outer.addLayout(btn_row)
+
+    def _on_search_clicked(self):
+        keyword = self._search_input.text().strip()
+        if len(keyword) < 2:
+            self._status_label.setText(_t("arm_player_search_too_short"))
+            return
+        if self._search_worker is not None and self._search_worker.isRunning():
+            return
+
+        from core.aion2_lookup import CharacterSearchWorker
+
+        self._results_list.clear()
+        self._preview_list.clear()
+        self._preview_header.setText("")
+        self._skipped_label.setText("")
+        self._import_btn.setEnabled(False)
+        self._selected_result = None
+        self._current_build = None
+        self._status_label.setText(_t("arm_player_search_searching"))
+        self._search_btn.setEnabled(False)
+
+        self._search_worker = CharacterSearchWorker(keyword, self)
+        self._search_worker.results_ready.connect(self._on_results_ready)
+        self._search_worker.search_failed.connect(self._on_search_failed)
+        self._search_worker.finished.connect(lambda: self._search_btn.setEnabled(True))
+        self._search_worker.start()
+
+    def _on_results_ready(self, results: list):
+        self._results = results
+        self._results_list.clear()
+        if not results:
+            self._status_label.setText(_t("arm_player_search_no_results"))
+            return
+        self._status_label.setText("")
+        for row in results:
+            label = f"{row['name']}  (Lv.{row['level']})" if row.get("level") else row["name"]
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, row)
+            self._results_list.addItem(item)
+
+    def _on_search_failed(self, _message: str):
+        self._status_label.setText(_t("arm_player_search_error"))
+
+    def _on_result_clicked(self, item: QListWidgetItem):
+        row = item.data(Qt.UserRole)
+        if not row or not row.get("character_id"):
+            return
+        self._selected_result = row
+        self._preview_list.clear()
+        self._preview_header.setText("")
+        self._skipped_label.setText("")
+        self._import_btn.setEnabled(False)
+        self._current_build = None
+        self._status_label.setText(_t("arm_player_search_loading_build"))
+
+        from core.aion2_lookup import CharacterEquipmentWorker
+
+        self._equip_worker = CharacterEquipmentWorker(
+            row["character_id"], row["server_id"], self
+        )
+        self._equip_worker.build_ready.connect(self._on_build_ready)
+        self._equip_worker.fetch_failed.connect(self._on_build_failed)
+        self._equip_worker.start()
+
+    def _on_build_ready(self, build: dict):
+        self._current_build = build
+        self._status_label.setText("")
+        self._preview_header.setText(
+            f"{build['character_name']} — {build['class_name']} "
+            f"(Lv.{build['level']}, CP {build['combat_power']})"
+        )
+        self._preview_list.clear()
+        for row in build["equipped"]:
+            label = f"{row['slot_pos_name']}: {row['name']} ({row['grade']}, +{row['enchant_level']})"
+            self._preview_list.addItem(QListWidgetItem(label))
+        self._import_btn.setEnabled(bool(build["equipped"]))
+
+    def _on_build_failed(self, _message: str):
+        self._status_label.setText(_t("arm_player_search_error"))
+
+    def _on_import_clicked(self):
+        if not self._current_build:
+            return
+        from core.aion2_lookup import match_build_to_catalog
+
+        result = match_build_to_catalog(self._current_build["equipped"], self._items_by_id)
+        if result["skipped"]:
+            self._skipped_label.setText(
+                _t("arm_player_search_skipped_prefix") + " " + "; ".join(result["skipped"])
+            )
+        if not result["matched"]:
+            self._status_label.setText(_t("arm_player_search_nothing_matched"))
+            return
+        self.imported = result["matched"]
+        self.accept()
+
+
 class LoadoutWindow(QMainWindow):
     """Virtual (local-only) equipment loadout — not tied to any real
     character. Lets you try any catalog item per slot and preview its
@@ -13273,6 +13465,10 @@ class LoadoutWindow(QMainWindow):
         self.quick_stat_btn = QPushButton(_t("arm_properties_btn"))
         self.quick_stat_btn.clicked.connect(self._open_quick_stat_select)
         equip_header_row.addWidget(self.quick_stat_btn)
+        if AION2_LOOKUP_ENABLED:
+            self.player_search_btn = QPushButton(_t("arm_player_search_title"))
+            self.player_search_btn.clicked.connect(self._open_player_search)
+            equip_header_row.addWidget(self.player_search_btn)
         self.stat_priority_edit_btn = QToolButton()
         self.stat_priority_edit_btn.setObjectName("StatPriorityEditBtn")
         self.stat_priority_edit_btn.setIcon(_make_gear_icon())
@@ -20302,6 +20498,36 @@ class LoadoutWindow(QMainWindow):
                 self, _t("arm_quick_select_result_title"),
                 _t("arm_quick_select_equipped_result", count=len(dlg.result_slots), missing=', '.join(dlg.missing_slots)),
             )
+
+    def _open_player_search(self):
+        """"Nach Spieler suchen" (tobia, 2026-10-03). Same bulk-equip
+        pattern as _open_quick_gear_select above (setUpdatesEnabled(False)
+        around the loop, refresh=False per slot, one recompute at the
+        end) -- PlayerSearchDialog hands back {app_slot_id: (catalog_item,
+        enchant_level)} via .imported, already resolved against our own
+        catalog by core.aion2_lookup.match_build_to_catalog."""
+        dlg = PlayerSearchDialog(self._items_by_id, parent=self)
+        if dlg.exec() != QDialog.Accepted or not dlg.imported:
+            return
+
+        self.setUpdatesEnabled(False)
+        try:
+            self._capture_current_substats()
+            for slot_id, (item, enchant) in dlg.imported.items():
+                if slot_id not in self._slot_icon_buttons:
+                    continue  # catalog/API slot with no button in THIS class's layout
+                self._on_item_chosen_for_slot(slot_id, item, refresh=False)
+                if enchant:
+                    self._equipped_enchant[slot_id] = enchant
+                    self._update_slot_enchant_label(slot_id)
+            self._update_gearscore()
+            self._refresh_stat_info()
+            self._update_quick_stat_btn_visibility()
+            if self._selected_equip_slot_id in dlg.imported:
+                self._refresh_equip_item_panel()
+        finally:
+            self.setUpdatesEnabled(True)
+        self.update()
 
     def _open_quick_stat_select(self):
         # Flush whatever's LIVE in the currently-open slot's panel (picks,

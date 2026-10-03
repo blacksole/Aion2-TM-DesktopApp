@@ -156,7 +156,7 @@ a = Analysis(
     hiddenimports=[
         'email', 'email.mime', 'email.mime.text', 'email.mime.multipart',
         'core.shadows', 'core.theme', 'core.translations', 'core.app_logger',
-        'utils.paths',
+        'core.aion2_lookup', 'utils.paths',
     ],
     hookspath=[],
     hooksconfig={},
